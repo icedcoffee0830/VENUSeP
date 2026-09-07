@@ -222,7 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="auth-card">
           <div class="auth-brand"><img src="../logo/Logo Header 3.png" alt="VENUSeP" /></div>
           <div class="auth-heading">
-            <h1 class="auth-title" id="adminLoginTitle">Admin Login</h1>
+            <h1 class="auth-title" id="adminLoginTitle">CHANGE Login</h1>
             <p class="auth-subtitle">Sign in to manage venue bookings.</p>
           </div>
 

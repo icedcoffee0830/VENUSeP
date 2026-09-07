@@ -1,0 +1,413 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  VENUSeP — PROJECT HANDOFF & CONTEXT                                          ║
+║  For the teammate building the database. Read this top to bottom.            ║
+║  You can paste this whole file into Claude to give it full context.          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+This document explains WHAT the system is, HOW it's built, WHY each decision was
+made, WHAT is finished vs only designed, and WHAT the database phase must do.
+A companion file, DB-TRANSITION.md, is the focused technical checklist — this
+file is the full story around it.
+
+────────────────────────────────────────────────────────────────────────────────
+0. TL;DR
+────────────────────────────────────────────────────────────────────────────────
+• VENUSeP is a university venue + hostel booking system for USeP.
+• Right now it is a FRONT-END MOCKUP: real UI, but NO backend, NO persistence,
+  NO server logic. Every "submit" just changes the screen; every list is
+  hand-written [SIM] demo data.
+• The data model is CLEAN and CONSISTENT and ready to derive a schema from.
+• The application is NOT ready to "just add a DB" — the entire server layer
+  (persistence, auth, INSERT/SELECT, concurrency, server-side validation) has
+  to be built. That is your job.
+• Verdict: ready to BUILD A DATABASE AGAINST, not ready to RUN ON one yet.
+
+────────────────────────────────────────────────────────────────────────────────
+1. HOW TO RUN IT
+────────────────────────────────────────────────────────────────────────────────
+• It's PHP. It must be served by a PHP server (XAMPP), opened via
+  http://localhost/VENUSeP/... — NOT by double-clicking the .php files
+  (file:// won't execute PHP).
+• Put the VENUSeP folder in xampp/htdocs.
+• It needs INTERNET for some features: fonts, Bootstrap Icons, Pannellum (the
+  360° viewer), Tesseract.js (the GCash receipt OCR), and AdminLTE on a couple
+  of pages all load from CDNs. Offline, pages still render but the 360 viewer
+  and the receipt auto-checker won't work (they fail gracefully, no crash).
+• There is no login gate wired — open pages directly:
+    Customer landing : customer/venusep_venue_booking.php
+    Admin dashboard  : admin/Admin_Dashboard.php
+
+────────────────────────────────────────────────────────────────────────────────
+2. THE DOMAIN — WHAT VENUSeP MODELS
+────────────────────────────────────────────────────────────────────────────────
+THREE VENUES, and this is the core of the model:
+    1. Bahay Alumni   — event rooms (halls, function rooms)
+    2. USeP Venues    — event rooms (gym, AVR, conference halls)
+    3. USeP Hostel    — dormitory rooms, booked PER BED
+
+There are TWO booking modes, because the hostel works differently:
+
+  A) VENUE BOOKING (Bahay Alumni + USeP Venues) — "book a room for an event"
+     - You reserve a whole room for a date + time range.
+     - Priced per DAY (fee × days).
+     - Pay by GCash (receipt auto-checked) or cash at the venue office.
+
+  B) HOSTEL BOOKING (USeP Hostel) — "book a bed for a stay"
+     - You reserve individual BEDS, not the room. 6 beds per room.
+     - Others can book the remaining beds in the same room; book all 6 and it's
+       effectively yours (this exclusivity is EMERGENT, never a stored flag).
+     - Priced per HEAD, per NIGHT (beds × rate × nights).
+     - Payment goes through CEDU (see §5) — different from the venues.
+
+IMPORTANT vocabulary note the team settled on:
+  • "venues" (the word) usually means the two EVENT locations (Bahay Alumni +
+    USeP Venues).
+  • But in the DATA MODEL the hostel IS a venue (3 venue rows). Both are true.
+  • The hostel "operates differently" — mainly its payment (CEDU) and its
+    per-bed booking. Everything else is shared.
+
+Governing design principle used throughout:
+  "Split where the DATA differs; share where the MACHINERY is the same."
+  → separate booking pages (fields differ), but ONE booking queue, ONE request
+    detail page (branched), ONE receipt-checking engine, ONE room list per venue.
+
+────────────────────────────────────────────────────────────────────────────────
+3. FILE MAP
+────────────────────────────────────────────────────────────────────────────────
+SHARED SOURCES (includes/) — THE PATTERN TO COPY INTO TABLES
+  venues.php          $venues — the list of venues. A venue exists whether or
+                      not it has rooms, so it's its own list (not derived from
+                      rooms). The room-form "Location" dropdowns + the Venue
+                      Management filter all render from it. ADD A VENUE = ADD ONE
+                      LINE HERE and it appears everywhere. → becomes `venues` table.
+  venue-rooms.php     $venueRooms — the 8 event rooms r1..r8 (id, name, venue,
+                      capacity, fee, photos, description, amenities, maintenance,
+                      booked[]). Read by the booking page, the landing page, and
+                      admin Venue Management. → becomes `rooms` (event) seed.
+  hostel-rooms.php    $hostelRooms — the 5 hostel rooms h1..h5 (id, name, cr_type,
+                      beds, photos, amenities, maintenance, occupied{night:[..]}).
+                      Plus helper functions. → becomes `rooms` (hostel) + occupancy.
+  payment-settings.php  $gcAccounts — ONE GCash account per venue. → `payment_settings`.
+  gcash-checker.php   The receipt OCR + verdict engine (shared, see §5).
+  header.php,
+  sidebar.php         The shared shell (top bar + side menu). Portal-aware:
+                      $portal = 'admin' (default) or 'customer'.
+
+CUSTOMER PAGES (customer/)
+  venusep_venue_booking.php  Landing page. Lists venue rooms (from venue-rooms.php)
+                             + a hostel section (from hostel-rooms.php). Links to
+                             the two booking pages.
+  room-reservation.php       VENUE booking flow (?room=r1..r8). Screens:
+                             detail → review(+ID) → pending(approval) →
+                             payment(GCash/cash) → done.
+  hostel-reservation.php     HOSTEL booking flow (?room=h1..h5). Screens:
+                             detail → review(+ID) → pending(awaiting POS) →
+                             payment → done(+OR pending). Same look as the venue
+                             page (360 hero, tabs, gallery) but per-bed fields.
+  booking-history.php        The customer's past bookings (table).
+  transaction-history.php    The customer's transactions (Tabulator table).
+  calendar.php               Read-only calendar of the customer's bookings.
+  customer-profile.php       Account settings.
+  customer-login.php,
+  customer-register.php      Auth screens (no backend).
+  faq.php                    Static FAQ.
+
+ADMIN PAGES (admin/)
+  Admin_Dashboard.php        Dashboard (counts, links into the queue).
+  venue-management.php       Lists ALL 3 venues + every room (event + hostel) in
+                             one grid. Hostel rooms show occupancy; event rooms
+                             show capacity; both show maintenance windows.
+  room-form.php              Add/edit an EVENT room (name, venue, capacity, rate,
+                             maintenance window, amenities).
+  hostel-room-form.php       Add/edit a HOSTEL room (beds, CR type, rate/head,
+                             hostel amenities, maintenance).
+  venue-form.php             Add/edit a venue.
+  booking-requests.php       THE booking QUEUE — one list for venue + hostel, with
+                             a venue filter and needs-action tabs (Pending ID,
+                             Receipts to confirm, Manual review, Overdue, POS to
+                             fetch). Rows link to the detail page.
+  booking-request.php        THE request DETAIL — one page, branches for hostel
+                             (roster + POS + OR + check-in) vs venue (schedule).
+                             Staff approve/reject/confirm/refund here.
+  transaction-history.php    Admin transaction table (all customers).
+  payment-settings.php       Edit the GCash account per venue (from payment-settings.php).
+  calendar.php               Admin calendar.
+  Quarterly_Reports.php      Reports/charts.
+  venusep_staffManagement.php  Staff CRUD (Tabulator).
+  venusep_profile.php        Admin settings.
+  admin-login.php,
+  admin-register.php         Admin auth (no backend).
+
+ROOT
+  index.php                  Entry.
+  DB-TRANSITION.md           The focused DB checklist (read alongside this file).
+  logo/                      Logo images.
+
+────────────────────────────────────────────────────────────────────────────────
+4. KEY DESIGN DECISIONS (the "why", so you don't undo them)
+────────────────────────────────────────────────────────────────────────────────
+
+4.1  ROOMS HAVE NO "STATUS" FIELD — maintenance is a DATE WINDOW
+  There is deliberately no Available/Occupied/Maintenance enum on rooms. It used
+  to exist and it was dead code that lied (a room read "Maintenance" while its
+  booking form happily took reservations). Availability is DERIVED:
+    • venue room available on a date  ⇔  no booking overlaps that date/time
+    • hostel bed available on a night ⇔  occupants that night < beds
+  A CLOSURE is the only real state, and a closure has dates, so it is stored as a
+  window on the room:
+        maintenance = { from, until, reason, blocks }
+    - until = null  → INDEFINITE (no end date; not "no date")
+    - blocks = true → HARD  : cannot be booked on those dates
+    - blocks = false → MEDIUM: still bookable, the customer is just shown a notice
+  This same shape is used on BOTH venue and hostel rooms, customer and admin.
+  Indefinite closures past ~14 days raise a "still closed?" review nag in Venue
+  Management (a fixed window self-heals when its end date passes; an indefinite
+  one only ends when a human acts, so the system has to ask).
+
+4.2  HOSTEL = PER BED, and "beds" is NEVER stored
+  beds = COUNT(occupants). Storing a separate bed count lets it disagree with the
+  roster. The bed stepper on the form literally grows/shrinks the occupant list,
+  so the count and the named guests are one thing by construction. Each bed has a
+  named person + a gender. GENDER IS DISPLAY ONLY (shows the room's mix; nothing
+  is enforced or gender-locked). A mixed group booking all 6 beds is allowed.
+
+4.3  NIGHTS vs DAYS (a real arithmetic difference — do not unify)
+  • Venue days are INCLUSIVE: Aug 1 → Aug 3 = 3 days.
+  • Hostel nights are EXCLUSIVE of check-out: Aug 1 → Aug 4 = 3 nights (nights
+    of the 1st, 2nd, 3rd). Check-out day is not charged.
+  • A hostel stay must be CONTIGUOUS: if any night in the range is blocked
+    (maintenance), the whole range is refused — a guest can't leave and return.
+    (A venue booking, by contrast, "books around" a blocked day.)
+
+4.4  AVAILABILITY IS TWO DIFFERENT SHAPES ON PURPOSE
+  • Venue:  booked   = [ {date, start, end} ]   (exclusive time ranges)
+  • Hostel: occupied = { 'YYYY-MM-DD': [occupants] }  (per-night bed counts)
+  These are genuinely different and must be TWO different tables. An event has
+  hours; a bed has nights. Do NOT force them into one shape.
+
+4.5  PAYMENT — GCASH + CASH ONLY, ONE ACCOUNT PER VENUE
+  • Methods are GCash and Cash ONLY. (Bank Transfer and Maya were removed —
+    the receipt checker verifies GCash; cash is confirmed by staff. No others.)
+  • THREE GCash accounts, one per venue (payment-settings.php). Bahay Alumni and
+    USeP Venues used to SHARE one account; they are now SEPARATE, so a receipt
+    paid to the wrong venue's account is correctly rejected.
+  • The hostel's account is a designated STAFF account (a person), because the
+    hostel's cash flow is: customer → staff → University Cashier (who issues the
+    Official Receipt). The venues' accounts are business accounts.
+  • The payment SCREEN (what the customer is told to send to) and the CHECKER
+    (what it verifies against) BOTH read the same account, so they can never
+    disagree. If they ever did, the customer would pay exactly what they were
+    shown and every receipt would auto-reject as "receiver mismatch" — a bug that
+    looks like the scanner is broken. This is why it's one source.
+
+4.6  THE GCASH RECEIPT CHECKER (includes/gcash-checker.php)
+  • ONE shared engine, used by both booking pages. It OCRs a GCash receipt
+    screenshot (Tesseract.js, in the browser) and returns a verdict.
+  • HARD gates (any one → rejected): duplicate file, not a GCash receipt,
+    duplicate reference number, wrong receiver account, wrong amount (exact
+    centavo match required).
+  • SOFT flags (→ needs staff review): unreadable fields, odd ref format, stale/
+    future date, amount≠total, low OCR confidence.
+  • The page supplies three callbacks: gcAccount() (which account THIS booking
+    pays to — resolved per room's venue), gcExpectedCentavos() (exact amount
+    owed), gcBookingRef() (the booking reference). NEVER copy-paste this engine
+    into a new page; include it and pass the account in.
+  • ⚠️ THE VERDICT IS COMPUTED IN THE BROWSER → it is spoofable. For real money
+    you MUST re-run these checks server-side (see §6). Also, the duplicate-
+    reference check currently uses localStorage (per-browser); in the DB it must
+    be a UNIQUE index on the reference number across ALL bookings.
+
+4.7  BOOKING LIFECYCLE + TWO-AXIS STATUS
+  Every booking carries TWO statuses, not one blended one:
+    • reservation_status : pending → approved → (released / completed / rejected)
+    • payment_status     : locked → awaiting → confirmed/paid → (refund chain)
+  Staff see the full taxonomy; customers see softened labels. Flow:
+    1. Customer books + uploads a valid ID (required).
+    2. Reservation is PENDING; payment is LOCKED until staff approve ID+reservation.
+    3. Approved → payment unlocks. Pay by GCash (auto-checked) or cash.
+    4. Staff confirm the payment → CONFIRMED.
+  Rules baked in: pay at least 1 DAY before the event (late bookings pay
+  immediately on approval); a rejected auto-check holds the slot for a 48-hour
+  resubmit window (bounded by the pay-by deadline); staff can OVERRIDE a wrong
+  auto-rejection with a required note (duplicate-ref overrides are admin-only).
+
+4.8  THE HOSTEL'S CEDU PAYMENT FLOW (this is the hostel's big difference)
+    1. Customer books + gives ID.
+    2. Staff walk the booking to CEDU and get a POS. → NEW status "Awaiting POS".
+       Payment stays LOCKED. (This is the ONLY status that waits on another
+       OFFICE, not on the customer.)
+    3. POS recorded → payment unlocks.
+    4. Customer pays: cash to staff, or GCash to the designated staff account.
+    5. Staff verify → CONFIRMED.
+    6. Staff bring the money to the University Cashier → Cashier issues the OR
+       (Official Receipt).
+    7. Documents emailed: Transaction Receipt (now), GCash Receipt (if GCash),
+       OR (later, once issued).
+    8. Customer shows POS + OR to staff AT CHECK-IN.
+  KEY: the OR is NOT a payment status. Payment ends at CONFIRMED. The OR is a
+  post-confirmation DOCUMENT (a nullable official_receipt_no + an "OR pending"
+  flag so staff can chase it). Check-in is a manual staff action; hostel-only.
+
+4.9  IDENTITY
+  The demo session customer is "Juan Miguel Dela Cruz" everywhere (booking pages,
+  header, history, profile). One logged-in customer drives the whole customer
+  side. (Admin sees many customers; that's normal.)
+
+4.10 REFUNDS
+  A refund requires: the system Transaction Receipt + the GCash Payment Receipt
+  (if paid by GCash) + the Official Receipt. Missing any → cannot be processed.
+  Walk-in refund by a DIFFERENT person → staff match a valid ID against the DB.
+
+────────────────────────────────────────────────────────────────────────────────
+5. WHAT'S BUILT vs ONLY DESIGNED
+────────────────────────────────────────────────────────────────────────────────
+BUILT (works as UI + demo data):
+  ✓ Venue booking flow end to end (detail→review→pending→payment→done)
+  ✓ Hostel booking flow end to end, incl. the CEDU/POS steps + OR + check-in
+  ✓ GCash receipt checker (client-side), 3 separate accounts, proven distinct
+  ✓ Admin booking queue + request detail (branched for hostel), staff actions
+  ✓ Venue Management (all 3 venues, all rooms, maintenance windows)
+  ✓ Maintenance model (windows, medium/hard, indefinite review nag)
+  ✓ Room/venue forms, payment settings, staff management, dashboards, reports
+  ✓ Single-source data (venues, venue-rooms, hostel-rooms, payment accounts)
+
+DESIGNED BUT NOT BUILT (reserve room for these in the schema now):
+  ✗ Disruption / involuntary refund: when a room is HARD-closed while it has
+    paid bookings inside the window → offer a replacement room (customer chooses
+    replacement or refund; if replacement, STAFF pick the room) or a full,
+    NON-DENIABLE refund. This adds a "disrupted" reservation state — reserve the
+    enum value even though the flow isn't built, or adding it later is a migration.
+  ✗ Customer-initiated cancel / refund request. The admin refund chain exists;
+    there is no customer button to start it.
+  ✗ Hostel POS timeout. If CEDU never issues a POS, the booking (and held beds)
+    sit forever. Decide whether held beds expire, like the venue pay-by deadline.
+  ✗ Email/notifications. Every "receipt emailed / OR emailed" is [SIM] — nothing
+    sends. Needs a real notification service.
+  ✗ Overdue auto-release, the 48-hour resubmit clock, tiered override permissions
+    — specified but need a scheduler + a real staff-role system.
+
+────────────────────────────────────────────────────────────────────────────────
+6. WHAT THE DATABASE PHASE MUST DO (the load-bearing work)
+────────────────────────────────────────────────────────────────────────────────
+These CANNOT be shown in a mockup and are the core of your job. (Also in
+DB-TRANSITION.md.)
+
+  1. CONNECT CUSTOMER → ADMIN. Today submitRequest() just flips a screen; the
+     admin queue is hand-written rows. Design ONE `bookings` table so a customer
+     submit = INSERT and the admin queue = SELECT over the same table. Design
+     both sides together, not as two shapes.
+
+  2. ONE BOOKING ID owned by the DB. Today there are four ID namespaces
+     (USEP-######, USEP-H-######, BRQ-####, VB-2026-###) that never meet, all
+     random/hand-written. The DB owns the id (auto-increment or UUID); any
+     customer-facing reference is a display alias.
+
+  3. CONCURRENCY (invisible in a single-user mockup, critical in a DB):
+     • Venue double-booking: two people both see a slot free and both submit →
+       enforce a unique constraint / transactional lock on (room, date, time).
+     • Hostel last-bed race: beds_taken = COUNT(occupants); two people grab the
+       6th bed at once → transaction (SELECT…FOR UPDATE) or a per-(room,night)
+       counter with CHECK(taken <= beds).
+     • GCash reference reuse: currently localStorage (per browser) → must be a
+       UNIQUE index on the reference number across ALL bookings.
+
+  4. SERVER-SIDE VALIDATION. All validation is client-side JS today (dates,
+     amounts, bed limits, required ID) and the receipt verdict runs in the
+     browser (spoofable). Re-validate everything server-side, and re-run the
+     receipt amount/receiver/reference checks server-side (or keep staff
+     confirmation as the real gate and treat the client verdict as a hint).
+
+  5. AUTH / SESSIONS. Login/register pages exist but have no backend. Real
+     sessions must drive "the logged-in customer" and staff roles/permissions.
+
+────────────────────────────────────────────────────────────────────────────────
+7. DECISIONS ALREADY MADE — MATCH THESE IN THE SCHEMA
+────────────────────────────────────────────────────────────────────────────────
+  • payment_method ENUM('gcash','cash')  — nothing else.
+  • Two columns: reservation_status + payment_status (not one blended status).
+    Reserve 'disrupted' in reservation_status; 'await_pos' in payment_status.
+  • One GCash account per venue (payment_settings keyed by venue).
+  • Maintenance is a window {from, until(nullable), reason, blocks} on a room —
+    NOT a status enum. Availability is derived.
+  • beds is derived (COUNT(occupants)), never a column.
+  • Hostel occupancy is per-(room,night); venue booking is a (room, date, time
+    range). Two different tables.
+  • The OR is a nullable official_receipt_no recorded AFTER confirmation, plus a
+    check-in flag — not a payment status.
+  • Venues are a first-class table (a venue can exist with zero rooms). Room.venue
+    is a foreign key to it.
+
+────────────────────────────────────────────────────────────────────────────────
+8. SUGGESTED SCHEMA SKETCH (a starting point, not gospel)
+────────────────────────────────────────────────────────────────────────────────
+  venues(id, name, kind ENUM('event','hostel'), description, ...)
+  rooms(id, venue_id FK, name, kind ENUM('event','hostel'),
+        -- event: capacity, fee_per_day
+        -- hostel: beds, cr_type ENUM('communal','private'), rate_per_head_per_night
+        photos, description, ...)
+  room_amenities(room_id FK, label)
+  maintenance_windows(id, room_id FK, from_date, until_date NULLABLE,
+        reason, blocks BOOL)   -- until NULL = indefinite
+  gcash_accounts(venue_id FK, name, number, note)   -- one per venue
+  customers(id, name, email, phone, ...)
+  staff(id, name, role, ...)
+  bookings(id, customer_id FK, room_id FK, reference,
+        reservation_status ENUM(...incl 'disrupted'),
+        payment_status ENUM(...incl 'await_pos'),
+        payment_method ENUM('gcash','cash'),
+        id_document, pay_by_date,
+        -- venue: event_name, start_datetime, end_datetime, days, total_fee
+        -- hostel: check_in, check_out, nights, total,
+        --         pos_number NULLABLE, official_receipt_no NULLABLE, checked_in BOOL
+        created_at, ...)
+  booking_occupants(id, booking_id FK, name, gender)   -- hostel: one row per bed
+                        -- COUNT(*) per (room,night) is the bed count; add a
+                        -- (room, night) uniqueness/counter guard for the race
+  gcash_receipts(id, booking_id FK, reference UNIQUE, sha256, amount_centavos,
+        verdict, flags, confirmed_by, ... )   -- reference UNIQUE across all
+  timeline(id, booking_id FK, at, who, action, note)   -- the audit trail
+  Availability is COMPUTED from bookings/occupants + maintenance_windows — do not
+  store an availability/status column on rooms.
+
+────────────────────────────────────────────────────────────────────────────────
+9. PLACEHOLDERS TO REPLACE BEFORE GO-LIVE
+────────────────────────────────────────────────────────────────────────────────
+  • GCash accounts in includes/payment-settings.php — the USeP Venues account
+    (Ramon T Villaflor) and the hostel account/number are INVENTED placeholders.
+    Bahay Alumni (Mika J Juarez / 09951941234) was the original. Get the real ones.
+  • CEDU and "University Cashier" are placeholder office names.
+  • Hostel check-in/check-out TIMES are display-only placeholders.
+  • Room photos are just counts; the 360° panorama is one shared sample image for
+    every room. Real images need storage (path/URL columns).
+  • The hostel per-night rate (₱350 communal / ₱400 private) is confirmed; other
+    fees are demo values.
+
+────────────────────────────────────────────────────────────────────────────────
+10. THE PATTERN — PLEASE KEEP IT
+────────────────────────────────────────────────────────────────────────────────
+The biggest mistake we already fixed: the same data hand-written on multiple
+pages and drifting apart (there were once FOUR different room lists). The fix was
+ONE source per entity (includes/venues.php, venue-rooms.php, hostel-rooms.php,
+payment-settings.php) that every page reads. When you move to the DB, keep that
+discipline: one table = one source of truth; derive everything you can (bed
+counts, availability, maintenance labels) instead of storing a second copy that
+can disagree.
+
+Also a recurring rule worth remembering: a room's availability is a (room, DATE)
+fact, never a (room) fact — that's why there's no status column, why maintenance
+has dates, and why hostel occupancy is per-night. Anything that tries to collapse
+a room×date truth into a single label on the room will drift.
+
+────────────────────────────────────────────────────────────────────────────────
+11. FOR WHOEVER USES CLAUDE ON THIS
+────────────────────────────────────────────────────────────────────────────────
+• Paste this whole file first for context, then DB-TRANSITION.md.
+• The includes/ files are the seed data — point Claude at them for exact shapes.
+• Ask it to design the schema from §7/§8 BEFORE writing any query, and to build
+  the customer-submit → INSERT / admin-queue → SELECT connection (§6.1) as the
+  first vertical slice.
+• Verify behaviour by driving the actual flow, not just by checking it compiles.
+• Do NOT let it re-introduce per-page data copies, a room "status" column, or a
+  stored bed count — those are the exact things we removed.
+
+— End of handoff —

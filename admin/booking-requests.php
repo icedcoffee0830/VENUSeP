@@ -1,4 +1,10 @@
-<?php ?>
+<?php
+/* The demo customer's own bookings, from THE one source. Needed here because a
+   refund filed on the customer side has to appear in this queue, and until the
+   database exists the two sides have separate seed data. At DB time both sides
+   simply SELECT the same `bookings` rows and this include goes away. */
+require_once __DIR__ . '/../includes/customer-bookings.php';
+?>
 <!DOCTYPE html>
 <!-- ==================================================================
   BOOKING REQUESTS — VENUSeP merged system (ported from the AdminLTE mockup)
@@ -206,6 +212,9 @@
          · row builder   turns each request into a clickable row
          · tabs + search counts per tab, filters the visible rows
          ============================================================ -->
+    <!-- Shared refund state — the ONE source, also included by both customer
+         pages. Must load BEFORE this page's script, which reads from it. -->
+    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
     <script>
       /* Booking Requests queue — static mockup data + client-side filtering.
          Statuses follow the agreed payment-status taxonomy:
@@ -221,11 +230,15 @@
         await_cash:  { t: 'Awaiting payment · Cash',     c: 'b-amber' },
         auto_pass:   { t: 'Receipt passed auto-check',   c: 'b-navy'  },
         review:      { t: 'Receipt · manual review',     c: 'b-amber' },
-        rejected:    { t: 'Receipt auto-rejected',       c: 'b-red'   },
+        rejected:    { t: 'Receipt rejected',          c: 'b-red'   },
         confirmed:   { t: 'Payment confirmed',           c: 'b-green' },
         paid_cash:   { t: 'Paid at cashier',             c: 'b-green' },
         overdue:     { t: 'Payment overdue',             c: 'b-red'   },
         refund_req:  { t: 'Refund · under verification', c: 'b-navy'  },
+        /* Filed, but the Official Receipt has not arrived. The claim can still be
+           decided; only the PAYOUT waits (agreed 2026-09-09). */
+        refund_or:   { t: 'Refund · awaiting Official Receipt', c: 'b-amber' },
+        refund_fix:  { t: 'Refund · returned for correction',   c: 'b-amber' },
         /* HOSTEL ONLY — waiting on CEDU, not on the customer. */
         await_pos:   { t: 'Awaiting POS · CEDU',         c: 'b-amber' },
       };
@@ -238,7 +251,15 @@
         { id: 'BRQ-2426', name: 'Carmen Uy', type: 'Faculty · CAS', room: 'Admin Conference Hall', venue: 'USeP Venues', dates: 'Jul 22, 2026', res: 'approved', pay: 'await_cash', act: 'Pay at cashier by Jul 21', cls: '', cat: '' },
         { id: 'BRQ-2425', name: 'Paolo Mendoza', type: 'Org · Honor Society', room: 'USeP Gymnasium', venue: 'USeP Venues', dates: 'Aug 2, 2026', res: 'approved', pay: 'confirmed', act: 'Confirmed by M. Robles · Jul 13', cls: '', cat: '' },
         { id: 'BRQ-2424', name: 'Grace Tan', type: 'Student · CIC', room: 'Garden Pavilion', venue: 'Bahay Alumni', dates: 'Jul 17, 2026', res: 'approved', pay: 'overdue', act: 'Deadline passed Jul 16 · slot releasable', cls: 'late', cat: 'overdue' },
-        { id: 'BRQ-2423', name: 'Diego Cruz', type: 'Alumni', room: 'Heritage Function Room', venue: 'Bahay Alumni', dates: 'Jul 12, 2026', res: 'approved', pay: 'refund_req', act: 'Both receipts submitted · verify', cls: 'warn', cat: '' },
+        /* REFUNDS ARE STAFF WORK — they get a `cat` (and therefore a tab and a
+           place in the needs-action count) for the same reason 'pos' does: nobody
+           else surfaces them, and the customer's booking is ALREADY cancelled and
+           their date already released while this sits unread. `since` is the date
+           the customer submitted the request; the row shows how long it has waited. */
+        { id: 'BRQ-2423', name: 'Diego Cruz', type: 'Alumni', room: 'Heritage Function Room', venue: 'Bahay Alumni', dates: 'Sep 14, 2026', res: 'approved', pay: 'refund_req', act: 'All documents in · verify', cls: 'warn', cat: 'refund', since: '2026-09-06', eventIso: '2026-09-14' },
+        /* [SIM] a second, fresh request — so the tab count and the two ends of the
+           waiting display (today vs several days) are both visible in the mockup. */
+        { id: 'BRQ-2422', name: 'Elena Bautista', type: 'Faculty · CTET', room: 'Admin Conference Hall', venue: 'USeP Venues', dates: 'Sep 30, 2026', res: 'approved', pay: 'refund_or', act: 'Receipts in · OR still to come', cls: 'warn', cat: 'refund', since: '2026-09-09', eventIso: '2026-09-30' },
         /* HOSTEL requests live in the SAME queue. A queue answers "what needs me
            now" — splitting it by venue is how work goes unseen. The row shape is
            identical; only `dates` reads as a stay and the action mentions CEDU. */
@@ -251,6 +272,10 @@
         { k: 'confirm', t: 'Receipts to confirm' },
         { k: 'review',  t: 'Manual review' },
         { k: 'overdue', t: 'Overdue' },
+        /* Refunds wait on STAFF, not on the customer — same argument as POS below.
+           Without a tab a refund request only ever appears under "All", mixed in
+           with rows that need nobody. */
+        { k: 'refund',  t: 'Refunds to verify' },
         /* "Waiting on another office" is genuinely new — every other tab here
            waits on the customer. It earns a tab because it is staff WORK: someone
            has to physically walk to CEDU, and nothing else would surface it. */
@@ -264,11 +289,45 @@
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
       function countOf(k) { return k === 'all' ? BR.length : BR.filter(r => r.cat === k).length; }
       function rowsOf() {
-        return BR.filter(r => (tab === 'all' || r.cat === tab))
-                 .filter(r => !q || (r.name + ' ' + r.room + ' ' + r.id).toLowerCase().includes(q));
+        const list = BR.filter(r => (tab === 'all' || r.cat === tab))
+                       .filter(r => !q || (r.name + ' ' + r.room + ' ' + r.id).toLowerCase().includes(q));
+        /* Rows carrying an event date (refunds) are ordered soonest-event-first.
+           Array.sort is stable and this returns 0 for anything without one, so
+           the rest of the queue keeps its existing order. */
+        return list.sort((a, b) => {
+          if (!a.eventIso || !b.eventIso) return 0;
+          return a.eventIso < b.eventIso ? -1 : (a.eventIso > b.eventIso ? 1 : 0);
+        });
       }
       function setTab(k) { tab = k; draw(); }
       function setQ(v) { q = v.trim().toLowerCase(); drawRows(); }
+
+      /* How long the customer has been waiting on STAFF — measured from the day
+         they filed. Worded so it is obvious who owes whom: "waiting 3 days" never
+         said who was waiting or for what. COMPUTED, never hard-coded, so the queue
+         stays truthful as days pass instead of ageing into a lie. */
+      function waitedFor(iso) {
+        const days = Math.floor((Date.now() - new Date(iso + 'T00:00:00')) / 86400000);
+        if (days <= 0) return 'filed today · no staff reply yet';
+        if (days === 1) return 'filed yesterday · no staff reply for 1 day';
+        return 'filed ' + new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+             + ' · no staff reply for ' + days + ' days';
+      }
+      /* Rows carrying `since` show their age next to the action text. */
+      /* How soon the event is. This matters MORE than waiting time for refunds:
+         the booking stays live until the refund completes, so a near event means
+         a date nobody can rebook. Refund rows are ordered by it in rowsOf(). */
+      function eventIn(iso) {
+        const days = Math.ceil((new Date(iso + 'T00:00:00') - Date.now()) / 86400000);
+        if (days <= 0) return 'event has passed';
+        return days === 1 ? 'event tomorrow' : 'event in ' + days + ' days';
+      }
+      function actLabel(r) {
+        let s = r.act;
+        if (r.since) s += ' · ' + waitedFor(r.since);
+        if (r.eventIso) s += ' · ' + eventIn(r.eventIso);
+        return s;
+      }
 
       function drawRows() {
         document.getElementById('brRows').innerHTML = rowsOf().map(r => `
@@ -278,7 +337,7 @@
             <span class="hide-md r-main">${esc(r.dates)}</span>
             <span class="hide-md"><span class="br-badge ${RES[r.res].c}">${RES[r.res].t}</span></span>
             <span><span class="br-badge ${PAY[r.pay].c}">${PAY[r.pay].t}</span></span>
-            <span class="hide-md r-act ${r.cls}">${esc(r.act)}</span>
+            <span class="hide-md r-act ${r.cls}">${esc(actLabel(r))}</span>
             <span class="r-chev">&rsaquo;</span>
           </a>`).join('') || '<div style="padding:1.2rem;color:#8a857d;font-size:.85rem">No requests match.</div>';
       }
@@ -286,10 +345,45 @@
         document.getElementById('brTabs').innerHTML = TABS.map(t => `
           <button type="button" class="br-tab${tab === t.k ? ' active' : ''}" onclick="setTab('${t.k}')">${t.t}<span class="n">${countOf(t.k)}</span></button>`).join('')
           + `<input id="brSearch" class="br-search" type="text" value="${esc(q)}" placeholder="Search name, room, or request no." oninput="setQ(this.value)">`;
-        const need = BR.filter(r => ['id', 'confirm', 'review', 'overdue', 'pos'].includes(r.cat)).length;
+        const need = BR.filter(r => ['id', 'confirm', 'review', 'overdue', 'refund', 'pos'].includes(r.cat)).length;
         document.getElementById('brCount').textContent = BR.length + ' booking requests · ' + need + ' need action';
         drawRows();
       }
+      /* [SIM] Refunds the CUSTOMER filed. With no database they travel through
+         includes/refund-store.php (browser storage shared by both mockups), so
+         inject them as queue rows — otherwise a refund request would be filed
+         into a void and staff would never see it.
+
+         A request RETURNED for correction is waiting on the customer, not on
+         staff, so it gets no `cat` and no `since`: it shows under All but is
+         deliberately kept out of the refund tab and the needs-action count.
+         Same reasoning as 'await_gcash' — a queue answers "what needs me now". */
+      const SESSION_CUSTOMER = 'Juan Miguel Dela Cruz';   /* PROJECT-HANDOFF 4.9 */
+      const CUSTOMER_BOOKINGS = <?php echo json_encode($customerBookings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+      (function injectCustomerRefunds() {
+        if (!window.RefundStore) return;
+        const all = RefundStore.all();
+        Object.keys(all).forEach(function (ref) {
+          const rec = all[ref];
+          if (!rec || (rec.status !== 'open' && rec.status !== 'fix')) return;
+          if (BR.some(function (r) { return r.id === ref; })) return;
+          const b = CUSTOMER_BOOKINGS.filter(function (x) { return x.bookingId === ref; })[0];
+          if (!b) return;
+          const returned = rec.status === 'fix';
+          BR.unshift({
+            id: ref, name: SESSION_CUSTOMER, type: 'Student · CIC',
+            room: b.roomName, venue: b.venueName, dates: b.eventDate,
+            res: 'approved',
+            pay: returned ? 'refund_fix' : (rec.orPending ? 'refund_or' : 'refund_req'),
+            act: returned ? 'Returned to the customer · waiting on them'
+               : (rec.orPending ? 'Receipts in · OR still to come' : 'All documents in · verify'),
+            cls: 'warn',
+            cat: returned ? '' : 'refund',
+            since: returned ? null : rec.filed,
+            eventIso: b.eventDateIso
+          });
+        });
+      })();
       draw();
     </script>
   </body>

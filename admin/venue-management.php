@@ -25,6 +25,7 @@ $TODAY = date('Y-m-d');
 include __DIR__ . '/../includes/venues.php';       // the venue list — one source, data-driven
 include __DIR__ . '/../includes/venue-rooms.php';
 include __DIR__ . '/../includes/hostel-rooms.php';
+include __DIR__ . '/../includes/pricing.php';       // the USeP discount rate — THIS page is the screen that edits it (one rate for all venues)
 
 $rooms = $venueRooms;   // the r1–r8 event rooms, same data the booking page shows
 
@@ -415,6 +416,41 @@ function vmMaint($m, $today) {
         grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
       }
 
+
+      /* 6b) Settings panel — for page-wide controls (the discount rate). Deliberately
+         NOT .vm-card: that is a grid tile that lifts on hover and clips overflow.
+         This is a quiet, wide panel that reads as configuration. */
+      .vm-setting { background: var(--vm-card-bg); border: 1px solid var(--vm-border); border-radius: var(--vm-radius); box-shadow: var(--vm-shadow); margin-bottom: 1.6rem; }
+      .vm-setting-main { display: flex; align-items: center; gap: 1.4rem; padding: 1.15rem 1.35rem; }
+      .vm-setting-rate { flex: none; display: flex; align-items: baseline; gap: 0.3rem; min-width: 6.5rem; }
+      .vm-setting-rate span { font-size: 2.35rem; font-weight: 760; letter-spacing: -0.03em; line-height: 1; color: #1f2a44; }
+      .vm-setting-rate small { font-size: 0.8rem; font-weight: 600; color: #8a857d; text-transform: uppercase; letter-spacing: 0.05em; }
+      .vm-setting-copy { flex: 1 1 320px; min-width: 0; }
+      .vm-setting-title { display: flex; align-items: center; gap: 0.55rem; font-size: 1rem; font-weight: 680; letter-spacing: -0.01em; margin-bottom: 0.25rem; }
+      .vm-setting-copy p { margin: 0; font-size: 0.82rem; line-height: 1.55; color: #6b675f; max-width: 60ch; }
+      .vm-setting-act { flex: none; }
+      .vm-setting-form { display: flex; flex-wrap: wrap; gap: 0.9rem 1.2rem; align-items: flex-end; padding: 1rem 1.35rem 1.1rem; border-top: 1px solid var(--vm-border); background: #fff; }
+      .vm-setting-field { display: flex; flex-direction: column; gap: 0.3rem; }
+      .vm-setting-field-wide { flex: 1 1 320px; min-width: 0; }
+      .vm-setting-field label { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #8a857d; }
+      .vm-setting-field label .req { color: #b23a3a; }
+      .vm-setting-field input { border: 1px solid var(--vm-border); border-radius: 9px; padding: 0.5rem 0.7rem; font: inherit; font-size: 0.9rem; background: #fff; }
+      .vm-setting-field input:focus { outline: none; border-color: #1f2a44; }
+      .vm-setting-pct { display: flex; align-items: center; gap: 0.4rem; }
+      .vm-setting-pct input { width: 5.5rem; text-align: right; font-weight: 640; }
+      .vm-setting-pct span { color: #8a857d; font-weight: 600; }
+      .vm-setting-buttons { display: flex; gap: 0.5rem; }
+      .vm-setting-msg { flex-basis: 100%; font-size: 0.8rem; color: #b23a3a; }
+      .vm-setting-msg.ok { color: #1c7a4f; }
+      .vm-setting-hist { padding: 0.9rem 1.35rem 1.1rem; border-top: 1px solid var(--vm-border); }
+      .vm-setting-hist-title { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #8a857d; margin-bottom: 0.5rem; }
+      .vm-setting-hist-empty { font-size: 0.82rem; color: #8a857d; }
+      .vm-setting-row { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 1rem; padding: 0.5rem 0; border-top: 1px solid #f1eee8; font-size: 0.82rem; line-height: 1.5; }
+      .vm-setting-row:first-child { border-top: 0; padding-top: 0; }
+      .vm-setting-row b { color: #1f2a44; font-weight: 680; white-space: nowrap; }
+      .vm-setting-row .who { color: #8a857d; font-size: 0.76rem; }
+      .vm-setting-row .why { grid-column: 2; color: #4a463f; }
+      @media (max-width: 760px) { .vm-setting-main { flex-wrap: wrap; } .vm-setting-act { flex-basis: 100%; } }
       /* 6) Card base */
       .vm-card {
         background: var(--vm-card-bg);
@@ -769,6 +805,52 @@ function vmMaint($m, $today) {
         </details>
       </div>
 
+
+      <!-- ============================================================
+           USeP DISCOUNT RATE — ONE rate for every venue and the hostel
+           (DB-DECISIONS #2: system_settings.discount_percent). It sits HERE,
+           where the fees live, and ABOVE the venue cards so nobody reads it as
+           per-venue. Admin only; staff will REQUEST changes once a staff UI
+           exists (agreed 2026-09-14). A change is an EVENT — who/when/from/to/
+           why — which is both the audit trail and the shape a request takes.
+           [SIM] value → cookie; history → localStorage. Gone at DB time.
+           Its own panel class, not .vm-card: that one is a grid tile that
+           lifts on hover and clips overflow — wrong for a settings control. -->
+      <div class="vm-section-title">Pricing <span>&mdash; one rate, every venue and the hostel</span></div>
+      <section class="vm-setting" id="vmDiscount">
+        <div class="vm-setting-main">
+          <div class="vm-setting-rate"><span id="dcCurrent"><?php echo (int) $DISCOUNT_PERCENT; ?>%</span><small>off</small></div>
+          <div class="vm-setting-copy">
+            <div class="vm-setting-title">USeP discount rate <span class="vm-loc-badge">Admin only</span></div>
+            <p>For USeP students, faculty and employees, once staff verify their USeP ID. Changing it affects <strong>new bookings only</strong> &mdash; existing bookings keep the rate they were quoted. <strong>0%</strong> switches the discount off.</p>
+          </div>
+          <div class="vm-setting-act">
+            <button class="vm-btn vm-btn-primary" type="button" id="dcOpen" onclick="dcToggle(true)">Change rate</button>
+          </div>
+        </div>
+
+        <form class="vm-setting-form" id="dcForm" hidden onsubmit="return false">
+          <div class="vm-setting-field">
+            <label for="dcRate">New rate</label>
+            <div class="vm-setting-pct"><input id="dcRate" type="number" min="0" max="100" step="1" inputmode="numeric" value="<?php echo (int) $DISCOUNT_PERCENT; ?>"><span>%</span></div>
+          </div>
+          <div class="vm-setting-field vm-setting-field-wide">
+            <label for="dcReason">Reason <span class="req">*</span></label>
+            <input id="dcReason" type="text" placeholder="Required &mdash; recorded in the history below">
+          </div>
+          <div class="vm-setting-buttons">
+            <button class="vm-btn vm-btn-primary" type="button" onclick="dcSave()">Save</button>
+            <button class="vm-btn vm-btn-outline" type="button" onclick="dcToggle(false)">Cancel</button>
+          </div>
+          <div class="vm-setting-msg" id="dcErr" hidden></div>
+          <div class="vm-setting-msg ok" id="dcSaved" hidden>Saved &mdash; new bookings now use this rate.</div>
+        </form>
+
+        <div class="vm-setting-hist">
+          <div class="vm-setting-hist-title">Change history</div>
+          <div id="dcHistory"></div>
+        </div>
+      </section>
       <!-- VENUES -->
       <div class="vm-section-title">Venues <span>&mdash; locations that hold rooms</span></div>
       <div class="vm-grid">
@@ -1033,6 +1115,57 @@ function vmMaint($m, $today) {
           if (!dd.contains(e.target)) dd.removeAttribute('open');
         });
       });
+    </script>
+    <!-- [6b] DISCOUNT RATE SCRIPT [SIM] — the form is hidden until "Change rate"
+         is clicked, so the resting state is one number and one sentence. A save
+         records an EVENT and writes the cookie includes/pricing.php reads. -->
+    <script>
+      (function () {
+        const HIST = 'venusep_discount_history';
+        const $ = function (id) { return document.getElementById(id); };
+        const esc = function (s) { return String(s == null ? "" : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+        const readHist = function () { try { const v = JSON.parse(localStorage.getItem(HIST) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+        const fmt = function (iso) { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); };
+        const drawHist = function () {
+          const list = readHist().slice().reverse().slice(0, 6);
+          $('dcHistory').innerHTML = list.length
+            ? list.map(function (h) {
+                return '<div class="vm-setting-row"><b>' + esc(h.from) + '% &rarr; ' + esc(h.to) + '%</b>'
+                  + '<span class="who">' + esc(h.by) + ' &middot; ' + esc(fmt(h.at)) + '</span>'
+                  + '<span class="why">' + esc(h.reason) + '</span></div>';
+              }).join('')
+            : '<div class="vm-setting-hist-empty">No changes yet &mdash; the rate is the default from system settings.</div>';
+        };
+        window.dcToggle = function (show) {
+          $('dcForm').hidden = !show;
+          $('dcOpen').hidden = show;
+          $('dcErr').hidden = true; $('dcSaved').hidden = true;
+          if (show) { $('dcRate').value = parseInt($('dcCurrent').textContent, 10); $('dcReason').value = ""; $('dcRate').focus(); }
+        };
+        window.dcSave = function () {
+          const err = $('dcErr'), ok = $('dcSaved');
+          err.hidden = true; ok.hidden = true;
+          const raw = $('dcRate').value.trim(), reason = $('dcReason').value.trim();
+          const cur = parseInt($('dcCurrent').textContent, 10);
+          if (!/^\d{1,3}$/.test(raw) || parseInt(raw, 10) > 100) { err.textContent = 'Enter a whole number from 0 to 100.'; err.hidden = false; return; }
+          const next = parseInt(raw, 10);
+          if (next === cur) { err.textContent = 'That is already the current rate.'; err.hidden = false; return; }
+          if (!reason) { err.textContent = 'A reason is required — it goes into the change history.'; err.hidden = false; return; }
+          /* the value: a cookie, so the PHP listing and the JS booking pages read
+             the same number (includes/pricing.php validates it again) */
+          document.cookie = 'venusep_discount_percent=' + next + '; path=/; max-age=31536000; SameSite=Lax';
+          /* the event: who / when / from / to / why */
+          const hist = readHist();
+          hist.push({ at: new Date().toISOString(), by: 'Administrator', from: cur, to: next, reason: reason });
+          try { localStorage.setItem(HIST, JSON.stringify(hist)); } catch (e) { /* history is a nicety; the rate still saved */ }
+          $('dcCurrent').textContent = next + '%';
+          drawHist();
+          $('dcForm').hidden = true; $('dcOpen').hidden = false;
+          ok.hidden = false;
+          setTimeout(function () { ok.hidden = true; }, 4000);
+        };
+        drawHist();
+      })();
     </script>
   </body>
 </html>

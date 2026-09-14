@@ -1112,7 +1112,7 @@ const PAY = {
   await_cash:  { t: 'Awaiting payment · Cash',     c: 'b-amber' },
   auto_pass:   { t: 'Receipt passed auto-check',   c: 'b-navy'  },
   review:      { t: 'Receipt · manual review',     c: 'b-amber' },
-  rejected:    { t: 'Receipt auto-rejected',       c: 'b-red'   },
+  rejected:    { t: 'Receipt rejected',          c: 'b-red'   },
   confirmed:   { t: 'Payment confirmed',           c: 'b-green' },
   paid_cash:   { t: 'Paid at cashier',             c: 'b-green' },
   overdue:     { t: 'Payment overdue',             c: 'b-red'   },

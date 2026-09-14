@@ -3,6 +3,12 @@
    never drift from the booking pages or admin Venue Management. */
 include __DIR__ . '/../includes/venue-rooms.php';
 include __DIR__ . '/../includes/hostel-rooms.php';
+/* Who is looking, and the discount rule — so a USeP account sees its price with
+   the full price crossed out, and everyone else sees a nudge. This is a PREVIEW:
+   the ID decides the discount at approval (includes/pricing.php). */
+require_once __DIR__ . '/../includes/customer-bookings.php';   /* $customerContact */
+ob_start(); include __DIR__ . '/../includes/pricing.php'; $pricingJs = ob_get_clean();   /* PHP helpers now; JS block echoed later */
+$isUsep = usep_is_account($customerContact['email']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -516,11 +522,24 @@ include __DIR__ . '/../includes/hostel-rooms.php';
     <section class="listing-placeholder" id="venue-listings">
       <h4>Rooms you can reserve</h4>
       <p>Pick a room to open its booking page — dates, times, and payment happen there.</p>
+      <?php if ($isUsep): ?>
+        <!-- USeP account: prices below are shown discounted with the full price
+             crossed out. A preview, not a grant — staff confirm from the ID. -->
+        <p style="display:inline-flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#1c7a4f;background:#f2faf5;border:1px solid #d4ebdd;border-radius:9px;padding:9px 12px;margin:0 0 12px;line-height:1.5">
+          <span>&#10003;</span><span>You are signed in with a USeP account, so prices show your <strong><?php echo (int) $DISCOUNT_PERCENT; ?>% USeP rate</strong> with the full price crossed out. It is confirmed from your USeP ID when staff approve the booking.</span>
+        </p>
+      <?php else: ?>
+        <!-- everyone else: full price, plus the nudge — a USeP student on a Gmail
+             account should still find out the discount exists. -->
+        <p style="display:inline-flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#4a463f;background:#faf9f7;border:1px solid #e8e3d9;border-radius:9px;padding:9px 12px;margin:0 0 12px;line-height:1.5">
+          <span>&#127891;</span><span><strong>USeP student, faculty or staff?</strong> You get <?php echo (int) $DISCOUNT_PERCENT; ?>% off &mdash; choose "USeP-affiliated" and upload your USeP ID when you book.</span>
+        </p>
+      <?php endif; ?>
       <!-- Venue rooms come from the ONE shared source (includes/venue-rooms.php),
            the same data the booking page and admin Venue Management read. -->
       <div class="listing-grid">
 <?php foreach ($venueRooms as $room): ?>
-        <a class="listing-item" href="room-reservation.php?room=<?php echo urlencode($room['id']); ?>"><strong><?php echo htmlspecialchars($room['name']); ?></strong><?php echo htmlspecialchars($room['venue']); ?> · up to <?php echo (int) $room['capacity']; ?> guests · ₱<?php echo number_format($room['fee']); ?> per day</a>
+        <a class="listing-item" href="room-reservation.php?room=<?php echo urlencode($room['id']); ?>"><strong><?php echo htmlspecialchars($room['name']); ?></strong><?php echo htmlspecialchars($room['venue']); ?> · up to <?php echo (int) $room['capacity']; ?> guests · <?php echo usep_price_html((int) $room['fee'], $isUsep, ' per day'); ?></a>
 <?php endforeach; ?>
       </div>
     </section>
@@ -541,7 +560,7 @@ include __DIR__ . '/../includes/hostel-rooms.php';
         if (!$rooms) continue; ?>
       <div class="hostel-type-head">
         <span class="hostel-type-name"><?php echo htmlspecialchars($HOSTEL_CR_LABEL[$crType]); ?></span>
-        <span class="hostel-type-note"><?php echo $crType === 'private' ? 'Bathroom inside the room' : 'Shared bathroom outside the room'; ?> · ₱<?php echo number_format($HOSTEL_RATES[$crType]); ?> per head, per night</span>
+        <span class="hostel-type-note"><?php echo $crType === 'private' ? 'Bathroom inside the room' : 'Shared bathroom outside the room'; ?> · <?php echo usep_price_html((int) $HOSTEL_RATES[$crType], $isUsep, ' per head, per night'); ?></span>
       </div>
       <div class="listing-grid">
 <?php foreach ($rooms as $room):
@@ -553,7 +572,7 @@ include __DIR__ . '/../includes/hostel-rooms.php';
           $closed  = $mt && $mt['blocks'] && hostelMaintCovers($mt, $tonight); ?>
         <a class="listing-item" href="hostel-reservation.php?room=<?php echo urlencode($room['id']); ?>">
           <strong><?php echo htmlspecialchars($room['name']); ?></strong>
-          <?php echo (int) $room['beds']; ?> beds · ₱<?php echo number_format($HOSTEL_RATES[$room['cr_type']]); ?> per head, per night
+          <?php echo (int) $room['beds']; ?> beds · <?php echo usep_price_html((int) $HOSTEL_RATES[$room['cr_type']], $isUsep, ' per head, per night'); ?>
           <span class="hostel-free<?php echo ($closed || !$free) ? ' is-none' : ''; ?>">
             <?php
               if ($closed)      echo 'Closed for maintenance tonight';

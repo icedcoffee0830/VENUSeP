@@ -37,6 +37,7 @@ if ($portal === 'customer') {
     ['Reports',             'Quarterly_Reports.php',           'bi-bar-chart'],
     ['Payment Settings',    'payment-settings.php',            'bi-wallet2'],
     ['Settings',            'venusep_profile.php',             'bi-gear'],
+    ['Log Out',             'admin-login.php',              'bi-box-arrow-right'],
   ];
 }
 ?>

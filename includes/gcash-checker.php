@@ -205,7 +205,7 @@ const GC_LABELS={
   duplicate_file:'This exact image file was already submitted before.',
   duplicate_ref:'This reference number was already used by a previous submission.',
   not_gcash_receipt:'The image does not look like a GCash receipt (expected markers not found).',
-  receiver_mismatch:'The money was sent to a DIFFERENT account, not the business GCash account.',
+  receiver_mismatch:'The account on the receipt does not match the account this booking pays into.',
   amount_mismatch:'The amount on the receipt is not the exact amount required for this booking.',
   unreadable:'Could not read enough text from the image.',
   likeness_uncertain:'Layout only partially matches a GCash send-money receipt.',
@@ -226,6 +226,10 @@ function evaluateReceipt(input, expectedCentavos){
   const text=String(input.text||'');
   const flags=(input.preFlags||[]).slice();
   const reasons=[];
+  /* The two SCORED fields (DB-DECISIONS #6): true = confirmed correct,
+     false = positively wrong, null = could not be read. `reasons` now holds only
+     the fatal three — duplicate file, duplicate reference, not a GCash receipt. */
+  let amountOk=null, receiverOk=null;
   const parsed=parseReceiptText(text);
 
   /* G1 — exact same file submitted before (blocks even if unreadable) */
@@ -246,21 +250,28 @@ function evaluateReceipt(input, expectedCentavos){
 
     /* G4 — receiver must be THIS booking's account (number beats name).
        Asked for at verdict time, because one page can serve several venues
-       and each venue has its own account (includes/payment-settings.php). */
+       and each venue has its own account (includes/payment-settings.php).
+       SCORED, not fatal (DB-DECISIONS #6): a wrong receiver alone sends the
+       receipt to a human, because this matcher reads MASKED names off a phone
+       screenshot and a false mismatch is its classic failure. */
     const acct=gcAccount();
     const numberOk=numberMatchesMasked(parsed.receiverNumber, acct.number);
     const nameOk=maskedNameMatches(parsed.receiverNameMasked, acct.name);
     const shortOk=shortNameMatches(parsed.receiverNameShort, acct.name);
-    if(numberOk===false) reasons.push('receiver_mismatch');
-    else if(numberOk===true){ /* number confirmed — good regardless of noisy name OCR */ }
-    else if(nameOk===true || shortOk===true){ /* name evidence confirms */ }
-    else if(nameOk===false || shortOk===false) reasons.push('receiver_mismatch');
-    else flags.push('receiver_unreadable');
+    if(numberOk===true) receiverOk=true;                 // number confirmed — noisy name OCR cannot override it
+    else if(numberOk===false) receiverOk=false;
+    else if(nameOk===true || shortOk===true) receiverOk=true;
+    else if(nameOk===false || shortOk===false) receiverOk=false;
+    else receiverOk=null;                                // nothing readable — neither right nor wrong
+    if(receiverOk===false) flags.push('receiver_mismatch');
+    else if(receiverOk===null) flags.push('receiver_unreadable');
 
-    /* G5 — EXACT amount, no more no less (integer centavo equality) */
+    /* G5 — EXACT amount, integer centavo equality. Also SCORED, not fatal: a
+       typo'd amount to the right account is a customer who paid, not a fraud. */
     if(parsed.effAmountC!=null){
-      if(parsed.effAmountC!==expectedCentavos) reasons.push('amount_mismatch');
-    }else flags.push('amount_unreadable');
+      amountOk = (parsed.effAmountC===expectedCentavos);
+      if(!amountOk) flags.push('amount_mismatch');
+    }else{ amountOk=null; flags.push('amount_unreadable'); }
     if(parsed.amountC!=null && parsed.totalC!=null && parsed.amountC!==parsed.totalC) flags.push('amounts_inconsistent');
 
     /* date sanity — soft only */
@@ -276,7 +287,18 @@ function evaluateReceipt(input, expectedCentavos){
   }
 
   const uf=[...new Set(flags)], ur=[...new Set(reasons)];
-  const status=ur.length?'rejected_auto':(uf.length?'needs_review':'pending_staff');
+  /* THE VERDICT (DB-DECISIONS #6). Reject only when there is nothing for a human
+     to weigh: a duplicate, a non-receipt, or BOTH fields positively wrong. One
+     field wrong — or unreadable — is a person's call, not the scanner's. The
+     engine has never been trusted to confirm a payment on its own; this stops it
+     being trusted to refuse one either.
+     "Both wrong" means positively wrong, never merely unreadable: absence of data
+     must not reject, which is this engine's oldest rule. */
+  const bothWrong = (amountOk===false && receiverOk===false);
+  const bothRight = (amountOk===true  && receiverOk===true);
+  const status = (ur.length || bothWrong) ? 'rejected'
+               : (bothRight && !uf.length) ? 'accepted'
+               : 'manual_review';
   return { status, parsed, flags:uf, reasons:ur, sha:input.sha||'',
            confidence:input.confidence!=null?Math.round(input.confidence):null,
            textExcerpt:text.trim().slice(0,900) };
@@ -413,5 +435,5 @@ function removeReceipt(){
   state.ocr=null; render();
 }
 
-function receiptOk(){ return !!(state.ocr && state.ocr.phase==='done' && state.ocr.rec && state.ocr.rec.status!=='rejected_auto'); }
+function receiptOk(){ return !!(state.ocr && state.ocr.phase==='done' && state.ocr.rec && state.ocr.rec.status!=='rejected'); }
 </script>

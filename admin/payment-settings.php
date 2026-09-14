@@ -240,6 +240,7 @@ include __DIR__ . '/../includes/payment-settings.php';
               </div>
 <?php endforeach; ?>
             </div>
+
           </div>
         </div>
       </main>

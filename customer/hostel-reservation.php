@@ -114,6 +114,7 @@ include __DIR__ . '/../includes/hostel-rooms.php';
    same engine as the venues, different expected receiver. That is exactly why the
    engine is an include and not a copy — see includes/gcash-checker.php. */
 include __DIR__ . '/../includes/payment-settings.php';
+include __DIR__ . '/../includes/pricing.php';   /* USeP discount rate + the account check */
 include __DIR__ . '/../includes/gcash-checker.php';
 ?>
 <script>
@@ -161,6 +162,7 @@ let state = {
      stepper grows/shrinks this list, so the count and the roster are one thing. */
   booking: { checkIn:'', checkOut:'', occupants:[ {name:'', gender:'F'} ] },
   payMethod: 'gcash',                     // 'gcash' (staff account) | 'cash' (to staff)
+  affiliated: isUsepAccount(ACCOUNT.email) ? true : null,   // pre-selected for a USeP account (preview — the ID decides)
   idFile: null,                           // required to submit
   posNumber: null,                        // null until staff returns from CEDU -> payment LOCKED
   orNumber: null,                         // null until the cashier issues it -> post-confirmation only
@@ -237,7 +239,13 @@ function derive(){
   const rate=R?roomRate(R):0;
   const maxFree=R?maxBedsFree(R,nights):0;
   const blocked=firstBlockedNight(nights);
-  const total=R?(beds*rate*nights.length):0;
+  /* Pricing. `total` is the DISCOUNTED total, same as the venue page: the checker
+     validates the stored discounted figure (DB-DECISIONS #2), so every screen and
+     gcExpectedCentavos() below stays right without knowing a discount exists.
+     Hostel maths differs — beds x rate x NIGHTS — but the discount lands the same. */
+  const roomPrice=R?(beds*rate*nights.length):0;
+  const hpr=priceWithDiscount(roomPrice, state.affiliated);
+  const total=hpr.total, discountPercent=hpr.discountPercent, discountAmount=hpr.discountAmount;
   const named=b.occupants.every(o=>o.name.trim().length>0);
   const badRange=!!(b.checkIn && b.checkOut && b.checkOut<=b.checkIn);
 
@@ -278,7 +286,7 @@ function derive(){
   else if(beds>maxFree) hint='Only '+maxFree+' bed'+(maxFree>1?'s':'')+' free — reduce your booking';
   else if(!named) hint='Enter a name for every bed';
 
-  return { R, b, nights, beds, rate, maxFree, blocked, total, named, badRange, slot, ready, hint };
+  return { R, b, nights, beds, rate, maxFree, blocked, total, roomPrice, discountPercent, discountAmount, named, badRange, slot, ready, hint };
 }
 
 /* ---------- actions ---------- */
@@ -387,12 +395,14 @@ function uploadId(input){
   state.idFile={ name:f.name, url:URL.createObjectURL(f) };
   input.value=''; render();
 }
+function setAffiliation(v){ state.affiliated = v; render(); }   /* re-prices instantly */
 function removeId(){
   if(state.idFile && state.idFile.url){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
   state.idFile=null; render();
 }
 function submitRequest(){
-  if(!derive().ready || !state.idFile) return;
+  /* affiliation is a required choice, like the ID — the price depends on it */
+  if(!derive().ready || !state.idFile || state.affiliated===null) return;
   state.screen='pending'; state.posNumber=null; window.scrollTo(0,0); render();
 }
 /* [SIM] the staff side is not connected — this stands in for a staff member
@@ -649,7 +659,7 @@ function detailScreen(){
       ${policy('Booking is per bed','You reserve <strong>beds</strong>, not the room. Other guests may book the remaining beds in the same room — unless you book all '+R.beds+', which gives you the whole room. A bed has to be free on <strong>every night</strong> of your stay.')}
       ${policy('Every bed is named','Give the name of the person sleeping in each bed. Staff match these against your valid ID at check-in. The gender mix of the room is shown so you know who you are sharing with — <strong>no bed is reserved by gender</strong>.')}
       ${policy('Nights, not days','A stay is counted in <strong>nights</strong>: check in on the 1st and out on the 4th and that is 3 nights. Your check-out day is not charged. A stay must be <strong>continuous</strong> — if the room is closed for maintenance on any night in your range, those dates cannot be booked at all.')}
-      ${policy('Payment goes through '+CEDU.name,'After you book, hostel staff request a <strong>POS</strong> from '+CEDU.name+'. <strong>You cannot pay until it arrives</strong> — nothing is wrong and nothing is late while you wait. Once it is in, pay cash to the staff or GCash to the designated staff account (send the <strong>exact amount</strong> — anything else is rejected automatically).')}
+      ${policy('Payment goes through '+CEDU.name,'After you book, hostel staff request a <strong>POS</strong> from '+CEDU.name+'. <strong>You cannot pay until it arrives</strong> — nothing is wrong and nothing is late while you wait. Once it is in, pay cash to the staff or GCash to the designated staff account (send the <strong>exact amount</strong> — a different amount is not confirmed automatically and has to be reviewed by staff).')}
       ${policy('One full payment','The whole stay is paid at once, up front. There is no per-night billing and no partial payment.')}
       ${policy('Your receipts','You get a <strong>Transaction Receipt</strong> straight away, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already confirmed — the booking is not waiting on it.')}
       ${policy('At check-in','Show the staff your <strong>POS</strong> and your <strong>Official Receipt</strong>, plus the valid ID you submitted. Each guest sleeps in the bed booked under their name.')}
@@ -836,6 +846,37 @@ function reviewScreen(){
         <span style="font-size:12.5px;color:#8a857d">${esc(x.mathLabel)}</span>
         <span style="font-size:21px;font-weight:720">${peso(x.d.total)}</span>
       </div>
+      ${x.d.discountAmount>0?`
+      <div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#8a857d;margin-top:4px">
+        <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
+        <span style="color:#1c7a4f;font-weight:640">&minus;${peso(x.d.discountAmount)}</span>
+      </div>
+      <div style="font-size:11.5px;color:#a5a19a;line-height:1.5;margin-top:4px">Provisional &mdash; staff confirm the discount from your USeP ID. Payment cannot open until the POS arrives anyway, so it is settled well before you pay.</div>`:''}
+    </div>
+
+    <!-- USeP AFFILIATION — same rule as the venue page: a CLAIM the customer
+         makes, proved by a USeP ID and confirmed by staff. The usep.edu.ph
+         account is evidence shown to staff, never a grant (includes/pricing.php).
+         DB-DECISIONS #2 applies the discount to hostel bookings too. -->
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px">
+      <div style="font-size:14.5px;font-weight:680;margin-bottom:3px">USeP affiliation <span style="color:#b23a3a">*</span></div>
+      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">USeP students, faculty and employees get <strong>${DISCOUNT_PERCENT}% off</strong> the whole stay. Staff confirm it from your ID.</div>
+      ${[[true,'I am USeP-affiliated','Student, faculty or employee &mdash; upload your <strong>USeP ID</strong> below'],
+         [false,'Not affiliated','Upload any valid government-issued ID below']].map(function(o){
+        const on = state.affiliated === o[0];
+        return `<div onclick="setAffiliation(${o[0]})" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid ${on?'#1f2a44':'rgba(0,0,0,.14)'};background:${on?'#f4f7fc':'#fff'};border-radius:11px;padding:12px 13px;margin-bottom:8px;cursor:pointer">
+            <span style="flex:none;width:17px;height:17px;border-radius:999px;border:2px solid ${on?'#1f2a44':'#c3bfb8'};margin-top:1px;display:flex;align-items:center;justify-content:center">
+              ${on?`<span style="width:8px;height:8px;border-radius:999px;background:#1f2a44"></span>`:''}</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:13.5px;font-weight:640;color:#1c1b19">${o[1]}</span>
+              <span style="display:block;font-size:11.5px;color:#8a857d;margin-top:2px">${o[2]}</span>
+            </span>
+          </div>`;
+      }).join('')}
+      ${isUsepAccount(ACCOUNT.email)?`
+      <div style="display:flex;gap:8px;align-items:flex-start;font-size:11.5px;color:#4f7a63;background:#f2faf5;border:1px solid #d4ebdd;border-radius:9px;padding:9px 11px">
+        <span>&#10003;</span><span>You are signed in with a USeP address (<strong>${esc(ACCOUNT.email)}</strong>). Staff see this, but the <strong>ID</strong> is what decides the discount.</span>
+      </div>`:''}
     </div>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px">
@@ -933,15 +974,21 @@ function receiptPanelHtml(){
     </div>`;
   }
   const r=o.rec;
+  /* Verdict wording. Keys match the schema's gcash_receipts.verdict enum
+     (accepted / manual_review / rejected) so the app and the database speak one
+     vocabulary. "manual review" is NOT a problem the customer must fix — the
+     slot is held and staff decide — so it says so, and the issue list below
+     still tells them exactly what looked off. */
   const V={
-    pending_staff:{ bg:'#f2faf5', bd:'#d4ebdd', fg:'#1c7a4f', t:'Receipt accepted — payment recorded', s:'All automatic checks passed. Staff give the final confirmation in GCash.' },
-    needs_review:{ bg:'#fdf7ee', bd:'#f3e3c8', fg:'#8a5a12', t:'Receipt received — needs manual review', s:'Some details could not be verified automatically; staff will review them.' },
-    rejected_auto:{ bg:'#fdf2f2', bd:'#f2d8d8', fg:'#b23a3a', t:'Receipt rejected by the automatic check', s:'Fix the issues below, then upload a new receipt.' },
+    accepted:{ bg:'#f2faf5', bd:'#d4ebdd', fg:'#1c7a4f', t:'Receipt accepted — payment recorded', s:'All automatic checks passed. Staff give the final confirmation in GCash.' },
+    manual_review:{ bg:'#fdf7ee', bd:'#f3e3c8', fg:'#8a5a12', t:'Receipt received — a coordinator will check it', s:'Something did not match automatically, so a person will look at it. Your slot is held while they do — you do not need to resubmit.' },
+    rejected:{ bg:'#fdf2f2', bd:'#f2d8d8', fg:'#b23a3a', t:'Receipt rejected by the automatic check', s:'Fix the issues below, then upload a new receipt.' },
   }[r.status];
   const p=r.parsed;
   const kv=[
     ['Ref no.', p.refDisplay||p.ref||'—'],
     ['Amount read', p.effAmountC!=null?centavosFmt(p.effAmountC):'—'],
+    ['Amount required', centavosFmt(gcExpectedCentavos())],   /* the number they can act on — shown even when a person is reviewing */
     ['Date & time', p.datetime||'—'],
     ['Sent to', p.receiverNumber||p.receiverNameMasked||p.receiverNameShort||'—'],
   ];
@@ -953,7 +1000,7 @@ function receiptPanelHtml(){
         <div style="font-size:13.5px;color:${V.fg}">${V.t}</div>
         <div style="font-size:12px;color:${V.fg};opacity:.85;margin-top:2px">${V.s}</div>
       </div>
-      <button onclick="removeReceipt()" style="flex:none;background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;color:#4a463f;cursor:pointer">${r.status==='rejected_auto'?'Try another':'Remove'}</button>
+      <button onclick="removeReceipt()" style="flex:none;background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;color:#4a463f;cursor:pointer">${r.status==='rejected'?'Try another':'Remove'}</button>
     </div>
     <div style="display:flex;gap:13px;padding:13px 14px">
       ${o.thumb?`<img src="${o.thumb}" alt="receipt" style="width:64px;height:84px;object-fit:cover;border-radius:8px;border:1px solid rgba(0,0,0,.1);flex:none">`:''}
@@ -998,7 +1045,7 @@ function paymentScreen(){
     </div>
     <label style="display:flex;align-items:flex-start;gap:9px;font-size:12.5px;color:#4a463f;line-height:1.5;margin-bottom:12px;cursor:pointer">
       <input type="checkbox" ${state.agreeExact?'checked':''} onchange="toggleAgreeExact(this)" style="margin-top:2px;width:15px;height:15px;accent-color:#1f2a44;flex:none">
-      <span>I sent <strong>exactly ${peso(x.d.total)}</strong> to the account above. A different amount is rejected automatically.</span>
+      <span>I sent <strong>exactly ${peso(x.d.total)}</strong> to the account above. A different amount is not confirmed automatically &mdash; a coordinator has to review it, which delays my booking.</span>
     </label>
     ${receiptPanelHtml()}`;
 

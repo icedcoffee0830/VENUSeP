@@ -98,6 +98,7 @@
    it, so what the customer is told and what is verified cannot diverge. */
 include __DIR__ . '/../includes/payment-settings.php';
 include __DIR__ . '/../includes/venue-rooms.php';
+include __DIR__ . '/../includes/pricing.php';   /* USeP discount rate + the account check */
 include __DIR__ . '/../includes/gcash-checker.php';
 ?>
 <script>
@@ -166,6 +167,7 @@ let state = {
   // days); times{} holds per-day overrides for multi-day bookings, keyed by date.
   booking: { eventName:'', date:'', dateEnd:'', start:'', end:'', attendees:'', times:{} },
   payMethod: 'gcash',                                                // 'gcash' | 'cash' (walk-in, pay at the venue office)
+  affiliated: isUsepAccount(ACCOUNT.email) ? true : null,           // USeP-affiliated CLAIM. Pre-selected for a USeP account (a preview — the ID decides); null = not chosen yet
   idFile: null,                                                      // uploaded valid ID: null | {name, url} — required to submit
   approved: false,                                                   // staff approved the ID + reservation (payment unlocked)
   agreeExact: false,                                                 // EXACT-amount disclaimer ticked?
@@ -367,7 +369,14 @@ function derive(){
   const actDates=activeDates();                       // same filter as everywhere else — never a second copy
   const days=Math.max(1, actDates.length);            // billable days = available days only
   const excluded=allDates.length-actDates.length;     // booked or closed days, excluded automatically
-  const totalFee=R ? R.fee*days : 0;
+  /* Pricing. totalFee is the DISCOUNTED total on purpose: DB-DECISIONS #2 says
+     the system computes the discounted price and the checker validates THAT, so
+     every screen and gcExpectedCentavos() downstream stays correct without
+     knowing the discount exists. roomPrice/discountAmount ride along for display
+     and are what a booking would snapshot. */
+  const roomPrice=R ? R.fee*days : 0;
+  const pr=priceWithDiscount(roomPrice, state.affiliated);
+  const totalFee=pr.total, discountPercent=pr.discountPercent, discountAmount=pr.discountAmount;
 
   const sr=slotStatus();
   const multi = allDates.length>1;                    // the range spans several days (per-day editor shows)
@@ -432,7 +441,7 @@ function derive(){
   else if(tooSoon) hint='Bookings must be made at least 12 hours in advance';
   else if(isNaN(ba)||ba<=0) hint='Enter the number of attendees';
 
-  return { R, b, days, multi, excluded, allDates, dates:sr.dates||actDates, totalFee, slot, over, ready, hint };
+  return { R, b, days, multi, excluded, allDates, dates:sr.dates||actDates, totalFee, roomPrice, discountPercent, discountAmount, slot, over, ready, hint };
 }
 
 /* ---------- actions ---------- */
@@ -619,12 +628,17 @@ function uploadId(input){
   state.idFile={ name:f.name, url:URL.createObjectURL(f) };
   render();
 }
+/* The affiliation CLAIM. Changing it re-prices instantly, so the customer sees
+   what the discount is worth before deciding which ID to upload. */
+function setAffiliation(v){ state.affiliated = v; render(); }
 function removeId(){
   if(state.idFile){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
   state.idFile=null; render();
 }
 function submitRequest(){
-  if(!derive().ready || !state.idFile) return;
+  /* affiliation is now a required choice, exactly like the ID upload — the price
+     depends on it, so it cannot be left unanswered */
+  if(!derive().ready || !state.idFile || state.affiliated===null) return;
   state.screen='pending'; render();
 }
 /* [SIM] mockup stand-in for the staff side (the two UIs aren't connected yet) —
@@ -756,14 +770,19 @@ function detailScreen(){
     };
     // Capacity & location are already in the title row, so keep only non-redundant facts here
     const facts=[
-      { icon:I.tag,    text:'Reservation fee: '+peso(R.fee)+' per day' },
+      /* USeP account: the fee shows crossed-out full price + USeP price. A PREVIEW
+         (staff confirm from the ID), so it always carries the condition. */
+      { icon:I.tag,    text:'Reservation fee: '+peso(R.fee)+' per day',
+        html: isUsepAccount(ACCOUNT.email)
+          ? 'Reservation fee: <s style="color:#a5a19a">'+peso(R.fee)+'</s> <strong style="color:#1c7a4f">'+peso(priceWithDiscount(R.fee,true).total)+'</strong> per day <span style="font-size:12px;color:#1c7a4f">· USeP price, with a verified ID</span>'
+          : null },
       { icon:I.clock,  text:'Bookable hours: 7 AM – 10 PM daily' },
       { icon:I.star,   text:'Best for: '+R.bestFor },
       { icon:I.food,   text:'Catering: '+R.catering },
       { icon:I.access, text:'Accessibility: '+R.accessible },
     ];
-    const row=(icon,label)=>`<div style="display:flex;align-items:flex-start;gap:11px;font-size:14px;line-height:1.45;color:#1c1b19"><span style="color:#3a372f;flex:none;display:flex;margin-top:1px">${icon}</span>${esc(label)}</div>`;
-    const factRows=facts.map(f=>row(f.icon,f.text)).join('');
+    const row=(icon,label,html)=>`<div style="display:flex;align-items:flex-start;gap:11px;font-size:14px;line-height:1.45;color:#1c1b19"><span style="color:#3a372f;flex:none;display:flex;margin-top:1px">${icon}</span>${html!=null?html:esc(label)}</div>`;
+    const factRows=facts.map(f=>row(f.icon,f.text,f.html)).join('');
     const amenityRows=R.amenities.map(a=>row(amenityIcon(a),a)).join('');
     content=`
       <p style="margin:0 0 28px;font-size:15.5px;line-height:1.7;color:#3a372f;max-width:70ch">${esc(R.description)}</p>
@@ -787,7 +806,7 @@ function detailScreen(){
       ${policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')}
       ${policy('Valid ID & approval','Every booking request must include a photo of a <strong>valid ID</strong> (USeP or government-issued). Your reservation stays <strong>pending</strong> — and payment stays locked — until staff approve both the ID and the reservation.')}
       ${policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')}
-      ${policy('Refunds','A refund requires <strong>both</strong> the system transaction receipt <strong>and</strong> the GCash receipt (or the official cashier receipt for cash payments). Requests missing either document cannot be processed.')}
+      ${policy('Refunds','A refund needs the system transaction receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
       ${policy('Confirmation','After you pay, staff verify the payment — the GCash reference in the business account, or the cashier record — and give the final confirmation. You are notified at each step.')}`;
   }
 
@@ -965,8 +984,17 @@ function detailScreen(){
 
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
           <span style="font-size:13px;color:#7a766f">Reservation fee${feeNote}</span>
-          <span style="font-size:17px;font-weight:700">${peso(d.totalFee)}</span>
+          <span style="font-size:17px;font-weight:700">${peso(d.roomPrice)}</span>
         </div>
+        ${d.discountAmount>0?`
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:8px">
+          <span style="font-size:13px;color:#1c7a4f">USeP discount &minus;${d.discountPercent}%<span style="display:block;font-size:11px;color:#a5a19a;margin-top:1px">applied once staff check your USeP ID</span></span>
+          <span style="font-size:17px;font-weight:700;color:#1c7a4f">&minus;${peso(d.discountAmount)}</span>
+        </div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:9px;margin-top:8px;border-top:1px solid rgba(0,0,0,.08)">
+          <span style="font-size:13px;font-weight:640;color:#4a463f">Total to pay</span>
+          <span style="font-size:19px;font-weight:750">${peso(d.totalFee)}</span>
+        </div>`:''}
 
         <button onclick="goReview()" ${d.ready?'':'disabled'} style="width:100%;height:48px;border:none;border-radius:11px;font-size:15px;font-weight:680;cursor:${d.ready?'pointer':'not-allowed'};background:${d.ready?'#1f2a44':'#b7b3ab'};color:#fff;opacity:${d.ready?'1':'.85'}">Continue — review &amp; submit request</button>
         ${(!d.ready && d.hint)?`<div style="font-size:11.5px;color:#a5a19a;text-align:center;margin-top:8px">${d.hint}</div>`:`<div style="font-size:11.5px;color:#a5a19a;text-align:center;margin-top:8px">You'll attach a valid ID next · payment opens after staff approval</div>`}
@@ -1053,9 +1081,41 @@ function reviewScreen(){
         ${scheduleHtml(x)}
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 16px;border-top:1px solid rgba(0,0,0,.07)">
-        <span style="font-size:13.5px;font-weight:600;color:#4a463f">Reservation fee <span style="font-weight:500;color:#8a857d">· GCash or cash at the venue</span></span>
+        <span style="font-size:13.5px;font-weight:600;color:#4a463f">${x.d.discountAmount>0?'Total to pay':'Reservation fee'} <span style="font-weight:500;color:#8a857d">· GCash or cash at the venue</span></span>
         <span style="font-size:20px;font-weight:750;letter-spacing:-.01em">${peso(x.d.totalFee)}</span>
       </div>
+      ${x.d.discountAmount>0?`
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#8a857d;margin-top:-4px;padding-bottom:2px">
+        <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
+        <span style="color:#1c7a4f;font-weight:640">&minus;${peso(x.d.discountAmount)}</span>
+      </div>
+      <div style="font-size:11.5px;color:#a5a19a;line-height:1.5;padding-bottom:4px">Provisional &mdash; staff confirm the discount when they check your USeP ID. Payment only opens after that, so this figure is settled before you pay anything.</div>`:''}
+    </div>
+
+    <!-- USeP AFFILIATION. A claim, not a grant: staff confirm it from the ID
+         before payment unlocks, so the discount below is shown as provisional.
+         The account's email is displayed as SUPPORTING EVIDENCE only — nothing
+         verifies it at registration, so it can never decide a price on its own
+         (see includes/pricing.php). -->
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+      <div style="font-size:14px;font-weight:660;margin-bottom:3px">USeP affiliation <span style="color:#b23a3a">*</span></div>
+      <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px">USeP students, faculty and employees get <strong>${DISCOUNT_PERCENT}% off</strong>. Staff confirm this from your ID before you pay.</div>
+      ${[[true,'I am USeP-affiliated','Student, faculty or employee &mdash; upload your <strong>USeP ID</strong> below'],
+         [false,'Not affiliated','Upload any valid government-issued ID below']].map(function(o){
+        const on = state.affiliated === o[0];
+        return `<div onclick="setAffiliation(${o[0]})" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid ${on?'#1f2a44':'rgba(0,0,0,.14)'};background:${on?'#f4f7fc':'#fff'};border-radius:11px;padding:12px 13px;margin-bottom:8px;cursor:pointer">
+            <span style="flex:none;width:17px;height:17px;border-radius:999px;border:2px solid ${on?'#1f2a44':'#c3bfb8'};margin-top:1px;display:flex;align-items:center;justify-content:center">
+              ${on?`<span style="width:8px;height:8px;border-radius:999px;background:#1f2a44"></span>`:''}</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:13.5px;font-weight:640;color:#1c1b19">${o[1]}</span>
+              <span style="display:block;font-size:11.5px;color:#8a857d;margin-top:2px">${o[2]}</span>
+            </span>
+          </div>`;
+      }).join('')}
+      ${isUsepAccount(ACCOUNT.email)?`
+      <div style="display:flex;gap:8px;align-items:flex-start;font-size:11.5px;color:#4f7a63;background:#f2faf5;border:1px solid #d4ebdd;border-radius:9px;padding:9px 11px">
+        <span>&#10003;</span><span>You are signed in with a USeP address (<strong>${esc(ACCOUNT.email)}</strong>). Staff see this, but they still check your ID &mdash; it is the ID that decides the discount.</span>
+      </div>`:''}
     </div>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
@@ -1161,15 +1221,21 @@ function receiptPanelHtml(){
     </div>`;
   }
   const r=o.rec;
+  /* Verdict wording. Keys match the schema's gcash_receipts.verdict enum
+     (accepted / manual_review / rejected) so the app and the database speak one
+     vocabulary. "manual review" is NOT a problem the customer must fix — the
+     slot is held and staff decide — so it says so, and the issue list below
+     still tells them exactly what looked off. */
   const V={
-    pending_staff:{ bg:'#f2faf5', bd:'#d4ebdd', fg:'#1c7a4f', t:'Receipt accepted — payment recorded', s:'All automatic checks passed. Staff give the final confirmation in GCash.' },
-    needs_review:{ bg:'#fdf7ee', bd:'#f3e3c8', fg:'#8a5a12', t:'Receipt received — needs manual review', s:'Some details could not be verified automatically; staff will review them.' },
-    rejected_auto:{ bg:'#fdf2f2', bd:'#f2d8d8', fg:'#b23a3a', t:'Receipt rejected by the automatic check', s:'Fix the issues below, then upload a new receipt.' },
+    accepted:{ bg:'#f2faf5', bd:'#d4ebdd', fg:'#1c7a4f', t:'Receipt accepted — payment recorded', s:'All automatic checks passed. Staff give the final confirmation in GCash.' },
+    manual_review:{ bg:'#fdf7ee', bd:'#f3e3c8', fg:'#8a5a12', t:'Receipt received — a coordinator will check it', s:'Something did not match automatically, so a person will look at it. Your slot is held while they do — you do not need to resubmit.' },
+    rejected:{ bg:'#fdf2f2', bd:'#f2d8d8', fg:'#b23a3a', t:'Receipt rejected by the automatic check', s:'Fix the issues below, then upload a new receipt.' },
   }[r.status];
   const p=r.parsed;
   const kv=[
     ['Ref no.', p.refDisplay||p.ref||'—'],
     ['Amount read', p.effAmountC!=null?centavosFmt(p.effAmountC):'—'],
+    ['Amount required', centavosFmt(gcExpectedCentavos())],   /* the number they can act on — shown even when a person is reviewing */
     ['Date & time', p.datetime||'—'],
     ['Sent to', p.receiverNumber||p.receiverNameMasked||p.receiverNameShort||'—'],
   ];
@@ -1181,7 +1247,7 @@ function receiptPanelHtml(){
         <div style="font-size:13.5px;color:${V.fg}">${V.t}</div>
         <div style="font-size:12px;color:${V.fg};opacity:.85;margin-top:2px">${V.s}</div>
       </div>
-      <button onclick="removeReceipt()" style="flex:none;background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;color:#4a463f;cursor:pointer">${r.status==='rejected_auto'?'Try another':'Remove'}</button>
+      <button onclick="removeReceipt()" style="flex:none;background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;color:#4a463f;cursor:pointer">${r.status==='rejected'?'Try another':'Remove'}</button>
     </div>
     <div style="display:flex;gap:13px;padding:13px 14px">
       ${o.thumb?`<img src="${o.thumb}" alt="receipt" style="width:64px;height:84px;object-fit:cover;border-radius:8px;border:1px solid rgba(0,0,0,.1);flex:none">`:''}
@@ -1242,7 +1308,7 @@ function paymentScreen(){
         <div style="font-size:12.5px;font-weight:600;color:#5c584f;margin-bottom:7px">Upload GCash receipt</div>
         <label style="display:flex;gap:9px;align-items:flex-start;margin:0 0 10px;cursor:pointer">
           <input type="checkbox" id="agreeExact" ${state.agreeExact?'checked':''} onchange="toggleAgreeExact(this)" style="width:15px;height:15px;margin-top:2px;accent-color:#1f2a44">
-          <span style="font-size:12.5px;color:#4a463f;line-height:1.5">I understand I must send the <strong>exact amount — ${peso(x.d.totalFee)}</strong>. A receipt with any other amount is rejected automatically.</span>
+          <span style="font-size:12.5px;color:#4a463f;line-height:1.5">I understand I must send the <strong>exact amount &mdash; ${peso(x.d.totalFee)}</strong>. A different amount is not confirmed automatically; a coordinator has to review it, which delays my booking.</span>
         </label>
         ${receiptPanelHtml()}
       </div>
@@ -1318,7 +1384,7 @@ function doneScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
   const cash=state.payMethod==='cash';
   const rec=!cash && state.ocr && state.ocr.rec;
-  const review=!!(rec&&rec.status==='needs_review');
+  const review=!!(rec&&rec.status==='manual_review');
   const rows=[
     { label:'Reference', value:state.reference },
     { label:'Payment method', value:cash?'Cash — walk-in':'GCash' },
@@ -1354,8 +1420,8 @@ function doneScreen(){
     </div>
 
     <div style="font-size:12.5px;color:#8a857d;line-height:1.6;margin-top:16px">${cash
-      ? 'Bring your booking reference and a valid ID when paying. Keep the official transaction receipt you receive at the counter — it is required for any refund request.'
-      : 'Keep your GCash receipt and this reference number. Both the system transaction receipt and the GCash receipt are required for any refund request.'}</div>
+      ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the system transaction receipt and the Official Receipt.'
+      : 'Keep your GCash receipt and this reference number. A refund request needs the system transaction receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
 
     <button onclick="restart()" style="height:48px;padding:0 26px;border:none;border-radius:11px;background:#1f2a44;color:#fff;font-size:14.5px;font-weight:660;cursor:pointer;margin-top:24px">Browse more rooms</button>
   </main>`;

@@ -6,50 +6,20 @@
    ($portal='customer'). Page-local vanilla JS (search / sort / paginate
    / CSV-JSON export / print) — no third-party table library.
 
-   [SIM] $bookingHistory below is demo data; View Details / Rebook are
-   stubs (their target pages don't exist yet). Replace at DB time.
-   ================================================================== */
+   The bookings themselves are NOT defined here any more: they come from
+   includes/customer-bookings.php, the ONE source, shared with
+   customer/refund-request.php. Moving them out is what stops the two
+   pages drifting apart (see the note in that file).
 
-/* [SIM] demo history rows (id, ROOM, eventDateIso, eventName, bookingStatus, paymentStatus, amount).
-   Rooms are the real r1–r8 venue rooms (see includes/venue-rooms.php) and amounts
-   match each room's per-day fee, so the history is coherent with what the booking
-   page shows. "Unpaid" (not "Failed") is the payment state of a rejected request —
-   nothing failed, it was simply never paid. Methods are GCash/Cash only. */
-$historySeeds = [
-    ['201','USeP Gymnasium','2026-06-28','Intercollege Basketball Finals','Completed','Paid',8000],
-    ['202','CIC Audio-Visual Room','2026-06-20','Research Documentary Screening','Completed','Paid',2000],
-    ['203','Alumni Grand Ballroom','2026-06-12','Leadership Recognition Night','Approved','Paid',5000],
-    ['204','Alumni Boardroom','2026-05-30','Undergraduate Thesis Defense','Completed','Paid',1500],
-    ['205','Heritage Function Room','2026-05-22','Organization Planning Session','Cancelled','Refunded',2500],
-    ['206','Admin Conference Hall','2026-05-15','Digital Literacy Workshop','Rejected','Unpaid',1800],
-    ['207','Alumni Grand Ballroom','2026-04-26','Alumni Chapter Reunion','Completed','Paid',5000],
-    ['208','Garden Pavilion','2026-04-18','Graduation Fellowship','Cancelled','Refunded',3500],
-    ['209','USeP Gymnasium','2026-03-28','Academic Recognition Ceremony','Completed','Paid',8000],
-    ['210','Obrero Function Hall','2026-03-14','Campus Wellness Fair','Rejected','Unpaid',3000],
-    ['211','USeP Gymnasium','2026-02-21','Community Volleyball Clinic','Completed','Paid',8000],
-    ['212','Admin Conference Hall','2026-02-08','Licensure Review Session','Approved','Paid',1800],
-];
-$bookingHistory = [];
-foreach ($historySeeds as $seed) {
-    $bookingHistory[] = [
-        'bookingId' => 'VB-2026-' . $seed[0],
-        'venue' => $seed[1],
-        'eventName' => $seed[3],
-        'eventDate' => date('F j, Y', strtotime($seed[2])),
-        'eventDateIso' => $seed[2],
-        'bookingDate' => date('F j, Y', strtotime($seed[2] . ' -25 days')),
-        'bookingDateIso' => date('Y-m-d', strtotime($seed[2] . ' -25 days')),
-        'amount' => '₱' . number_format($seed[6]),
-        'amountValue' => $seed[6],
-        'paymentStatus' => $seed[5],
-        'bookingStatus' => $seed[4],
-    ];
-}
+   [SIM] View Details / Rebook are still stubs — their target pages don't
+   exist yet. "Request Refund" is real and opens refund-request.php.
+   ================================================================== */
+require_once __DIR__ . '/../includes/customer-bookings.php';
+
+$bookingHistory = $customerBookings;
 $bookingHistoryVenues = array_values(array_unique(array_column($bookingHistory, 'venue')));
 sort($bookingHistoryVenues, SORT_NATURAL | SORT_FLAG_CASE);
 $emptyBookingMessage = 'No booking history found.';
-function bh_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
-function bh_badge($status) { return 'badge-' . strtolower(preg_replace('/[^a-zA-Z]+/', '-', $status)); }
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -138,10 +108,13 @@ function bh_badge($status) { return 'badge-' . strtolower(preg_replace('/[^a-zA-
       .badge-pending { background: #fbf1dd; color: #8a5a00; }
       .badge-rejected, .badge-failed { background: #fcecec; color: #b23a3a; }
       .badge-cancelled, .badge-unpaid { background: #eef0f2; color: #55606b; }
+      .badge-refund-requested { background: #fbf1dd; color: #8a5a00; }
+      .badge-refund-action-needed { background: #fdf3e6; color: #8a5a12; }
+      .badge-refund-denied { background: #fcecec; color: #b23a3a; }
 
       /* row actions */
       .booking-actions { display: inline-flex; gap: 6px; }
-      .booking-action { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
+      .booking-action { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
       .booking-action:hover { background: #f4f2ee; border-color: #c9c2b6; }
       .booking-action[disabled] { opacity: .5; cursor: not-allowed; }
 
@@ -260,6 +233,11 @@ function bh_badge($status) { return 'badge-' . strtolower(preg_replace('/[^a-zA-
                               <!-- [SIM] booking-details.php / rebook.php don't exist yet -->
                               <a class="booking-action" href="#"><i class="bi bi-eye" aria-hidden="true"></i>View</a>
                               <a class="booking-action" href="#"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>Rebook</a>
+                              <?php if ($booking['refundable']): ?>
+                                <a class="booking-action booking-action-refund" href="refund-request.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
+                                  <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Request Refund
+                                </a>
+                              <?php endif; ?>
                             </div>
                           </td>
                         </tr>
@@ -441,5 +419,83 @@ function bh_badge($status) { return 'badge-' . strtolower(preg_replace('/[^a-zA-
         render();
       });
     </script>
+    <!-- Shared refund state — the ONE source, also read by both admin pages. -->
+    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
+
+    <!-- [6b] REFUND STATE [SIM] — paints whatever the shared store says about
+         each booking. There is no database, so a request the customer filed and
+         a decision staff made both travel through includes/refund-store.php.
+
+         NOTE WHAT THIS DOES *NOT* DO: filing does not cancel the booking. Agreed
+         2026-09-09 — the booking stays the customer's for the whole process and
+         the date is released only when the refund is actually COMPLETED. So the
+         reservation badge is left alone for every state EXCEPT 'refunded', which
+         is the one moment the booking closes. -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        if (!window.RefundStore) return;
+        const all = RefundStore.all();
+        const refs = Object.keys(all);
+        if (!refs.length) return;
+
+        const badge = function (cls, text) { return '<span class="booking-badge ' + cls + '">' + text + '</span>'; };
+        const withdraw = function (ref) {
+          const ok = window.confirm('Withdraw your refund request for ' + ref + '?\n\nYour booking is not affected either way — it stays yours. You can request a refund again later if you change your mind.');
+          if (!ok) return;
+          RefundStore.withdraw(ref);
+          window.location.reload();
+        };
+        const action = function (row, cls, icon, text, onClick, href) {
+          const link = row.querySelector('.booking-action-refund');
+          if (!link) return;
+          let el;
+          if (href) { el = document.createElement('a'); el.href = href; }
+          else { el = document.createElement('button'); el.type = 'button'; el.addEventListener('click', onClick); }
+          el.className = 'booking-action ' + cls;
+          el.innerHTML = '<i class="bi ' + icon + '" aria-hidden="true"></i>' + text;
+          link.replaceWith(el);
+        };
+
+        refs.forEach(function (ref) {
+          const rec = all[ref];
+          const row = document.querySelector('[data-booking-id="' + String(ref).replace(/[^A-Za-z0-9-]/g, '') + '"]');
+          if (!row || !rec) return;
+          const cells = row.querySelectorAll('td');
+          const link = row.querySelector('.booking-action-refund');
+
+          if (rec.status === 'open') {
+            row.dataset.paymentStatus = 'Refund requested';
+            cells[6].innerHTML = badge('badge-refund-requested', rec.orPending ? 'Refund · awaiting your OR' : 'Refund requested');
+            action(row, 'booking-action-withdraw', 'bi-x-circle', 'Withdraw request', function () { withdraw(ref); });
+          } else if (rec.status === 'fix') {
+            row.dataset.paymentStatus = 'Refund action needed';
+            cells[6].innerHTML = badge('badge-refund-action-needed', 'Refund · action needed');
+            action(row, 'booking-action-fix', 'bi-arrow-counterclockwise', 'Fix and resubmit', null,
+              'refund-request.php?booking=' + encodeURIComponent(ref));
+          } else if (rec.status === 'denied') {
+            row.dataset.paymentStatus = 'Refund denied';
+            cells[6].innerHTML = badge('badge-refund-denied', 'Refund denied');
+            if (link) link.remove();
+          } else if (rec.status === 'refunded') {
+            /* the ONLY state that closes the booking and frees the date */
+            const p = rec.proof || {};
+            row.dataset.paymentStatus = 'Refunded';
+            row.dataset.status = 'Cancelled';
+            cells[6].innerHTML = badge('badge-refunded', 'Refunded')
+              + (p.reference ? '<div style="font-size:10.5px;color:#8a857d;margin-top:3px">Ref ' + String(p.reference).replace(/[<>&"]/g, '') + '</div>' : "");
+            cells[7].innerHTML = badge('badge-cancelled', 'Cancelled');
+            /* proof lives on the refund page — the row is too small for a receipt */
+            action(row, 'booking-action-proof', 'bi-receipt', 'View refund proof', null,
+              'refund-request.php?booking=' + encodeURIComponent(ref));
+          }
+          if (rec.staffNote && (rec.status === 'fix' || rec.status === 'denied')) {
+            row.title = 'Staff note: ' + rec.staffNote;
+          }
+        });
+        const search = document.getElementById('booking-history-search');
+        if (search) search.dispatchEvent(new Event('input'));
+      });
+    </script>
+
   </body>
 </html>

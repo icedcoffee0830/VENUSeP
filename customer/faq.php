@@ -91,7 +91,7 @@
     </details>
     <details>
       <summary>Why must I send the EXACT amount?</summary>
-      <p class="a">The automatic check compares the amount on your receipt with the reservation fee — <strong>any other amount, higher or lower, is rejected</strong>. This avoids partial payments and refund complications.</p>
+      <p class="a">Send the <strong>exact amount shown</strong>. The automatic check compares your receipt against it, and a different amount will not be confirmed on the spot &mdash; it goes to a coordinator to look at instead, which delays your booking. A receipt is only rejected outright when <strong>nothing</strong> matches, or when the same receipt has already been used.</p>
     </details>
     <details>
       <summary>What is the "Reference to include" (USEP-######)?</summary>
@@ -129,7 +129,7 @@
     </details>
     <details>
       <summary>How do refunds work?</summary>
-      <p class="a">A refund requires <strong>both</strong> receipts: the system transaction receipt <strong>and</strong> your GCash receipt (for cash payments, the official receipt from the counter). A request missing either document cannot be processed, so keep both safe.</p>
+      <p class="a">A refund needs three things: the <strong>system transaction receipt</strong>, your <strong>proof of payment</strong> (your GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You can send the request before the Official Receipt is ready — staff simply cannot pay the refund until they have it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review it, you may withdraw the request at any point before they decide, and your date is only released once the refund has actually been completed.</p>
     </details>
   </section>
 

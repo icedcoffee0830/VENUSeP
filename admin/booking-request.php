@@ -1,4 +1,9 @@
-<?php ?>
+<?php
+/* The demo customer's own bookings, from THE one source — a refund they filed
+   has to be openable here. Until the database exists the two mockups keep
+   separate seed data; at DB time both sides SELECT the same `bookings` row. */
+require_once __DIR__ . '/../includes/customer-bookings.php';
+?>
 <!DOCTYPE html>
 <!-- ==================================================================
   BOOKING REQUEST DETAIL — VENUSeP merged system (ported from the AdminLTE mockup)
@@ -179,6 +184,13 @@
       .br-ovr input, .br-ovr textarea { border: 1px solid var(--vm-border); border-radius: 8px; font-family: inherit; font-size: 0.82rem; padding: 0.5rem 0.62rem; width: 100%; }
       .br-ovr input:focus, .br-ovr textarea:focus { border-color: #b9b5ad; outline: none; }
       .br-ovr textarea { resize: vertical; }
+      .br-ovr select { background: #fff; border: 1px solid var(--vm-border); border-radius: 8px; font-family: inherit; font-size: 0.82rem; padding: 0.5rem 0.62rem; width: 100%; }
+      .br-ovr select:focus { border-color: #b9b5ad; outline: none; }
+      /* stacked label-over-control, so a staff decision reads top to bottom */
+      .br-fld { margin-bottom: 0.65rem; }
+      .br-fld label { color: var(--vm-label); display: block; font-size: 0.64rem; font-weight: 600; letter-spacing: 0.05em; margin-bottom: 0.25rem; text-transform: uppercase; }
+      .br-preview { background: #faf9f7; border: 1px solid var(--vm-hairline); border-radius: 8px; color: var(--vm-muted); font-size: 0.76rem; line-height: 1.5; margin-bottom: 0.65rem; padding: 0.5rem 0.62rem; }
+      .br-preview b { color: var(--vm-text); font-weight: 600; }
     </style>
   </head>
   <body>
@@ -224,6 +236,16 @@
                              resets) — the real app will POST to the
                              server and save to the database
          ============================================================ -->
+    <!-- Shared refund state — the ONE source, also included by both customer
+         pages. Must load BEFORE this page's script, which reads and writes it. -->
+    <?php include __DIR__ . '/../includes/pricing.php'; ?>
+    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
+    <!-- Tesseract + the shared GCash engine. The SAME checker the customer uses
+         to prove they paid in; here it proves staff paid out. It needs no changes
+         for that — it asks the page whose account the money must land in, and
+         this page answers "the customer's" (see gcAccount below). -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <?php include __DIR__ . '/../includes/gcash-checker.php'; ?>
     <script>
       /* Booking Request detail — one full window per request (mockup).
          Reads ?id=BRQ-xxxx; actions update badges + timeline in-page (demo only).
@@ -244,13 +266,16 @@
         await_cash:    { t: 'Awaiting payment · Cash',     c: 'b-amber' },
         auto_pass:     { t: 'Receipt passed auto-check',   c: 'b-navy'  },
         review:        { t: 'Receipt · manual review',     c: 'b-amber' },
-        rejected:      { t: 'Receipt auto-rejected',       c: 'b-red'   },
+        rejected:      { t: 'Receipt rejected',            c: 'b-red'   },
         confirmed:     { t: 'Payment confirmed',           c: 'b-green' },
         paid_cash:     { t: 'Paid at cashier',             c: 'b-green' },
         overdue:       { t: 'Payment overdue',             c: 'b-red'   },
         refund_req:    { t: 'Refund · under verification', c: 'b-navy'  },
         refund_done:   { t: 'Refunded',                    c: 'b-green' },
         refund_denied: { t: 'Refund denied',               c: 'b-red'   },
+        /* NOT a denial — a paperwork problem handed back with a window to fix it.
+           Agreed 2026-09-09: denial is final, so a blurry receipt must not be one. */
+        refund_fix:    { t: 'Refund · returned for correction', c: 'b-amber' },
       };
 
       const DATA = {
@@ -332,16 +357,40 @@
 
         'BRQ-2423': { id:'BRQ-2423', name:'Diego Cruz', type:'Alumni', email:'dcruz@alumni.usep.edu.ph', phone:'0917 660 3345',
           event:'Batch ’16 Reunion Dinner', room:'Heritage Function Room', venue:'Bahay Alumni', capacity:80, attendees:70,
-          dates:'Jul 12, 2026', feeDay:'₱2,500', days:1, total:'₱2,500', payBy:'Jul 11, 2026', method:'gcash',
-          submitted:'Jul 5, 2026 · 7:48 PM', res:'approved', pay:'refund_req', idStatus:'approved', idLabel:'Government ID (Driver’s License)',
-          sched:[{d:'Sun, Jul 12',t:'5:00 PM – 10:00 PM'}],
-          receipt:{ ref:'2044 118 555209', amount:'₱2,500.00', date:'Jul 9, 2026 · 6:02 PM', to:'0995 194 ****', conf:'93%', flags:[] },
-          refund:{ stage:'Under verification', docs:'System transaction receipt + GCash receipt submitted · identity re-verified (email + password)' },
-          tl:[{w:'Jul 5 · 7:48 PM — Customer',x:'Booking submitted',m:'Single-day request with a government ID attached.'},
-              {w:'Jul 6 · 9:00 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked.'},
-              {w:'Jul 9 · 6:02 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED.'},
-              {w:'Jul 10 · 8:15 AM — M. Robles (staff)',x:'Payment confirmed',m:'Reference matched in GCash.'},
-              {w:'Jul 14 · 10:40 AM — Customer',x:'Refund requested',m:'Event cancelled by the organizer. Both receipts submitted; identity re-verified.'}] },
+          dates:'Sep 14, 2026', feeDay:'₱2,500', days:1, total:'₱2,500', payBy:'Sep 13, 2026', method:'gcash',
+          submitted:'Aug 10, 2026 · 7:48 PM', res:'approved', pay:'refund_req', idStatus:'approved', idLabel:'Government ID (Driver’s License)',
+          sched:[{d:'Mon, Sep 14',t:'5:00 PM – 10:00 PM'}],
+          receipt:{ ref:'2044 118 555209', amount:'₱2,500.00', date:'Aug 14, 2026 · 6:02 PM', to:'0995 194 ****', conf:'93%', flags:[] },
+          refund:{ stage:'Under verification', orPending:false,
+            reason:'Event cancelled by the organiser',
+            details:'The committee called off the reunion dinner after the caterer withdrew. We would rather have the fee back than move the date.',
+            docs:'System transaction receipt + GCash receipt + Official Receipt submitted · identity re-verified (email + password)' },
+          tl:[{w:'Aug 10 · 7:48 PM — Customer',x:'Booking submitted',m:'Single-day request with a government ID attached.'},
+              {w:'Aug 11 · 9:00 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Sep 13.'},
+              {w:'Aug 14 · 6:02 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED.'},
+              {w:'Aug 15 · 8:15 AM — M. Robles (staff)',x:'Payment confirmed',m:'Reference matched in GCash.'},
+              {w:'Sep 6 · 10:40 AM — Customer',x:'Refund requested',m:'Event cancelled by the organiser. All documents submitted; identity re-verified. Booking stays live until the refund completes.'}] },
+
+        /* [SIM] The SECOND refund request — the fresh one the queue shows as
+           "submitted today". It exists here as well as in booking-requests.php
+           because a queue row whose id is missing from DATA silently falls back
+           to another booking (see the lookup below), which would show staff the
+           wrong customer entirely. Every queue id needs a record here. */
+        'BRQ-2422': { id:'BRQ-2422', name:'Elena Bautista', type:'Faculty · CTET', email:'ebautista@usep.edu.ph', phone:'0919 224 7781',
+          event:'CTET Faculty Development Seminar', room:'Admin Conference Hall', venue:'USeP Venues', capacity:60, attendees:45,
+          dates:'Sep 30, 2026', feeDay:'₱1,800', days:1, total:'₱1,800', payBy:'Sep 29, 2026', method:'gcash',
+          submitted:'Aug 20, 2026 · 2:15 PM', res:'approved', pay:'refund_req', idStatus:'approved', idLabel:'USeP Faculty ID',
+          sched:[{d:'Wed, Sep 30',t:'8:00 AM – 5:00 PM'}],
+          receipt:{ ref:'2051 903 447126', amount:'₱1,800.00', date:'Aug 24, 2026 · 4:05 PM', to:'0918 334 ****', conf:'95%', flags:[] },
+          refund:{ stage:'Awaiting Official Receipt', orPending:true,
+            reason:'Schedule conflict — need a different date',
+            details:'The seminar moved to the second semester when the department calendar changed. Nobody will be using the hall on the 30th.',
+            docs:'System transaction receipt + GCash receipt submitted · Official Receipt not yet provided' },
+          tl:[{w:'Aug 20 · 2:15 PM — Customer',x:'Booking submitted',m:'Single-day request with a USeP Faculty ID attached.'},
+              {w:'Aug 21 · 9:10 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Sep 29.'},
+              {w:'Aug 24 · 4:05 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED: exact amount, correct receiver, fresh reference.'},
+              {w:'Aug 25 · 8:30 AM — M. Robles (staff)',x:'Payment confirmed',m:'Reference matched in GCash Transaction History.'},
+              {w:'Sep 9 · 8:05 AM — Customer',x:'Refund requested',m:'Reason: schedule conflict — the seminar was moved to the second semester. Booking cancelled and the date released; all three receipts submitted.'}] },
 
         /* ============================================================
            [SIM] HOSTEL requests. Same queue, same detail page, same
@@ -382,18 +431,358 @@
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
       const qid = new URLSearchParams(location.search).get('id');
-      const cur = DATA[qid] || DATA['BRQ-2429'];
 
+      /* [SIM] A refund the CUSTOMER filed has no record in DATA above — it lives
+         in the shared store (includes/refund-store.php) because there is no
+         database. Build the same record shape from the one-source booking plus
+         whatever the store holds, so this page renders it like any other request.
+         At DB time both come from the same `bookings` row and this disappears. */
+      const SESSION_CUSTOMER = 'Juan Miguel Dela Cruz';   /* PROJECT-HANDOFF 4.9 */
+      const CUSTOMER_BOOKINGS = <?php echo json_encode($customerBookings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+      /* The session customer's details, from the same include the customer pages
+         read — this page and customer-profile.php had drifted to two different
+         phone numbers, which matters now that the phone seeds a refund destination. */
+      const CUSTOMER_CONTACT = <?php echo json_encode($customerContact, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+      function storeRecord(ref) {
+        if (!window.RefundStore || !ref) return null;
+        const rec = RefundStore.get(ref);
+        const b = CUSTOMER_BOOKINGS.filter(function (x) { return x.bookingId === ref; })[0];
+        if (!rec || !b) return null;
+        const waited = RefundStore.daysSince(rec.filed);
+        return {
+          id: ref, name: SESSION_CUSTOMER, type: 'Student · CIC',
+          email: CUSTOMER_CONTACT.email, phone: CUSTOMER_CONTACT.phone,
+          refundTo: rec.refundTo || null,     /* the number the CUSTOMER declared */
+          event: b.eventName, room: b.roomName, venue: b.venueName,
+          capacity: b.capacity, attendees: b.attendees,
+          dates: b.eventDate, feeDay: b.amount, days: 1, total: b.amount,
+          payBy: b.eventDate, method: b.method === 'GCash' ? 'gcash' : 'cash',
+          submitted: b.bookingDate, res: 'approved',
+          pay: rec.status === 'fix' ? 'refund_fix' : 'refund_req',
+          idStatus: 'approved', idLabel: 'USeP Student ID',
+          sched: [],
+          receipt: null,
+          refund: {
+            stage: rec.status === 'fix' ? 'Returned for correction'
+                 : (rec.orPending ? 'Awaiting Official Receipt' : 'Under verification'),
+            orPending: !!rec.orPending,
+            reason: rec.reason,
+            details: rec.details,
+            docs: rec.status === 'fix'
+              ? 'Returned to the customer: ' + (rec.staffNote || 'correction requested')
+              : ('Transaction receipt + proof of payment submitted · '
+                 + (rec.orPending ? 'Official Receipt NOT yet provided' : 'Official Receipt provided'))
+          },
+          tl: [
+            { w: 'Filed ' + rec.filed + ' — Customer', x: 'Refund requested',
+              m: (rec.reason || 'No reason recorded') + '. ' + (rec.details || "")
+                 + ' Booking stays live until the refund completes.' }
+          ].concat(rec.resubmitted ? [{ w: 'Resubmitted ' + rec.resubmitted + ' — Customer', x: 'Corrected documents sent', m: 'Returned earlier for: ' + (rec.staffNote || 'a document problem') + '.' }] : [])
+           .concat(waited > 0 ? [{ w: 'Now', x: 'Awaiting a staff decision', m: 'No staff reply for ' + waited + ' day' + (waited === 1 ? "" : 's') + '.' }] : []),
+          fromStore: true
+        };
+      }
+      const storeCur = storeRecord(qid);
+      /* A VB- reference with nothing in the store must NOT fall through to the
+         default record — that would silently show staff a different customer. */
+      const missingCustomerRef = !DATA[qid] && !storeCur && String(qid || "").indexOf('VB-') === 0;
+      const cur = DATA[qid] || storeCur || (missingCustomerRef ? null : DATA['BRQ-2429']);
+
+      /* ---- GCASH CHECKER WIRING FOR THE REFUND PAYOUT (staff → customer) ----
+         The shared engine asks the page three questions. For a payment the money
+         must land in the VENUE's account; for a refund it must land in the
+         CUSTOMER's. Same engine, different answers — that is the whole reason it
+         needs no changes to run in this direction.
+
+         The destination is the account that PAID: staff read it from the venue's
+         GCash Transaction History (where they already go to confirm payments) and
+         enter it here. The customer is never asked, so nobody can be talked into
+         redirecting a refund. Losing access to that account is a staff-handled
+         exception against the ID already on file (PROJECT-HANDOFF 4.10). */
+      const state = { ocr: null };                     /* the engine's receipt slot */
+      /* For a PAYOUT, "not rejected" is not good enough. receiptOk() means
+         "not rejected", which since DB-DECISIONS #6 includes manual_review — and
+         manual_review is precisely a wrong amount or a wrong recipient. On the
+         customer side that is fine (staff review it afterwards); here STAFF are
+         the reviewer, so only a fully clean receipt counts as verified. Anything
+         less demands a written reason. */
+      function payoutVerified() {
+        return !!(state.ocr && state.ocr.phase === 'done' && state.ocr.rec && state.ocr.rec.status === 'accepted');
+      }
+      function refundCentavos() {
+        const s = String((cur && cur.total) || "").replace(/[^0-9.]/g, "");
+        const n = parseFloat(s);
+        return isFinite(n) ? Math.round(n * 100) : 0;
+      }
+      /* Same normalisation the customer side and the server use, so a number is
+         compared as a NUMBER: "0917 555 0123" and "09175550123" are never
+         reported as different. Returns null if it cannot be a PH mobile. */
+      function normMobile(raw) {
+        let d = String(raw || "").replace(/\D+/g, "");
+        if (d.length === 12 && d.slice(0, 2) === "63") d = "0" + d.slice(2);
+        if (d.length === 10 && d.charAt(0) === "9")    d = "0" + d;
+        return (d.length === 11 && d.slice(0, 2) === "09") ? d : null;
+      }
+      /* What staff will actually SEND to: their own entry if they typed one, else
+         the number the CUSTOMER declared on the refund form, else the number on
+         file. cur.refundTo is the declaration and is never overwritten — the
+         panel compares the two and shouts when they differ. */
+      function payoutTarget() {
+        if (cur.payoutTo != null) return cur.payoutTo;
+        return normMobile(cur.refundTo) || normMobile(cur.phone) || "";
+      }
+      function gcAccount()          { return { name: (cur && cur.name) || "", number: normMobile(payoutTarget()) || "" }; }
+      function gcExpectedCentavos() { return refundCentavos(); }
+      function gcBookingRef()       { return (cur && cur.id) || ""; }
+
+      function openPayout()  { cur.payoutOpen = true;  cur.payoutErr = null; render(); }
+      function closePayout() { cur.payoutOpen = false; cur.payoutErr = null; state.ocr = null; render(); }
+      function setPayoutTo(v){ cur.payoutTo = v; }
+
+      /* [SIM] Nobody is sending real money to produce a test screenshot, so these
+         feed SYNTHETIC receipt text through the REAL parser and the REAL verdict
+         engine. What you see is the engine's own answer, not a canned one — which
+         also makes this the test harness for the three-verdict rule. */
+      /* Where the destination came from, and a loud warning when the customer's
+         declared account is NOT the one on their record — that is exactly what a
+         redirected refund looks like, and it is the one thing software can flag
+         but only a person can resolve. */
+      function destinationNote() {
+        const declared = normMobile(cur.refundTo);
+        const onFile   = normMobile(cur.phone);
+        const target   = normMobile(payoutTarget());
+        const fmt  = function (n) { return n ? n.replace(/^(\d{4})(\d{3})(\d{4})$/, "$1 $2 $3") : "—"; };
+        const line = function (c, t) { return `<div style="font-size:0.74rem;line-height:1.5;color:${c};margin-top:0.35rem">${t}</div>`; };
+        if (!target) return line('#b23a3a', 'Enter the number before attaching a receipt — the check has nothing to compare against without it.');
+        let out = "";
+        if (declared && target !== declared)      out += line('#8a5a12', '<strong>You changed this.</strong> The customer asked for it to go to ' + fmt(declared) + '.');
+        else if (declared)                        out += line('#8a857d', 'Given by the customer on their refund request.');
+        else                                      out += line('#8a857d', 'No number was declared on the request — this is the number on their account.');
+        if (declared && onFile && declared !== onFile)
+          out += line('#b23a3a', '&#9888; <strong>This is NOT the number on their account</strong> (' + fmt(onFile) + '). Check it against the sender on the original payment before sending.');
+        else if (declared && onFile)
+          out += line('#1c7a4f', '&#10003; Matches the number on their account.');
+        return out;
+      }
+      function simulateReceipt(kind) {
+        if (!normMobile(payoutTarget())) { cur.payoutErr = 'Enter the GCash number first — without it the check has nothing to compare the receipt against.'; render(); return; }
+        const acct = gcAccount();
+        const owed = refundCentavos();
+        const num  = kind === 'wrongnum' ? '09991112222' : (acct.number || '09171234567');
+        const amt  = ((kind === 'wrongamt' ? Math.round(owed / 2) : owed) / 100).toFixed(2);
+        const ref  = String(Date.now()).slice(-13);
+        const text = kind === 'unreadable' ? "" : [
+          'Sent via GCash', 'JU....L D.. C.', num, 'Ref No. ' + ref,
+          'Sep 09, 2026 10:12 AM', 'Total Amount Sent PHP ' + amt, 'Amount PHP ' + amt
+        ].join('\n');
+        state.ocr = { phase: 'done', pct: 1, label: 'Simulated', fileName: '[SIM] ' + kind + '.png', thumb: null,
+                      rec: evaluateReceipt({ text: text, sha: 'sim-' + ref, confidence: kind === 'unreadable' ? 12 : 93 }, owed) };
+        render();
+      }
+
+      function completeRefund() {
+        const note = ((document.getElementById('payoutNote') || {}).value || "").trim();
+        const to   = normMobile(payoutTarget());
+        if (!to) { cur.payoutErr = 'Enter the GCash number the refund was sent to — it is the account that paid.'; render(); return; }
+        /* THE OR RULE, enforced rather than merely asked about: no Official Receipt,
+           no payout. An exception is allowed, but it costs a written reason — the
+           same shape as the GCash override above, not a dialog anyone clicks past. */
+        if (cur.refund && cur.refund.orPending && !note) {
+          cur.payoutErr = 'The Official Receipt has not been provided, and a refund cannot be paid without it. If you are recording an exception, write why in the note.';
+          render(); return;
+        }
+        if (!payoutVerified() && !note) {
+          cur.payoutErr = 'Attach a receipt that verifies, or write a note explaining why you are recording this refund without one.';
+          render(); return;
+        }
+        const rec = state.ocr && state.ocr.rec;
+        const refNo = (rec && (rec.parsed.refDisplay || rec.parsed.ref)) || null;
+        /* Write FIRST and check it landed. The customer can withdraw while this
+           page is open; showing "Refunded" for a request that no longer exists
+           would be a lie staff then act on. */
+        const wrote = pushOutcome('refunded', 'Refund sent to ' + to + (refNo ? ' · GCash ref ' + refNo : "") + (note ? ' · ' + note : ""), {
+          reference: refNo, amount: cur.total, to: to,
+          receiptFile: (state.ocr && state.ocr.fileName) || null,
+          verified: payoutVerified()
+        });
+        if (!wrote) {
+          cur.payoutErr = 'This request is no longer open — the customer withdrew it while this page was open. Nothing has been recorded. Go back to the queue.';
+          render(); return;
+        }
+        if (rec) gcRemember(rec);        /* consume ref + file hash only once the refund really landed */
+        cur.pay = 'refund_done'; cur.confirmedBy = 'You · just now';
+        cur.payoutOpen = false; cur.payoutErr = null;
+        cur.tl.push({ w: now(), x: 'Refund completed', m: 'Sent to ' + to + (refNo ? ' (GCash ref ' + refNo + ')' : "")
+          + (payoutVerified() ? ', receipt verified.' : ', recorded without a verified receipt: ' + note)
+          + ' The booking is now closed and its date released.' });
+        state.ocr = null;
+        render();
+      }
+
+      /* Money compared as money. "₱1,500" and "₱1,500.00" are the same amount;
+         comparing them as strings reported a false mismatch on a correct receipt. */
+      function pesoCentavos(v) {
+        const n = parseFloat(String(v == null ? "" : v).replace(/[^0-9.]/g, ""));
+        return isFinite(n) ? Math.round(n * 100) : null;
+      }
+      function amountVerdict(read, required) {
+        const a = pesoCentavos(read), b = pesoCentavos(required);
+        if (a == null || b == null) return ' <span style="color:#8a857d">· could not compare</span>';
+        if (a === b) return ' <span style="color:#1c7a4f">· matches</span>';
+        return ' <span style="color:#b23a3a">· ' + (a < b ? 'SHORT by ' : 'OVER by ') + centavosFmt(Math.abs(b - a)) + '</span>';
+      }
       function kv(k, v, wide) { return `<div class="br-kv${wide ? ' kv-wide' : ''}"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
       function banner(cls, title, sub) { return `<div class="br-banner ${cls}"><div>${title}${sub ? `<span class="s">${sub}</span>` : ''}</div></div>`; }
       function flags(list, color) { return list.map(f => `<div class="br-flag"><span class="dot" style="background:${color}"></span><span>${esc(f)}</span></div>`).join(''); }
       function initials(n) { return n.split(' ').map(w => w[0]).slice(0, 2).join(''); }
+      /* The customer's own words, from customer/refund-request.php. Staff decide
+         on this, so it belongs on screen rather than buried in the timeline. */
+      /* Why a request goes back, or gets refused. These are STAFF vocabulary made
+         explicit: window.prompt asked them to invent the wording every time, which
+         is slow, inconsistent, and the customer reads the result. Returning is a
+         PAPERWORK outcome only — nothing here questions the claim itself. */
+      const FIX_REASONS = [
+        'The image is blurry or cannot be read',
+        'The wrong document was attached',
+        'Part of the document is cut off or missing',
+        'The details do not match this booking (name, amount, or reference)',
+        'The document appears to have been edited',
+        'The Official Receipt has not been provided yet',
+        'Other — see the note below',
+      ];
+      /* Denial is FINAL, so every entry here is about the CLAIM, never the paper. */
+      const DENY_REASONS = [
+        'The reason given is not covered by the refund policy',
+        'The request was made after the event had already taken place',
+        'The payment could not be verified in our records',
+        'The documents were still not valid after being returned for correction',
+        'This booking has already been refunded',
+        'Other — see the note below',
+      ];
+      function fixDocOptions() {
+        const docs = ['System Transaction Receipt'];
+        if (cur.method === 'gcash') docs.push('GCash Payment Receipt');
+        docs.push('Official Receipt (OR)');
+        return docs;
+      }
+      /* Inline panel, same pattern as the GCash override block above — this page
+         has no modals and should not grow one for this. */
+      /* The payout panel. Staff send the money in GCash FIRST, then prove it here
+         — the receipt is what completes the refund, not a bare button. */
+      function payoutPanel() {
+        if (!cur.payoutOpen) return "";
+        const o = state.ocr, rec = o && o.rec;
+        const tone = !rec ? "" : (rec.status === 'rejected' ? 'bn-red' : (rec.status === 'manual_review' ? 'bn-amber' : 'bn-green'));
+        const head = !rec ? "" : (rec.status === 'rejected' ? 'This receipt does not match'
+                        : (rec.status === 'manual_review' ? 'Receipt needs a closer look' : 'Receipt verified'));
+        const why  = !rec ? "" : (rec.reasons.concat(rec.flags).map(function (k) { return GC_LABELS[k] || k; }).join(' · ')
+                        || 'Amount and recipient match the approved refund.');
+        const verdict = !rec ? "" : banner(tone, head, why)
+          + `<div class="br-kvgrid" style="margin-bottom:0.7rem">
+               ${kv('GCash ref no.', esc(rec.parsed.refDisplay || rec.parsed.ref || '—'))}
+               ${kv('Amount on receipt', rec.parsed.effAmountC != null ? esc(centavosFmt(rec.parsed.effAmountC)) : '—')}
+               ${kv('Sent to', esc(rec.parsed.receiverNumber || '—'))}
+               ${kv('Receipt file', esc((o && o.fileName) || '—'))}
+             </div>`;
+        const busy = o && o.phase === 'reading';
+        return `<div class="br-ovr" style="margin-top:0.9rem">
+            <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">Record the refund payout</div>
+            <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.55;margin-bottom:0.8rem">
+              Send the money in GCash first, then attach the receipt. It must go back to the account that <strong>paid</strong> — you can see the sender on the original transaction in the venue GCash history. The check <strong>advises</strong>: if it cannot read the screenshot you can still record the refund with a note.
+            </div>
+            <div class="br-fld">
+              <label for="payoutTo">Refund sent to (GCash number)</label>
+              <input id="payoutTo" placeholder="09XX XXX XXXX — the account that paid" value="${esc(payoutTarget())}" oninput="setPayoutTo(this.value)">
+              ${destinationNote()}
+            </div>
+            <div class="br-fld">
+              <label>Amount to send</label>
+              <div style="font-size:1.05rem;font-weight:700">${esc(cur.total)}</div>
+            </div>
+            <input type="file" id="gcFile" accept="image/*" style="display:none" onchange="checkReceipt(this)">
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.7rem">
+              <button class="br-btn" onclick="pickReceipt()" ${busy ? 'disabled' : ''}>${o ? 'Choose a different screenshot' : 'Attach the GCash receipt'}</button>
+              ${o ? `<button class="br-btn" onclick="removeReceipt()">Remove</button>` : ""}
+            </div>
+            ${busy ? `<div style="font-size:0.76rem;color:var(--vm-muted);margin-bottom:0.7rem" id="gcBarLabel">${esc(o.label)}</div>` : ""}
+            ${verdict}
+            <div style="border-top:1px dashed var(--vm-border);margin:0.8rem 0 0.7rem;padding-top:0.7rem">
+              <div style="font-size:0.7rem;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--vm-label);margin-bottom:0.4rem">[SIM] Simulate a receipt — runs the real engine</div>
+              <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+                <button class="br-btn" onclick="simulateReceipt('pass')">Passes</button>
+                <button class="br-btn" onclick="simulateReceipt('wrongamt')">Wrong amount</button>
+                <button class="br-btn" onclick="simulateReceipt('wrongnum')">Wrong number</button>
+                <button class="br-btn" onclick="simulateReceipt('unreadable')">Unreadable</button>
+              </div>
+            </div>
+            <div class="br-fld">
+              <label for="payoutNote">Note ${payoutVerified() ? '(optional)' : '(required if the receipt does not verify)'}</label>
+              <textarea id="payoutNote" rows="2" placeholder="e.g. screenshot unreadable — payment confirmed in the GCash transaction history.">${esc(cur.payoutNote || "")}</textarea>
+            </div>
+            ${cur.payoutErr ? `<div style="color:#b23a3a;font-size:0.74rem;margin-bottom:0.55rem">${esc(cur.payoutErr)}</div>` : ""}
+            <div style="display:flex;gap:0.5rem">
+              <button class="br-btn br-btn-primary" onclick="completeRefund()">Complete refund</button>
+              <button class="br-btn" onclick="closePayout()">Cancel</button>
+            </div>
+          </div>`;
+      }
+      function actionPanel() {
+        if (!cur.actionMode) return "";
+        const deny = cur.actionMode === 'deny';
+        const reasons = deny ? DENY_REASONS : FIX_REASONS;
+        const blurb = deny
+          ? 'A denial is <strong>final</strong> — the customer would have to book again from scratch. Their booking itself is not affected. Be plain about why: they read this.'
+          : 'This is <strong>not</strong> a denial. The customer keeps their booking and has <strong>48 hours</strong> to send a corrected document. Tell them exactly what to fix.';
+        const docField = deny ? "" : `<div class="br-fld">
+                <label for="actDoc">Which document</label>
+                <select id="actDoc">${fixDocOptions().map(d => `<option${cur.actDoc === d ? ' selected' : ''}>${esc(d)}</option>`).join("")}</select>
+              </div>`;
+        const preview = cur.actReason
+          ? `<div class="br-preview">The customer will see: <b>${esc((deny ? "" : (cur.actDoc || fixDocOptions()[0]) + ' — ') + cur.actReason)}</b>${cur.actNote ? esc(' — ' + cur.actNote) : ""}</div>`
+          : "";
+        return `<div class="br-ovr" style="margin-top:0.9rem">
+              <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">${deny ? 'Deny this refund' : 'Return this request for correction'}</div>
+              <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.55;margin-bottom:0.8rem">${blurb}</div>
+              ${docField}
+              <div class="br-fld">
+                <label for="actReason">${deny ? 'Why is it being denied' : 'What is wrong with it'}</label>
+                <select id="actReason" onchange="refreshAction()">
+                  <option value="">Choose a reason…</option>
+                  ${reasons.map(r => `<option${cur.actReason === r ? ' selected' : ''}>${esc(r)}</option>`).join("")}
+                </select>
+              </div>
+              <div class="br-fld">
+                <label for="actNote">Note to the customer ${deny || (cur.actReason || "").indexOf('Other') === 0 ? '(required)' : '(optional)'}</label>
+                <textarea id="actNote" rows="2" placeholder="${deny ? 'Explain the decision in plain language.' : 'Anything else they need to know — which page is missing, what to re-scan.'}">${esc(cur.actNote || "")}</textarea>
+              </div>
+              ${preview}
+              ${cur.actErr ? `<div style="color:#b23a3a;font-size:0.74rem;margin-bottom:0.55rem">${esc(cur.actErr)}</div>` : ""}
+              <div style="display:flex;gap:0.5rem">
+                <button class="br-btn br-btn-primary" onclick="submitAction()">${deny ? 'Deny refund' : 'Send back to the customer'}</button>
+                <button class="br-btn" onclick="closeAction()">Cancel</button>
+              </div>
+            </div>`;
+      }
+      function refundReasonBlock() {
+        if (!cur.refund || !cur.refund.reason) return "";
+        return `<div style="margin-top:1rem;padding-top:0.9rem;border-top:1px solid var(--vm-hairline)">
+            <div class="br-h2" style="margin-bottom:0.5rem">Why the customer asked</div>
+            <div style="font-size:0.87rem;font-weight:600;margin-bottom:0.3rem">${esc(cur.refund.reason)}</div>
+            <div style="font-size:0.83rem;line-height:1.6;color:var(--vm-muted)">${esc(cur.refund.details || "")}</div>
+          </div>`;
+      }
 
       /* which buttons make sense right now (reservation-level, in the header) */
       function hdrActions() {
-        if (cur.res === 'pending') return `<button class="br-btn br-btn-primary" onclick="approveIdRes()">Approve ID &amp; reservation</button><button class="br-btn" onclick="rejectRequest()">Reject request</button>`;
+        /* Three outcomes when the customer claims affiliation, because approving
+           the ID and granting the discount are different judgements. When they
+           have not claimed it, there is nothing to decide — one approve button. */
+        if (cur.res === 'pending') return (claimsAffiliation()
+            ? `<button class="br-btn br-btn-primary" onclick="approveIdRes(true)">Approve with ${DISCOUNT_PERCENT}% discount</button><button class="br-btn" onclick="approveIdRes(false)">Approve at full price</button>`
+            : `<button class="br-btn br-btn-primary" onclick="approveIdRes(false)">Approve ID &amp; reservation</button>`)
+          + `<button class="br-btn" onclick="rejectRequest()">Reject request</button>`;
         if (cur.pay === 'overdue') return `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
-        if (cur.pay === 'refund_req') return `<button class="br-btn br-btn-primary" onclick="markRefunded()">Mark refunded</button><button class="br-btn" onclick="denyRefund()">Deny refund</button>`;
+        if (cur.pay === 'refund_req' || cur.pay === 'refund_fix') return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button><button class="br-btn" onclick="openAction('fix')">Return for correction</button><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
         /* Check-in is hostel-only: an event venue has no arrivals. It needs the
            OR in hand, because that is what the guest is asked to show. */
         if (cur.kind === 'hostel' && cur.pay === 'confirmed' && !cur.checkedIn) {
@@ -412,7 +801,7 @@
           <div style="display:flex;gap:0.85rem;margin-bottom:0.7rem">
             <div class="br-receipt">receipt<br>screenshot</div>
             <div class="br-kvgrid" style="flex:1;align-content:start">
-              ${kv('Ref no.', esc(r.ref))}${kv('Amount read', esc(r.amount))}
+              ${kv('Ref no.', esc(r.ref))}${kv('Amount read', esc(r.amount))}${kv('Amount required', esc(cur.total) + amountVerdict(r.amount, cur.total))}
               ${kv('Receipt date', esc(r.date))}${kv('Sent to', esc(r.to))}
             </div>
           </div>
@@ -486,10 +875,24 @@
           case 'auto_pass': return banner('bn-green', 'All automatic checks passed', 'Exact amount · correct receiver · fresh reference · genuine receipt markers.') + receiptBlock() +
             `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="rejectPay()">Reject after GCash check</button></div>
              <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.55rem">Find the reference number in the business GCash Transaction History before confirming.</div>`;
-          case 'review': return banner('bn-amber', 'Needs manual review', 'The auto-check could not verify everything — compare the fields against the screenshot.') + receiptBlock() +
+          /* Manual review is now the COMMON path, not a rarity — so it has to say
+             out loud that the customer is waiting on US. The pay-by deadline must
+             not quietly expire while a receipt sits here: the customer did their
+             part, and letting the slot lapse would punish them for our queue. */
+          case 'review': return banner('bn-amber', 'Needs manual review — the customer is waiting on you',
+              'The auto-check could not verify everything. Compare the fields against the screenshot; the amount required is shown beside the amount read.') + receiptBlock() +
             flags(cur.receipt.flags, '#c99a3c') +
+            `<div class="br-banner bn-gray" style="margin-top:0.7rem"><div>Slot is held while this is with you
+              <span class="s">Pay-by deadline: <strong>${esc(cur.payBy)}</strong>. The customer has already paid and cannot act further — clear this before the deadline, or extend it. Do not let it lapse to overdue.</span></div></div>` +
             `<div style="display:flex;gap:0.5rem;margin-top:0.7rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="rejectPay()">Reject receipt</button></div>`;
-          case 'rejected': return banner('bn-red', 'Receipt auto-rejected', 'Customer was told to fix and resubmit. Slot held for the 48-hour window (until ' + esc(cur.resubmitBy || cur.payBy) + '), bounded by the pay-by deadline.') +
+          /* WHO rejected it matters, and matters more now the scanner rejects
+             less: after DB-DECISIONS #6 most rejections are a staff decision, and
+             labelling those "auto-rejected" told staff the machine did something
+             they did themselves — while the reason line underneath said otherwise. */
+          case 'rejected': return banner('bn-red',
+              cur.rejectedByStaff ? 'Receipt rejected by staff' : 'Receipt auto-rejected',
+              (cur.rejectedByStaff ? 'Checked against GCash and refused. ' : 'The automatic check refused it. ')
+              + 'Customer was told to fix and resubmit. Slot held for the 48-hour window (until ' + esc(cur.resubmitBy || cur.payBy) + '), bounded by the pay-by deadline.') +
             flags(cur.rejects || [], '#b23a3a') +
             `<div class="br-ovr">
               <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.4rem">Override &amp; confirm payment (staff)</div>
@@ -497,28 +900,74 @@
               <input id="ovrRef" placeholder="Verified reference number (from GCash)" style="margin-bottom:0.5rem" value="${esc(cur.ovrRef || '')}">
               <textarea id="ovrNote" rows="2" placeholder="Required note — why is this override correct?">${esc(cur.ovrNote || '')}</textarea>
               ${cur.ovrErr ? `<div style="color:#b23a3a;font-size:0.74rem;margin-top:0.35rem">${esc(cur.ovrErr)}</div>` : ''}
-              <div style="margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="overrideConfirm()">Override &amp; confirm</button></div>
+              <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
+                <button class="br-btn br-btn-primary" onclick="overrideConfirm()">Override &amp; confirm</button>
+                ${cur.rejectedByStaff ? `<button class="br-btn" onclick="undoRejection()">&larr; Undo rejection</button>` : ""}
+              </div>
             </div>`;
           case 'confirmed': return banner('bn-green', 'Payment confirmed', 'Confirmed by ' + esc(cur.confirmedBy || 'staff') + '. The reference number is permanently locked.') + (cur.receipt ? receiptBlock() : '');
           case 'paid_cash': return banner('bn-green', 'Paid at the cashier', esc(cur.confirmedBy || 'Recorded by staff') + ' · official receipt issued at the counter.');
           case 'overdue': return banner('bn-red', 'Payment overdue', 'The pay-by deadline (' + esc(cur.payBy) + ') passed with no valid payment. The slot can be released or the deadline extended.') +
             `<div class="br-kvgrid">${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
-          case 'refund_req': return banner('bn-amber', 'Refund requested — under verification', esc(cur.refund.docs)) + (cur.receipt ? receiptBlock() : '') +
-            `<div style="color:var(--vm-muted);font-size:0.76rem;line-height:1.55">Refund chain: Requested &rarr; <strong>Under verification</strong> &rarr; Refunded / Denied. Both receipts are required — a request missing either is denied automatically.</div>`;
-          case 'refund_done': return banner('bn-green', 'Refunded', esc(cur.confirmedBy || 'Processed by staff') + ' · refund recorded on this booking.');
-          case 'refund_denied': return banner('bn-red', 'Refund denied', esc(cur.denyReason || 'Requirements not met.'));
+          case 'refund_req':
+          case 'refund_fix': {
+            const pendingOR = !!(cur.refund && cur.refund.orPending);
+            const returned  = cur.pay === 'refund_fix';
+            const head = returned ? 'Returned to the customer for correction'
+                       : (pendingOR ? 'Refund requested — awaiting Official Receipt'
+                                    : 'Refund requested — under verification');
+            const orNote = pendingOR
+              ? ' <strong>The Official Receipt is still outstanding</strong> — the refund cannot be PAID until it arrives, but the claim can be decided on its merits now.'
+              : "";
+            return banner(returned || pendingOR ? 'bn-amber' : 'bn-gray', head, esc(cur.refund.docs))
+              + refundReasonBlock()
+              + actionPanel()
+              + payoutPanel()
+              + (cur.receipt ? receiptBlock() : "")
+              + `<div style="color:var(--vm-muted);font-size:0.76rem;line-height:1.55;margin-top:0.9rem">The booking is <strong>not cancelled</strong> while this is open — the date is released only once the refund is completed. Chain: Requested &rarr; Under verification &rarr; Refunded / Returned for correction / Denied.${orNote}</div>`;
+          }
+          case 'refund_done': return banner('bn-green', 'Refunded — booking closed, date released', esc(cur.confirmedBy || 'Processed by staff') + ' · the refund was paid, so this booking is closed and its date is free to be booked again.');
+          case 'refund_denied': return banner('bn-red', 'Refund denied — booking unaffected', esc(cur.denyReason || 'Requirements not met.') + ' A denial is final; the booking itself is untouched and remains the customer\u2019s.');
           default: return '';
         }
       }
 
+      /* The ID card carries the DISCOUNT DECISION, because that is what the ID is
+         being read for. Two separate questions live here and staff answer both:
+         is the ID valid, and does it prove USeP affiliation? A valid driver's
+         licence is a YES to the first and a NO to the second — which is why
+         approval has three outcomes and not two.
+         The account address is EVIDENCE. Nothing verifies it at registration, so
+         it never decides a price on its own (includes/pricing.php). */
+      function claimsAffiliation() {
+        if (cur.affiliated != null) return !!cur.affiliated;
+        return /^USeP/i.test(String(cur.idLabel || ""));   /* seeded records: infer from the ID they gave */
+      }
       function idBlock() {
         const st = cur.idStatus;
+        const claim = claimsAffiliation();
+        const usepAcct = typeof isUsepAccount === 'function' && isUsepAccount(cur.email);
         return `
           <div style="margin-top:0.85rem">
             <div class="br-idtile">${esc(cur.idLabel)} — image</div>
             <div style="align-items:center;display:flex;gap:0.5rem;justify-content:space-between;margin-top:0.6rem">
               <span class="br-badge ${st === 'approved' ? 'b-green' : st === 'rejected' ? 'b-red' : 'b-amber'}">${st === 'approved' ? 'ID approved' : st === 'rejected' ? 'ID rejected' : 'ID awaiting review'}</span>
               ${st === 'pending' ? '<span style="color:var(--vm-muted);font-size:0.74rem">Approve via the header button — it approves the ID and the reservation together.</span>' : ''}
+            </div>
+            <div style="margin-top:0.7rem;padding-top:0.7rem;border-top:1px solid var(--vm-hairline)">
+              <div class="br-h2" style="margin-bottom:0.45rem">USeP affiliation</div>
+              <div style="font-size:0.83rem;font-weight:600;margin-bottom:0.25rem">
+                ${claim ? 'Claimed &mdash; ' + DISCOUNT_PERCENT + '% discount requested' : 'Not claimed &mdash; full price'}
+              </div>
+              <div style="font-size:0.76rem;color:var(--vm-muted);line-height:1.5">
+                ID uploaded: <strong>${esc(cur.idLabel)}</strong><br>
+                Account: <strong>${esc(cur.email || '—')}</strong>
+                ${usepAcct
+                  ? ' <span style="color:#1c7a4f">&#10003; a USeP address</span> <span style="color:var(--vm-label)">&mdash; supporting evidence only, not proof</span>'
+                  : ' <span style="color:var(--vm-label)">&mdash; not a USeP address</span>'}
+              </div>
+              ${cur.discountPct != null ? `<div style="font-size:0.76rem;margin-top:0.4rem;color:${cur.discountPct > 0 ? '#1c7a4f' : 'var(--vm-muted)'}">
+                Decided: <strong>${cur.discountPct > 0 ? DISCOUNT_PERCENT + '% applied' : 'no discount — full price'}</strong></div>` : ''}
             </div>
           </div>`;
       }
@@ -612,7 +1061,28 @@
 
       /* demo actions — update statuses + timeline in-page (no persistence) */
       function now() { return 'Jul 14, 2026 — You (staff)'; }
-      function approveIdRes() {
+      /* Recompute and LOCK the price at approval. DB-DECISIONS #2: the booking
+         stores the % it received, so changing the live rate later never rewrites
+         it. The rate the customer was quoted at booking is the rate they get. */
+      function pesoStr(n) { return '₱' + Number(n).toLocaleString('en-PH'); }
+      function lockPrice(withDiscount) {
+        const fee  = parseFloat(String(cur.feeDay || "").replace(/[^0-9.]/g, "")) || 0;
+        const days = Number(cur.days) || 1;
+        const base = fee * days;
+        cur.discountPct = withDiscount ? DISCOUNT_PERCENT : 0;
+        cur.roomPrice   = pesoStr(base);
+        cur.total       = pesoStr(base - Math.round(base * cur.discountPct) / 100);
+      }
+      /* Approving answers TWO questions: is the ID valid, and does it prove USeP
+         affiliation? `withDiscount` is the second. A valid government ID is a yes
+         to the first and a no to the second — approved, at full price. */
+      function approveIdRes(withDiscount) {
+        cur.idStatus = 'approved'; cur.res = 'approved';
+        lockPrice(!!withDiscount);
+        cur.tl.push({ w: now(), x: 'Affiliation ' + (withDiscount ? 'confirmed' : 'not confirmed'),
+          m: withDiscount
+            ? DISCOUNT_PERCENT + '% USeP discount applied from ' + cur.idLabel + '. Price locked at ' + cur.total + '.'
+            : 'ID accepted but it does not prove USeP affiliation. Full price ' + cur.total + '.' });
         cur.idStatus = 'approved'; cur.res = 'approved';
         /* HOSTEL: approving does NOT unlock payment. The POS has to come back
            from CEDU first — that is the extra gate the venue flow does not have. */
@@ -666,10 +1136,24 @@
         render();
       }
       function rejectPay() {
+        cur.prevPay = cur.pay;               /* so the decision can be taken back */
         cur.pay = 'rejected';
+        cur.rejectedByStaff = true;      /* a person decided this, not the scanner */
         cur.rejects = ['Rejected by staff after checking GCash — the reference was not found in the Transaction History (reference freed, record kept for audit).'];
         cur.resubmitBy = 'Jul 16, 2026 · ' + (cur.resubmitBy ? cur.resubmitBy.split('· ')[1] || '5:00 PM' : '5:00 PM');
         cur.tl.push({ w: now(), x: 'Receipt rejected', m: '48-hour resubmit window started; customer notified.' });
+        render();
+      }
+      /* Take back a rejection STAFF made and return the receipt to where it was —
+         the confirm / reject choice. Only offered for staff rejections: an
+         auto-rejection is a duplicate or a total mismatch, and the considered way
+         back from those is Override & confirm with a written reason.
+         The timeline keeps both entries; undoing a decision is itself a decision. */
+      function undoRejection() {
+        cur.pay = cur.prevPay || 'review';
+        cur.rejectedByStaff = false;
+        cur.rejects = []; cur.resubmitBy = null;   /* the 48-hour window dies with the rejection */
+        cur.tl.push({ w: now(), x: 'Rejection withdrawn', m: 'Staff took the rejection back; the receipt is under review again.' });
         render();
       }
       function overrideConfirm() {
@@ -691,18 +1175,82 @@
         cur.tl.push({ w: now(), x: 'Deadline extended 48 hours', m: 'New pay-by: Jul 16, 2026. Customer notified.' });
         render();
       }
-      function markRefunded() {
-        cur.pay = 'refund_done'; cur.confirmedBy = 'You · just now';
-        cur.tl.push({ w: now(), x: 'Refund processed', m: 'Both receipts verified; refund recorded on this booking.' });
-        render();
+      /* NOT a denial. A paperwork problem hands the request back with a bounded
+         window to fix it; the claim is untouched, and so is the booking. */
+      /* The three refund outcomes share one inline panel. openAction shows it,
+         refreshAction keeps the live preview honest as fields change, submitAction
+         validates and applies. Replaces window.prompt, which gave staff a blank
+         box and no idea what the customer would end up reading. */
+      /* Switching between the two modes clears the selection: the reason lists are
+         different, so a value carried over from the other one would sit invisible
+         in cur while the select showed nothing. */
+      function openAction(mode) {
+        if (cur.actionMode !== mode) { cur.actReason = ""; cur.actNote = ""; }
+        cur.actionMode = mode; cur.actErr = null; render();
       }
-      function denyRefund() {
-        cur.pay = 'refund_denied'; cur.denyReason = 'Requirements not met after verification.';
-        cur.tl.push({ w: now(), x: 'Refund denied', m: 'Verification failed; customer notified with the reason.' });
+      function closeAction() { cur.actionMode = null; cur.actErr = null; cur.actNote = ""; cur.actReason = ""; render(); }
+      function readAction() {
+        const val = function (id) { const el = document.getElementById(id); return el ? el.value : ""; };
+        if (document.getElementById('actReason')) {
+          cur.actDoc = val('actDoc'); cur.actReason = val('actReason'); cur.actNote = val('actNote');
+        }
+      }
+      function refreshAction() { readAction(); render(); }
+      function submitAction() {
+        readAction();
+        const deny = cur.actionMode === 'deny';
+        if (!cur.actReason) { cur.actErr = 'Choose a reason — the customer sees it.'; render(); return; }
+        const note = (cur.actNote || "").trim();
+        if ((deny || cur.actReason.indexOf('Other') === 0) && !note) {
+          cur.actErr = 'A note is required for this reason.'; render(); return;
+        }
+        /* Write first, and only change what staff see if it landed. The customer
+           can withdraw while this page is open. */
+        const outcome = deny ? 'denied' : 'fix';
+        const msg = deny
+          ? cur.actReason + (note ? ' — ' + note : "")
+          : (cur.actDoc || fixDocOptions()[0]) + ' — ' + cur.actReason + (note ? ' — ' + note : "");
+        if (!pushOutcome(outcome, msg)) {
+          cur.actErr = 'This request is no longer open — the customer withdrew it while this page was open. Nothing has been recorded.';
+          render(); return;
+        }
+        if (deny) {
+          cur.pay = 'refund_denied';
+          cur.denyReason = msg;
+          cur.tl.push({ w: now(), x: 'Refund denied', m: msg + '. Final — the customer would need to book again. The booking itself is unaffected.' });
+        } else {
+          cur.pay = 'refund_fix';
+          cur.refund = cur.refund || {};
+          cur.refund.stage = 'Returned for correction';
+          cur.refund.docs = 'Returned to the customer: ' + msg;
+          cur.tl.push({ w: now(), x: 'Returned for correction', m: msg + ' · 48 hours to resubmit. Not a denial — the booking is unaffected.' });
+        }
+        cur.actionMode = null; cur.actNote = ""; cur.actReason = ""; cur.actErr = null;
         render();
       }
 
-      render();
+      /* Decisions on a customer-filed request must go back into the shared store,
+         or the customer would never learn the outcome. No-op for the seeded BRQ
+         records, which live only in this page. */
+      /* Returns FALSE when the store refused the write — which happens when the
+         customer withdrew the request while this page was open. Callers must check
+         it: showing "Refunded" for a request that no longer exists would be a lie
+         staff act on. `proof` is forwarded; dropping it silently is what made the
+         customer's proof panel read "not recorded". */
+      function pushOutcome(status, note, proof) {
+        if (!cur.fromStore || !window.RefundStore) return true;   /* seeded demo record */
+        return RefundStore.decide(cur.id, status, note || "", proof || null) !== false;
+      }
+      /* Nothing to show: a VB- reference with no request behind it. Better than
+         silently rendering a different customer's booking. */
+      function showMissing() {
+        document.getElementById('brqRoot').innerHTML =
+          `<div class="br-page"><a class="br-back" href="booking-requests.php">&larr; Back to Booking Requests</a>
+            <h1 class="br-title">Request not found</h1>
+            <p class="br-subtitle">There is no refund request for <strong>${esc(qid)}</strong>. It may have been withdrawn by the customer, or already decided.</p>
+          </div>`;
+      }
+      if (!cur) { showMissing(); } else { render(); }
     </script>
   </body>
 </html>

@@ -195,7 +195,7 @@ $fqApp = isset($_GET['in']) && $_GET['in'] === 'app';
         <a href="#hostel">Hostel beds</a>
         <a href="#gcash">Paying with GCash</a>
         <a href="#cash">Paying in cash</a>
-        <a href="#after">After you book &middot; refunds</a>
+        <a href="#after">After you book &middot; <?php echo $REFUNDS_ENABLED ? 'refunds' : 'refund policy'; ?></a>
       </nav>
 
       <div>
@@ -318,12 +318,13 @@ $fqApp = isset($_GET['in']) && $_GET['in'] === 'app';
 
         <!-- ==================== AFTER / REFUNDS ==================== -->
         <section class="fq-section" id="after" data-reveal>
-          <h2><span>06</span>After you book &middot; refunds</h2>
+          <h2><span>06</span>After you book &middot; <?php echo $REFUNDS_ENABLED ? 'refunds' : 'refund policy'; ?></h2>
 
           <details>
             <summary>What happens after I submit my reservation?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
             <p class="fq-a">Two stages. First, staff review your <strong>ID and reservation</strong> &mdash; until they approve, your request is pending and payment is locked. Once approved, you pay (GCash or cash), and staff verify the payment itself &mdash; the GCash reference in the business account, or the cashier record &mdash; before the booking is finally confirmed. You can follow every step in <a href="booking-history.php">your booking history</a>.</p>
           </details>
+<?php if ($REFUNDS_ENABLED): /* the admin refund switch — includes/refund-policy.php */ ?>
           <details>
             <summary>Who can ask for a refund?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
             <p class="fq-a">A booking that is <strong>approved</strong>, <strong>paid</strong>, and whose date <strong>has not been held yet</strong>. Those bookings show a <strong>Request refund</strong> link in your booking history. Unpaid bookings and past events cannot be refunded.</p>
@@ -348,6 +349,20 @@ $fqApp = isset($_GET['in']) && $_GET['in'] === 'app';
           <details>
             <summary>How is the money returned?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
             <p class="fq-a">The same way you paid. A GCash payment is refunded <strong>to GCash</strong>, to the number you gave in the request. A cash payment is refunded <strong>at the venue office</strong>; staff will tell you when it is ready to collect.</p>
+          </details>
+<?php else: ?>
+          <details>
+            <summary>Can I get a refund?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
+            <p class="fq-a"><strong>No.</strong> USeP does not give refunds: every booking is <strong>final and non-refundable</strong> once paid. Before you submit a booking you are asked to confirm that you understand this, so please check your date, room and details carefully before you pay.</p>
+          </details>
+          <details>
+            <summary>I booked while refunds were still offered. Can I still ask for one?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
+            <p class="fq-a"><strong>Yes.</strong> A booking keeps the policy it was made under. If yours was made while refunds were offered, it still shows a <strong>Request refund</strong> link in <a href="booking-history.php">your booking history</a> while it is paid and the date has not been held yet &mdash; the request page lists the documents you need.</p>
+          </details>
+<?php endif; ?>
+          <details>
+            <summary>What if USeP closes or cancels my venue?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
+            <p class="fq-a">If USeP has to close a room you have booked &mdash; for maintenance or any other reason &mdash; the venue office will offer you a <strong>replacement room</strong> or a <strong>new date</strong>. If you cannot accept either, your payment is returned in full. This does not depend on the refund policy.</p>
           </details>
         </section>
 
@@ -387,7 +402,7 @@ $fqApp = isset($_GET['in']) && $_GET['in'] === 'app';
         <h4>Help</h4>
         <div class="fq-footer-links">
           <a href="#gcash">How to pay by GCash</a>
-          <a href="#after">Request a refund</a>
+          <a href="#after"><?php echo $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy'; ?></a>
           <a href="#discount">USeP discount rules</a>
           <a href="transaction-history.php">Transaction history</a>
         </div>

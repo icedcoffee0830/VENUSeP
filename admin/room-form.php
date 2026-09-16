@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
 /* Venues come from the ONE shared source so the Location dropdown lists every
    venue that exists — add a venue there and it appears here automatically. */

@@ -1,32 +1,18 @@
 <?php
 declare(strict_types=1);
 
-session_start();
-
 /*
  * VENUSeP customer authentication
  * --------------------------------
- * Update these four values for your MySQL installation.
- * For production, move them to environment variables or a config file
- * outside the web root.
+ * The connection + credentials live in ONE place: includes/db.php.
  */
-$dbHost = 'localhost';
-$dbName = 'venusep';
-$dbUser = 'root';
-$dbPass = '';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-try {
-    $pdo = new PDO(
-        "mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4",
-        $dbUser,
-        $dbPass,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ]
-    );
-} catch (PDOException $e) {
+venusep_session_start();
+
+$pdo = venusep_db();
+if ($pdo === null) {
     http_response_code(500);
     exit('Database connection failed.');
 }
@@ -53,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 u.email,
                 u.password_hash,
                 u.is_active,
-                c.user_id AS customer_id,
+                c.id AS customer_id,
                 c.full_name,
                 c.phone,
                 c.address,
@@ -79,6 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Prevent session fixation after successful authentication.
             session_regenerate_id(true);
 
+            // Start from an empty session so nothing from a previous login
+            // (e.g. an admin on the same browser) survives into this one.
+            $_SESSION = [];
             $_SESSION['user_id'] = (int)$customer['user_id'];
             $_SESSION['customer_id'] = (int)$customer['customer_id'];
             $_SESSION['account_type'] = 'customer';

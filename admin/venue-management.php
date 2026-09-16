@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
 /* ==================================================================
    [SIM] ROOMS — sample data; the real app loads these from the database.

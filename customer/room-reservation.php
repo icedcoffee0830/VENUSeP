@@ -241,7 +241,7 @@ $mrOthers = array_slice($mrOthers, 0, 4);
         <div class="bk-footer-links">
           <a href="faq.php">Frequently asked questions</a>
           <a href="faq.php#gcash">How to pay by GCash</a>
-          <a href="faq.php#after">Request a refund</a>
+          <a href="faq.php#after"><?php echo $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy'; ?></a>
           <a href="faq.php#discount">USeP discount rules</a>
         </div>
       </div>
@@ -255,6 +255,11 @@ $mrOthers = array_slice($mrOthers, 0, 4);
 <script>
 /* [SIM] every venue's GCash account — replaced by a lookup when there is a DB. */
 const GCASH_ACCOUNTS = <?php echo json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+/* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
+   OFF = this booking is non-refundable, and the customer must tick that they
+   understand before the request can be submitted. Whatever it is at submit time
+   is what the booking keeps (bookings.refunds_allowed) — it never changes later. */
+const REFUNDS_ENABLED = <?php echo $REFUNDS_ENABLED ? 'true' : 'false'; ?>;
 /* The venue rooms come from the ONE shared source (includes/venue-rooms.php),
    so this page, the landing page and admin Venue Management cannot disagree. */
 const ROOMS = <?php echo json_encode($venueRooms, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
@@ -322,6 +327,7 @@ let state = {
   idFile: null,                                                      // uploaded valid ID: null | {name, url} — required to submit
   approved: false,                                                   // staff approved the ID + reservation (payment unlocked)
   agreeExact: false,                                                 // EXACT-amount disclaimer ticked?
+  agreeNoRefund: false,                                              // "non-refundable" ticked? (required only while refunds are OFF)
   ocr: null,                                                         // receipt check: null | {phase:'reading'|'done', pct, pass, fileName, thumb, rec}
   reference: 'USEP-' + Math.floor(100000 + Math.random()*900000),
   cal: null,                                                         // open date picker: null | {field:'date'|'dateEnd', month:'YYYY-MM'}
@@ -786,10 +792,14 @@ function removeId(){
   if(state.idFile){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
   state.idFile=null; render();
 }
+/* While refunds are OFF, the customer must acknowledge the booking is final
+   before it is made — the policy is agreed at booking time, not at payment. */
+function canSubmitRequest(){ return !!state.idFile && (REFUNDS_ENABLED || state.agreeNoRefund); }
+function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
 function submitRequest(){
   /* affiliation is now a required choice, exactly like the ID upload — the price
      depends on it, so it cannot be left unanswered */
-  if(!derive().ready || !state.idFile || state.affiliated===null) return;
+  if(!derive().ready || !canSubmitRequest() || state.affiliated===null) return;
   state.screen='pending'; render();
 }
 /* [SIM] mockup stand-in for the staff side (the two UIs aren't connected yet) —
@@ -940,7 +950,9 @@ function detailScreen(){
       ${policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')}
       ${policy('Valid ID & approval','Every booking request must include a photo of a <strong>valid ID</strong> (USeP or government-issued). Your reservation stays <strong>pending</strong> — and payment stays locked — until staff approve both the ID and the reservation.')}
       ${policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')}
-      ${policy('Refunds','A refund needs the system transaction receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
+      ${!REFUNDS_ENABLED
+        ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your date, room and details before you submit and pay. If USeP has to close or cancel your venue, the venue office will offer you a <strong>replacement room or a new date</strong> instead; if you cannot accept either, your payment is returned.')
+        : policy('Refunds','A refund needs the system transaction receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
       ${policy('Confirmation','After you pay, staff verify the payment — the GCash reference in the business account, or the cashier record — and give the final confirmation. You are notified at each step.')}`;
   }
 
@@ -1271,11 +1283,22 @@ function reviewScreen(){
       </div>`}
     </div>
 
+    ${REFUNDS_ENABLED?'':`
+    <div style="background:#fff;border:1px solid ${state.agreeNoRefund?'#d4ebdd':'#f0d9b8'};border-radius:16px;padding:16px;margin-top:14px">
+      <div style="font-size:14px;font-weight:660;margin-bottom:3px">Non-refundable booking <span style="color:#b23a3a">*</span></div>
+      <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px;line-height:1.55">USeP does not give refunds. Once you pay, this booking is final. If USeP has to close or cancel the venue, you will be offered a replacement room or a new date instead.</div>
+      <label style="display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.55;color:#1c1b19;cursor:pointer">
+        <input type="checkbox" id="agreeNoRefund" ${state.agreeNoRefund?'checked':''} onchange="toggleAgreeNoRefund(this)" style="width:15px;height:15px;margin-top:2px;flex:none;accent-color:#a11626">
+        <span>I understand this booking is <strong>non-refundable</strong> once paid.</span>
+      </label>
+    </div>`}
+
     <div style="display:flex;gap:12px;margin-top:20px">
       <button onclick="backToDetail()" style="flex:none;height:48px;padding:0 20px;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;font-size:14px;font-weight:640;cursor:pointer">Edit details</button>
-      <button onclick="submitRequest()" ${state.idFile?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${state.idFile?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${state.idFile?'pointer':'not-allowed'};opacity:${state.idFile?'1':'.85'}">Submit booking request</button>
+      <button onclick="submitRequest()" ${canSubmitRequest()?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${canSubmitRequest()?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${canSubmitRequest()?'pointer':'not-allowed'};opacity:${canSubmitRequest()?'1':'.85'}">Submit booking request</button>
     </div>
-    ${state.idFile?'':'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'}
+    ${!state.idFile?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'
+      :!canSubmitRequest()?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Tick that you understand the booking is non-refundable to submit your request</div>':''}
     <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Payment opens after staff approve your ID and reservation — pay via GCash or cash, at least 1 day before your event.</div>
   </main>`;
 }
@@ -1477,7 +1500,7 @@ function paymentScreen(){
         <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
       </div>
 
-      <div style="font-size:12.5px;color:#4a463f;line-height:1.7;border-top:1px solid rgba(0,0,0,.07);padding-top:13px">Bring your booking reference and a valid ID. Pay <strong>before your event date</strong> — unpaid reservations may be released. You will receive the official transaction receipt at the counter; keep it (it is required for any refund).</div>
+      <div style="font-size:12.5px;color:#4a463f;line-height:1.7;border-top:1px solid rgba(0,0,0,.07);padding-top:13px">Bring your booking reference and a valid ID. Pay <strong>before your event date</strong> — unpaid reservations may be released. You will receive the official transaction receipt at the counter; keep it${REFUNDS_ENABLED?' (it is required for any refund)':''}.</div>
     </div>`;
 
   return `
@@ -1553,7 +1576,11 @@ function doneScreen(){
       ${scheduleHtml(x)}
     </div>
 
-    <div style="font-size:12.5px;color:#8a857d;line-height:1.6;margin-top:16px">${cash
+    <div style="font-size:12.5px;color:#8a857d;line-height:1.6;margin-top:16px">${!REFUNDS_ENABLED
+      ? (cash
+        ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter as your proof of payment. This booking is non-refundable.'
+        : 'Keep your GCash receipt and this reference number as your proof of payment. This booking is non-refundable.')
+      : cash
       ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the system transaction receipt and the Official Receipt.'
       : 'Keep your GCash receipt and this reference number. A refund request needs the system transaction receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
 

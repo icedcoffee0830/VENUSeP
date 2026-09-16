@@ -1,3 +1,4 @@
+<?php /* Old copy kept for reference only — the real page is admin/admin-login.php. */ header('Location: ../admin-login.php'); exit; ?>
 <?php ?>
 <!DOCTYPE html>
 <!-- ==================================================================

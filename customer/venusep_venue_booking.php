@@ -674,20 +674,31 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
     </div>
   </section>
 
-  <!-- ==================== REFUND ==================== -->
+  <!-- ==================== REFUND ====================
+       Follows the admin refund switch (includes/refund-policy.php). OFF is the
+       USeP default: every new booking is final. -->
   <section class="lp-refund">
     <div class="lp-wrap">
       <div class="lp-refund-card" data-reveal>
         <div class="lp-refund-left">
           <span class="lp-refund-icon">
+<?php if ($REFUNDS_ENABLED): ?>
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h13a5 5 0 0 1 0 10h-6"/><path d="m7 6-4 4 4 4"/></svg>
+<?php else: ?>
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+<?php endif; ?>
           </span>
           <div>
+<?php if ($REFUNDS_ENABLED): ?>
             <h3>Plans change &mdash; you can ask for a refund.</h3>
             <p>Approved bookings that are paid and have not been held yet are eligible. Request it from your booking history; staff make the final call and you will see the reason either way.</p>
+<?php else: ?>
+            <h3>All bookings are non-refundable.</h3>
+            <p>Please check your date, room and details before you pay &mdash; once paid, a booking cannot be refunded. If USeP has to close or cancel your venue, the venue office will offer you a replacement room or a new date.</p>
+<?php endif; ?>
           </div>
         </div>
-        <a class="lp-btn" href="faq.php">Read the FAQ</a>
+        <a class="lp-btn" href="faq.php#after">Read the FAQ</a>
       </div>
     </div>
   </section>
@@ -719,7 +730,11 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
         <div class="lp-footer-links">
           <a href="faq.php">Frequently asked questions</a>
           <a href="faq.php">How to pay by GCash</a>
+<?php if ($REFUNDS_ENABLED): ?>
           <a href="booking-history.php">Request a refund</a>
+<?php else: ?>
+          <a href="faq.php#after">Refund policy</a>
+<?php endif; ?>
           <a href="faq.php">USeP discount rules</a>
         </div>
       </div>

@@ -139,6 +139,14 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 
       @media (max-width: 1100px) { .th-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .th-field-reset { grid-column: 1 / -1; } }
       @media (max-width: 767.98px) { .th-head { flex-direction: column; } }
+    
+      /* on the crimson page background (painted by includes/header.php): light text, a card that floats */
+      .th-head h1 { color: #fff; }
+      .th-head p { color: #e9d0cd; }
+      .th-panel { box-shadow: 0 18px 44px rgba(10,4,5,.28), 0 2px 6px rgba(10,4,5,.18); border-color: rgba(255,255,255,.18); }
+    
+      /* current page in the table's pagination: crimson, not black */
+      .tabulator .tabulator-footer .tabulator-page.active { background: #a11626; color: #ffffff; border-color: #a11626; }
     </style>
   </head>
   <body class="customer-transaction-page">

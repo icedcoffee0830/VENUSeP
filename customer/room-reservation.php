@@ -63,10 +63,10 @@
 <style>
   *{box-sizing:border-box}
   body{margin:0;background:#f4f3f0;color:#1c1b19;font-family:'Inter',system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
-  a{color:#1f2a44;text-decoration:none}
-  a:hover{color:#2f3f66}
+  a{color:#a11626;text-decoration:none}
+  a:hover{color:#7d0f1e}
   input,select,button,textarea{font-family:inherit}
-  input:focus,select:focus,textarea:focus{outline:2px solid rgba(31,42,68,.35);outline-offset:0}
+  input:focus,select:focus,textarea:focus{outline:2px solid rgba(161,22,38,.35);outline-offset:0}
   ::placeholder{color:#a5a19a}
   button{appearance:none}
   /* custom date-picker dropdown (booking panel) */
@@ -78,16 +78,80 @@
   .cal-day:disabled{color:#c6c2ba;text-decoration:line-through;cursor:default;background:none}
   .cal-day.out{color:#c6c2ba}
   .cal-day.today:not(.sel){box-shadow:inset 0 0 0 1.5px #b9c0d0}
-  .cal-day.sel,.cal-day.sel:hover{background:#1f2a44;color:#fff;font-weight:650}
+  .cal-day.sel,.cal-day.sel:hover{background:#a11626;color:#fff;font-weight:650}
   /* time dropdown (booking panel) */
   .tt-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;min-width:118px;z-index:70;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.14);max-height:196px;overflow-y:auto;padding:5px}
   .tt-opt{display:block;width:100%;border:none;background:none;text-align:left;padding:8px 11px;border-radius:8px;font:500 13.5px 'Inter',system-ui,sans-serif;color:#1c1b19;cursor:pointer;white-space:nowrap}
   .tt-opt:hover{background:#f0eeea}
-  .tt-opt.sel,.tt-opt.sel:hover{background:#1f2a44;color:#fff}
+  .tt-opt.sel,.tt-opt.sel:hover{background:#a11626;color:#fff}
+  /* the footer — crimson to black; the page is a column so it stays at the bottom on short screens */
+  body{display:flex;flex-direction:column;min-height:100vh}
+  #app{flex:1 0 auto}
+  .bk-footer{position:relative;color:#fff;background:linear-gradient(158deg,#8a1222 0%,#400d16 40%,#14080a 100%)}
+  .bk-footer a{color:#e6d7d5}
+  .bk-footer a:hover{color:#fff}
+  .bk-footer-wrap{max-width:1240px;margin:0 auto;padding:44px 28px 26px}
+  .bk-footer-grid{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:36px;padding-bottom:26px}
+  .bk-footer-logo{height:20px;width:auto;display:block;filter:invert(1)}
+  .bk-footer-about{margin:14px 0 0;max-width:300px;font-size:12.5px;line-height:1.66;color:#b29b9a}
+  .bk-footer-disc{margin-top:16px;display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);font-size:12.5px;font-weight:600;color:#e6d7d5}
+  .bk-footer-disc i{width:7px;height:7px;border-radius:50%;background:#d9930d;display:block}
+  .bk-footer h4{margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#96807e}
+  .bk-footer-links{display:grid;gap:8px}
+  .bk-footer-links a{font-size:12.5px}
+  .bk-footer-bottom{border-top:1px solid rgba(255,255,255,.1);padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12.5px;color:#96807e}
+  .bk-footer-bottom a{color:#96807e;margin-left:20px}
+  @media (max-width:720px){.bk-footer-wrap{padding:36px 18px 22px}.bk-footer-grid{grid-template-columns:1fr 1fr;gap:24px 16px}.bk-footer-brand{grid-column:1/-1}.bk-footer-bottom{display:grid;gap:10px}.bk-footer-bottom a{margin:0 16px 0 0}}
+  /* "Discover · More rooms" — the landing page's hostel cards, on a crimson band above the footer */
+  .bk-more{position:relative;overflow:hidden;color:#fff;background:linear-gradient(162deg,#7d1120 0%,#3c0c14 48%,#17080a 100%)}
+  .bk-more::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(900px 560px at 86% 2%,rgba(232,62,74,.3),transparent 62%),radial-gradient(800px 560px at 6% 100%,rgba(10,4,5,.62),transparent 66%)}
+  .bk-more-wrap{position:relative;max-width:1240px;margin:0 auto;padding:60px 28px 56px}
+  .bk-more-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:24px}
+  .bk-more-eyebrow{display:block;font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#f2d0cb;margin-bottom:10px}
+  .bk-more h2{margin:0;font-size:34px;font-weight:800;letter-spacing:-.024em;color:#fff}
+  .bk-more-all{font-size:14px;font-weight:700;color:#fff;padding-bottom:6px}
+  .bk-more-all:hover{color:#f2d0cb}
+  .bk-more-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+  .bk-more-card{display:block;border-radius:20px;overflow:hidden;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.17);color:#fff;transition:transform 260ms cubic-bezier(.16,1,.3,1),box-shadow 260ms cubic-bezier(.16,1,.3,1)}
+  .bk-more-card:hover{transform:translateY(-4px);box-shadow:0 20px 48px rgba(10,4,5,.35);color:#fff}
+  .bk-more-ph{position:relative;overflow:hidden;aspect-ratio:16/10;background:linear-gradient(158deg,#2c181a,#82453f)}
+  .bk-more-ph-in{position:absolute;inset:0;transition:transform 700ms cubic-bezier(.16,1,.3,1)}
+  .bk-more-card:hover .bk-more-ph-in{transform:scale(1.045)}
+  .bk-more-art{display:block;width:100%;height:100%}
+  .bk-more-img{display:block;width:100%;height:100%;object-fit:cover}
+  .bk-more-scrim{position:absolute;inset:0;background:linear-gradient(180deg,transparent 44%,rgba(14,5,6,.64) 100%)}
+  .bk-more-tag{position:absolute;left:13px;bottom:13px;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.17);border:1px solid rgba(255,255,255,.24);color:#fff;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .bk-more-badge{position:absolute;right:12px;top:12px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.95);font-size:12px;font-weight:700;color:#705e5e}
+  .bk-more-badge.is-closed{color:#8a5a12}
+  .bk-more-body{padding:18px 19px 20px}
+  .bk-more-body h3{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;color:#fff}
+  .bk-more-meta{margin:7px 0 0;font-size:12.5px;line-height:1.55;color:#d5b8b5}
+  .bk-more-price{margin:6px 0 0;font-size:13px;line-height:1.5;color:#d5b8b5}
+  /* usep_price_html() paints for a white page; recolour it for the dark card (UI only) */
+  .bk-more-meta s,.bk-more-price s{color:#ac8f8d!important}
+  .bk-more-meta strong,.bk-more-price strong{color:#fff!important}
+  .bk-more-meta span,.bk-more-price span{color:#f2d0cb!important}
+  .bk-more-free{margin-top:13px;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,209,102,.16);border:1px solid rgba(255,209,102,.42);color:#ffd166}
+  .bk-more-free i{width:6px;height:6px;border-radius:50%;background:#ffd166;display:block}
+  .bk-more-free.is-none{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.17);color:#bda4a2}
+  .bk-more-free.is-none i{background:#96807e}
+  .bk-more-free.is-closed{background:rgba(178,58,58,.26);border-color:rgba(255,123,138,.4);color:#ff9aa6}
+  .bk-more-free.is-closed i{background:#ff7b8a}
+  .bk-more-alt{margin:22px 0 0;font-size:13px;color:#d5b8b5}
+  .bk-more-alt a{color:#fff;font-weight:600}
+  .bk-footer{border-top:1px solid rgba(255,255,255,.12)}
+  @media (max-width:1080px){.bk-more-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:720px){.bk-more-wrap{padding:40px 18px 36px}.bk-more-head{flex-direction:column;align-items:flex-start}.bk-more-grid{grid-template-columns:1fr}.bk-more h2{font-size:26px}}
 </style>
 </head>
 <body>
 <!-- empty shell — render() (bottom of the script) draws the current screen in here -->
+<?php
+/* the nav highlights the venue this room belongs to */
+include_once __DIR__ . '/../includes/venue-rooms.php';
+$navHere = '';
+foreach ($venueRooms as $navRoom) if (isset($_GET['room']) && $navRoom['id'] === $_GET['room']) { $navHere = 'venue-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($navRoom['venue'])); break; }
+$navMode = 'solid'; include __DIR__ . '/../includes/customer-nav.php'; ?>
 <div id="app"></div>
 
 <?php
@@ -96,11 +160,98 @@
    they have DIFFERENT accounts — so the account is resolved per room, not per
    page (see gcAccount() below). Both the checker and the payment screen read
    it, so what the customer is told and what is verified cannot diverge. */
-include __DIR__ . '/../includes/payment-settings.php';
-include __DIR__ . '/../includes/venue-rooms.php';
-include __DIR__ . '/../includes/pricing.php';   /* USeP discount rate + the account check */
-include __DIR__ . '/../includes/gcash-checker.php';
+include_once __DIR__ . '/../includes/payment-settings.php';
+include_once __DIR__ . '/../includes/venue-rooms.php';   /* _once: the nav bar already loaded it via the customer record */
+include_once __DIR__ . '/../includes/pricing.php';   /* USeP discount rate + the account check */
+include_once __DIR__ . '/../includes/gcash-checker.php';
 ?>
+
+<?php
+/* "More rooms" — the other event spaces, same venue first, four at most. Presentation only. */
+/* who is looking — so the price line previews the USeP rate the way the landing page does */
+require_once __DIR__ . '/../includes/customer-bookings.php';
+$mrUsep    = usep_is_account($customerContact['email']);
+$mrToday   = date('Y-m-d');
+$mrCurrent = isset($_GET['room']) && is_string($_GET['room']) ? $_GET['room'] : '';
+function mr_photo($id) { foreach (['jpg','jpeg','png','webp'] as $e) if (file_exists(__DIR__ . "/../assets/img/venues/$id.$e")) return "../assets/img/venues/$id.$e"; return null; }
+function mr_pic($id, $kind, $badge = '') {
+  $ph = mr_photo($id);
+  $in = $ph ? '<img class="bk-more-img" loading="lazy" src="' . htmlspecialchars($ph) . '" alt="">'
+            : '<svg class="bk-more-art" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#bk-art-' . $kind . '"/></svg>';
+  $tag = '';   /* "Photo slot" tag off — the drawings stand as illustrations until real photos land */
+  return '<div class="bk-more-ph"><div class="bk-more-ph-in">' . $in . '<div class="bk-more-scrim"></div></div>' . $tag . $badge . '</div>';
+}
+$mrHere   = null; foreach ($venueRooms as $r) if ($r['id'] === $mrCurrent) { $mrHere = $r; break; }
+$mrOthers = array_values(array_filter($venueRooms, function ($r) use ($mrCurrent) { return $r['id'] !== $mrCurrent; }));
+if ($mrHere) usort($mrOthers, function ($a, $b) use ($mrHere) { return ($b['venue'] === $mrHere['venue']) - ($a['venue'] === $mrHere['venue']); });
+$mrOthers = array_slice($mrOthers, 0, 4);
+?>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="bk-art-hall" viewBox="0 0 400 250"><g stroke="#fff" stroke-opacity=".32" fill="none" stroke-width="1.6"><path d="M80 172V108a30 30 0 0 1 60 0v64Z"/><path d="M170 172V98a30 30 0 0 1 60 0v74Z"/><path d="M260 172V108a30 30 0 0 1 60 0v64Z"/><path d="M24 172h352"/><path d="M150 172v-32h100v32"/></g><g fill="#fff" fill-opacity=".14"><rect x="84" y="196" width="24" height="8" rx="4"/><rect x="120" y="196" width="24" height="8" rx="4"/><rect x="156" y="196" width="24" height="8" rx="4"/><rect x="192" y="196" width="24" height="8" rx="4"/><rect x="228" y="196" width="24" height="8" rx="4"/><rect x="264" y="196" width="24" height="8" rx="4"/><rect x="300" y="196" width="24" height="8" rx="4"/></g></symbol>
+  <symbol id="bk-art-gym" viewBox="0 0 400 250"><g stroke="#fff" stroke-opacity=".32" fill="none" stroke-width="1.6"><path d="M24 84c50-30 100-42 176-42s126 12 176 42"/><path d="M24 108c50-28 100-40 176-40s126 12 176 40"/><path d="M64 84v98M134 68v114M200 62v120M266 68v114M336 84v98"/><path d="M14 182h372"/><rect x="128" y="128" width="144" height="54" rx="3"/><path d="M200 128v54M128 155h144" stroke-opacity=".5"/></g></symbol>
+  <symbol id="bk-art-bunk" viewBox="0 0 400 250"><g stroke="#fff" stroke-opacity=".38" fill="none" stroke-width="1.7"><rect x="52" y="72" width="140" height="46" rx="6"/><rect x="52" y="146" width="140" height="46" rx="6"/><path d="M62 72V56M182 72V56M62 146v-28M182 146v-28M62 192v22M182 192v22"/><rect x="228" y="72" width="140" height="46" rx="6"/><rect x="228" y="146" width="140" height="46" rx="6"/><path d="M238 72V56M358 72V56M238 146v-28M358 146v-28M238 192v22M358 192v22"/><path d="M14 214h372"/></g><g fill="#fff" fill-opacity=".22"><rect x="64" y="82" width="40" height="16" rx="7"/><rect x="64" y="156" width="40" height="16" rx="7"/><rect x="240" y="82" width="40" height="16" rx="7"/><rect x="240" y="156" width="40" height="16" rx="7"/></g></symbol>
+  <symbol id="bk-art-private" viewBox="0 0 400 250"><g stroke="#fff" stroke-opacity=".38" fill="none" stroke-width="1.7"><rect x="44" y="88" width="132" height="42" rx="6"/><rect x="44" y="158" width="132" height="42" rx="6"/><path d="M54 88V72M166 88V72M54 158v-28M166 158v-28M54 200v20M166 200v20"/><path d="M244 52v168M244 52h122M244 220h122"/><path d="M272 132a22 22 0 0 1 44 0v10h-44Z"/><path d="M266 142h56M294 142v22"/><rect x="336" y="96" width="26" height="60" rx="4"/><path d="M14 220h372"/></g><g fill="#fff" fill-opacity=".22"><rect x="56" y="98" width="36" height="15" rx="7"/><rect x="56" y="168" width="36" height="15" rx="7"/></g></symbol>
+</svg>
+<section class="bk-more">
+  <div class="bk-more-wrap">
+    <div class="bk-more-head">
+      <div><span class="bk-more-eyebrow">Discover</span><h2>More rooms</h2></div>
+      <a class="bk-more-all" href="venusep_venue_booking.php#venue-listings">See all spaces <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <div class="bk-more-grid">
+<?php foreach ($mrOthers as $r):
+        $mt = $r['maintenance']; $covers = $mt && venueMaintCovers($mt, $mrToday); $badge = '';
+        if ($covers && $mt['blocks']) $badge = '<span class="bk-more-badge is-closed">Closed &middot; ' . htmlspecialchars($mt['reason']) . '</span>';
+        elseif ($covers)              $badge = '<span class="bk-more-badge">Notice &middot; '  . htmlspecialchars($mt['reason']) . '</span>'; ?>
+      <a class="bk-more-card" href="room-reservation.php?room=<?php echo urlencode($r['id']); ?>">
+        <?php echo mr_pic($r['id'], $r['capacity'] >= 500 ? 'gym' : 'hall', $badge); ?>
+        <div class="bk-more-body">
+          <h3><?php echo htmlspecialchars($r['name']); ?></h3>
+          <p class="bk-more-meta"><?php echo htmlspecialchars($r['venue']); ?> &middot; up to <?php echo number_format((int) $r['capacity']); ?> guests</p>
+          <p class="bk-more-price"><?php echo usep_price_html((int) $r['fee'], $mrUsep, ' per day'); ?></p>
+        </div>
+      </a>
+<?php endforeach; ?>
+    </div>
+    <p class="bk-more-alt">Looking for a bed instead? <a href="venusep_venue_booking.php#hostel-listings">See the hostel rooms</a></p>
+  </div>
+</section>
+
+<!-- ==================== FOOTER — the landing page's, compact. Static: it sits
+     below #app in the DOM, so it is there on every screen the script draws. -->
+<footer class="bk-footer">
+  <div class="bk-footer-wrap">
+    <div class="bk-footer-grid">
+      <div class="bk-footer-brand">
+        <img class="bk-footer-logo" src="../logo/Logo Header 3.png" alt="VENUSeP">
+        <p class="bk-footer-about">Venue and hostel booking for the University of Southeastern Philippines, Tagum&ndash;Mabini Campus. Run by the campus venue office.</p>
+        <span class="bk-footer-disc"><i></i><?php echo (int) $DISCOUNT_PERCENT; ?>% off for USeP students &amp; staff</span>
+      </div>
+      <div>
+        <h4>Book</h4>
+        <div class="bk-footer-links">
+          <a href="venusep_venue_booking.php#venue-listings">Browse venues</a>
+          <a href="venusep_venue_booking.php#hostel-listings">Hostel beds</a>
+          <a href="calendar.php">Availability calendar</a>
+          <a href="booking-history.php">My bookings</a>
+        </div>
+      </div>
+      <div>
+        <h4>Help</h4>
+        <div class="bk-footer-links">
+          <a href="faq.php">Frequently asked questions</a>
+          <a href="faq.php#gcash">How to pay by GCash</a>
+          <a href="faq.php#after">Request a refund</a>
+          <a href="faq.php#discount">USeP discount rules</a>
+        </div>
+      </div>
+    </div>
+    <div class="bk-footer-bottom">
+      <span>&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</span>
+      <span><a href="faq.php#after">Booking &amp; cancellation policy</a><a href="faq.php">Privacy</a></span>
+    </div>
+  </div>
+</footer>
 <script>
 /* [SIM] every venue's GCash account — replaced by a lookup when there is a DB. */
 const GCASH_ACCOUNTS = <?php echo json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
@@ -540,7 +691,7 @@ function calHtml(field){
       <button type="button" class="cal-nav" onclick="calNav(1)">›</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);justify-items:center;margin-bottom:4px">
-      ${['S','M','T','W','T','F','S'].map(d=>`<span style="font-size:11px;font-weight:600;color:#a5a19a;width:32px;text-align:center">${d}</span>`).join('')}
+      ${['S','M','T','W','T','F','S'].map(d=>`<span style="font-size:12px;font-weight:600;color:#a5a19a;width:32px;text-align:center">${d}</span>`).join('')}
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;justify-items:center">${cells}</div>
   </div>`;
@@ -599,7 +750,7 @@ function galSelect(i){
   const big=document.getElementById('galBig');
   if(big){ big.setAttribute('style', galGrad(i)+';border-radius:12px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 14px ui-monospace,monospace'); big.textContent='Photo '+(i+1); }
   const g=document.getElementById('galGrid');
-  if(g) g.querySelectorAll('.galThumb').forEach(function(b){ b.style.borderColor=(+b.getAttribute('data-i')===i)?'#1f2a44':'transparent'; });
+  if(g) g.querySelectorAll('.galThumb').forEach(function(b){ b.style.borderColor=(+b.getAttribute('data-i')===i)?'#a11626':'transparent'; });
 }
 function closeGallery(){ const ov=document.getElementById('galOverlay'); if(ov) ov.remove(); }
 function applyTimeToAll(){
@@ -687,24 +838,7 @@ function confirmBooking(){
 function restart(){ location.href='venusep_venue_booking.php'; }
 
 /* ---------- shared bits ---------- */
-function header(){
-  return `
-  <header style="position:sticky;top:0;z-index:40;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid rgba(0,0,0,.08)">
-    <div style="max-width:none;margin:0;padding:14px 40px;display:flex;align-items:center;gap:16px">
-      <a href="venusep_venue_booking.php" title="Back to the landing page" style="display:flex;align-items:center">
-        <img src="../logo/Logo Header 3.png" alt="VENUSeP logo" style="height:38px;width:auto;display:block">
-      </a>
-      <div style="flex:1"></div>
-      <a href="customer-profile.php" title="Account settings" style="display:flex;align-items:center;gap:9px;padding:6px 8px 6px 6px;border:1px solid rgba(0,0,0,.1);border-radius:999px;background:#fff;color:inherit;text-decoration:none">
-        <div style="width:28px;height:28px;border-radius:999px;background:#e7e4de;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:650;color:#5c584f">${esc(initials(ACCOUNT.name))}</div>
-        <div style="line-height:1.15;padding-right:4px">
-          <div style="font-size:12.5px;font-weight:600">${esc(ACCOUNT.name)}</div>
-          <div style="font-size:11px;color:#8a857d">${esc(ACCOUNT.role)}</div>
-        </div>
-      </a>
-    </div>
-  </header>`;
-}
+function header(){ return ''; }   /* the nav bar is static now: includes/customer-nav.php, above #app */
 
 const PHOTO_TILE = 'background:#e9e7e2;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px);display:flex;align-items:center;justify-content:center';
 
@@ -755,7 +889,7 @@ function detailScreen(){
   /* tabs */
   const tabDefs=[['overview','Overview'],['availability','Availability'],['policies','Policies']];
   const tabs=tabDefs.map(([k,label])=>`
-    <button onclick="setTab('${k}')" style="background:none;border:none;padding:12px 14px;font-size:14px;font-weight:${state.tab===k?680:550};color:${state.tab===k?'#1c1b19':'#8a857d'};border-bottom:2px solid ${state.tab===k?'#1f2a44':'transparent'};cursor:pointer;margin-bottom:-1px">${label}</button>`).join('');
+    <button onclick="setTab('${k}')" style="background:none;border:none;padding:12px 14px;font-size:14px;font-weight:${state.tab===k?680:550};color:${state.tab===k?'#1c1b19':'#8a857d'};border-bottom:2px solid ${state.tab===k?'#a11626':'transparent'};cursor:pointer;margin-bottom:-1px">${label}</button>`).join('');
 
   /* tab content */
   let content='';
@@ -851,7 +985,7 @@ function detailScreen(){
       n++;
       const t=dayTime(ds);
       return `<div style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px">
-        <span style="font-size:12px;font-weight:600;color:#5c584f">Day ${n}<div style="font-size:11px;font-weight:500;color:#8a857d">${lbl}</div></span>
+        <span style="font-size:12px;font-weight:600;color:#5c584f">Day ${n}<div style="font-size:12px;font-weight:500;color:#8a857d">${lbl}</div></span>
         ${timeInput('bk-t-'+ds+'-s',t.start,"setDayTime('"+ds+"','start',this.value)")}
         ${timeInput('bk-t-'+ds+'-e',t.end,"setDayTime('"+ds+"','end',this.value)")}
       </div>`;
@@ -860,13 +994,13 @@ function detailScreen(){
       <div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <span style="font-size:12px;font-weight:600;color:#5c584f">Hours per day</span>
-          <button onclick="applyTimeToAll()" style="background:none;border:none;padding:0;font-size:11.5px;font-weight:600;color:#1f2a44;cursor:pointer">Apply Day 1 to all</button>
+          <button onclick="applyTimeToAll()" style="background:none;border:none;padding:0;font-size:12.5px;font-weight:600;color:#a11626;cursor:pointer">Apply Day 1 to all</button>
         </div>
         <div style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;margin-bottom:4px">
-          <span></span><span style="font-size:11px;color:#8a857d">Start</span><span style="font-size:11px;color:#8a857d">End</span>
+          <span></span><span style="font-size:12px;color:#8a857d">Start</span><span style="font-size:12px;color:#8a857d">End</span>
         </div>
         ${rows}
-        ${d.excluded?`<div style="font-size:11px;color:#a5a19a;margin-top:2px">Unavailable days are left out automatically — you only book and pay for the available days.</div>`:''}
+        ${d.excluded?`<div style="font-size:12px;color:#a5a19a;margin-top:2px">Unavailable days are left out automatically — you only book and pay for the available days.</div>`:''}
       </div>`;
   } else {
     timeSection=`
@@ -893,7 +1027,7 @@ function detailScreen(){
 
   const capacityWarn = d.over ? `<div style="font-size:12px;color:#8a5a12;margin-bottom:10px;line-height:1.4">Exceeds this room's capacity of ${R.capacity}. You can continue, but staff may reject an over-capacity booking.</div>` : '';
 
-  const feeNote = d.days>1 ? `<span style="display:block;font-size:11px;color:#a5a19a;margin-top:1px">${peso(R.fee)} × ${d.days} days</span>` : '';
+  const feeNote = d.days>1 ? `<span style="display:block;font-size:12px;color:#a5a19a;margin-top:1px">${peso(R.fee)} × ${d.days} days</span>` : '';
 
   return `
   <main style="max-width:1180px;margin:0 auto;padding:20px 24px 72px">
@@ -958,7 +1092,7 @@ function detailScreen(){
             ${calHtml('dateEnd')}
           </div>
         </div>
-        <div style="font-size:11.5px;color:#8a857d;margin-bottom:12px">${rangeNote}</div>
+        <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">${rangeNote}</div>
 
         ${timeSection}
 
@@ -974,7 +1108,7 @@ function detailScreen(){
         <div style="border-top:1px solid rgba(0,0,0,.09);padding-top:14px;margin-bottom:12px">
           <div style="font-size:12px;font-weight:600;color:#5c584f;margin-bottom:8px">Booking under</div>
           <div style="display:flex;align-items:center;gap:10px;padding:2px 0">
-            <div style="width:34px;height:34px;border-radius:999px;background:#1f2a44;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:650;color:#fff">${esc(initials(ACCOUNT.name))}</div>
+            <div style="width:34px;height:34px;border-radius:999px;background:#a11626;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:650;color:#fff">${esc(initials(ACCOUNT.name))}</div>
             <div style="line-height:1.3">
               <div style="font-size:13.5px;font-weight:640">${esc(ACCOUNT.name)}</div>
               <div style="font-size:12px;color:#8a857d">${esc(ACCOUNT.email)}</div>
@@ -988,7 +1122,7 @@ function detailScreen(){
         </div>
         ${d.discountAmount>0?`
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:8px">
-          <span style="font-size:13px;color:#1c7a4f">USeP discount &minus;${d.discountPercent}%<span style="display:block;font-size:11px;color:#a5a19a;margin-top:1px">applied once staff check your USeP ID</span></span>
+          <span style="font-size:13px;color:#1c7a4f">USeP discount &minus;${d.discountPercent}%<span style="display:block;font-size:12px;color:#a5a19a;margin-top:1px">applied once staff check your USeP ID</span></span>
           <span style="font-size:17px;font-weight:700;color:#1c7a4f">&minus;${peso(d.discountAmount)}</span>
         </div>
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:9px;margin-top:8px;border-top:1px solid rgba(0,0,0,.08)">
@@ -996,8 +1130,8 @@ function detailScreen(){
           <span style="font-size:19px;font-weight:750">${peso(d.totalFee)}</span>
         </div>`:''}
 
-        <button onclick="goReview()" ${d.ready?'':'disabled'} style="width:100%;height:48px;border:none;border-radius:11px;font-size:15px;font-weight:680;cursor:${d.ready?'pointer':'not-allowed'};background:${d.ready?'#1f2a44':'#b7b3ab'};color:#fff;opacity:${d.ready?'1':'.85'}">Continue — review &amp; submit request</button>
-        ${(!d.ready && d.hint)?`<div style="font-size:11.5px;color:#a5a19a;text-align:center;margin-top:8px">${d.hint}</div>`:`<div style="font-size:11.5px;color:#a5a19a;text-align:center;margin-top:8px">You'll attach a valid ID next · payment opens after staff approval</div>`}
+        <button onclick="goReview()" ${d.ready?'':'disabled'} style="width:100%;height:48px;border:none;border-radius:11px;font-size:15px;font-weight:680;cursor:${d.ready?'pointer':'not-allowed'};background:${d.ready?'#a11626':'#b7b3ab'};color:#fff;opacity:${d.ready?'1':'.85'}">Continue — review &amp; submit request</button>
+        ${(!d.ready && d.hint)?`<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">${d.hint}</div>`:`<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">You'll attach a valid ID next · payment opens after staff approval</div>`}
       </div>
     </aside>
     </div>
@@ -1031,7 +1165,7 @@ function scheduleHtml(x){
   if(!x.d.multi) return '';
   return `
     <div style="margin:12px 0 2px">
-      <div style="font-size:11px;font-weight:600;color:#a5a19a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">Daily schedule</div>
+      <div style="font-size:12px;font-weight:600;color:#a5a19a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">Daily schedule</div>
       <div>
         ${x.schedule.map((s,i)=>{
           const line=i?'border-top:1px solid rgba(0,0,0,.06);':'';
@@ -1048,7 +1182,7 @@ function reviewScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
   /* key-value blocks (same visual language as the payment card) — left-aligned
      label-over-value cells instead of a long label…value ping-pong list */
-  const blk=(label,value,span)=>`<div style="min-width:0;${span?'grid-column:1 / -1;':''}"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+  const blk=(label,value,span)=>`<div style="min-width:0;${span?'grid-column:1 / -1;':''}"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
   const blocks=[
     blk('Event name', esc(x.b.eventName||'—')),
     blk('Attendees', esc(x.b.attendees||'—')+(x.d.over?' <span style="color:#8a5a12;font-weight:600">· over capacity</span>':'')),
@@ -1058,7 +1192,7 @@ function reviewScreen(){
     blk('Booked by ('+esc(x.bookerType)+')', esc(x.bookerName)),
     blk('Contact', esc(x.bookerContact), true),
   ].join('');
-  const step=(n,active,done)=>`<span style="width:26px;height:26px;border-radius:999px;background:${done?'#1c7a4f':active?'#1f2a44':'#e7e4de'};color:${(active||done)?'#fff':'#8a857d'};font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">${n}</span>`;
+  const step=(n,active,done)=>`<span style="width:26px;height:26px;border-radius:999px;background:${done?'#1c7a4f':active?'#a11626':'#e7e4de'};color:${(active||done)?'#fff':'#8a857d'};font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">${n}</span>`;
   return `
   <main style="max-width:720px;margin:0 auto;padding:26px 24px 72px">
     <a onclick="backToDetail()" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:16px">← Back to room</a>
@@ -1089,7 +1223,7 @@ function reviewScreen(){
         <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
         <span style="color:#1c7a4f;font-weight:640">&minus;${peso(x.d.discountAmount)}</span>
       </div>
-      <div style="font-size:11.5px;color:#a5a19a;line-height:1.5;padding-bottom:4px">Provisional &mdash; staff confirm the discount when they check your USeP ID. Payment only opens after that, so this figure is settled before you pay anything.</div>`:''}
+      <div style="font-size:12.5px;color:#a5a19a;line-height:1.5;padding-bottom:4px">Provisional &mdash; staff confirm the discount when they check your USeP ID. Payment only opens after that, so this figure is settled before you pay anything.</div>`:''}
     </div>
 
     <!-- USeP AFFILIATION. A claim, not a grant: staff confirm it from the ID
@@ -1103,17 +1237,17 @@ function reviewScreen(){
       ${[[true,'I am USeP-affiliated','Student, faculty or employee &mdash; upload your <strong>USeP ID</strong> below'],
          [false,'Not affiliated','Upload any valid government-issued ID below']].map(function(o){
         const on = state.affiliated === o[0];
-        return `<div onclick="setAffiliation(${o[0]})" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid ${on?'#1f2a44':'rgba(0,0,0,.14)'};background:${on?'#f4f7fc':'#fff'};border-radius:11px;padding:12px 13px;margin-bottom:8px;cursor:pointer">
-            <span style="flex:none;width:17px;height:17px;border-radius:999px;border:2px solid ${on?'#1f2a44':'#c3bfb8'};margin-top:1px;display:flex;align-items:center;justify-content:center">
-              ${on?`<span style="width:8px;height:8px;border-radius:999px;background:#1f2a44"></span>`:''}</span>
+        return `<div onclick="setAffiliation(${o[0]})" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid ${on?'#a11626':'rgba(0,0,0,.14)'};background:${on?'#f4f7fc':'#fff'};border-radius:11px;padding:12px 13px;margin-bottom:8px;cursor:pointer">
+            <span style="flex:none;width:17px;height:17px;border-radius:999px;border:2px solid ${on?'#a11626':'#c3bfb8'};margin-top:1px;display:flex;align-items:center;justify-content:center">
+              ${on?`<span style="width:8px;height:8px;border-radius:999px;background:#a11626"></span>`:''}</span>
             <span style="min-width:0">
               <span style="display:block;font-size:13.5px;font-weight:640;color:#1c1b19">${o[1]}</span>
-              <span style="display:block;font-size:11.5px;color:#8a857d;margin-top:2px">${o[2]}</span>
+              <span style="display:block;font-size:12.5px;color:#8a857d;margin-top:2px">${o[2]}</span>
             </span>
           </div>`;
       }).join('')}
       ${isUsepAccount(ACCOUNT.email)?`
-      <div style="display:flex;gap:8px;align-items:flex-start;font-size:11.5px;color:#4f7a63;background:#f2faf5;border:1px solid #d4ebdd;border-radius:9px;padding:9px 11px">
+      <div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#4f7a63;background:#f2faf5;border:1px solid #d4ebdd;border-radius:9px;padding:9px 11px">
         <span>&#10003;</span><span>You are signed in with a USeP address (<strong>${esc(ACCOUNT.email)}</strong>). Staff see this, but they still check your ID &mdash; it is the ID that decides the discount.</span>
       </div>`:''}
     </div>
@@ -1127,22 +1261,22 @@ function reviewScreen(){
         <img src="${state.idFile.url}" alt="ID" style="width:58px;height:38px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,.1);flex:none">
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;color:#1c7a4f;overflow-wrap:anywhere">${esc(state.idFile.name)}</div>
-          <div style="font-size:11.5px;color:#4f7a63">Reviewed by staff together with your reservation</div>
+          <div style="font-size:12.5px;color:#4f7a63">Reviewed by staff together with your reservation</div>
         </div>
         <button onclick="removeId()" style="flex:none;background:none;border:none;color:#8a857d;font-size:12.5px;font-weight:600;cursor:pointer">Remove</button>
       </div>`:`
       <div onclick="document.getElementById('idFileInput').click()" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:22px 14px;text-align:center;cursor:pointer;background:#fff">
         <div style="font-size:13.5px;font-weight:600;color:#4a463f">Upload a photo of your valid ID</div>
-        <div style="font-size:11.5px;color:#a5a19a;margin-top:3px">PNG or JPG · make sure the name and photo are readable</div>
+        <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · make sure the name and photo are readable</div>
       </div>`}
     </div>
 
     <div style="display:flex;gap:12px;margin-top:20px">
       <button onclick="backToDetail()" style="flex:none;height:48px;padding:0 20px;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;font-size:14px;font-weight:640;cursor:pointer">Edit details</button>
-      <button onclick="submitRequest()" ${state.idFile?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${state.idFile?'#1f2a44':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${state.idFile?'pointer':'not-allowed'};opacity:${state.idFile?'1':'.85'}">Submit booking request</button>
+      <button onclick="submitRequest()" ${state.idFile?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${state.idFile?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${state.idFile?'pointer':'not-allowed'};opacity:${state.idFile?'1':'.85'}">Submit booking request</button>
     </div>
-    ${state.idFile?'':'<div style="font-size:11.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'}
-    <div style="font-size:11.5px;color:#a5a19a;text-align:center;margin-top:8px">Payment opens after staff approve your ID and reservation — pay via GCash or cash, at least 1 day before your event.</div>
+    ${state.idFile?'':'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'}
+    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Payment opens after staff approve your ID and reservation — pay via GCash or cash, at least 1 day before your event.</div>
   </main>`;
 }
 
@@ -1176,16 +1310,16 @@ function pendingScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;text-align:left">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Reference</div><div style="font-size:13.5px;font-weight:640">${esc(state.reference)}</div></div>
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:13.5px;font-weight:640">${esc(R.name)}</div></div>
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${x.d.days>1?'Dates':'Date'}</div><div style="font-size:13.5px;font-weight:640">${esc(x.rangeLabel)}</div></div>
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Fee (pay after approval)</div><div style="font-size:13.5px;font-weight:640">${peso(x.d.totalFee)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Reference</div><div style="font-size:13.5px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:13.5px;font-weight:640">${esc(R.name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${x.d.days>1?'Dates':'Date'}</div><div style="font-size:13.5px;font-weight:640">${esc(x.rangeLabel)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Fee (pay after approval)</div><div style="font-size:13.5px;font-weight:640">${peso(x.d.totalFee)}</div></div>
       </div>
       <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">Once approved, pay ${pb.late?'<strong>'+pb.label+'</strong>':'by <strong>'+pb.label+'</strong> (1 day before your event)'} — unpaid reservations may be released after the deadline.</div>
     </div>
 
     <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
-      <div style="font-size:11px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
+      <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
       <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">The staff side isn't connected in this mockup — use this to simulate the coordinator approving your ID and reservation.</div>
       <button onclick="demoApprove()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate staff approval → proceed to payment</button>
     </div>
@@ -1204,7 +1338,7 @@ function receiptPanelHtml(){
     return fileInput+`
     <div onclick="${on?'pickReceipt()':''}" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:26px 14px;text-align:center;background:#fff;${on?'cursor:pointer':'opacity:.55;cursor:not-allowed'}">
       <div style="font-size:13.5px;font-weight:600;color:#4a463f">${on?'Tap to upload a screenshot of your GCash receipt':'Tick the exact-amount box above to enable the upload'}</div>
-      <div style="font-size:11.5px;color:#a5a19a;margin-top:3px">PNG or JPG · keep the reference number and amount visible · checked instantly with OCR</div>
+      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · keep the reference number and amount visible · checked instantly with OCR</div>
     </div>`;
   }
   if(o.phase==='reading'){
@@ -1215,9 +1349,9 @@ function receiptPanelHtml(){
         <span id="gcBarLabel" style="font-size:12px;color:#8a857d;flex:none">${esc(o.label)} · ${Math.round((o.pct||0)*100)}%</span>
       </div>
       <div style="height:6px;border-radius:999px;background:#e7e4de;overflow:hidden">
-        <div id="gcBar" style="height:100%;width:${Math.round((o.pct||0)*100)}%;background:#1f2a44;border-radius:999px;transition:width .25s"></div>
+        <div id="gcBar" style="height:100%;width:${Math.round((o.pct||0)*100)}%;background:#a11626;border-radius:999px;transition:width .25s"></div>
       </div>
-      <div style="font-size:11.5px;color:#a5a19a;margin-top:8px">Reading the receipt with OCR — runs in your browser, usually 5–15 seconds.</div>
+      <div style="font-size:12.5px;color:#a5a19a;margin-top:8px">Reading the receipt with OCR — runs in your browser, usually 5–15 seconds.</div>
     </div>`;
   }
   const r=o.rec;
@@ -1252,14 +1386,14 @@ function receiptPanelHtml(){
     <div style="display:flex;gap:13px;padding:13px 14px">
       ${o.thumb?`<img src="${o.thumb}" alt="receipt" style="width:64px;height:84px;object-fit:cover;border-radius:8px;border:1px solid rgba(0,0,0,.1);flex:none">`:''}
       <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;align-content:start">
-        ${kv.map(([k,v])=>`<div><div style="font-size:11px;color:#8a857d">${k}</div><div style="font-size:13px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${esc(v)}</div></div>`).join('')}
+        ${kv.map(([k,v])=>`<div><div style="font-size:12px;color:#8a857d">${k}</div><div style="font-size:13px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${esc(v)}</div></div>`).join('')}
       </div>
     </div>
     ${issues.length?`
     <div style="padding:2px 14px 12px">
       ${issues.map(i=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0"><span style="width:7px;height:7px;border-radius:999px;background:${i.hard?'#b23a3a':'#c99a3c'};margin-top:5px;flex:none"></span><span style="font-size:12.5px;color:#4a463f;line-height:1.45">${esc(GC_LABELS[i.c]||i.c)}</span></div>`).join('')}
     </div>`:''}
-    ${r.confidence!=null?`<div style="padding:0 14px 11px;font-size:11px;color:#a5a19a">OCR confidence ${r.confidence}% · ${esc(o.fileName)}</div>`:''}
+    ${r.confidence!=null?`<div style="padding:0 14px 11px;font-size:12px;color:#a5a19a">OCR confidence ${r.confidence}% · ${esc(o.fileName)}</div>`:''}
   </div>`;
 }
 
@@ -1271,9 +1405,9 @@ function paymentScreen(){
   /* payment method selector — GCash (online) or cash (walk-in at the office) */
   const methodCard=(m,title,sub)=>{
     const on=state.payMethod===m;
-    return `<div onclick="setPayMethod('${m}')" style="border:1.5px solid ${on?'#1f2a44':'rgba(0,0,0,.12)'};background:${on?'#f2f4f9':'#fff'};border-radius:12px;padding:13px 14px;cursor:pointer">
+    return `<div onclick="setPayMethod('${m}')" style="border:1.5px solid ${on?'#a11626':'rgba(0,0,0,.12)'};background:${on?'#f2f4f9':'#fff'};border-radius:12px;padding:13px 14px;cursor:pointer">
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="width:15px;height:15px;border-radius:999px;border:1.5px solid ${on?'#1f2a44':'#b7b3ab'};display:flex;align-items:center;justify-content:center;flex:none">${on?'<span style="width:7px;height:7px;border-radius:999px;background:#1f2a44"></span>':''}</span>
+        <span style="width:15px;height:15px;border-radius:999px;border:1.5px solid ${on?'#a11626':'#b7b3ab'};display:flex;align-items:center;justify-content:center;flex:none">${on?'<span style="width:7px;height:7px;border-radius:999px;background:#a11626"></span>':''}</span>
         <span style="font-size:14px;font-weight:680;color:#1c1b19">${title}</span>
       </div>
       <div style="font-size:12px;color:#8a857d;margin-top:3px;padding-left:23px">${sub}</div>
@@ -1292,22 +1426,22 @@ function paymentScreen(){
       <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
         <div>
           <div style="font-size:12.5px;color:#8a857d">Amount to send</div>
-          <div style="font-size:30px;font-weight:780;letter-spacing:-.02em;color:#1f2a44">${peso(x.d.totalFee)}</div>
+          <div style="font-size:30px;font-weight:780;letter-spacing:-.02em;color:#a11626">${peso(x.d.totalFee)}</div>
         </div>
         <div style="width:60px;height:60px;border-radius:14px;background:#0a6cf0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750;text-align:center;line-height:1.1">GCash</div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin:16px 0;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">GCash account name</div><div style="font-size:14px;font-weight:640">${esc(gcAccount().name)}</div></div>
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">GCash number <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#a3a09a">· ${esc(R.venue)}</span></div><div style="font-size:14px;font-weight:640">${esc(gcAccount().number.replace(/^(\d{4})(\d{3})(\d{4})$/,'$1 $2 $3'))}</div></div>
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Reference to include</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">GCash account name</div><div style="font-size:14px;font-weight:640">${esc(gcAccount().name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">GCash number <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#a3a09a">· ${esc(R.venue)}</span></div><div style="font-size:14px;font-weight:640">${esc(gcAccount().number.replace(/^(\d{4})(\d{3})(\d{4})$/,'$1 $2 $3'))}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Reference to include</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
       </div>
 
       <div style="margin-top:4px">
         <div style="font-size:12.5px;font-weight:600;color:#5c584f;margin-bottom:7px">Upload GCash receipt</div>
         <label style="display:flex;gap:9px;align-items:flex-start;margin:0 0 10px;cursor:pointer">
-          <input type="checkbox" id="agreeExact" ${state.agreeExact?'checked':''} onchange="toggleAgreeExact(this)" style="width:15px;height:15px;margin-top:2px;accent-color:#1f2a44">
+          <input type="checkbox" id="agreeExact" ${state.agreeExact?'checked':''} onchange="toggleAgreeExact(this)" style="width:15px;height:15px;margin-top:2px;accent-color:#a11626">
           <span style="font-size:12.5px;color:#4a463f;line-height:1.5">I understand I must send the <strong>exact amount &mdash; ${peso(x.d.totalFee)}</strong>. A different amount is not confirmed automatically; a coordinator has to review it, which delays my booking.</span>
         </label>
         ${receiptPanelHtml()}
@@ -1317,8 +1451,8 @@ function paymentScreen(){
   const cashBody=`
     <div style="display:flex;gap:12px;background:#f5f7fb;border:1px solid #dfe4ef;border-radius:12px;padding:15px 16px;margin-bottom:18px">
       <div>
-        <div style="font-size:14.5px;color:#1f2a44">Pay in cash at the venue office.</div>
-        <div style="font-size:13px;color:#1f2a44;opacity:.85;margin-top:2px">Your reservation is held while payment is pending — it is confirmed once the cashier records your payment.</div>
+        <div style="font-size:14.5px;color:#a11626">Pay in cash at the venue office.</div>
+        <div style="font-size:13px;color:#a11626;opacity:.85;margin-top:2px">Your reservation is held while payment is pending — it is confirmed once the cashier records your payment.</div>
       </div>
     </div>
 
@@ -1326,21 +1460,21 @@ function paymentScreen(){
       <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
         <div>
           <div style="font-size:12.5px;color:#8a857d">Amount to pay</div>
-          <div style="font-size:30px;font-weight:780;letter-spacing:-.02em;color:#1f2a44">${peso(x.d.totalFee)}</div>
+          <div style="font-size:30px;font-weight:780;letter-spacing:-.02em;color:#a11626">${peso(x.d.totalFee)}</div>
         </div>
-        <div style="width:60px;height:60px;border-radius:14px;background:#1f2a44;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750;text-align:center;line-height:1.1">Cash</div>
+        <div style="width:60px;height:60px;border-radius:14px;background:#a11626;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750;text-align:center;line-height:1.1">Cash</div>
       </div>
 
       <div style="margin:16px 0">
-        <div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Where to pay</div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Where to pay</div>
         <div style="font-size:15px;font-weight:680;color:#1c1b19">${esc(CASH_PAY.office)}</div>
         <div style="font-size:13px;color:#4a463f;margin-top:3px">${esc(CASH_PAY.address)}</div>
         <div style="font-size:12.5px;color:#8a857d;margin-top:3px">${esc(CASH_PAY.hours)}</div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin-bottom:16px">
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Quote your reference</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
-        <div style="min-width:0"><div style="font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Quote your reference</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
       </div>
 
       <div style="font-size:12.5px;color:#4a463f;line-height:1.7;border-top:1px solid rgba(0,0,0,.07);padding-top:13px">Bring your booking reference and a valid ID. Pay <strong>before your event date</strong> — unpaid reservations may be released. You will receive the official transaction receipt at the counter; keep it (it is required for any refund).</div>
@@ -1352,7 +1486,7 @@ function paymentScreen(){
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
       <div style="display:flex;gap:6px">
         <span style="width:26px;height:26px;border-radius:999px;background:#1c7a4f;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">1</span>
-        <span style="width:26px;height:26px;border-radius:999px;background:#1f2a44;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span>
+        <span style="width:26px;height:26px;border-radius:999px;background:#a11626;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span>
         <span style="width:26px;height:26px;border-radius:999px;background:#e7e4de;color:#8a857d;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span>
       </div>
       <span style="font-size:12.5px;color:#8a857d;font-weight:600">Step 2 of 3 · Payment</span>
@@ -1374,8 +1508,8 @@ function paymentScreen(){
 
     ${cash?cashBody:gcashBody}
 
-    <button onclick="confirmBooking()" ${paid?'':'disabled'} style="width:100%;height:50px;border:none;border-radius:12px;background:${paid?'#1f2a44':'#b7b3ab'};color:#fff;font-size:15px;font-weight:700;cursor:${paid?'pointer':'not-allowed'};opacity:${paid?'1':'.85'};margin-top:20px">${cash?'Submit reservation — pay at the office':'Submit payment &amp; reservation'}</button>
-    <div style="font-size:11.5px;color:#a5a19a;text-align:center;margin-top:9px">${cash?'Your booking stays pending until the cashier records your payment.':'Your booking will be pending staff confirmation after submission.'} Need help? <a href="faq.php" target="_blank" rel="noopener" style="cursor:pointer;color:#1f2a44;font-weight:600;text-decoration:underline">Check the FAQ</a>${cash?'':' · <a onclick="clearGcashHistory()" style="cursor:pointer;color:#8a857d;text-decoration:underline">Reset receipt history (demo)</a>'}</div>
+    <button onclick="confirmBooking()" ${paid?'':'disabled'} style="width:100%;height:50px;border:none;border-radius:12px;background:${paid?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:700;cursor:${paid?'pointer':'not-allowed'};opacity:${paid?'1':'.85'};margin-top:20px">${cash?'Submit reservation — pay at the office':'Submit payment &amp; reservation'}</button>
+    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:9px">${cash?'Your booking stays pending until the cashier records your payment.':'Your booking will be pending staff confirmation after submission.'} Need help? <a href="faq.php" target="_blank" rel="noopener" style="cursor:pointer;color:#a11626;font-weight:600;text-decoration:underline">Check the FAQ</a>${cash?'':' · <a onclick="clearGcashHistory()" style="cursor:pointer;color:#8a857d;text-decoration:underline">Reset receipt history (demo)</a>'}</div>
   </main>`;
 }
 
@@ -1423,7 +1557,7 @@ function doneScreen(){
       ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the system transaction receipt and the Official Receipt.'
       : 'Keep your GCash receipt and this reference number. A refund request needs the system transaction receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
 
-    <button onclick="restart()" style="height:48px;padding:0 26px;border:none;border-radius:11px;background:#1f2a44;color:#fff;font-size:14.5px;font-weight:660;cursor:pointer;margin-top:24px">Browse more rooms</button>
+    <button onclick="restart()" style="height:48px;padding:0 26px;border:none;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:660;cursor:pointer;margin-top:24px">Browse more rooms</button>
   </main>`;
 }
 
@@ -1438,15 +1572,15 @@ function modalHtml(){
   <div onclick="closeModal()" style="position:fixed;inset:0;background:rgba(20,18,15,.45);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100">
     <div onclick="event.stopPropagation()" role="dialog" aria-modal="true" style="background:#fff;border-radius:20px;max-width:380px;width:100%;padding:28px 26px 24px;box-shadow:0 24px 70px rgba(0,0,0,.26);text-align:center">
       <div style="width:46px;height:46px;border-radius:999px;background:#eef0f5;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1f2a44" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a11626" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       </div>
       <div style="font-size:17px;font-weight:720;letter-spacing:-.01em;margin-bottom:6px">Book at least 12 hours ahead</div>
       <p style="margin:0 auto 16px;font-size:13.5px;line-height:1.6;color:#7a766f;max-width:32ch">Venue staff need time to prepare — reservations must start at least <strong style="color:#4a463f">12 hours from now</strong>. The time you picked is too soon.</p>
       <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px 14px;margin-bottom:18px">
-        <div style="font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">Earliest start</div>
-        <div style="font-size:15px;font-weight:680;color:#1f2a44">${when}</div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">Earliest start</div>
+        <div style="font-size:15px;font-weight:680;color:#a11626">${when}</div>
       </div>
-      <button onclick="closeModal()" style="width:100%;height:46px;border:none;border-radius:12px;background:#1f2a44;color:#fff;font-size:14px;font-weight:650;cursor:pointer">Pick a later time</button>
+      <button onclick="closeModal()" style="width:100%;height:46px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14px;font-weight:650;cursor:pointer">Pick a later time</button>
     </div>
   </div>`;
 }
@@ -1481,11 +1615,11 @@ function clashModalHtml(){
       <div style="font-size:17px;font-weight:720;letter-spacing:-.01em;margin-bottom:6px">${dl} is not available</div>
       <p style="margin:0 auto 16px;font-size:13.5px;line-height:1.6;color:#7a766f;max-width:34ch">${body}</p>
       <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px 14px;margin-bottom:18px">
-        <div style="font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">${boxLabel}</div>
-        <div style="font-size:15px;font-weight:680;color:#1f2a44">${esc(boxValue)||'—'}</div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">${boxLabel}</div>
+        <div style="font-size:15px;font-weight:680;color:#a11626">${esc(boxValue)||'—'}</div>
         ${boxNote?`<div style="font-size:12px;color:#8a857d;margin-top:3px">${esc(boxNote)}</div>`:''}
       </div>
-      <button onclick="closeModal()" style="width:100%;height:46px;border:none;border-radius:12px;background:#1f2a44;color:#fff;font-size:14px;font-weight:650;cursor:pointer">${okLabel}</button>
+      <button onclick="closeModal()" style="width:100%;height:46px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14px;font-weight:650;cursor:pointer">${okLabel}</button>
     </div>
   </div>`;
 }
@@ -1529,6 +1663,102 @@ function render(){
 }
 
 render();
+</script>
+<!-- GSAP — the landing page's motion, on the booking flow. Same CDN as the rest of the project. -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script>
+  /* Motion for the booking flow — two parts, both skipped when GSAP is missing
+     or the user prefers reduced motion.
+
+     (1) Each SCREEN pops in when you move to it (detail -> review -> pending ->
+         payment -> done): its blocks rise and fade in with a stagger, and each
+         block keeps a scroll trigger after that, so scrolling up and down
+         replays the pop. render() also fires on every keystroke and date pick;
+         those re-arm the blocks silently — nothing moves under your hands.
+     (2) The static parts below the flow (More rooms, footer) reveal on scroll
+         exactly as on the landing page, and replay up and down. */
+  (function () {
+    if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    gsap.registerPlugin(ScrollTrigger);
+    ScrollTrigger.config({ ignoreMobileResize: true });
+    var EASE = 'power3.out';
+
+    /* ---- (1) screen entrance ---- */
+    /* The blocks to stagger: walk down from #app through single-child wrappers
+       until a node has several children — those are the screen's sections. */
+    function screenBlocks() {
+      var node = document.getElementById('app'), depth = 0;
+      while (node && node.children.length === 1 && depth < 5) { node = node.children[0]; depth++; }
+      if (!node || !node.children.length) return [];
+      var vis = function (el) { return el.offsetHeight > 0; };
+      var kids = Array.prototype.filter.call(node.children, vis);
+      if (kids.length <= 3) {                       /* two columns is too coarse: use their sections instead */
+        var out = [];
+        kids.forEach(function (k) {
+          var g = Array.prototype.filter.call(k.children, vis);
+          if (g.length >= 2 && g.length <= 8) out.push.apply(out, g); else out.push(k);
+        });
+        kids = out;
+      }
+      return kids.slice(0, 12);
+    }
+    /* Every block gets a scroll trigger, like the landing page: it rises in when
+       it scrolls into view and drops back out when it leaves, so scrolling up
+       and down replays the pop. The FIRST paint after a screen change is the
+       staggered entrance; on a same-screen re-render (typing, picking a date)
+       the blocks are re-armed silently so nothing jumps under your hands. */
+    var appTriggers = [], mode = 'scroll';
+    function armScreen(entrance) {
+      appTriggers.forEach(function (t) { t.kill(); }); appTriggers = [];
+      var blocks = screenBlocks();
+      if (!blocks.length) return;
+      mode = entrance ? 'entrance' : 'instant';
+      blocks.forEach(function (el, i) {
+        gsap.set(el, { opacity: 0, y: 18, scale: .985 });
+        function paint(on) {
+          if (mode === 'instant') {              /* re-render mid-typing: snap to the right state */
+            gsap.set(el, { opacity: on ? 1 : 0, y: on ? 0 : 18, scale: on ? 1 : .985, clearProps: on ? 'transform' : '' });
+            return;
+          }
+          gsap.to(el, { opacity: on ? 1 : 0, y: on ? 0 : 18, scale: on ? 1 : .985,
+            duration: on ? .75 : .35, ease: EASE, overwrite: 'auto',
+            delay: (on && mode === 'entrance') ? i * .07 : 0,
+            clearProps: on ? 'transform' : '' });
+        }
+        appTriggers.push(ScrollTrigger.create({ trigger: el, start: 'top 92%', end: 'bottom top',
+          onToggle: function (s) { paint(s.isActive); }, onRefresh: function (s) { paint(s.isActive); } }));
+      });
+      ScrollTrigger.refresh();                   /* the screen changed height: re-measure everything below it too */
+      setTimeout(function () { mode = 'scroll'; }, 60);
+    }
+    var lastScreen = (typeof state !== 'undefined' && state.screen) || '';
+    var pageRender = render;                          /* the page's own render() */
+    render = function () {
+      pageRender.apply(this, arguments);
+      var now = (typeof state !== 'undefined' && state.screen) || '';
+      var changed = now !== lastScreen; lastScreen = now;
+      armScreen(changed);
+    };
+    armScreen(true);                                  /* the first screen, already drawn */
+
+    /* ---- (2) scroll reveals for the static parts ---- */
+    function reveal(targets, trigger, opts) {
+      opts = opts || {};
+      gsap.set(targets, { opacity: 0, y: opts.rise || 24 });
+      function paint(on) {
+        gsap.to(targets, { opacity: on ? 1 : 0, y: on ? 0 : (opts.rise || 24), duration: on ? 1 : .4, ease: EASE,
+          overwrite: 'auto', stagger: on ? (opts.stagger || 0) : 0, clearProps: on ? 'transform' : '' });
+      }
+      ScrollTrigger.create({ trigger: trigger, start: 'top 88%', end: 'bottom top',
+        onToggle: function (s) { paint(s.isActive); }, onRefresh: function (s) { paint(s.isActive); } });
+    }
+    var head = document.querySelector('.bk-more-head'); if (head) reveal(head, head);
+    var grid = document.querySelector('.bk-more-grid'); if (grid) reveal(grid.children, grid, { stagger: .09 });
+    var alt  = document.querySelector('.bk-more-alt');  if (alt)  reveal(alt, alt);
+    var foot = document.querySelector('.bk-footer .bk-footer-grid'); if (foot) reveal(foot.children, foot, { stagger: .08, rise: 16 });
+  })();
 </script>
 </body>
 </html>

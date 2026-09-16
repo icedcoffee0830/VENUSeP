@@ -124,6 +124,37 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
         .profile-layout { grid-template-columns: 1fr; }
         .profile-form-grid { grid-template-columns: 1fr; }
       }
+    
+      /* ==================================================================
+         LIGHT GLASS. The page behind the cards is the crimson gradient
+         (painted by includes/header.php). Cards are near-white but not
+         solid: they blur what is behind them, so a hint of the crimson
+         bleeds through and the edge glows — while the content inside stays
+         dark-on-light, the readable choice for long forms and tables.
+         Only colours change here — no layout, no markup.
+         ================================================================== */
+      .profile-page-header h1 { color: #fff; }
+      .profile-page-header p { color: #e9d0cd; }
+
+      .profile-summary, .profile-section {
+        background: rgba(255,255,255,.90);
+        -webkit-backdrop-filter: blur(18px) saturate(1.15); backdrop-filter: blur(18px) saturate(1.15);
+        border: 1px solid rgba(255,255,255,.6);
+        box-shadow: 0 18px 44px rgba(10,4,5,.30), inset 0 1px 0 rgba(255,255,255,.9);
+      }
+      .profile-meta { border-top-color: rgba(31,30,30,.1); }
+
+      /* fields: white on the tinted card, crimson focus */
+      .form-control, .input-group { background: #fff; border-color: #dccfcc; }
+      .form-control:focus, .input-group:focus-within { border-color: #a11626; box-shadow: 0 0 0 3px rgba(161,22,38,.14); }
+      .form-check-input { accent-color: #a11626; }
+
+      /* avatar + primary buttons: crimson */
+      .profile-summary .profile-avatar { background: #a11626; color: #fff; box-shadow: 0 8px 20px rgba(138,18,34,.3); }
+      .btn-profile { background: rgba(255,255,255,.7); }
+      .btn-profile:hover { background: #fff; border-color: #c9b9b6; }
+      .btn-profile.btn-profile-primary { background: #a11626; border-color: #a11626; color: #fff; }
+      .btn-profile.btn-profile-primary:hover { background: #7d0f1e; border-color: #7d0f1e; }
     </style>
   </head>
   <body class="customer-profile-page">

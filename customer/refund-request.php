@@ -240,6 +240,17 @@ $refundReasons = [
 
       @media (max-width: 900px) { .rr-grid { grid-template-columns: minmax(0, 1fr); } .rr-aside { position: static; } }
       @media (max-width: 560px) { .rr-doc { flex-wrap: wrap; } .rr-file { max-width: none; width: 100%; } }
+    
+      /* on the crimson page background (painted by includes/header.php): light text, cards that float */
+      .rr-page > h1 { color: #fff; }
+      .rr-page > p { color: #e9d0cd; }
+      .rr-back { color: #f2d0cb; }
+      .rr-back:hover { color: #fff; }
+      .rr-card { box-shadow: 0 18px 44px rgba(10,4,5,.28), 0 2px 6px rgba(10,4,5,.18); border-color: rgba(255,255,255,.18); }
+    
+      /* primary button: crimson, not black */
+      .rr-btn-primary { background: #a11626; border-color: #a11626; color: #ffffff; }
+      .rr-btn-primary:hover { background: #7d0f1e; border-color: #7d0f1e; color: #ffffff; }
     </style>
   </head>
   <body class="refund-request-page">

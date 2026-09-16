@@ -515,6 +515,21 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
           padding-inline: 0.25rem;
         }
       }
+    
+      /* on the crimson page background (painted by includes/header.php): light text, a card that floats */
+      .calendar-heading h1 { color: #fff; }
+      .calendar-heading p { color: #e9d0cd; }
+      .calendar-shell { box-shadow: 0 18px 44px rgba(10,4,5,.28), 0 2px 6px rgba(10,4,5,.18); border-color: rgba(255,255,255,.18); }
+    
+      /* the calendar owns its colours through these variables (see "Quick Edit Values" above):
+         the page behind the card takes the crimson gradient; today + the active view button go crimson */
+      :root {
+        --calendar-page-bg: linear-gradient(162deg, #7d1120 0%, #3c0c14 40%, #120809 100%) fixed;
+        --calendar-today-bg: #a11626;
+        --calendar-today-text: #ffffff;
+        --calendar-button-active-bg: #a11626;
+        --calendar-button-active-text: #ffffff;
+      }
     </style>
   </head>
   <body class="calendar-page">

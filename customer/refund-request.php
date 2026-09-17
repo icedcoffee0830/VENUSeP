@@ -35,7 +35,9 @@
 
    ELIGIBILITY IS RE-CHECKED HERE, not trusted from the link — someone can
    type ?booking= by hand. Both pages ask the same cb_is_refundable() so
-   they can never disagree.
+   they can never disagree. Since 2026-09-16 that includes the refund policy
+   snapshot: a booking made while the admin refund switch was OFF is refused
+   here, server-side (includes/refund-policy.php).
 
    [SIM] NOT WIRED: no POST handler, no database, no upload is stored. On
    submit the page shows its confirmation state and drops the reference in
@@ -73,6 +75,10 @@ if ($booking === null) {
         $refusal = 'Booking ' . $ref . ' has not been paid, so there is nothing to refund. Its payment status is "' . $booking['paymentStatus'] . '".';
     } elseif ($booking['eventDateIso'] <= date('Y-m-d')) {
         $refusal = 'The event for booking ' . $ref . ' was held on ' . $booking['eventDate'] . '. Refunds can only be requested before the event takes place — please contact the venue office directly.';
+    } elseif (empty($booking['refundsAllowed'])) {
+        /* The policy snapshot (2026-09-16). Checked on the SERVER, so typing
+           ?booking= by hand for a non-refundable booking gets this, not a form. */
+        $refusal = 'Booking ' . $ref . ' is non-refundable. It was made while USeP\'s no-refund policy was in effect, and a booking keeps the policy it was made under. If USeP closes or cancels your venue, the venue office will offer you a replacement room or a new date instead.';
     } else {
         $refusal = 'Booking ' . $ref . ' is not eligible for a refund request. Its booking status is "' . $booking['bookingStatus'] . '".';
     }
@@ -424,8 +430,9 @@ $refundReasons = [
 
                 <!-- [4e] ALREADY OPEN — a customer who has filed can still reach
                      this URL by typing it or using the back button. Filing twice
-                     would create a duplicate request (the DB has no unique
-                     constraint on refunds.booking_id either — see DB-TRANSITION).
+                     would create a duplicate request. The schema now refuses a
+                     second OPEN request per booking (refunds.open_booking_id,
+                     2026-09-16), but this page still has to say so politely.
                      Withdrawing from Booking History clears this. -->
                 <div class="rr-panel rr-panel-info" id="rr-already" hidden>
                   <i class="bi bi-hourglass-split" aria-hidden="true"></i>

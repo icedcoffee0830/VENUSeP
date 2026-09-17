@@ -1,12 +1,17 @@
 -- ============================================================================
 -- VENUSeP Database Schema
 -- Target: MySQL 8.0+ / MariaDB 10.4+ (XAMPP)
--- Built to match DB-DECISIONS.md (locked 2026-07-19). Where this and the
--- first-draft schema differ, DB-DECISIONS.md is the authority.
+-- Built to match DB-DECISIONS.md (locked 2026-07-19, refund switch added
+-- 2026-09-16). Where this and the first-draft schema differ, DB-DECISIONS.md
+-- is the authority.
 --
--- SCOPE OF THIS FILE: tables + constraints + seed data ("tables first").
--- The logic layer (stored procedures, most triggers, tuned indexes, views)
--- is intentionally DEFERRED — see the notes at the very bottom.
+-- SCOPE OF THIS FILE: tables + constraints + seed data, then the logic layer
+-- (functions, triggers, procedures, views) and the application notes.
+--
+-- WHAT THE APP ACTUALLY USES TODAY: only users/customers (the two logins) and
+-- system_settings/system_settings_history + the users re-auth lockout columns
+-- (the admin refund switch). Every other table is built and seeded, waiting for
+-- its page to be wired.
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS venusep
@@ -45,6 +50,13 @@ CREATE TABLE users (
     is_active           BOOLEAN NOT NULL DEFAULT TRUE,
     email_verified_at   DATETIME NULL,
     last_login_at       DATETIME NULL,
+    -- Password RE-ENTRY lockout for sensitive admin actions (the refund switch).
+    -- Stored on the account, not the session, so clearing cookies or switching
+    -- browsers cannot reset it. 5 wrong in a row = one lock; each lock is longer
+    -- (10s, 30s, 1m, 5m, then 15m max). A correct password resets all three.
+    reauth_failed_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,   -- wrong entries since the last lock/success
+    reauth_lock_level   TINYINT UNSIGNED NOT NULL DEFAULT 0,       -- how many locks so far (picks the duration)
+    reauth_locked_until DATETIME NULL,                             -- NULL or past = not locked
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uq_users_email UNIQUE (email),
@@ -55,6 +67,26 @@ ALTER TABLE system_settings
     ADD CONSTRAINT fk_settings_updated_by
         FOREIGN KEY (updated_by_user_id) REFERENCES users(id)
         ON UPDATE CASCADE ON DELETE SET NULL;
+
+-- A settings change is an EVENT, not an overwrite (DB-TRANSITION: discount rate
+-- setting). system_settings holds only the current value; this keeps who changed
+-- what, when, from what, to what. Used by the refund switch; the discount rate
+-- uses it too once it is wired.
+CREATE TABLE system_settings_history (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    setting_key         VARCHAR(100) NOT NULL,
+    old_value           VARCHAR(255) NULL,
+    new_value           VARCHAR(255) NOT NULL,
+    change_note         VARCHAR(500) NULL,
+    changed_by_user_id  BIGINT UNSIGNED NULL,
+    changed_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_settings_history_key
+        FOREIGN KEY (setting_key) REFERENCES system_settings(setting_key)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_settings_history_user
+        FOREIGN KEY (changed_by_user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
 
 CREATE TABLE customers (
     id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -273,6 +305,12 @@ CREATE TABLE bookings (
     discount_percent    DECIMAL(5,2) NOT NULL DEFAULT 0.00,   -- % actually applied (frozen; live % lives in system_settings)
     discount_amount     DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     total_amount        DECIMAL(12,2) NOT NULL DEFAULT 0.00,  -- DISCOUNTED total; this is what the checker validates
+    -- Refund policy snapshot (2026-09-16): copied from system_settings.refunds_enabled
+    -- when the booking is MADE, and never changed afterwards. The customer is held
+    -- to the policy they agreed to — flipping the switch later neither grants nor
+    -- removes refunds on this booking. Covers customer-requested refunds only; a
+    -- closure by USeP (reservation_status 'disrupted') is refundable regardless.
+    refunds_allowed     BOOLEAN NOT NULL DEFAULT FALSE,
     current_deadline_at DATETIME NULL,
     customer_notes      TEXT NULL,
     staff_notes         TEXT NULL,
@@ -511,20 +549,45 @@ CREATE TABLE booking_documents (
         ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+-- Customer-requested refunds (decided 2026-09-09; switch added 2026-09-16).
+-- Filing is allowed only when bookings.refunds_allowed = TRUE (the policy
+-- snapshot) — the app checks it; the global switch never rewrites old bookings.
+--   requested               filed, waiting on staff (customer may withdraw)
+--   under_review            staff picked it up
+--   returned_for_correction PAPERWORK problem, not a denial; customer fixes + resubmits
+--   approved                staff said yes; paid out once the Official Receipt is in
+--   rejected                denied — final; booking untouched
+--   completed               money sent; ONLY now is the booking closed + date freed
+--   withdrawn               customer pulled it before a decision; booking untouched
 CREATE TABLE refunds (
     id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     booking_id          BIGINT UNSIGNED NOT NULL,
     payment_id          BIGINT UNSIGNED NULL,
-    refund_status       ENUM('requested','under_review','approved','rejected','completed') NOT NULL DEFAULT 'requested',
-    reason              TEXT NOT NULL,
-    amount_requested    DECIMAL(12,2) NOT NULL,
-    amount_approved     DECIMAL(12,2) NULL,
+    refund_status       ENUM('requested','under_review','returned_for_correction','approved','rejected','completed','withdrawn') NOT NULL DEFAULT 'requested',
+    -- the form's reason dropdown (reportable; keeps USeP-fault closures distinct)
+    reason_category     ENUM('event_cancelled','schedule_conflict','wrong_room','venue_unavailable','payment_error','other') NOT NULL,
+    reason              TEXT NOT NULL,                     -- the customer's free-text explanation
+    amount_requested    DECIMAL(12,2) NOT NULL,            -- always the full amount paid; never typed by the customer
+    amount_approved     DECIMAL(12,2) NULL,                -- set by staff
+    refund_to_number    VARCHAR(30) NULL,                  -- GCash destination; NULL = cash booking (paid back at the counter)
+    official_receipt_pending BOOLEAN NOT NULL DEFAULT FALSE, -- filed without the OR; blocks PAYOUT, never a decision
+    correction_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0, -- times returned for correction (capped in the app, like the 5-receipt rule)
+    correction_due_at   DATETIME NULL,                     -- 48-hour resubmit window after a return
+    payout_reference    VARCHAR(100) NULL,                 -- GCash reference of the refund sent (receipt image -> booking_documents)
     requested_by_user_id BIGINT UNSIGNED NULL,
     reviewed_by_user_id BIGINT UNSIGNED NULL,
     requested_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resubmitted_at      DATETIME NULL,
     reviewed_at         DATETIME NULL,
     completed_at        DATETIME NULL,
-    notes               TEXT NULL,
+    withdrawn_at        DATETIME NULL,
+    notes               TEXT NULL,                         -- staff note the customer reads (why returned / denied)
+    -- One OPEN request per booking. Finished (rejected/completed) and withdrawn
+    -- requests drop to NULL here, so they stay as history without blocking.
+    open_booking_id     BIGINT UNSIGNED GENERATED ALWAYS AS
+                        (CASE WHEN refund_status IN ('requested','under_review','returned_for_correction','approved')
+                              THEN booking_id ELSE NULL END) STORED,
+    CONSTRAINT uq_refunds_one_open_per_booking UNIQUE (open_booking_id),
     CONSTRAINT chk_refund_requested CHECK (amount_requested > 0),
     CONSTRAINT chk_refund_approved CHECK (amount_approved IS NULL OR amount_approved >= 0),
     CONSTRAINT fk_refunds_booking
@@ -571,7 +634,8 @@ CREATE TABLE booking_timeline (
 INSERT INTO system_settings (setting_key, setting_value, value_type, description) VALUES
   ('discount_percent',                '20', 'decimal', 'USeP-affiliated discount % (dynamic; staff-editable). Snapshotted onto each booking.'),
   ('hostel_pos_deadline_hours',       '72', 'integer', 'Hours an approved hostel booking may sit in await_pos before expiry checks release it.'),
-  ('hostel_advance_booking_max_days', '7',  'integer', 'Hostel cannot be reserved more than this many days before check-in. Events: no limit.');
+  ('hostel_advance_booking_max_days', '7',  'integer', 'Hostel cannot be reserved more than this many days before check-in. Events: no limit.'),
+  ('refunds_enabled',                 '0',  'boolean', 'Customer refund requests. 0 = OFF (all new bookings non-refundable, the USeP default). Admin-only. Snapshotted onto each booking as bookings.refunds_allowed.');
 
 -- ---- Reservation statuses ----
 INSERT INTO reservation_statuses (code, staff_label, customer_label, sort_order, is_terminal) VALUES
@@ -595,8 +659,11 @@ INSERT INTO payment_statuses (code, staff_label, customer_label, sort_order) VAL
   ('overdue',           'Payment overdue',          'Overdue',           8),
   ('expired',           'Expired',                  'Expired',           9),
   ('refund_requested',  'Refund requested',         'Refund requested',  10),
-  ('refund_processing', 'Refund processing',        'Refund processing', 11),
-  ('refunded',          'Refunded',                 'Refunded',          12);
+  ('refund_correction', 'Refund returned for correction', 'Refund - action needed', 11),
+  ('refund_await_or',   'Refund approved - awaiting Official Receipt', 'Refund - Official Receipt needed', 12),
+  ('refund_processing', 'Refund processing',        'Refund processing', 13),
+  ('refunded',          'Refunded',                 'Refunded',          14),
+  ('refund_denied',     'Refund denied',            'Refund denied',     15);
 
 -- ---- Venues ----
 INSERT INTO venues (id, venue_code, name, venue_type, description) VALUES
@@ -653,11 +720,13 @@ INSERT INTO maintenance_windows (room_id, from_date, until_date, reason, blocks_
   (11, '2026-07-14', '2026-07-28', 'One of the two ceiling fans is being replaced', FALSE), -- MEDIUM (hostel)
   (13, '2026-08-10', '2026-08-16', 'Bathroom re-tiling',                         TRUE);   -- HARD (hostel)
 
--- ---- One demo login + customer (the mockup's session user). [SIM] replace password_hash. ----
+-- ---- Test logins (carried over from the live DB, 2026-09-16). TEST PASSWORDS ONLY —
+--      never reuse them for real data. There is no staff account yet (staff UI pending). ----
 INSERT INTO users (id, email, username, password_hash, account_type) VALUES
-  (1, 'jmdelacruz@usep.edu.ph', 'jmdelacruz', '$2y$10$REPLACE_WITH_A_REAL_BCRYPT_HASH_0000000000000000000000', 'customer');
-INSERT INTO customers (id, user_id, full_name, phone) VALUES
-  (1, 1, 'Juan Miguel Dela Cruz', '0917 555 0123');
+  (1, 'admin@gmail.com',    'admin',    '$2y$10$s/z5l2Gsv5GqrXO35nZ4E.7n.6I0szBPD55RqHNBC3mc0CxHD1fDq', 'admin'),
+  (2, 'customer@gmail.com', 'customer', '$2y$10$Eg3ofJRVPb0f0hSRxYflcObtnfjKhK5VZ3SMZC8HvFfc47WnWm0RC', 'customer');
+INSERT INTO customers (id, user_id, full_name, phone, address, university_id_no) VALUES
+  (1, 2, 'Brent Cajipoe', '09876543210', 'Molave, Zamboanga del Sur', '2024-00001');
 
 -- ============================================================================
 -- 8. INDEXES  (beyond the automatic FK/UNIQUE indexes)
@@ -1118,4 +1187,9 @@ WHERE mw.from_date <= CURDATE()
 -- 6) Availability helpers: fn_room_hard_blocked(room,date),
 --    fn_hostel_beds_free(room,check_in,check_out), fn_current_discount_percent().
 -- 7) Never hard-delete bookings — change statuses (history + audit rely on it).
+-- 8) REFUND SWITCH: when INSERTing a booking, copy system_settings.refunds_enabled
+--    into bookings.refunds_allowed. A customer may file a refund only when THAT
+--    booking's refunds_allowed = TRUE (plus the usual eligibility). Changing the
+--    switch writes a system_settings_history row and is admin-only, behind
+--    password re-entry (users.reauth_* columns hold the lockout).
 -- ============================================================================

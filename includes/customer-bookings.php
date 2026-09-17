@@ -44,13 +44,30 @@ $customerBookingSeeds = [
     ['215','Obrero Function Hall','2026-11-14','Alumni Homecoming Dinner','Approved','Paid',3000,'GCash'],
 ];
 
-/* REFUND ELIGIBILITY (agreed 2026-09-09) — PAID, and the event has not yet
-   happened. A past event is a service already delivered; refunding it is a
-   staff-side exception, not a self-service request. Both the history page
+/* The refund switch (system_settings.refunds_enabled) — the one real,
+   database-backed part of the refund flow. Sets $REFUNDS_ENABLED. */
+require_once __DIR__ . '/refund-policy.php';
+
+/* [SIM] REFUND POLICY SNAPSHOT (agreed 2026-09-16). Every booking records whether
+   refunds were ON at the moment it was MADE (bookings.refunds_allowed), and that
+   never changes. These are the demo bookings that were "made while refunds were
+   ON"; every other booking was made under the default no-refund policy. #213 is
+   here so the demo shows both cases side by side with the switch OFF: #213 still
+   offers "Request Refund", #214 and #215 do not. At database time this list goes
+   away — the column is read from the row. */
+$cbMadeWhileRefundsOn = ['213'];
+
+/* REFUND ELIGIBILITY (agreed 2026-09-09, policy snapshot added 2026-09-16) —
+   the booking was made while refunds were allowed, it is PAID, and the event has
+   not yet happened. A past event is a service already delivered; refunding it is
+   a staff-side exception, not a self-service request. Both the history page
    (whether to offer the button) and the refund page (whether to accept the
-   booking at all) ask THIS function, so they can never disagree. */
+   booking at all) ask THIS function, so they can never disagree.
+   Deliberately NOT checked here: the live switch. Turning it OFF must not take a
+   refund away from a booking that was sold as refundable. */
 function cb_is_refundable(array $booking) {
-    return $booking['bookingStatus'] === 'Approved'
+    return !empty($booking['refundsAllowed'])
+        && $booking['bookingStatus'] === 'Approved'
         && $booking['paymentStatus'] === 'Paid'
         && $booking['eventDateIso'] > date('Y-m-d');
 }
@@ -90,6 +107,7 @@ foreach ($customerBookingSeeds as $seed) {
         'paymentStatus' => $seed[5],
         'bookingStatus' => $seed[4],
         'method'        => $seed[7] ?? 'GCash',
+        'refundsAllowed'=> in_array($seed[0], $cbMadeWhileRefundsOn, true),   /* bookings.refunds_allowed */
     ];
     $row['refundable'] = cb_is_refundable($row);
     $customerBookings[] = $row;

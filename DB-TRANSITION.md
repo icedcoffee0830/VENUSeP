@@ -162,17 +162,57 @@ express them.
   Staff set `refunds.amount_approved`.
 - **Venue bookings only.** Hostel refunds are a separate decision.
 
-**Schema gaps this creates (none of it exists yet):**
-- `payment_statuses` has no **`refund_denied`** code — `admin/booking-request.php`
-  already has a working Deny button with nowhere to write. Also needs codes for
-  **returned-for-correction** and **awaiting-Official-Receipt**.
-- `refunds.refund_status` (`requested/under_review/approved/rejected/completed`)
-  has no value for **returned for correction** or **withdrawn**.
-- No **attempt counter** for corrections — copy `gcash_receipts.attempt_no`.
-- No **unique constraint on `refunds.booking_id`**, so nothing stops a second
-  request being filed for the same booking by revisiting the URL.
-- The reason **category + free text** the form collects needs columns; the admin
-  panel renders them, so they must survive to the DB.
+**Schema gaps — CLOSED in `venusep_schema.sql` on 2026-09-16** (DB-DECISIONS #16):
+- ✅ `payment_statuses` now has **`refund_denied`**, **`refund_correction`**
+  (returned for correction) and **`refund_await_or`** (awaiting Official Receipt).
+- ✅ `refunds.refund_status` now has **`returned_for_correction`** and **`withdrawn`**.
+- ✅ Correction **attempt counter** (`refunds.correction_attempts`) + the 48-hour
+  window (`correction_due_at`). The cap itself is enforced in the app.
+- ✅ **One OPEN request per booking**: generated `refunds.open_booking_id` + UNIQUE.
+  A second open request fails with a duplicate-key error; a withdrawn or finished
+  request drops out, so the customer can file again after withdrawing. (A plain
+  UNIQUE on `booking_id` would have blocked that.)
+- ✅ Reason **category** (`reason_category`) + free text (`reason`), plus the
+  GCash destination (`refund_to_number`), the OR-pending flag
+  (`official_receipt_pending`) and the payout GCash reference (`payout_reference`).
+
+## The refund switch — built 2026-09-16  🔴 real, database-backed
+
+USeP does not do refunds, so the refund module above is now **behind an
+admin-only switch, OFF by default** (DB-DECISIONS #16 has the rules). Unlike the
+rest of the refund flow, **this part is wired to the database** — it is the third
+thing that is, after the two logins.
+
+**Files:**
+- `includes/db.php` — the ONE connection (both logins use it now).
+- `includes/auth.php` — session start, the admin page guard, logout, CSRF tokens.
+- `includes/refund-policy.php` — reads `system_settings.refunds_enabled` into
+  `$REFUNDS_ENABLED`. Unreachable DB = OFF.
+- `admin/refund-switch.php` — the only writer. POST + CSRF → re-reads the account
+  (active, **admin**) → lockout check → `password_verify` → update the setting +
+  insert `system_settings_history`, in one transaction.
+- `admin/payment-settings.php` — the "Refund Requests" card, the ON/OFF warning
+  windows, the lockout countdown.
+
+**What still has to happen when bookings reach the database:**
+- 🔴 **Copy the switch onto the booking at INSERT** —
+  `bookings.refunds_allowed = (SELECT setting_value FROM system_settings WHERE setting_key = 'refunds_enabled')`.
+  Read it **in the same transaction** as the INSERT, never from an earlier page
+  load, or a booking made the second the admin flips it gets the wrong policy.
+- 🔴 **Refund eligibility reads the ROW, not the switch.**
+  `cb_is_refundable()` checks `refundsAllowed` from the booking, never
+  `$REFUNDS_ENABLED`; keep it that way in SQL, or turning the switch OFF silently
+  strips refunds from bookings that were sold as refundable.
+- 🔴 **Re-check the non-refundable checkbox server-side** when the booking POST is
+  built. Today it is enforced in the booking page's JavaScript only.
+- The `[SIM]` list `$cbMadeWhileRefundsOn` in `includes/customer-bookings.php`
+  (booking #213) goes away — it stands in for that column.
+
+**Login + logout (same change):** every admin page starts with
+`admin_require_login()` (admin-register is admin-only). "Log Out" goes to
+`admin/logout.php` / `customer/logout.php`, which destroy the session — it used
+to be a plain link to the login page that left the session alive. Customer pages
+are still not guarded; that comes with the customer side's database work.
 
 **Security — the current page is UI only and none of this is done yet:**
 - 🔴 **Scope the lookup by customer.** `cb_find()` searches only the session

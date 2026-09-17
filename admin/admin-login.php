@@ -1,32 +1,23 @@
 <?php
 declare(strict_types=1);
 
-session_start();
+/* The connection + credentials live in ONE place: includes/db.php. */
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/*
- * VENUSeP database connection
- * XAMPP defaults: MySQL user = root, password = empty.
- * Change these values if your local MySQL setup is different.
- */
-$dbHost = '127.0.0.1';
-$dbName = 'venusep';
-$dbUser = 'root';
-$dbPass = '';
+venusep_session_start();
+
+/* Already logged in on the staff side — no reason to see the form again. */
+if (isset($_SESSION['user_id'], $_SESSION['account_type'])
+    && in_array($_SESSION['account_type'], ['admin', 'staff'], true)) {
+    header('Location: Admin_Dashboard.php');
+    exit;
+}
 
 $loginError = '';
 
-try {
-    $pdo = new PDO(
-        "mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4",
-        $dbUser,
-        $dbPass,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ]
-    );
-} catch (PDOException $e) {
+$pdo = venusep_db();
+if ($pdo === null) {
     // Do not expose database credentials/errors to users.
     $loginError = 'Unable to connect to the database. Please contact the system administrator.';
 }
@@ -86,7 +77,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updateLogin->execute(['id' => $user['id']]);
 
                 // Secure PHP session instead of browser sessionStorage.
+                // Start from an empty session so nothing from a previous login
+                // (e.g. a customer on the same browser) survives into this one.
                 session_regenerate_id(true);
+                $_SESSION = [];
                 $_SESSION['user_id'] = (int)$user['id'];
                 $_SESSION['user_email'] = $user['email'];
                 $_SESSION['username'] = $user['username'];

@@ -54,12 +54,19 @@ erDiagram
     PAYMENTS ||--o| REFUNDS : "of"
     BOOKINGS ||--o{ BOOKING_TIMELINE : "audit trail"
 
+    %% ---------- settings + the refund switch (2026-09-16) ----------
+    SYSTEM_SETTINGS ||--o{ SYSTEM_SETTINGS_HISTORY : "change log"
+    USERS ||--o{ SYSTEM_SETTINGS_HISTORY : "changed by"
+
     %% ================= ENTITIES =================
     USERS {
         bigint id PK
         varchar email UK
         enum account_type "customer / staff / admin"
         boolean is_active
+        smallint reauth_failed_attempts "password re-entry lockout"
+        tinyint reauth_lock_level "10s / 30s / 1m / 5m / 15m"
+        datetime reauth_locked_until
     }
     CUSTOMERS {
         bigint id PK
@@ -151,6 +158,7 @@ erDiagram
         decimal discount_percent "snapshot"
         decimal discount_amount
         decimal total_amount "discounted; checker validates this"
+        boolean refunds_allowed "snapshot of the refund switch; never changes"
         datetime current_deadline_at
         timestamp submitted_at
     }
@@ -230,9 +238,14 @@ erDiagram
         bigint id PK
         bigint booking_id FK
         bigint payment_id FK
-        enum refund_status
+        enum refund_status "requested / under_review / returned_for_correction / approved / rejected / completed / withdrawn"
+        enum reason_category
         decimal amount_requested
         decimal amount_approved
+        varchar refund_to_number "GCash destination"
+        boolean official_receipt_pending
+        smallint correction_attempts
+        bigint open_booking_id UK "generated; one OPEN request per booking"
     }
     BOOKING_TIMELINE {
         bigint id PK
@@ -244,8 +257,17 @@ erDiagram
     }
     SYSTEM_SETTINGS {
         varchar setting_key PK
-        varchar setting_value "e.g. discount_percent = 20"
+        varchar setting_value "e.g. discount_percent = 20, refunds_enabled = 0"
         enum value_type
+        bigint updated_by_user_id FK "last changed by"
+    }
+    SYSTEM_SETTINGS_HISTORY {
+        bigint id PK
+        varchar setting_key FK
+        varchar old_value
+        varchar new_value
+        bigint changed_by_user_id FK
+        timestamp changed_at
     }
 ```
 
@@ -259,4 +281,7 @@ and it branches into a venue side (`VENUE_BOOKING_DETAILS` + per-day
 per-night rows carry the last-bed race guard). Money flows `BOOKINGS → PAYMENTS →
 GCASH_RECEIPTS`; IDs/POS/OR live in `BOOKING_DOCUMENTS`; every status change lands
 in `BOOKING_TIMELINE`. Status labels come from the two lookup tables; the live
-discount % lives in `SYSTEM_SETTINGS`.
+discount % and the refund switch (`refunds_enabled`, default OFF) live in
+`SYSTEM_SETTINGS`, and every change to them is a row in `SYSTEM_SETTINGS_HISTORY`.
+Each booking copies the refund switch into `BOOKINGS.refunds_allowed` when it is
+made, so changing the switch never rewrites an existing booking.

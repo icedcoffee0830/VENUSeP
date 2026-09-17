@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(['admin']);   /* admin only: staff cannot create accounts */ ?>
 <?php ?>
 <!DOCTYPE html>
 <!-- ==================================================================

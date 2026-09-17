@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
 /* The demo customer's own bookings, from THE one source. Needed here because a
    refund filed on the customer side has to appear in this queue, and until the

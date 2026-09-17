@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
 /* ==================================================================
    TRANSACTION HISTORY — VENUSeP merged system (admin view)

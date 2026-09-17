@@ -134,6 +134,49 @@ These exist in the schema but not the UI yet — **keep them and add UI for them
 - `gcash_receipts.reference_number` UNIQUE + file-hash UNIQUE.
 - Two-axis status (reservation + payment).
 
+## 16. Refund switch — decided 2026-09-16
+USeP does not do refunds: every transaction is non-refundable. The teacher's
+recommendation was to **keep the refund module but let the admin turn it on and off.**
+
+- **One global switch**, `system_settings.refunds_enabled`, **default `0` (OFF)**.
+- **Admin only** (`users.account_type = 'admin'`). Staff see it read-only.
+- **Covers customer-requested refunds only.** A closure by USeP (maintenance or
+  any other reason) is never affected: the customer is offered a replacement room
+  or a new date, and refunded if they decline both (#11 disruption flow).
+- **Per-booking snapshot — `bookings.refunds_allowed`.** Copied from the switch
+  when the booking is **made**, never changed after. Turning the switch OFF does
+  not take refunds away from bookings made while it was ON; turning it ON does not
+  make older bookings refundable. Customers are held to the policy they agreed to.
+- **Turning it OFF:** new requests are blocked; **open requests are still finished
+  by staff**; refund history stays visible to admins.
+- **Customers are told before they book.** While OFF, the landing page, FAQ and
+  booking policies say bookings are non-refundable, and the booking review screen
+  requires an "I understand this booking is non-refundable" checkbox.
+- **Changing it needs password re-entry.** 5 wrong passwords in a row = a lock,
+  each longer than the last: **10s → 30s → 1m → 5m → 15m (max)**. A correct password
+  resets it. Stored on the account (`users.reauth_failed_attempts`,
+  `reauth_lock_level`, `reauth_locked_until`), not the session.
+- **Every change is an event** in **`system_settings_history`** (who, when, old,
+  new). Shared with the discount rate once that is wired.
+- **Fail safe:** if the database is unreachable, the customer side treats refunds as OFF.
+
+Refund-table gaps closed in the same change (DB-TRANSITION "Schema gaps"):
+`refunds.refund_status` gains `returned_for_correction` + `withdrawn`;
+`payment_statuses` gains `refund_correction`, `refund_await_or`, `refund_denied`;
+`refunds` gains `reason_category`, `refund_to_number`, `official_receipt_pending`,
+`correction_attempts`, `correction_due_at`, `payout_reference`, `resubmitted_at`,
+`withdrawn_at`; and **one OPEN request per booking** is enforced by a generated
+`open_booking_id` + UNIQUE (finished/withdrawn requests stay as history).
+
+## 17. Live database realigned — 2026-09-16
+The local `venusep` database had been built from the **first-draft** SQL
+(inline status ENUMs, `amenities`/`room_amenities`, `booking_occupants`, no
+`updated_by_user_id`). It was backed up, then rebuilt from `venusep_schema.sql`,
+so the live DB now matches this file. Kept from it: the test logins
+`admin@gmail.com` (admin) and `customer@gmail.com` (customer, profile *Brent
+Cajipoe*) — **test passwords only**. `customers` now has its own `id` (#4), so
+`customer-login.php` reads `c.id AS customer_id`.
+
 ---
 
 ## Open items (not yet decided)

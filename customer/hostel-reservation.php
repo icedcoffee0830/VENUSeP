@@ -255,7 +255,7 @@ $mrOthers = array_slice($mrOthers, 0, 4);
         <div class="bk-footer-links">
           <a href="faq.php">Frequently asked questions</a>
           <a href="faq.php#gcash">How to pay by GCash</a>
-          <a href="faq.php#after">Request a refund</a>
+          <a href="faq.php#after"><?php echo $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy'; ?></a>
           <a href="faq.php#discount">USeP discount rules</a>
         </div>
       </div>
@@ -271,6 +271,11 @@ $mrOthers = array_slice($mrOthers, 0, 4);
    belongs to the hostel — so gcAccount() below is constant. It is still a
    function because that is the checker's contract. */
 const GCASH_ACCOUNTS = <?php echo json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+/* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
+   OFF = the stay is non-refundable and the guest must tick that they understand
+   before submitting. ON leaves the hostel's refund text as it was — hostel refund
+   REQUESTS are still a separate, undecided flow (venue-only, 2026-09-09). */
+const REFUNDS_ENABLED = <?php echo $REFUNDS_ENABLED ? 'true' : 'false'; ?>;
 </script>
 <script>
 /* ---------- data ---------- */
@@ -316,6 +321,7 @@ let state = {
   posNumber: null,                        // null until staff returns from CEDU -> payment LOCKED
   orNumber: null,                         // null until the cashier issues it -> post-confirmation only
   agreeExact: false,
+  agreeNoRefund: false,                   // "non-refundable" ticked? (required only while refunds are OFF)
   ocr: null,
   reference: 'USEP-H-' + Math.floor(100000 + Math.random()*900000),
   cal: null,
@@ -549,9 +555,13 @@ function removeId(){
   if(state.idFile && state.idFile.url){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
   state.idFile=null; render();
 }
+/* While refunds are OFF, the guest must acknowledge the stay is final before
+   the booking is made — the policy is agreed at booking time, not at payment. */
+function canSubmitRequest(){ return !!state.idFile && (REFUNDS_ENABLED || state.agreeNoRefund); }
+function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
 function submitRequest(){
   /* affiliation is a required choice, like the ID — the price depends on it */
-  if(!derive().ready || !state.idFile || state.affiliated===null) return;
+  if(!derive().ready || !canSubmitRequest() || state.affiliated===null) return;
   state.screen='pending'; state.posNumber=null; window.scrollTo(0,0); render();
 }
 /* [SIM] the staff side is not connected — this stands in for a staff member
@@ -795,7 +805,9 @@ function detailScreen(){
       ${policy('One full payment','The whole stay is paid at once, up front. There is no per-night billing and no partial payment.')}
       ${policy('Your receipts','You get a <strong>Transaction Receipt</strong> straight away, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already confirmed — the booking is not waiting on it.')}
       ${policy('At check-in','Show the staff your <strong>POS</strong> and your <strong>Official Receipt</strong>, plus the valid ID you submitted. Each guest sleeps in the bed booked under their name.')}
-      ${policy('Refunds','A refund requires the system Transaction Receipt, the GCash Payment Receipt (if you paid by GCash), <strong>and</strong> the Official Receipt. Requests missing any of these cannot be processed.')}`;
+      ${!REFUNDS_ENABLED
+        ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your dates and guests before you submit and pay. If USeP has to close the room, the hostel office will offer you a <strong>replacement room or new dates</strong> instead; if you cannot accept either, your payment is returned.')
+        : policy('Refunds','A refund requires the system Transaction Receipt, the GCash Payment Receipt (if you paid by GCash), <strong>and</strong> the Official Receipt. Requests missing any of these cannot be processed.')}`;
   }
 
   /* --- booking panel --- */
@@ -1027,8 +1039,18 @@ function reviewScreen(){
         </div>`}
     </div>
 
-    <button onclick="submitRequest()" ${idOk?'':'disabled'} style="width:100%;height:48px;margin-top:16px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14.5px;font-weight:650;cursor:${idOk?'pointer':'not-allowed'};opacity:${idOk?1:.45}">Submit booking request</button>
-    <div style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px">${idOk?'You cannot pay yet — the POS has to come from '+esc(CEDU.name)+' first.':'Attach a valid ID to continue'}</div>
+    ${REFUNDS_ENABLED?'':`
+    <div style="background:#fff;border:1px solid ${state.agreeNoRefund?'#d4ebdd':'#f0d9b8'};border-radius:16px;padding:18px;margin-top:14px">
+      <div style="font-size:14.5px;font-weight:680;margin-bottom:3px">Non-refundable booking <span style="color:#b23a3a">*</span></div>
+      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px;line-height:1.55">USeP does not give refunds. Once you pay, this stay is final. If USeP has to close the room, you will be offered a replacement room or new dates instead.</div>
+      <label style="display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.55;color:#1c1b19;cursor:pointer">
+        <input type="checkbox" id="agreeNoRefund" ${state.agreeNoRefund?'checked':''} onchange="toggleAgreeNoRefund(this)" style="margin-top:2px;width:15px;height:15px;accent-color:#a11626;flex:none">
+        <span>I understand this booking is <strong>non-refundable</strong> once paid.</span>
+      </label>
+    </div>`}
+
+    <button onclick="submitRequest()" ${canSubmitRequest()?'':'disabled'} style="width:100%;height:48px;margin-top:16px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14.5px;font-weight:650;cursor:${canSubmitRequest()?'pointer':'not-allowed'};opacity:${canSubmitRequest()?1:.45}">Submit booking request</button>
+    <div style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px">${!idOk?'Attach a valid ID to continue':!canSubmitRequest()?'Tick that you understand the booking is non-refundable to continue':'You cannot pay yet — the POS has to come from '+esc(CEDU.name)+' first.'}</div>
   </main>`;
 }
 

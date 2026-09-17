@@ -241,7 +241,7 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
 
                   <section class="profile-section" aria-labelledby="accountActionsTitle">
                     <div class="profile-section-header"><h2 id="accountActionsTitle">Account Actions</h2><p>Manage access to your VENUSeP account.</p></div>
-                    <div class="account-actions"><a class="btn-profile" href="customer-login.php"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>Log Out</a><!-- [SIM] deactivate not built --><button class="btn-profile btn-profile-danger" type="button" disabled title="Account deactivation is under development"><i class="bi bi-person-x" aria-hidden="true"></i>Deactivate Account</button></div>
+                    <div class="account-actions"><a class="btn-profile" href="logout.php"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>Log Out</a><!-- [SIM] deactivate not built --><button class="btn-profile btn-profile-danger" type="button" disabled title="Account deactivation is under development"><i class="bi bi-person-x" aria-hidden="true"></i>Deactivate Account</button></div>
                   </section>
                 </div>
               </div>

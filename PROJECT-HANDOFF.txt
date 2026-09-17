@@ -254,9 +254,24 @@ ROOT
   side. (Admin sees many customers; that's normal.)
 
 4.10 REFUNDS
-  A refund requires: the system Transaction Receipt + the GCash Payment Receipt
-  (if paid by GCash) + the Official Receipt. Missing any → cannot be processed.
-  Walk-in refund by a DIFFERENT person → staff match a valid ID against the DB.
+  ⚠️ USeP DOES NOT DO REFUNDS (found out 2026-09-16) — every transaction is
+  non-refundable. The refund module is KEPT but sits behind an ADMIN-ONLY
+  SWITCH on Payment Settings, OFF by default (DB-DECISIONS #16):
+    • OFF: customers are told bookings are non-refundable (landing page, FAQ,
+      booking policies) and must tick "I understand this booking is
+      non-refundable" before submitting a booking.
+    • Each booking keeps the policy it was MADE under (bookings.refunds_allowed).
+      Flipping the switch never grants or removes refunds on existing bookings.
+    • The switch covers customer-requested refunds ONLY. A closure by USeP is
+      handled by the disruption flow (replacement room / new date / money back).
+    • Changing it needs the admin's password; wrong passwords lock it for longer
+      each time (10s → 30s → 1m → 5m → 15m). Every change is recorded.
+    • This switch is REAL (database-backed); the refund requests themselves are
+      still UI + demo data.
+  When refunds ARE allowed, a refund requires: the system Transaction Receipt +
+  the GCash Payment Receipt (if paid by GCash) + the Official Receipt. Missing
+  any → cannot be processed. Walk-in refund by a DIFFERENT person → staff match
+  a valid ID against the DB.
 
 ────────────────────────────────────────────────────────────────────────────────
 5. WHAT'S BUILT vs ONLY DESIGNED
@@ -270,6 +285,9 @@ BUILT (works as UI + demo data):
   ✓ Maintenance model (windows, medium/hard, indefinite review nag)
   ✓ Room/venue forms, payment settings, staff management, dashboards, reports
   ✓ Single-source data (venues, venue-rooms, hostel-rooms, payment accounts)
+  ✓ Customer refund request flow (history → request → staff decision), UI only
+  ✓ Admin refund switch (default OFF) — REAL: database, password, lockout, history
+  ✓ Admin login guard on every admin page + real logout (admin and customer)
 
 DESIGNED BUT NOT BUILT (reserve room for these in the schema now):
   ✗ Disruption / involuntary refund: when a room is HARD-closed while it has
@@ -277,8 +295,8 @@ DESIGNED BUT NOT BUILT (reserve room for these in the schema now):
     replacement or refund; if replacement, STAFF pick the room) or a full,
     NON-DENIABLE refund. This adds a "disrupted" reservation state — reserve the
     enum value even though the flow isn't built, or adding it later is a migration.
-  ✗ Customer-initiated cancel / refund request. The admin refund chain exists;
-    there is no customer button to start it.
+  ✗ Customer-initiated CANCEL. (The customer refund REQUEST now exists — see
+    4.10 — but only matters while the admin refund switch is ON.)
   ✗ Hostel POS timeout. If CEDU never issues a POS, the booking (and held beds)
     sit forever. Decide whether held beds expire, like the venue pay-by deadline.
   ✗ Email/notifications. Every "receipt emailed / OR emailed" is [SIM] — nothing

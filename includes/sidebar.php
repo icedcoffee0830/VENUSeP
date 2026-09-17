@@ -24,7 +24,7 @@ if ($portal === 'customer') {
     ['Transaction History', 'transaction-history.php',         'bi-receipt'],
     ['Profile',             'customer-profile.php',            'bi-person'],
     ['FAQ',                 'faq.php?in=app',                  'bi-question-circle'],   /* ?in=app = keep the sidebar frame */
-    ['Log Out',             'customer-login.php',              'bi-box-arrow-right'],
+    ['Log Out',             'logout.php',                      'bi-box-arrow-right'],   /* ends the session */
   ];
 } else {
   $items = [
@@ -38,7 +38,7 @@ if ($portal === 'customer') {
     ['Reports',             'Quarterly_Reports.php',           'bi-bar-chart'],
     ['Payment Settings',    'payment-settings.php',            'bi-wallet2'],
     ['Settings',            'venusep_profile.php',             'bi-gear'],
-    ['Log Out',             'admin-login.php',              'bi-box-arrow-right'],
+    ['Log Out',             'logout.php',                      'bi-box-arrow-right'],   /* ends the session */
   ];
 }
 ?>

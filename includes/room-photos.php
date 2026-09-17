@@ -41,6 +41,31 @@ function rp_order_file($id) {
   return rp_photos_dir($id) . '/order.json';
 }
 
+/* Recursively create $dir under ROOM_PHOTO_BASE and force 0775 on every
+   segment created. mkdir()'s own mode argument is masked by the running
+   process's umask (typically 022 on Apache/PHP, which strips the group
+   write bit) — that leaves a directory writable only by whichever OS
+   user happened to create it first, silently breaking every later
+   upload made by a different user (e.g. the web server vs. a CLI/test
+   run). chmod()ing after the fact bypasses the umask entirely. */
+function rp_mkdir($dir) {
+  if (is_dir($dir)) return true;
+  // $dir is always built from the ROOM_PHOTO_BASE constant (rp_photos_dir()
+  // / rp_room_dir()), so it shares that exact literal prefix — comparing
+  // against a realpath()'d (symlink-resolved, normalized) version of the
+  // same constant would silently mismatch and skip every chmod below.
+  if (!is_dir(ROOM_PHOTO_BASE)) { @mkdir(ROOM_PHOTO_BASE, 0775, true); @chmod(ROOM_PHOTO_BASE, 0775); }
+  if (!@mkdir($dir, 0775, true) && !is_dir($dir)) return false;
+  $rel = trim(substr($dir, strlen(ROOM_PHOTO_BASE)), '/');
+  $path = ROOM_PHOTO_BASE;
+  foreach (explode('/', $rel) as $seg) {
+    if ($seg === '') continue;
+    $path .= '/' . $seg;
+    @chmod($path, 0775);
+  }
+  return true;
+}
+
 /* Validate an uploaded (or any local) image file: real image, allowed
    extension, under the size cap. Returns the lowercase extension on
    success, or null + $error set on failure. */
@@ -116,9 +141,10 @@ function rp_list_photos($id) {
 
 function rp_save_order($id, array $files) {
   if (!rp_room_id_valid($id)) return false;
-  $dir = rp_photos_dir($id);
-  if (!is_dir($dir)) @mkdir($dir, 0775, true);
-  return file_put_contents(rp_order_file($id), json_encode(array_values($files))) !== false;
+  rp_mkdir(rp_photos_dir($id));
+  $ok = file_put_contents(rp_order_file($id), json_encode(array_values($files))) !== false;
+  if ($ok) @chmod(rp_order_file($id), 0664);
+  return $ok;
 }
 
 /* Add one photo from a tmp upload path. Returns the new filename, or
@@ -130,7 +156,7 @@ function rp_add_photo($id, $tmpPath, $originalName, &$error) {
   if ($ext === null) return null;
 
   $dir = rp_photos_dir($id);
-  if (!is_dir($dir) && !@mkdir($dir, 0775, true)) { $error = 'Could not create the upload folder.'; return null; }
+  if (!rp_mkdir($dir)) { $error = 'Could not create the upload folder.'; return null; }
 
   $filename = 'p_' . bin2hex(random_bytes(8)) . '.' . $ext;
   $dest = $dir . '/' . $filename;
@@ -197,7 +223,7 @@ function rp_save_pano($id, $tmpPath, $originalName, &$error) {
   if ($ext === null) return null;
 
   $dir = rp_room_dir($id);
-  if (!is_dir($dir) && !@mkdir($dir, 0775, true)) { $error = 'Could not create the upload folder.'; return null; }
+  if (!rp_mkdir($dir)) { $error = 'Could not create the upload folder.'; return null; }
 
   rp_delete_pano($id);   // only one panorama per room
   $dest = $dir . '/pano.' . $ext;

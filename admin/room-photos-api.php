@@ -62,6 +62,8 @@ if (!csrf_valid($_POST['csrf'] ?? null)) {
   rpa_reply(400, ['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
 }
 
+$uploaderId = (int) $_SESSION['user_id'];
+
 switch ($action) {
   case 'upload': {
     if (empty($_FILES['files'])) {
@@ -75,7 +77,7 @@ switch ($action) {
     foreach ($names as $i => $originalName) {
       if (($errs[$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) { $firstError = $firstError ?: 'One of the files failed to upload.'; continue; }
       $err = null;
-      $ok = rp_add_photo($roomId, $tmps[$i], $originalName, $err);
+      $ok = rp_add_photo($roomId, $tmps[$i], $originalName, $uploaderId, $err);
       if ($ok === null) { $firstError = $firstError ?: $err; continue; }
       $added++;
     }
@@ -108,7 +110,7 @@ switch ($action) {
       rpa_reply(400, ['ok' => false, 'error' => 'no_file', 'message' => 'Choose a 360° photo.']);
     }
     $err = null;
-    $url = rp_save_pano($roomId, $_FILES['file']['tmp_name'], $_FILES['file']['name'], $err);
+    $url = rp_save_pano($roomId, $_FILES['file']['tmp_name'], $_FILES['file']['name'], $uploaderId, $err);
     if ($url === null) {
       rpa_reply(400, ['ok' => false, 'error' => 'upload_failed', 'message' => $err ?: 'Upload failed.']);
     }

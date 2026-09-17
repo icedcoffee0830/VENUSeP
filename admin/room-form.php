@@ -689,14 +689,15 @@ $roomFormCsrf = csrf_token();
         <div class="vm-row">
           <div class="vm-field">
             <label for="roomName">Room Name</label>
-            <input id="roomName" class="vm-control" type="text" value="Function Hall" placeholder="e.g. Function Hall" />
+            <input id="roomName" class="vm-control" type="text" value="<?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['name'] : ''); ?>" placeholder="e.g. Function Hall" />
           </div>
           <div class="vm-field">
             <label>Location (Venue)</label>
             <!-- Options come from includes/venues.php — every venue, data-driven.
-                 [SIM] the summary shows the room's current venue; the DB loads it. -->
+                 The summary + saved value come from rooms.venue_id via the DB
+                 overlay in includes/venue-rooms.php. -->
             <details class="vm-dd" id="roomLoc">
-              <summary class="vm-dd-trigger">Bahay Alumni</summary>
+              <summary class="vm-dd-trigger"><?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['venue'] : 'Select a venue'); ?></summary>
               <ul class="vm-dd-menu" aria-label="Location options">
                 <?php echo venueOptions($venues); ?>
               </ul>
@@ -1115,18 +1116,36 @@ $roomFormCsrf = csrf_token();
       function vmCloseGallery() { var ov = document.getElementById('vmGalOverlay'); if (ov) ov.remove(); }
 
       /* "Save Changes" — photos and the 360° tour already save themselves the
-         moment you add/remove/reorder them (see vmApiPost above), so there is
-         nothing left to submit for them. This button just confirms that and
-         returns to Venue Management. The other fields on this form (name,
-         capacity, rate, maintenance, amenities) are still [SIM] — same as
-         everywhere else in this mockup — so we say so rather than pretend. */
+         moment you add/remove/reorder them (see vmApiPost above); Name and
+         Location save here, to rooms.name / rooms.venue_id via
+         admin/room-save.php. Capacity, rate, maintenance and amenities on
+         this form are still [SIM] — same as everywhere else in this
+         mockup — so the confirmation says so rather than pretend. */
       function vmSaveChanges() {
         if (!VM_ROOM_ID) {
           alert('This form can\'t create a new room yet — open an existing room from Venue Management to add photos and a 360° tour.');
           return;
         }
-        alert('Photos and the 360° tour are saved.\n\n(Name, capacity, rate, maintenance and amenities on this form are not connected to storage yet.)');
-        location.href = 'venue-management.php';
+        var name = document.getElementById('roomName').value.trim();
+        var venueTrigger = document.querySelector('#roomLoc .vm-dd-trigger');
+        var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
+        if (!name) { alert('Enter a room name.'); return; }
+        if (!venue || venue === 'Select a venue') { alert('Choose a location.'); return; }
+
+        var body = new FormData();
+        body.append('room_id', VM_ROOM_ID);
+        body.append('name', name);
+        body.append('venue', venue);
+        body.append('room_type', 'event');
+        body.append('csrf', VM_CSRF);
+        fetch('room-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.ok) { alert(res.message || 'Could not save the room.'); return; }
+            alert('Room saved.\n\n(Capacity, rate, maintenance and amenities on this form are not connected to storage yet.)');
+            location.href = 'venue-management.php';
+          })
+          .catch(function () { alert('Could not reach the server.'); });
       }
 
       vmLoadPhotos();

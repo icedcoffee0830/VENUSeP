@@ -1,23 +1,24 @@
 <?php
 /* =====================================================================
-   ROOM PHOTOS — filesystem-backed storage for room galleries + 360°
-   panoramas, keyed by the room's existing string id (r1, h1, ...).
+   ROOM PHOTOS — room_media-backed gallery + 360° panorama storage,
+   keyed by the room's existing string id / room_code (r1, h1, ...).
 
-   WHY FILESYSTEM, NOT THE DB: rooms themselves are not database-backed
-   anywhere in this app yet (see includes/venue-rooms.php / hostel-rooms.php
-   — [SIM] hard-coded arrays). Bolting room_media onto a DB row that does
-   not exist would be a fiction; this instead extends the ONE thing that
-   already works today — assets/img/venues/<id>.<ext> — into a real
-   multi-photo gallery + panorama, still keyed by the same room id.
-
-   Layout, per room id:
+   The image BYTES still live on disk (the `room_media.file_path` column
+   is a path, not a blob — same as the schema's own comment intends):
      assets/img/venues/rooms/<id>/photos/<file>   gallery images
-     assets/img/venues/rooms/<id>/photos/order.json   ["file1.jpg", ...] — index 0 = cover
-     assets/img/venues/rooms/<id>/pano.<ext>          the one 360° photo (if any)
+     assets/img/venues/rooms/<id>/pano.<ext>      the one 360° photo (if any)
+   Everything about WHICH photos exist, their order, and the cover is now
+   the `room_media` table (room_id FK -> rooms.id, looked up by room_code)
+   — not a JSON sidecar file. Writes fail loud if the DB is unreachable
+   (mirrors admin/refund-switch.php); reads fail safe (empty/null), so a
+   DB hiccup degrades a customer's room photos to placeholders instead of
+   a fatal error.
 
    Every function here validates the room id against ROOM_ID_RE so a path
    like "../../etc" can never be built from user input.
    ===================================================================== */
+
+require_once __DIR__ . '/db.php';
 
 define('ROOM_PHOTO_BASE', __DIR__ . '/../assets/img/venues/rooms');
 define('ROOM_PHOTO_WEB_BASE', '../assets/img/venues/rooms');   // relative from admin/ and customer/ (both one level deep)
@@ -38,8 +39,19 @@ function rp_room_dir($id) {
   return ROOM_PHOTO_BASE . '/' . $id;
 }
 
-function rp_order_file($id) {
-  return rp_photos_dir($id) . '/order.json';
+/* rooms.id (bigint PK) for a room_code like "r1", or null if the room
+   doesn't exist in the DB (or the DB is unreachable). Cached per request
+   — this gets called from render loops (room cards, listing pages). */
+function rp_db_room_id($code) {
+  static $cache = [];
+  if (array_key_exists($code, $cache)) return $cache[$code];
+  if (!rp_room_id_valid($code)) return $cache[$code] = null;
+  $pdo = venusep_db();
+  if ($pdo === null) return $cache[$code] = null;
+  $stmt = $pdo->prepare('SELECT id FROM rooms WHERE room_code = :code');
+  $stmt->execute([':code' => $code]);
+  $id = $stmt->fetchColumn();
+  return $cache[$code] = ($id !== false ? (int) $id : null);
 }
 
 /* Recursively create $dir under ROOM_PHOTO_BASE and force 0775 on every
@@ -102,100 +114,114 @@ function rp_validate_image($tmpPath, $originalName, &$error) {
   return $ext === 'jpeg' ? 'jpg' : $ext;
 }
 
+/* Move a validated temp upload into place under $dest and return
+   [mime, size, sha256] metadata for the room_media row, or null on
+   failure (with $error set). */
+function rp_store_file($tmpPath, $dest, &$error) {
+  $moved = is_uploaded_file($tmpPath) ? move_uploaded_file($tmpPath, $dest) : copy($tmpPath, $dest);
+  if (!$moved) { $error = 'Could not save the uploaded file.'; return null; }
+  @chmod($dest, 0644);
+  $info = @getimagesize($dest);
+  return [
+    'mime' => $info !== false ? $info['mime'] : null,
+    'size' => @filesize($dest) ?: null,
+    'hash' => @hash_file('sha256', $dest) ?: null,
+  ];
+}
+
 /* ---------------------------------------------------------------------
-   Gallery photos
+   Gallery photos — room_media rows with media_type = 'photo'
    --------------------------------------------------------------------- */
 
 /* Ordered list of gallery photos for a room. Index 0 = cover. Each entry:
    ['file' => 'p_xxx.jpg', 'url' => '../assets/img/venues/rooms/r1/photos/p_xxx.jpg'] */
-function rp_list_photos($id) {
-  if (!rp_room_id_valid($id)) return [];
-  $dir = rp_photos_dir($id);
-  if (!is_dir($dir)) return [];
-
-  $orderFile = rp_order_file($id);
-  $order = [];
-  if (is_file($orderFile)) {
-    $decoded = json_decode(file_get_contents($orderFile), true);
-    if (is_array($decoded)) $order = $decoded;
+function rp_list_photos($code) {
+  $roomId = rp_db_room_id($code);
+  if ($roomId === null) return [];
+  $pdo = venusep_db();
+  if ($pdo === null) return [];
+  $stmt = $pdo->prepare("SELECT file_path FROM room_media WHERE room_id = :r AND media_type = 'photo' ORDER BY display_order ASC, id ASC");
+  $stmt->execute([':r' => $roomId]);
+  $out = [];
+  foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $url) {
+    $out[] = ['file' => basename($url), 'url' => $url];
   }
-
-  // Reconcile the stored order against what's actually on disk: drop
-  // filenames that no longer exist, then append any real files the
-  // order list doesn't know about yet (belt-and-suspenders).
-  $onDisk = [];
-  foreach (scandir($dir) as $f) {
-    if ($f === '.' || $f === '..' || $f === 'order.json') continue;
-    $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
-    if (in_array($ext, ROOM_PHOTO_ALLOWED_EXT, true)) $onDisk[$f] = true;
-  }
-  $result = [];
-  foreach ($order as $f) {
-    if (isset($onDisk[$f])) { $result[] = $f; unset($onDisk[$f]); }
-  }
-  foreach (array_keys($onDisk) as $f) $result[] = $f;
-
-  return array_map(function ($f) use ($id) {
-    return ['file' => $f, 'url' => ROOM_PHOTO_WEB_BASE . '/' . $id . '/photos/' . $f];
-  }, $result);
-}
-
-function rp_save_order($id, array $files) {
-  if (!rp_room_id_valid($id)) return false;
-  rp_mkdir(rp_photos_dir($id));
-  $ok = file_put_contents(rp_order_file($id), json_encode(array_values($files))) !== false;
-  if ($ok) @chmod(rp_order_file($id), 0664);
-  return $ok;
+  return $out;
 }
 
 /* Add one photo from a tmp upload path. Returns the new filename, or
    null + $error set. New photos are appended (not made cover) unless
    the gallery was empty. */
-function rp_add_photo($id, $tmpPath, $originalName, &$error) {
-  if (!rp_room_id_valid($id)) { $error = 'Invalid room.'; return null; }
-  if (count(rp_list_photos($id)) >= ROOM_PHOTO_MAX_COUNT) {
+function rp_add_photo($code, $tmpPath, $originalName, $uploadedByUserId, &$error) {
+  if (!rp_room_id_valid($code)) { $error = 'Invalid room.'; return null; }
+  $roomId = rp_db_room_id($code);
+  if ($roomId === null) { $error = 'This room was not found in the database.'; return null; }
+  $pdo = venusep_db();
+  if ($pdo === null) { $error = 'The database is unreachable, so the photo was not saved.'; return null; }
+  if (count(rp_list_photos($code)) >= ROOM_PHOTO_MAX_COUNT) {
     $error = 'This room already has the maximum of ' . ROOM_PHOTO_MAX_COUNT . ' photos. Remove one before adding another.';
     return null;
   }
   $ext = rp_validate_image($tmpPath, $originalName, $error);
   if ($ext === null) return null;
 
-  $dir = rp_photos_dir($id);
+  $dir = rp_photos_dir($code);
   if (!rp_mkdir($dir)) { $error = 'Could not create the upload folder.'; return null; }
 
   $filename = 'p_' . bin2hex(random_bytes(8)) . '.' . $ext;
   $dest = $dir . '/' . $filename;
+  $meta = rp_store_file($tmpPath, $dest, $error);
+  if ($meta === null) return null;
 
-  $moved = is_uploaded_file($tmpPath) ? move_uploaded_file($tmpPath, $dest) : copy($tmpPath, $dest);
-  if (!$moved) { $error = 'Could not save the uploaded file.'; return null; }
-  @chmod($dest, 0644);
+  $url = ROOM_PHOTO_WEB_BASE . '/' . $code . '/photos/' . $filename;
+  try {
+    $next = $pdo->prepare("SELECT COALESCE(MAX(display_order), 0) + 1 FROM room_media WHERE room_id = :r AND media_type = 'photo'");
+    $next->execute([':r' => $roomId]);
+    $order = (int) $next->fetchColumn();
 
-  $order = array_column(rp_list_photos($id), 'file');
-  // rp_list_photos() above already reconciles disk state, but the file we
-  // just wrote may already be picked up by the disk scan; only append if
-  // it somehow isn't there (paranoia, not the expected path).
-  if (!in_array($filename, $order, true)) $order[] = $filename;
-  rp_save_order($id, $order);
+    $ins = $pdo->prepare(
+      "INSERT INTO room_media (room_id, media_type, file_path, original_filename, display_order, mime_type, file_size_bytes, sha256_hash, uploaded_by_user_id)
+       VALUES (:room_id, 'photo', :path, :orig, :order, :mime, :size, :hash, :uid)"
+    );
+    $ins->execute([
+      ':room_id' => $roomId, ':path' => $url, ':orig' => $originalName, ':order' => $order,
+      ':mime' => $meta['mime'], ':size' => $meta['size'], ':hash' => $meta['hash'], ':uid' => $uploadedByUserId,
+    ]);
+  } catch (Throwable $e) {
+    @unlink($dest);
+    $error = 'Could not save the photo record.';
+    return null;
+  }
 
   return $filename;
 }
 
-function rp_delete_photo($id, $filename) {
-  if (!rp_room_id_valid($id)) return false;
+function rp_delete_photo($code, $filename) {
+  $roomId = rp_db_room_id($code);
+  if ($roomId === null) return false;
+  $pdo = venusep_db();
+  if ($pdo === null) return false;
+
   $filename = basename($filename);   // no path traversal
-  $path = rp_photos_dir($id) . '/' . $filename;
+  $url = ROOM_PHOTO_WEB_BASE . '/' . $code . '/photos/' . $filename;
+
+  $pdo->prepare("DELETE FROM room_media WHERE room_id = :r AND media_type = 'photo' AND file_path = :p")
+      ->execute([':r' => $roomId, ':p' => $url]);
+
+  $path = rp_photos_dir($code) . '/' . $filename;
   if (is_file($path)) @unlink($path);
-  $order = array_values(array_filter(array_column(rp_list_photos($id), 'file'), function ($f) use ($filename) {
-    return $f !== $filename;
-  }));
-  return rp_save_order($id, $order);
+  return true;
 }
 
 /* Reorder the gallery to match $files (filenames in the new order).
    Index 0 becomes the cover. Unknown filenames are ignored. */
-function rp_reorder_photos($id, array $files) {
-  if (!rp_room_id_valid($id)) return false;
-  $existing = array_column(rp_list_photos($id), 'file');
+function rp_reorder_photos($code, array $files) {
+  $roomId = rp_db_room_id($code);
+  if ($roomId === null) return false;
+  $pdo = venusep_db();
+  if ($pdo === null) return false;
+
+  $existing = array_column(rp_list_photos($code), 'file');
   $existingSet = array_flip($existing);
   $clean = [];
   foreach ($files as $f) {
@@ -205,47 +231,84 @@ function rp_reorder_photos($id, array $files) {
   // Anything missing from $files (shouldn't happen) stays, appended, so
   // nothing silently disappears from a partial reorder call.
   foreach ($existing as $f) if (!in_array($f, $clean, true)) $clean[] = $f;
-  return rp_save_order($id, $clean);
+
+  $upd = $pdo->prepare("UPDATE room_media SET display_order = :o WHERE room_id = :r AND media_type = 'photo' AND file_path = :p");
+  $order = 1;
+  foreach ($clean as $f) {
+    $upd->execute([':o' => $order, ':r' => $roomId, ':p' => ROOM_PHOTO_WEB_BASE . '/' . $code . '/photos/' . $f]);
+    $order++;
+  }
+  return true;
 }
 
 /* ---------------------------------------------------------------------
-   360° panorama — one per room
+   360° panorama — one room_media row with media_type = 'panorama_360'
    --------------------------------------------------------------------- */
 
-function rp_pano_url($id) {
-  if (!rp_room_id_valid($id)) return null;
-  $dir = rp_room_dir($id);
-  if (!is_dir($dir)) return null;
-  foreach (ROOM_PHOTO_ALLOWED_EXT as $ext) {
-    if (is_file($dir . '/pano.' . $ext)) return ROOM_PHOTO_WEB_BASE . '/' . $id . '/pano.' . $ext;
-  }
-  return null;
+function rp_pano_url($code) {
+  $roomId = rp_db_room_id($code);
+  if ($roomId === null) return null;
+  $pdo = venusep_db();
+  if ($pdo === null) return null;
+  $stmt = $pdo->prepare("SELECT file_path FROM room_media WHERE room_id = :r AND media_type = 'panorama_360' ORDER BY id DESC LIMIT 1");
+  $stmt->execute([':r' => $roomId]);
+  $path = $stmt->fetchColumn();
+  return $path !== false ? $path : null;
 }
 
-function rp_save_pano($id, $tmpPath, $originalName, &$error) {
-  if (!rp_room_id_valid($id)) { $error = 'Invalid room.'; return null; }
+function rp_save_pano($code, $tmpPath, $originalName, $uploadedByUserId, &$error) {
+  if (!rp_room_id_valid($code)) { $error = 'Invalid room.'; return null; }
+  $roomId = rp_db_room_id($code);
+  if ($roomId === null) { $error = 'This room was not found in the database.'; return null; }
+  $pdo = venusep_db();
+  if ($pdo === null) { $error = 'The database is unreachable, so the photo was not saved.'; return null; }
+
   $ext = rp_validate_image($tmpPath, $originalName, $error);
   if ($ext === null) return null;
 
-  $dir = rp_room_dir($id);
+  $dir = rp_room_dir($code);
   if (!rp_mkdir($dir)) { $error = 'Could not create the upload folder.'; return null; }
 
-  rp_delete_pano($id);   // only one panorama per room
+  rp_delete_pano($code);   // only one panorama per room
   $dest = $dir . '/pano.' . $ext;
-  $moved = is_uploaded_file($tmpPath) ? move_uploaded_file($tmpPath, $dest) : copy($tmpPath, $dest);
-  if (!$moved) { $error = 'Could not save the uploaded file.'; return null; }
-  @chmod($dest, 0644);
+  $meta = rp_store_file($tmpPath, $dest, $error);
+  if ($meta === null) return null;
 
-  return ROOM_PHOTO_WEB_BASE . '/' . $id . '/pano.' . $ext;
+  $url = ROOM_PHOTO_WEB_BASE . '/' . $code . '/pano.' . $ext;
+  try {
+    $ins = $pdo->prepare(
+      "INSERT INTO room_media (room_id, media_type, file_path, original_filename, display_order, mime_type, file_size_bytes, sha256_hash, uploaded_by_user_id)
+       VALUES (:room_id, 'panorama_360', :path, :orig, 1, :mime, :size, :hash, :uid)"
+    );
+    $ins->execute([
+      ':room_id' => $roomId, ':path' => $url, ':orig' => $originalName,
+      ':mime' => $meta['mime'], ':size' => $meta['size'], ':hash' => $meta['hash'], ':uid' => $uploadedByUserId,
+    ]);
+  } catch (Throwable $e) {
+    @unlink($dest);
+    $error = 'Could not save the 360° photo record.';
+    return null;
+  }
+
+  return $url;
 }
 
-function rp_delete_pano($id) {
-  if (!rp_room_id_valid($id)) return false;
-  $dir = rp_room_dir($id);
-  foreach (ROOM_PHOTO_ALLOWED_EXT as $ext) {
-    $p = $dir . '/pano.' . $ext;
-    if (is_file($p)) @unlink($p);
+function rp_delete_pano($code) {
+  $roomId = rp_db_room_id($code);
+  if ($roomId === null) return false;
+  $pdo = venusep_db();
+  if ($pdo === null) return false;
+
+  $stmt = $pdo->prepare("SELECT file_path FROM room_media WHERE room_id = :r AND media_type = 'panorama_360'");
+  $stmt->execute([':r' => $roomId]);
+  $prefix = ROOM_PHOTO_WEB_BASE . '/' . $code . '/';
+  foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $url) {
+    if (strpos($url, $prefix) === 0) {
+      $local = rp_room_dir($code) . '/' . substr($url, strlen($prefix));
+      if (is_file($local)) @unlink($local);
+    }
   }
+  $pdo->prepare("DELETE FROM room_media WHERE room_id = :r AND media_type = 'panorama_360'")->execute([':r' => $roomId]);
   return true;
 }
 
@@ -254,20 +317,20 @@ function rp_delete_pano($id) {
    --------------------------------------------------------------------- */
 
 /* All gallery photo URLs, in cover-first order. */
-function rp_gallery_urls($id) {
-  return array_column(rp_list_photos($id), 'url');
+function rp_gallery_urls($code) {
+  return array_column(rp_list_photos($code), 'url');
 }
 
 /* The single cover image for a room: the first uploaded gallery photo,
    falling back to the old assets/img/venues/<id>.<ext> convention (so
    any photo already dropped there manually keeps working), else null. */
-function rp_cover_url($id) {
-  $photos = rp_gallery_urls($id);
+function rp_cover_url($code) {
+  $photos = rp_gallery_urls($code);
   if ($photos) return $photos[0];
-  if (!rp_room_id_valid($id)) return null;
+  if (!rp_room_id_valid($code)) return null;
   foreach (ROOM_PHOTO_ALLOWED_EXT as $ext) {
-    if (file_exists(__DIR__ . '/../assets/img/venues/' . $id . '.' . $ext)) {
-      return '../assets/img/venues/' . $id . '.' . $ext;
+    if (file_exists(__DIR__ . '/../assets/img/venues/' . $code . '.' . $ext)) {
+      return '../assets/img/venues/' . $code . '.' . $ext;
     }
   }
   return null;

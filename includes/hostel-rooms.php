@@ -124,6 +124,35 @@ $hostelRooms = [
   ],
 ];
 
+/* Name + venue are now DB-backed (rooms.name, rooms.venue_id via venues) —
+   editable from admin/hostel-room-form.php (admin/room-save.php).
+   Everything else here stays [SIM] hard-coded. Overlaid onto the array
+   above (adding a 'venue' key that didn't exist before — every hostel
+   room is expected to point at $HOSTEL_VENUE, but the form lets it be
+   changed like any other room, so this reads what the DB actually says
+   rather than assuming) so every page that includes this file keeps
+   working unchanged even when the database is unreachable (fail safe,
+   same pattern as includes/venue-rooms.php). */
+require_once __DIR__ . '/db.php';
+$pdo = venusep_db();
+if ($pdo !== null) {
+  try {
+    $rows = $pdo->query(
+      "SELECT r.room_code, r.name, v.name AS venue_name FROM rooms r
+       JOIN venues v ON v.id = r.venue_id WHERE r.room_type = 'hostel'"
+    )->fetchAll();
+    $hostelRoomsDb = [];
+    foreach ($rows as $row) $hostelRoomsDb[$row['room_code']] = $row;
+    foreach ($hostelRooms as &$hr) {
+      if (isset($hostelRoomsDb[$hr['id']])) {
+        $hr['name']  = $hostelRoomsDb[$hr['id']]['name'];
+        $hr['venue'] = $hostelRoomsDb[$hr['id']]['venue_name'];
+      }
+    }
+    unset($hr);
+  } catch (Throwable $e) { /* fail safe: keep the hard-coded name, no venue key */ }
+}
+
 /* ---------------------------------------------------------------------
    Derived helpers — every one of these COMPUTES; none of them read a
    stored count, a stored status, or a stored bed total.

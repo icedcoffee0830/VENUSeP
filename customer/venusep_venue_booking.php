@@ -3,6 +3,7 @@
    never drift from the booking pages or admin Venue Management. */
 include __DIR__ . '/../includes/venue-rooms.php';
 include __DIR__ . '/../includes/hostel-rooms.php';
+require_once __DIR__ . '/../includes/room-photos.php';
 /* Who is looking, and the discount rule — so a USeP account sees its price with
    the full price crossed out, and everyone else sees a nudge. This is a PREVIEW:
    the ID decides the discount at approval (includes/pricing.php). */
@@ -16,15 +17,12 @@ $isUsep = usep_is_account($customerContact['email']);
    shared data above is DRAWN. All links go to the same pages as before.
    ===================================================================== */
 
-/* A real photo, if one has been dropped into assets/img/venues/ under the
-   room's id (see the README there). Null = draw the placeholder instead. */
+/* The room's cover photo: the first photo uploaded via admin Venue
+   Management (Edit Room -> Edit photos), or a manually-dropped
+   assets/img/venues/<id>.<ext> (see the README there). Null draws the
+   placeholder illustration instead. */
 function lp_photo($id) {
-  foreach (['jpg', 'jpeg', 'png', 'webp'] as $ext) {
-    if (file_exists(__DIR__ . '/../assets/img/venues/' . $id . '.' . $ext)) {
-      return '../assets/img/venues/' . $id . '.' . $ext;
-    }
-  }
-  return null;
+  return rp_cover_url($id);
 }
 /* One drawn placeholder per KIND of space, reused: hall | gym | bunk | private */
 function lp_art($kind) {

@@ -2,6 +2,7 @@
 /* The hostel's rooms + the availability model live in ONE include, shared with
    the landing page and admin Venue Management, so they cannot drift apart. */
 include_once __DIR__ . '/../includes/hostel-rooms.php';
+require_once __DIR__ . '/../includes/room-photos.php';
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -184,7 +185,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
 $mrUsep    = usep_is_account($customerContact['email']);
 $mrToday   = date('Y-m-d');
 $mrCurrent = isset($_GET['room']) && is_string($_GET['room']) ? $_GET['room'] : '';
-function mr_photo($id) { foreach (['jpg','jpeg','png','webp'] as $e) if (file_exists(__DIR__ . "/../assets/img/venues/$id.$e")) return "../assets/img/venues/$id.$e"; return null; }
+function mr_photo($id) { return rp_cover_url($id); }
 function mr_pic($id, $kind, $badge = '') {
   $ph = mr_photo($id);
   $in = $ph ? '<img class="bk-more-img" loading="lazy" src="' . htmlspecialchars($ph) . '" alt="">'
@@ -289,8 +290,17 @@ const NOW = new Date();
 const TODAY = isoOf(NOW);
 
 /* Rooms come from the ONE PHP source, so this page, the landing page and admin
-   Venue Management can never disagree about what exists. */
-const ROOMS    = <?php echo json_encode($hostelRooms, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+   Venue Management can never disagree about what exists. photoUrls/panorama
+   are merged in from includes/room-photos.php — whatever was uploaded on
+   admin Venue Management (Edit Room -> Edit photos / 360°). */
+<?php
+$mrRoomsWithPhotos = array_map(function ($r) {
+  $r['photoUrls'] = rp_gallery_urls($r['id']);
+  $r['panorama']  = rp_pano_url($r['id']);
+  return $r;
+}, $hostelRooms);
+?>
+const ROOMS    = <?php echo json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 const RATES    = <?php echo json_encode($HOSTEL_RATES); ?>;
 const CR_LABEL = <?php echo json_encode($HOSTEL_CR_LABEL); ?>;
 const HOSTEL   = <?php echo json_encode($HOSTEL_VENUE); ?>;
@@ -640,6 +650,16 @@ function maintDisclosure(R){
     </div>`;
 }
 const PHOTO_TILE = 'background:#e9e7e2;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px);display:flex;align-items:center;justify-content:center';
+
+/* A hero gallery tile: a real uploaded photo (R.photoUrls[i]) if one exists
+   at that index, else the placeholder pattern + "room photo" label. `inner`
+   is extra HTML appended inside the tile (e.g. the "+N photos" overlay). */
+function heroTile(R,i,extraStyle,inner){
+  const url=(R.photoUrls||[])[i];
+  extraStyle=extraStyle||''; inner=inner||'';
+  if(url) return `<div onclick="openGallery()" style="cursor:pointer;background-size:cover;background-position:center;background-image:url('${url}');${extraStyle}">${inner}</div>`;
+  return `<div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE};${extraStyle}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>${inner}</div>`;
+}
 function svgBed(s,c){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c||'currentColor'}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6"/><path d="M2 18h20M2 18v2M22 18v2"/><path d="M6 10V8a2 2 0 0 1 2-2h3v4"/></svg>`; }
 function svgUsers(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`; }
 
@@ -666,16 +686,21 @@ function mountHeroPano(){
   HERO.roomId=state.roomId;
 }
 
-/* Photo gallery lightbox — view-only, mounted outside #app. Placeholder
-   gradient "photos" (no real images yet). */
+/* Photo gallery lightbox — view-only, mounted outside #app. Shows the
+   room's real uploaded photos (R.photoUrls); falls back to the numbered
+   gradient placeholders when the room has none yet. */
 const GAL_GRADS=['#eef1f5,#dfe4ea','#f3eee9,#e6ddd3','#e9eef3,#d5e0ea','#eef3ee,#d9e6da','#f3eef1,#e6d5de','#eaf0f3,#d5e2ea','#f2efe8,#e4dccf','#eef3f0,#dbe7df'];
 function galGrad(i){ return 'background:linear-gradient(135deg,'+GAL_GRADS[i%GAL_GRADS.length]+')'; }
+var GAL_PHOTOS=[];
 function openGallery(){
   const R=getRoom(); if(!R || document.getElementById('galOverlay')) return;
-  const n=Math.max(1, R.photos||4);
+  GAL_PHOTOS=R.photoUrls||[];
+  const n=GAL_PHOTOS.length||Math.max(1, R.photos||4);
   let thumbs='';
   for(let i=0;i<n;i++){
-    thumbs+='<button class="galThumb" data-i="'+i+'" onclick="galSelect('+i+')" style="border:2px solid transparent;border-radius:8px;cursor:pointer;padding:0;aspect-ratio:4/3;'+galGrad(i)+';display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 10px ui-monospace,monospace">Photo '+(i+1)+'</button>';
+    const url=GAL_PHOTOS[i];
+    const bg=url?('background-size:cover;background-position:center;background-image:url(\''+url+'\')'):galGrad(i);
+    thumbs+='<button class="galThumb" data-i="'+i+'" onclick="galSelect('+i+')" style="border:2px solid transparent;border-radius:8px;cursor:pointer;padding:0;aspect-ratio:4/3;'+bg+';display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 10px ui-monospace,monospace">'+(url?'':'Photo '+(i+1))+'</button>';
   }
   const ov=document.createElement('div');
   ov.id='galOverlay';
@@ -694,7 +719,11 @@ function openGallery(){
 }
 function galSelect(i){
   const big=document.getElementById('galBig');
-  if(big){ big.setAttribute('style', galGrad(i)+';border-radius:12px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 14px ui-monospace,monospace'); big.textContent='Photo '+(i+1); }
+  const url=GAL_PHOTOS[i];
+  if(big){
+    if(url){ big.setAttribute('style','background-size:cover;background-position:center;background-image:url(\''+url+'\');border-radius:12px;aspect-ratio:16/9'); big.textContent=''; }
+    else { big.setAttribute('style', galGrad(i)+';border-radius:12px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 14px ui-monospace,monospace'); big.textContent='Photo '+(i+1); }
+  }
   const g=document.getElementById('galGrid');
   if(g) g.querySelectorAll('.galThumb').forEach(function(b){ b.style.borderColor=(+b.getAttribute('data-i')===i)?'#a11626':'transparent'; });
 }
@@ -876,15 +905,13 @@ function detailScreen(){
         <div id="heroPanoSlot" style="grid-row:1 / span 2;position:relative;${PHOTO_TILE}">
           <span style="font:500 13px/1 ui-monospace,Menlo,monospace;color:#9a958c">360° panorama</span>
         </div>
-        <div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
-        <div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
+        ${heroTile(R,0)}
+        ${heroTile(R,1)}
       </div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;width:604px;max-width:100%">
-        ${[1,2,3,4].map(()=>`<div onclick="openGallery()" style="aspect-ratio:1/1;border-radius:10px;overflow:hidden;cursor:pointer;${PHOTO_TILE}"><span style="font:500 10px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>`).join('')}
-        <div onclick="openGallery()" style="aspect-ratio:1/1;border-radius:10px;overflow:hidden;position:relative;cursor:pointer;${PHOTO_TILE}">
-          <span style="font:500 10px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>
-          <div style="position:absolute;inset:0;background:rgba(20,18,15,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600">+${R.photos} photos</div>
-        </div>
+        ${[2,3,4,5].map(i=>heroTile(R,i,'aspect-ratio:1/1;border-radius:10px;overflow:hidden')).join('')}
+        ${heroTile(R,6,'aspect-ratio:1/1;border-radius:10px;overflow:hidden;position:relative',
+          (R.photoUrls||[]).length>7?`<div style="position:absolute;inset:0;background:rgba(20,18,15,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600">+${R.photoUrls.length-6} photos</div>`:'')}
       </div>
 
       <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;margin:22px 2px 4px">

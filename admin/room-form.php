@@ -1052,17 +1052,22 @@ $roomFormCsrf = csrf_token();
         wrap.style.pointerEvents = full ? 'none' : 'auto';
       }
       function vmGalAdd(input) {
+        // input.files is a LIVE FileList, not a snapshot — clearing
+        // input.value before finishing with `files` empties this same
+        // reference too, silently turning the whole upload into a no-op.
+        // Everything that needs to read `files` (the length checks, the
+        // FormData loop) must happen before input.value is touched.
         var files = input.files;
-        input.value = '';
-        if (!files || !files.length) return;
-        if (vmNeedsRoom()) return;
+        if (!files || !files.length) { input.value = ''; return; }
+        if (vmNeedsRoom()) { input.value = ''; return; }
         var room = VMPHOTOS.length;
-        if (room >= VM_MAX_PHOTOS) { alert('This room already has the maximum of ' + VM_MAX_PHOTOS + ' photos.'); return; }
+        if (room >= VM_MAX_PHOTOS) { alert('This room already has the maximum of ' + VM_MAX_PHOTOS + ' photos.'); input.value = ''; return; }
         if (room + files.length > VM_MAX_PHOTOS) {
           alert('Only ' + (VM_MAX_PHOTOS - room) + ' more photo(s) fit — a room can have at most ' + VM_MAX_PHOTOS + '. The rest will be skipped.');
         }
         var body = new FormData();
         for (var i = 0; i < files.length; i++) body.append('files[]', files[i]);
+        input.value = '';   // safe now — the File objects are already captured in `body`
         vmApiPost('upload', body).then(function (res) {
           if (!res.ok) { alert(res.message || 'Could not upload those photos.'); return; }
           VMSEL = (res.photos || []).length - 1;

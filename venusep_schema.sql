@@ -2,8 +2,8 @@
 -- VENUSeP Database Schema
 -- Target: MySQL 8.0+ / MariaDB 10.4+ (XAMPP)
 -- Built to match DB-DECISIONS.md (locked 2026-07-19, refund switch added
--- 2026-09-16). Where this and the first-draft schema differ, DB-DECISIONS.md
--- is the authority.
+-- 2026-09-16, payment timing tied to the switch 2026-09-17). Where this and
+-- the first-draft schema differ, DB-DECISIONS.md is the authority.
 --
 -- SCOPE OF THIS FILE: tables + constraints + seed data, then the logic layer
 -- (functions, triggers, procedures, views) and the application notes.
@@ -310,8 +310,12 @@ CREATE TABLE bookings (
     -- to the policy they agreed to — flipping the switch later neither grants nor
     -- removes refunds on this booking. Covers customer-requested refunds only; a
     -- closure by USeP (reservation_status 'disrupted') is refundable regardless.
+    -- 2026-09-17: the same snapshot fixes WHEN the booking is paid —
+    --   TRUE  = pre-pay : pay after approval, by 1 day before the first day
+    --   FALSE = post-pay: pay after the last day, within postpay_grace_days
+    -- (fn_payment_deadline / sp_approve_booking read it; nothing else decides).
     refunds_allowed     BOOLEAN NOT NULL DEFAULT FALSE,
-    current_deadline_at DATETIME NULL,
+    current_deadline_at DATETIME NULL,                     -- the pay-by moment for the booking's policy (see above)
     customer_notes      TEXT NULL,
     staff_notes         TEXT NULL,
     submitted_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -635,6 +639,7 @@ INSERT INTO system_settings (setting_key, setting_value, value_type, description
   ('discount_percent',                '20', 'decimal', 'USeP-affiliated discount % (dynamic; staff-editable). Snapshotted onto each booking.'),
   ('hostel_pos_deadline_hours',       '72', 'integer', 'Hours an approved hostel booking may sit in await_pos before expiry checks release it.'),
   ('hostel_advance_booking_max_days', '7',  'integer', 'Hostel cannot be reserved more than this many days before check-in. Events: no limit.'),
+  ('postpay_grace_days',              '3',  'integer', 'Refunds OFF only: days after the last booked day (event end / check-out) the customer has to pay. Past it payment_status becomes overdue; nothing is released.'),
   ('refunds_enabled',                 '0',  'boolean', 'Customer refund requests. 0 = OFF (all new bookings non-refundable, the USeP default). Admin-only. Snapshotted onto each booking as bookings.refunds_allowed.');
 
 -- ---- Reservation statuses ----
@@ -648,22 +653,26 @@ INSERT INTO reservation_statuses (code, staff_label, customer_label, sort_order,
   ('disrupted', 'Room closed - awaiting decision',   'Action needed', 7, 0);
 
 -- ---- Payment statuses ----
+-- await_event (2026-09-17): the post-pay holding state. A booking made while
+-- refunds were OFF is approved into it and stays there until its last day has
+-- passed; sp_expire_due_bookings() then opens payment (await_gcash/await_cash).
 INSERT INTO payment_statuses (code, staff_label, customer_label, sort_order) VALUES
   ('locked',            'Payment locked',           'Locked',            1),
-  ('await_pos',         'Awaiting POS - CEDU',      'Awaiting POS',      2),
-  ('await_gcash',       'Awaiting GCash payment',   'Awaiting payment',  3),
-  ('await_cash',        'Awaiting cash payment',    'Awaiting payment',  4),
-  ('under_review',      'Receipt under review',     'Under review',      5),
-  ('confirmed',         'Payment confirmed',        'Paid',              6),
-  ('paid_cash',         'Paid at cashier',          'Paid',              7),
-  ('overdue',           'Payment overdue',          'Overdue',           8),
-  ('expired',           'Expired',                  'Expired',           9),
-  ('refund_requested',  'Refund requested',         'Refund requested',  10),
-  ('refund_correction', 'Refund returned for correction', 'Refund - action needed', 11),
-  ('refund_await_or',   'Refund approved - awaiting Official Receipt', 'Refund - Official Receipt needed', 12),
-  ('refund_processing', 'Refund processing',        'Refund processing', 13),
-  ('refunded',          'Refunded',                 'Refunded',          14),
-  ('refund_denied',     'Refund denied',            'Refund denied',     15);
+  ('await_event',       'Payment due after event',  'Payment pending',   2),
+  ('await_pos',         'Awaiting POS - CEDU',      'Awaiting POS',      3),
+  ('await_gcash',       'Awaiting GCash payment',   'Payment due',       4),
+  ('await_cash',        'Awaiting cash payment',    'Payment due',       5),
+  ('under_review',      'Receipt under review',     'Under review',      6),
+  ('confirmed',         'Payment confirmed',        'Paid',              7),
+  ('paid_cash',         'Paid at cashier',          'Paid',              8),
+  ('overdue',           'Payment overdue',          'Overdue',           9),
+  ('expired',           'Expired',                  'Expired',           10),
+  ('refund_requested',  'Refund requested',         'Refund requested',  11),
+  ('refund_correction', 'Refund returned for correction', 'Refund - action needed', 12),
+  ('refund_await_or',   'Refund approved - awaiting Official Receipt', 'Refund - Official Receipt needed', 13),
+  ('refund_processing', 'Refund processing',        'Refund processing', 14),
+  ('refunded',          'Refunded',                 'Refunded',          15),
+  ('refund_denied',     'Refund denied',            'Refund denied',     16);
 
 -- ---- Venues ----
 INSERT INTO venues (id, venue_code, name, venue_type, description) VALUES
@@ -809,6 +818,81 @@ BEGIN
     RETURN COALESCE(v, 0.00);
 END$$
 
+-- First and last booked day of any booking (venue: start/end date; hostel:
+-- check-in / check-out). Both policies' deadlines hang off these.
+CREATE FUNCTION fn_booking_first_day(p_booking_id BIGINT UNSIGNED)
+RETURNS DATE
+NOT DETERMINISTIC READS SQL DATA
+BEGIN
+    DECLARE v_day DATE;
+    SELECT COALESCE(vbd.start_date, hbd.check_in_date) INTO v_day
+      FROM bookings b
+      LEFT JOIN venue_booking_details  vbd ON vbd.booking_id = b.id
+      LEFT JOIN hostel_booking_details hbd ON hbd.booking_id = b.id
+     WHERE b.id = p_booking_id;
+    RETURN v_day;
+END$$
+
+CREATE FUNCTION fn_booking_last_day(p_booking_id BIGINT UNSIGNED)
+RETURNS DATE
+NOT DETERMINISTIC READS SQL DATA
+BEGIN
+    DECLARE v_day DATE;
+    SELECT COALESCE(vbd.end_date, hbd.check_out_date) INTO v_day
+      FROM bookings b
+      LEFT JOIN venue_booking_details  vbd ON vbd.booking_id = b.id
+      LEFT JOIN hostel_booking_details hbd ON hbd.booking_id = b.id
+     WHERE b.id = p_booking_id;
+    RETURN v_day;
+END$$
+
+-- The pay-by moment for a booking, from ITS policy snapshot (2026-09-17):
+--   pre-pay  (refunds_allowed = TRUE) : 23:59:59 the day before the first day;
+--                                       if that is already past, the first
+--                                       day's start time — pay before it begins.
+--   post-pay (refunds_allowed = FALSE): 23:59:59 postpay_grace_days after the
+--                                       last day.
+CREATE FUNCTION fn_payment_deadline(p_booking_id BIGINT UNSIGNED)
+RETURNS DATETIME
+NOT DETERMINISTIC READS SQL DATA
+BEGIN
+    DECLARE v_prepay BOOLEAN;
+    DECLARE v_type VARCHAR(20);
+    DECLARE v_first DATE;
+    DECLARE v_last DATE;
+    DECLARE v_start TIME DEFAULT '00:00:00';
+    DECLARE v_grace INT DEFAULT 3;
+    DECLARE v_deadline DATETIME;
+
+    SELECT refunds_allowed INTO v_prepay FROM bookings WHERE id = p_booking_id;
+    SET v_first = fn_booking_first_day(p_booking_id);
+    SET v_last  = fn_booking_last_day(p_booking_id);
+    IF v_first IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    IF v_prepay THEN
+        SET v_deadline = TIMESTAMP(DATE_SUB(v_first, INTERVAL 1 DAY), '23:59:59');
+        IF v_deadline <= NOW() THEN
+            SELECT booking_type INTO v_type FROM bookings WHERE id = p_booking_id;
+            IF v_type = 'venue' THEN
+                SELECT COALESCE(MIN(start_time), '00:00:00') INTO v_start
+                  FROM venue_booking_slots WHERE booking_id = p_booking_id AND slot_date = v_first;
+            ELSE
+                SELECT COALESCE(hrd.check_in_time, '00:00:00') INTO v_start
+                  FROM bookings b JOIN hostel_room_details hrd ON hrd.room_id = b.room_id
+                 WHERE b.id = p_booking_id;
+            END IF;
+            SET v_deadline = TIMESTAMP(v_first, v_start);
+        END IF;
+    ELSE
+        SELECT CAST(setting_value AS SIGNED) INTO v_grace
+          FROM system_settings WHERE setting_key = 'postpay_grace_days';
+        SET v_deadline = TIMESTAMP(DATE_ADD(v_last, INTERVAL v_grace DAY), '23:59:59');
+    END IF;
+    RETURN v_deadline;
+END$$
+
 DELIMITER ;
 
 -- ============================================================================
@@ -937,21 +1021,96 @@ DELIMITER ;
 -- ============================================================================
 DELIMITER $$
 
--- Release holds whose deadline has passed. Call before availability/queue reads.
+-- Deadline housekeeping. Call before availability/queue/detail reads.
+--   (1) POST-PAY bookings whose last day has passed: open payment
+--       (await_event -> await_gcash / await_cash). The customer chooses the
+--       channel at checkout; GCash is the default until they pick cash.
+--   (2) PRE-PAY bookings past their pay-by moment: release the hold (as before).
+--   (3) POST-PAY bookings past their pay-by moment: mark OVERDUE. Nothing is
+--       released — the event already happened; chasing it is staff's job.
 CREATE PROCEDURE sp_expire_due_bookings ()
 BEGIN
     SET @venusep_actor_user_id = NULL;
+
+    SET @venusep_action_note = 'Event over; payment window opened.';
+    UPDATE bookings
+        SET payment_status = CASE WHEN payment_method = 'cash' THEN 'await_cash' ELSE 'await_gcash' END
+        WHERE refunds_allowed = FALSE
+          AND payment_status = 'await_event'
+          AND reservation_status IN ('approved','completed')
+          AND fn_booking_last_day(id) < CURDATE();
+
     SET @venusep_action_note = 'Auto-expired by deadline check.';
     UPDATE bookings
         SET reservation_status = 'released', payment_status = 'expired'
-        WHERE reservation_status IN ('pending','approved')
+        WHERE refunds_allowed = TRUE
+          AND reservation_status IN ('pending','approved')
           AND current_deadline_at IS NOT NULL
           AND current_deadline_at <= NOW();
+
+    SET @venusep_action_note = 'Payment not received within the post-event window.';
+    UPDATE bookings
+        SET payment_status = 'overdue'
+        WHERE refunds_allowed = FALSE
+          AND reservation_status IN ('approved','completed')
+          AND payment_status IN ('await_gcash','await_cash','await_pos')
+          AND current_deadline_at IS NOT NULL
+          AND current_deadline_at <= NOW();
+
     SET @venusep_action_note = NULL;
 END$$
 
--- Approve a hostel booking into await_pos with a deadline (POS-deadline hours,
--- capped at check-in). Payment stays locked until the POS is recorded.
+-- Staff approve a request. ONE entry point for both booking types and both
+-- policies (2026-09-17): the status and the deadline follow the booking's
+-- refunds_allowed snapshot, so no page has to know the rule.
+--   venue  + pre-pay : approved / await_gcash|await_cash, pay-by = 1 day before
+--   venue  + post-pay: approved / await_event,            pay-by = last day + grace
+--   hostel + pre-pay : approved / await_pos (POS from CEDU first, as before)
+--   hostel + post-pay: approved / await_event; staff call sp_start_await_pos
+--                      after check-out, then the guest pays within the grace days.
+CREATE PROCEDURE sp_approve_booking (
+    IN p_booking_id BIGINT UNSIGNED,
+    IN p_actor_user_id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_type VARCHAR(20);
+    DECLARE v_prepay BOOLEAN;
+    DECLARE v_method VARCHAR(10);
+    DECLARE v_status VARCHAR(40);
+
+    SELECT booking_type, refunds_allowed, payment_method INTO v_type, v_prepay, v_method
+      FROM bookings WHERE id = p_booking_id AND reservation_status = 'pending';
+    IF v_type IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only a pending booking can be approved.';
+    END IF;
+
+    IF v_type = 'hostel' AND v_prepay THEN
+        CALL sp_start_await_pos(p_booking_id, p_actor_user_id);
+    ELSE
+        IF v_prepay THEN
+            SET v_status = IF(v_method = 'cash', 'await_cash', 'await_gcash');
+        ELSE
+            SET v_status = 'await_event';
+        END IF;
+        SET @venusep_actor_user_id = p_actor_user_id;
+        SET @venusep_action_note = IF(v_prepay, 'Approved; pay before the event.', 'Approved; pay after the event.');
+        UPDATE bookings
+            SET reservation_status = 'approved', payment_status = v_status,
+                current_deadline_at = fn_payment_deadline(p_booking_id),
+                approved_at = COALESCE(approved_at, NOW()),
+                updated_by_user_id = p_actor_user_id
+            WHERE id = p_booking_id;
+        SET @venusep_actor_user_id = NULL;
+        SET @venusep_action_note = NULL;
+    END IF;
+END$$
+
+-- Put a hostel booking into await_pos (POS from CEDU before the guest can pay).
+--   pre-pay : called at approval. Deadline = POS-deadline hours, capped at
+--             check-in; past it the hold is released.
+--   post-pay: called AFTER check-out (2026-09-17). Deadline = the booking's
+--             pay-by moment (last day + grace days); past it the booking is
+--             overdue, not released.
 CREATE PROCEDURE sp_start_await_pos (
     IN p_booking_id BIGINT UNSIGNED,
     IN p_actor_user_id BIGINT UNSIGNED
@@ -961,13 +1120,14 @@ BEGIN
     DECLARE v_ci DATE;
     DECLARE v_cit TIME;
     DECLARE v_type VARCHAR(20);
+    DECLARE v_prepay BOOLEAN;
     DECLARE v_deadline DATETIME;
 
     SELECT CAST(setting_value AS UNSIGNED) INTO v_hours
         FROM system_settings WHERE setting_key = 'hostel_pos_deadline_hours';
 
-    SELECT b.booking_type, hbd.check_in_date, COALESCE(hrd.check_in_time, '00:00:00')
-      INTO v_type, v_ci, v_cit
+    SELECT b.booking_type, b.refunds_allowed, hbd.check_in_date, COALESCE(hrd.check_in_time, '00:00:00')
+      INTO v_type, v_prepay, v_ci, v_cit
     FROM bookings b
     JOIN hostel_booking_details hbd ON hbd.booking_id = b.id
     JOIN hostel_room_details hrd ON hrd.room_id = b.room_id
@@ -977,10 +1137,14 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only hostel bookings can enter await_pos.';
     END IF;
 
-    SET v_deadline = LEAST(DATE_ADD(NOW(), INTERVAL v_hours HOUR), TIMESTAMP(v_ci, v_cit));
+    IF v_prepay THEN
+        SET v_deadline = LEAST(DATE_ADD(NOW(), INTERVAL v_hours HOUR), TIMESTAMP(v_ci, v_cit));
+    ELSE
+        SET v_deadline = fn_payment_deadline(p_booking_id);
+    END IF;
 
     SET @venusep_actor_user_id = p_actor_user_id;
-    SET @venusep_action_note = 'Approved; awaiting POS from CEDU.';
+    SET @venusep_action_note = IF(v_prepay, 'Approved; awaiting POS from CEDU.', 'Checked out; awaiting POS from CEDU.');
     UPDATE bookings
         SET reservation_status = 'approved', payment_status = 'await_pos',
             current_deadline_at = v_deadline,
@@ -1129,6 +1293,10 @@ SELECT
     b.payment_status, ps.staff_label AS payment_staff_label, ps.customer_label AS payment_customer_label,
     b.payment_method, b.is_usep_affiliated, b.affiliation_verified,
     b.room_price, b.discount_percent, b.discount_amount, b.total_amount,
+    b.refunds_allowed,
+    IF(b.refunds_allowed, 'prepay', 'postpay') AS payment_policy,   -- 2026-09-17: when this booking pays
+    fn_booking_first_day(b.id) AS first_day,
+    fn_booking_last_day(b.id)  AS last_day,
     b.current_deadline_at, b.submitted_at, b.updated_at
 FROM bookings b
 JOIN customers c ON c.id = b.customer_id
@@ -1181,7 +1349,9 @@ WHERE mw.from_date <= CURDATE()
 --    room+date lock and rejects overlaps + HARD maintenance).
 -- 3) Use sp_assign_bed() for each occupant->bed (race-safe; rejects HARD
 --    maintenance over the stay).
--- 4) Use sp_start_await_pos() when staff approve a hostel request.
+-- 4) Use sp_approve_booking() when staff approve ANY request — it picks the
+--    status + deadline for the booking's policy. Under post-pay, call
+--    sp_start_await_pos() for a hostel booking after the guest checks out.
 -- 5) Before a direct status UPDATE, set @venusep_actor_user_id and
 --    @venusep_action_note so the audit trigger records who + why.
 -- 6) Availability helpers: fn_room_hard_blocked(room,date),
@@ -1192,4 +1362,11 @@ WHERE mw.from_date <= CURDATE()
 --    booking's refunds_allowed = TRUE (plus the usual eligibility). Changing the
 --    switch writes a system_settings_history row and is admin-only, behind
 --    password re-entry (users.reauth_* columns hold the lockout).
+-- 9) PAYMENT TIMING (2026-09-17) follows the same snapshot. refunds_allowed
+--    TRUE = pre-pay (pay after approval, 1 day before the event; unpaid holds
+--    are released). FALSE = post-pay (payment opens after the last day and is
+--    due within postpay_grace_days; unpaid bookings go OVERDUE, never
+--    released). fn_payment_deadline() is the only place the dates are
+--    computed; sp_expire_due_bookings() opens post-pay windows and marks
+--    overdue. An overdue booking can still be paid — it simply turns Paid late.
 -- ============================================================================

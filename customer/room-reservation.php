@@ -260,6 +260,12 @@ const GCASH_ACCOUNTS = <?php echo json_encode($gcAccounts, JSON_UNESCAPED_SLASHE
    understand before the request can be submitted. Whatever it is at submit time
    is what the booking keeps (bookings.refunds_allowed) — it never changes later. */
 const REFUNDS_ENABLED = <?php echo $REFUNDS_ENABLED ? 'true' : 'false'; ?>;
+/* PAYMENT TIMING follows the same switch (DB-DECISIONS #18). The rule and the
+   date math come from includes/refund-policy.php — the same function every
+   customer page uses — so this page never computes a deadline of its own.
+   refunds ON = pre-pay (pay after approval, 1 day before the event);
+   refunds OFF = post-pay (payment opens after the event, due within PAY_POLICY.graceDays). */
+<?php echo payment_policy_js(); ?>
 /* The venue rooms come from the ONE shared source (includes/venue-rooms.php),
    so this page, the landing page and admin Venue Management cannot disagree. */
 const ROOMS = <?php echo json_encode($venueRooms, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
@@ -325,7 +331,8 @@ let state = {
   payMethod: 'gcash',                                                // 'gcash' | 'cash' (walk-in, pay at the venue office)
   affiliated: isUsepAccount(ACCOUNT.email) ? true : null,           // USeP-affiliated CLAIM. Pre-selected for a USeP account (a preview — the ID decides); null = not chosen yet
   idFile: null,                                                      // uploaded valid ID: null | {name, url} — required to submit
-  approved: false,                                                   // staff approved the ID + reservation (payment unlocked)
+  approved: false,                                                   // staff approved the ID + reservation (pre-pay: payment unlocked)
+  eventOver: false,                                                  // post-pay only: the event has ended, so payment is open
   agreeExact: false,                                                 // EXACT-amount disclaimer ticked?
   agreeNoRefund: false,                                              // "non-refundable" ticked? (required only while refunds are OFF)
   ocr: null,                                                         // receipt check: null | {phase:'reading'|'done', pct, pass, fileName, thumb, rec}
@@ -800,20 +807,30 @@ function submitRequest(){
   /* affiliation is now a required choice, exactly like the ID upload — the price
      depends on it, so it cannot be left unanswered */
   if(!derive().ready || !canSubmitRequest() || state.affiliated===null) return;
+  state.submitted=true;                      // the form is gone for good — browser Back now leaves the flow
   state.screen='pending'; render();
 }
 /* [SIM] mockup stand-in for the staff side (the two UIs aren't connected yet) —
    delete this + its button once real staff approval updates the booking in the DB */
-function demoApprove(){ state.approved=true; state.screen='payment'; render(); }
+function demoApprove(){
+  state.approved=true;
+  /* pre-pay: approval unlocks payment. post-pay: approval only confirms the
+     slot — payment stays locked until the event is over. */
+  state.screen = PAY_POLICY.prepay ? 'payment' : 'pending';
+  render();
+}
+/* [SIM] post-pay only — stands in for the calendar rolling past the last day
+   (the DB does this in sp_expire_due_bookings). */
+function demoEventOver(){ state.eventOver=true; state.screen='payment'; render(); }
 
-/* payment deadline rule: pay at least 1 day before the event; a booking made
-   closer than that pays immediately upon approval */
-function payByInfo(){
-  const d=state.booking.date;
-  if(!d) return { label:'—', late:false };
-  const pb=new Date(new Date(d+'T00:00:00').getTime()-86400000);
-  if(pb<=NOW) return { label:'immediately upon approval — your event is close', late:true };
-  return { label:pb.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}), late:false };
+/* This booking's payment timing — the shared rule (payPolicyFor, from
+   includes/refund-policy.php) applied to the dates being typed. */
+function payByInfo(){ return payPolicyFor(state.booking.date, state.booking.dateEnd||state.booking.date); }
+/* The one-line "when do I pay" sentence, used wherever the deadline is shown. */
+function payWhenText(){
+  const pb=payByInfo();
+  if(pb.policy==='prepay') return pb.late ? 'Once approved, pay <strong>'+pb.label+'</strong>' : 'Once approved, pay by <strong>'+pb.label+'</strong> (1 day before your event)';
+  return 'Payment opens <strong>'+pb.opensLabel+'</strong> (the day after your event) and is due by <strong>'+pb.label+'</strong> — '+pb.grace+' days after your last day. It cannot be paid earlier';
 }
 
 /* ============================================================
@@ -949,7 +966,9 @@ function detailScreen(){
       <h3 style="margin:0 0 4px;font-size:16px;font-weight:660">Reservation policies</h3>
       ${policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')}
       ${policy('Valid ID & approval','Every booking request must include a photo of a <strong>valid ID</strong> (USeP or government-issued). Your reservation stays <strong>pending</strong> — and payment stays locked — until staff approve both the ID and the reservation.')}
-      ${policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')}
+      ${PAY_POLICY.prepay
+        ? policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')
+        : policy('Payment — GCash or cash (after your event)','You pay <strong>after the event</strong>, not before: payment opens the day after your last booked day and is due within <strong>'+PAY_POLICY.graceDays+' days</strong>. Pay online through GCash (send the <strong>exact amount</strong> shown — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment cannot be made earlier. A booking not paid within the window is marked <strong>overdue</strong>; it can still be paid, but overdue accounts may not be able to book again until settled.')}
       ${!REFUNDS_ENABLED
         ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your date, room and details before you submit and pay. If USeP has to close or cancel your venue, the venue office will offer you a <strong>replacement room or a new date</strong> instead; if you cannot accept either, your payment is returned.')
         : policy('Refunds','A refund needs the system transaction receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
@@ -1299,7 +1318,9 @@ function reviewScreen(){
     </div>
     ${!state.idFile?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'
       :!canSubmitRequest()?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Tick that you understand the booking is non-refundable to submit your request</div>':''}
-    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Payment opens after staff approve your ID and reservation — pay via GCash or cash, at least 1 day before your event.</div>
+    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">${PAY_POLICY.prepay
+      ? 'Payment opens after staff approve your ID and reservation — pay via GCash or cash, at least 1 day before your event.'
+      : 'Staff approve your ID and reservation first. Payment opens only <strong>after your event</strong> — pay via GCash or cash within '+PAY_POLICY.graceDays+' days of your last day.'}</div>
   </main>`;
 }
 
@@ -1316,18 +1337,24 @@ function pendingScreen(){
     </div>`;
   return `
   <main style="max-width:600px;margin:0 auto;padding:44px 24px 72px;text-align:center">
-    <div style="width:46px;height:46px;border-radius:999px;background:#fbeee0;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8a5a12" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <div style="width:46px;height:46px;border-radius:999px;background:${state.approved?'#e9f5ef':'#fbeee0'};display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+      ${state.approved
+        ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1c7a4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+        : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8a5a12" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'}
     </div>
-    <h1 style="margin:0 0 8px;font-size:25px;font-weight:720;letter-spacing:-.01em">Request submitted — awaiting approval</h1>
-    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">A venue coordinator will review your <strong>ID and reservation</strong>. Once both are approved, the payment step unlocks — you'll pay via GCash or cash at the venue.</p>
+    <h1 style="margin:0 0 8px;font-size:25px;font-weight:720;letter-spacing:-.01em">${state.approved?'Approved — payment opens after your event':'Request submitted — awaiting approval'}</h1>
+    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">${state.approved
+      ? 'Your ID and reservation are approved and the slot is yours. Nothing to pay yet — payment opens <strong>'+pb.opensLabel+'</strong> and is due by <strong>'+pb.label+'</strong>.'
+      : PAY_POLICY.prepay
+        ? 'A venue coordinator will review your <strong>ID and reservation</strong>. Once both are approved, the payment step unlocks — you\'ll pay via GCash or cash at the venue.'
+        : 'A venue coordinator will review your <strong>ID and reservation</strong>. Once both are approved your slot is confirmed. You pay <strong>after the event</strong> — via GCash or cash, within '+pb.grace+' days of your last day.'}</p>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:4px 18px;margin-top:24px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
-      ${st('Reservation request','Pending staff review','#fdf3e6','#8a5a12')}
-      ${st('Valid ID ('+esc(state.idFile?state.idFile.name:'submitted')+')','Under review','#fdf3e6','#8a5a12')}
+      ${state.approved ? st('Reservation request','Approved','#e9f5ef','#1c7a4f') : st('Reservation request','Pending staff review','#fdf3e6','#8a5a12')}
+      ${state.approved ? st('Valid ID ('+esc(state.idFile?state.idFile.name:'submitted')+')','Approved','#e9f5ef','#1c7a4f') : st('Valid ID ('+esc(state.idFile?state.idFile.name:'submitted')+')','Under review','#fdf3e6','#8a5a12')}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0">
         <span style="font-size:13.5px;color:#4a463f">Payment</span>
-        <span style="padding:4px 11px;border-radius:999px;font-size:12px;background:#fff;border:1px solid rgba(0,0,0,.14);color:#6b675f">Locked until approval</span>
+        <span style="padding:4px 11px;border-radius:999px;font-size:12px;background:#fff;border:1px solid rgba(0,0,0,.14);color:#6b675f">${state.approved?'Opens '+pb.opensLabel:'Locked until approval'}</span>
       </div>
     </div>
 
@@ -1336,15 +1363,18 @@ function pendingScreen(){
         <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Reference</div><div style="font-size:13.5px;font-weight:640">${esc(state.reference)}</div></div>
         <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:13.5px;font-weight:640">${esc(R.name)}</div></div>
         <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${x.d.days>1?'Dates':'Date'}</div><div style="font-size:13.5px;font-weight:640">${esc(x.rangeLabel)}</div></div>
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Fee (pay after approval)</div><div style="font-size:13.5px;font-weight:640">${peso(x.d.totalFee)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${PAY_POLICY.prepay?'Fee (pay after approval)':'Fee (pay after your event)'}</div><div style="font-size:13.5px;font-weight:640">${peso(x.d.totalFee)}</div></div>
       </div>
-      <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">Once approved, pay ${pb.late?'<strong>'+pb.label+'</strong>':'by <strong>'+pb.label+'</strong> (1 day before your event)'} — unpaid reservations may be released after the deadline.</div>
+      <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">${payWhenText()}${PAY_POLICY.prepay?' — unpaid reservations may be released after the deadline.':'. Bookings not paid by then are marked overdue.'}</div>
     </div>
 
     <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
       <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
+      ${!state.approved ? `
       <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">The staff side isn't connected in this mockup — use this to simulate the coordinator approving your ID and reservation.</div>
-      <button onclick="demoApprove()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate staff approval → proceed to payment</button>
+      <button onclick="demoApprove()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">${PAY_POLICY.prepay?'Simulate staff approval → proceed to payment':'Simulate staff approval'}</button>` : `
+      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Payment opens by itself once the calendar passes your last day — use this to jump there.</div>
+      <button onclick="demoEventOver()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate: event is over → proceed to payment</button>`}
     </div>
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse more rooms</button>
@@ -1500,7 +1530,7 @@ function paymentScreen(){
         <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
       </div>
 
-      <div style="font-size:12.5px;color:#4a463f;line-height:1.7;border-top:1px solid rgba(0,0,0,.07);padding-top:13px">Bring your booking reference and a valid ID. Pay <strong>before your event date</strong> — unpaid reservations may be released. You will receive the official transaction receipt at the counter; keep it${REFUNDS_ENABLED?' (it is required for any refund)':''}.</div>
+      <div style="font-size:12.5px;color:#4a463f;line-height:1.7;border-top:1px solid rgba(0,0,0,.07);padding-top:13px">Bring your booking reference and a valid ID. ${PAY_POLICY.prepay?'Pay <strong>before your event date</strong> — unpaid reservations may be released.':'Pay by <strong>'+payByInfo().label+'</strong> — after that the booking is marked overdue.'} You will receive the official transaction receipt at the counter; keep it${REFUNDS_ENABLED?' (it is required for any refund)':''}.</div>
     </div>`;
 
   return `
@@ -1519,8 +1549,10 @@ function paymentScreen(){
     <div style="display:flex;gap:10px;align-items:flex-start;background:#f2faf5;border:1px solid #d4ebdd;border-radius:12px;padding:13px 15px;margin-bottom:18px">
       <span style="width:8px;height:8px;border-radius:999px;background:#2f9e63;margin-top:5px;flex:none"></span>
       <div>
-        <div style="font-size:13.5px;color:#1c7a4f">Request approved — payment unlocked</div>
-        <div style="font-size:12.5px;color:#1c7a4f;opacity:.85;margin-top:1px">Your ID and reservation were approved. Pay ${payByInfo().late?payByInfo().label:'by '+payByInfo().label+' (1 day before your event)'} to secure the slot.</div>
+        <div style="font-size:13.5px;color:#1c7a4f">${PAY_POLICY.prepay?'Request approved — payment unlocked':'Your event is over — payment is open'}</div>
+        <div style="font-size:12.5px;color:#1c7a4f;opacity:.85;margin-top:1px">${PAY_POLICY.prepay
+          ? 'Your ID and reservation were approved. Pay '+(payByInfo().late?payByInfo().label:'by '+payByInfo().label+' (1 day before your event)')+' to secure the slot.'
+          : 'Pay by <strong>'+payByInfo().label+'</strong> — '+PAY_POLICY.graceDays+' days after your last day. After that the booking is marked overdue.'}</div>
       </div>
     </div>
 
@@ -1556,18 +1588,20 @@ function doneScreen(){
     { label:cash?'Amount due':'Amount paid', value:peso(x.d.totalFee) },
   ];
   const bodyCopy = cash
-    ? 'Your booking request was received and the slot is held. Pay <strong>'+peso(x.d.totalFee)+' in cash</strong> at '+esc(CASH_PAY.office)+' — quote your reference at the counter. The reservation is confirmed once the cashier records your payment.'
+    ? (PAY_POLICY.prepay
+      ? 'Your booking request was received and the slot is held. Pay <strong>'+peso(x.d.totalFee)+' in cash</strong> at '+esc(CASH_PAY.office)+' — quote your reference at the counter. The reservation is confirmed once the cashier records your payment.'
+      : 'Pay <strong>'+peso(x.d.totalFee)+' in cash</strong> at '+esc(CASH_PAY.office)+' by <strong>'+payByInfo().label+'</strong> — quote your reference at the counter. Your booking is settled once the cashier records your payment.')
     : (review
       ? 'Your booking request was received, but some receipt details could not be verified automatically. A venue coordinator will <strong>manually review your receipt</strong> before confirming.'
       : 'Your payment and booking request were received. This reservation is <strong>pending staff confirmation</strong> — a venue coordinator will confirm the payment in GCash and approve it shortly.');
   const pill = cash
-    ? { bg:'#fdf3e6', fg:'#8a5a12', t:'Reservation held — awaiting cash payment' }
+    ? { bg:'#fdf3e6', fg:'#8a5a12', t:PAY_POLICY.prepay?'Reservation held — awaiting cash payment':'Awaiting cash payment' }
     : (review
       ? { bg:'#fdf3e6', fg:'#8a5a12', t:'Receipt under manual review' }
       : { bg:'#e9f5ef', fg:'#1c7a4f', t:'Payment recorded — pending staff confirmation' });
   return `
   <main style="max-width:600px;margin:0 auto;padding:52px 24px 72px;text-align:center">
-    <h1 style="margin:0 0 8px;font-size:26px;font-weight:720;letter-spacing:-.01em">Reservation submitted</h1>
+    <h1 style="margin:0 0 8px;font-size:26px;font-weight:720;letter-spacing:-.01em">${PAY_POLICY.prepay?'Reservation submitted':(cash?'Cash payment pending':'Payment submitted')}</h1>
     <p style="margin:0 auto 6px;max-width:440px;font-size:15px;line-height:1.6;color:#4a463f">${bodyCopy}</p>
     <div style="display:inline-block;margin:16px auto 0;padding:8px 16px;border-radius:999px;background:${pill.bg};color:${pill.fg};font-size:13px">Status: ${pill.t}</div>
 
@@ -1786,6 +1820,41 @@ render();
     var alt  = document.querySelector('.bk-more-alt');  if (alt)  reveal(alt, alt);
     var foot = document.querySelector('.bk-footer .bk-footer-grid'); if (foot) reveal(foot.children, foot, { stagger: .08, rise: 16 });
   })();
+</script>
+<script>
+/* ============================================================
+   BROWSER BACK / FORWARD — the steps of this one-page flow are real history
+   entries, so the browser's Back button does what a customer expects:
+     review  → Back → edit details → Back → the landing page
+     payment → Back → the status page
+   Before submission every step is walkable. Once the request is SUBMITTED the
+   form is gone for good (pending/done REPLACE the entry instead of adding one),
+   so Back from there leaves the flow to the landing page rather than showing
+   an editable form for a booking that already exists.
+   ============================================================ */
+(function () {
+  if (typeof state === 'undefined' || typeof render !== 'function' || !window.history || !history.pushState) return;
+  var silent = false;                                  /* true while a popstate is being applied — do not push again */
+  var REPLACE = { pending: 1, done: 1 };               /* screens that stand in for the step before them */
+  var lastScreen = state.screen;
+  history.replaceState({ screen: state.screen }, '');
+  var prevRender = render;
+  render = function () {
+    prevRender.apply(this, arguments);
+    var now = state.screen;
+    if (now === lastScreen) return;
+    lastScreen = now;
+    if (silent) return;
+    (REPLACE[now] ? history.replaceState : history.pushState).call(history, { screen: now }, '');
+  };
+  window.addEventListener('popstate', function (e) {
+    var to = e.state && e.state.screen;
+    if (!to) return;
+    var submitted = state.submitted || (state.screen !== 'detail' && state.screen !== 'review');
+    if (submitted && (to === 'detail' || to === 'review')) { location.replace('venusep_venue_booking.php'); return; }
+    silent = true; state.screen = to; window.scrollTo(0, 0); render(); silent = false;
+  });
+})();
 </script>
 </body>
 </html>

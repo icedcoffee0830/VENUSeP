@@ -553,8 +553,13 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
         </div>
         <div class="lp-step">
           <span class="lp-step-n">4</span>
+<?php if ($REFUNDS_ENABLED): /* pre-pay — the refund switch also sets payment timing (DB-DECISIONS #18) */ ?>
           <h3>Pay before your date</h3>
           <p>GCash or over the counter, at least one day before the event. Then your booking is confirmed.</p>
+<?php else: ?>
+          <h3>Pay after your event</h3>
+          <p>Nothing to pay up front. Once your event is over, pay by GCash or over the counter within <?php echo (int) $POSTPAY_GRACE_DAYS; ?> days.</p>
+<?php endif; ?>
         </div>
       </div>
     </div>

@@ -40,8 +40,15 @@ $customerBookingSeeds = [
        NOT yet happened, so every row above (all past events) correctly offers no
        refund — these three exist so the path is demonstrable. */
     ['213','Alumni Grand Ballroom','2026-10-03','College Awards Night','Approved','Paid',5000,'GCash'],
-    ['214','CIC Audio-Visual Room','2026-09-26','Faculty Research Colloquium','Approved','Paid',2000,'Cash'],
-    ['215','Obrero Function Hall','2026-11-14','Alumni Homecoming Dinner','Approved','Paid',3000,'GCash'],
+    /* [SIM] POST-PAY rows (DB-DECISIONS #18, 2026-09-17). A booking made while
+       refunds were OFF cannot be paid before its event, so a future one is
+       "Payment pending"; a finished one is "Payment due" until the grace days
+       run out, then "Overdue" (still payable). The labels are the customer
+       labels of payment_statuses await_event / await_gcash|await_cash / overdue. */
+    ['214','CIC Audio-Visual Room','2026-09-26','Faculty Research Colloquium','Approved','Payment pending',2000,'Cash'],
+    ['215','Obrero Function Hall','2026-11-14','Alumni Homecoming Dinner','Approved','Payment pending',3000,'GCash'],
+    ['216','USeP Gymnasium','2026-09-15','Faculty Sportsfest','Completed','Payment due',8000,'GCash'],
+    ['217','Heritage Function Room','2026-09-05','Department Orientation','Completed','Overdue',2500,'Cash'],
 ];
 
 /* The refund switch (system_settings.refunds_enabled) — the one real,
@@ -109,6 +116,9 @@ foreach ($customerBookingSeeds as $seed) {
         'method'        => $seed[7] ?? 'GCash',
         'refundsAllowed'=> in_array($seed[0], $cbMadeWhileRefundsOn, true),   /* bookings.refunds_allowed */
     ];
+    /* WHEN this booking pays — from the same snapshot, via the one shared rule
+       (includes/refund-policy.php). The history page prints the date. */
+    $row['payment'] = payment_policy_for($row['refundsAllowed'], $seed[2]);
     $row['refundable'] = cb_is_refundable($row);
     $customerBookings[] = $row;
 }

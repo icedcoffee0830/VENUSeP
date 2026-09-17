@@ -4,6 +4,7 @@
 include __DIR__ . '/../includes/venue-rooms.php';
 include __DIR__ . '/../includes/hostel-rooms.php';
 require_once __DIR__ . '/../includes/room-photos.php';
+require_once __DIR__ . '/../includes/venue-photos.php';
 /* Who is looking, and the discount rule — so a USeP account sees its price with
    the full price crossed out, and everyone else sees a nudge. This is a PREVIEW:
    the ID decides the discount at approval (includes/pricing.php). */
@@ -20,8 +21,14 @@ $isUsep = usep_is_account($customerContact['email']);
 /* The room's cover photo: the first photo uploaded via admin Venue
    Management (Edit Room -> Edit photos), or a manually-dropped
    assets/img/venues/<id>.<ext> (see the README there). Null draws the
-   placeholder illustration instead. */
-function lp_photo($id) {
+   placeholder illustration instead. $venueName set = this is a VENUE
+   card, not a room card — checked against venues.cover_photo (admin
+   Venue Management -> Edit Details -> Change photo) first. */
+function lp_photo($id, $venueName = null) {
+  if ($venueName !== null) {
+    $venuePhoto = vp_cover_url_by_name($venueName);
+    if ($venuePhoto) return $venuePhoto;
+  }
   return rp_cover_url($id);
 }
 /* One drawn placeholder per KIND of space, reused: hall | gym | bunk | private */
@@ -31,8 +38,8 @@ function lp_art($kind) {
 /* The picture area of a card: the real photo if one exists, else the drawing
    plus a "Photo slot" tag; a scrim over both; any badge on top. Every card on
    the page draws its picture through this one function. */
-function lp_photo_block($id, $kind, $badge = '') {
-  $photo = lp_photo($id);
+function lp_photo_block($id, $kind, $badge = '', $venueName = null) {
+  $photo = lp_photo($id, $venueName);
   $inner = $photo
     ? '<img class="lp-ph-img" loading="lazy" decoding="async" src="' . htmlspecialchars($photo) . '" alt="">'
     : lp_art($kind);
@@ -499,7 +506,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
         $slug  = $lpVenueSlug[$venueName] ?? 'venue';
         $anchor = 'venue-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($venueName)); ?>
         <a class="lp-card lp-venue-card lp-lift" href="#<?php echo htmlspecialchars($anchor); ?>">
-          <?php echo lp_photo_block($slug, $lpVenueArt[$venueName] ?? 'hall'); ?>
+          <?php echo lp_photo_block($slug, $lpVenueArt[$venueName] ?? 'hall', '', $venueName); ?>
           <div class="lp-card-body">
             <h3><?php echo htmlspecialchars($venueName); ?></h3>
             <p class="lp-card-desc"><?php echo htmlspecialchars($lpVenueBlurb[$venueName] ?? ''); ?></p>
@@ -511,7 +518,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
         </a>
 <?php endforeach; ?>
         <a class="lp-card lp-venue-card lp-lift" href="#hostel-listings">
-          <?php echo lp_photo_block('venue-usep-hostel', 'bunk'); ?>
+          <?php echo lp_photo_block('venue-usep-hostel', 'bunk', '', $HOSTEL_VENUE); ?>
           <div class="lp-card-body">
             <h3><?php echo htmlspecialchars($HOSTEL_VENUE); ?></h3>
             <p class="lp-card-desc">Bunk rooms booked by the bed, with communal or private bathrooms.</p>

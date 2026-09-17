@@ -130,6 +130,7 @@ CREATE TABLE venues (
     name                VARCHAR(150) NOT NULL,
     venue_type          ENUM('event','hostel') NOT NULL,   -- renamed from venue_kind (#12)
     description         TEXT NULL,
+    cover_photo         VARCHAR(500) NULL,                 -- relative path, set by admin/venue-photo-api.php (one photo per venue, unlike room_media's gallery)
     address             VARCHAR(500) NULL,
     contact_phone       VARCHAR(30) NULL,
     contact_email       VARCHAR(190) NULL,                 -- kept + to be added to UI (#13)

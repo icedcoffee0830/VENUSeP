@@ -1,5 +1,15 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
-<?php ?>
+<?php
+/* Venue photos are DB-backed (venues.cover_photo) — see
+   includes/venue-photos.php for why this is a single column, not a
+   room_media-style gallery. */
+require_once __DIR__ . '/../includes/venue-photos.php';
+
+$venueId = isset($_GET['id']) && ctype_digit((string) $_GET['id']) ? (int) $_GET['id'] : 0;
+$venueFormRow = $venueId ? vp_venue_row($venueId) : null;
+if ($venueFormRow === null) $venueId = 0;   // unknown id — behaves like Add
+$venueFormCsrf = csrf_token();
+?>
 <!DOCTYPE html>
 <!-- ==================================================================
   VENUE FORM — VENUSeP merged system (ported from the AdminLTE mockup)
@@ -416,28 +426,38 @@
           <div class="container-fluid">
             <div class="vm-page">
       <a class="vm-back" href="venue-management.php">&larr; Back to Venue Management</a>
-      <h1 class="vm-title">Edit Venue (Location)</h1>
-      <p class="vm-subtitle">A venue is a location that holds rooms. It is not bookable.</p>
+      <h1 class="vm-title"><?php echo $venueId ? 'Edit Venue (Location)' : 'Add Venue'; ?></h1>
+      <p class="vm-subtitle">A venue is a location that holds rooms. It is not bookable.<?php if (!$venueId): ?> Photos can be added once the venue is saved and has an id.<?php endif; ?></p>
 
       <form class="vm-panel" onsubmit="return false">
+        <input type="hidden" id="vpVenueId" value="<?php echo (int) $venueId; ?>" />
+        <input type="hidden" id="vpCsrf" value="<?php echo htmlspecialchars($venueFormCsrf); ?>" />
         <!-- Single image -->
-        <div class="vm-image">
-          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h6" />
-          </svg>
-          <button type="button" class="vm-photo-btn">✎ Change photo</button>
+        <div class="vm-image" id="vpImageArea">
+<?php $venueCover = $venueFormRow ? $venueFormRow['cover_photo'] : null; ?>
+          <div id="vpImageSlot" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+<?php if ($venueCover): ?>
+            <img id="vpCoverImg" src="<?php echo htmlspecialchars($venueCover); ?>" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px" />
+<?php else: ?>
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h6" />
+            </svg>
+<?php endif; ?>
+          </div>
+          <label class="vm-photo-btn" style="cursor:pointer">✎ Change photo<input id="vpPhotoInput" type="file" accept="image/*" onchange="vpChangePhoto(this)" style="display:none" /></label>
+          <button type="button" class="vm-photo-btn" id="vpRemoveBtn" style="right:auto;left:12px" onclick="vpRemovePhoto()"<?php echo $venueCover ? '' : ' hidden'; ?>>Remove photo</button>
         </div>
 
         <hr class="vm-divider" />
 
         <div class="vm-field">
           <label for="venueName">Venue Name</label>
-          <input id="venueName" class="vm-control" type="text" value="Bahay Alumni" placeholder="e.g. Bahay Alumni" />
+          <input id="venueName" class="vm-control" type="text" value="<?php echo htmlspecialchars($venueFormRow ? $venueFormRow['name'] : ''); ?>" placeholder="e.g. Bahay Alumni" />
         </div>
 
         <div class="vm-field">
           <label for="venueDesc">Description</label>
-          <textarea id="venueDesc" class="vm-control" rows="3" placeholder="Short description of the location">Heritage location for alumni events and functions.</textarea>
+          <textarea id="venueDesc" class="vm-control" rows="3" placeholder="Short description of the location"><?php echo htmlspecialchars($venueFormRow ? $venueFormRow['description'] : ''); ?></textarea>
         </div>
 
         <hr class="vm-divider" />
@@ -481,7 +501,7 @@
 
         <div class="vm-form-foot">
           <a class="vm-btn vm-btn-outline" href="venue-management.php">Cancel</a>
-          <button type="button" class="vm-btn vm-btn-primary">Save Changes</button>
+          <button type="button" class="vm-btn vm-btn-primary" onclick="vpSaveChanges()">Save Changes</button>
         </div>
       </form>
             </div>
@@ -491,7 +511,94 @@
     </div>
 
 <!-- ============================================================
-         [6] PAGE SCRIPT — this page's own JS (UI-only, no backend):
+         [6a] PAGE SCRIPT: venue photo — "Change photo" / "Remove
+         photo" call admin/venue-photo-api.php so the file is actually
+         stored under assets/img/venues/covers/<venue id>.<ext> and the
+         venue's cover_photo column, surviving a reload.
+         ============================================================ -->
+    <script>
+      var VP_VENUE_ID = document.getElementById('vpVenueId').value;
+      var VP_CSRF = document.getElementById('vpCsrf').value;
+      var VP_PLACEHOLDER_SVG = '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h6"/></svg>';
+
+      function vpNeedsVenue() {
+        if (VP_VENUE_ID && VP_VENUE_ID !== '0') return false;
+        alert('Save this venue first — a photo is attached to a saved venue.');
+        return true;
+      }
+      function vpParseApiResponse(r) {
+        return r.text().then(function (text) {
+          try { return JSON.parse(text); }
+          catch (e) { throw new Error('Unexpected response from the server (HTTP ' + r.status + '): ' + text.slice(0, 300)); }
+        });
+      }
+      function vpApiPost(action, extra) {
+        var body = extra instanceof FormData ? extra : new FormData();
+        body.append('action', action);
+        body.append('venue_id', VP_VENUE_ID);
+        body.append('csrf', VP_CSRF);
+        return fetch('venue-photo-api.php', { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(vpParseApiResponse);
+      }
+      function vpSetCover(url) {
+        var slot = document.getElementById('vpImageSlot');
+        var btn = document.getElementById('vpRemoveBtn');
+        if (slot) slot.innerHTML = url ? '<img id="vpCoverImg" src="' + url + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px" />' : VP_PLACEHOLDER_SVG;
+        if (btn) btn.hidden = !url;
+      }
+      function vpChangePhoto(input) {
+        // input.files is a LIVE FileList — read what we need from it
+        // before clearing input.value, or the reset empties it too.
+        var f = input.files && input.files[0];
+        if (!f) { input.value = ''; return; }
+        if (vpNeedsVenue()) { input.value = ''; return; }
+        var body = new FormData();
+        body.append('file', f);
+        input.value = '';
+        vpSetCover(URL.createObjectURL(f));   // instant local preview
+        vpApiPost('upload', body).then(function (res) {
+          if (!res.ok) { alert(res.message || 'Could not save the photo.'); vpSetCover(null); return; }
+          vpSetCover(res.cover);
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); vpSetCover(null); });
+      }
+      function vpRemovePhoto() {
+        if (vpNeedsVenue()) return;
+        if (!confirm('Remove this venue\'s photo?')) return;
+        vpApiPost('delete').then(function (res) {
+          if (!res.ok) { alert(res.message || 'Could not remove the photo.'); return; }
+          vpSetCover(null);
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+      }
+
+      /* "Save Changes" — the photo already saves itself the moment you
+         change/remove it; Name and Description save here, to
+         venues.name / venues.description via admin/venue-save.php.
+         Assigned Staff on this form is still [SIM] — no venue-to-staff
+         table exists in the schema, so the confirmation says so rather
+         than pretend. */
+      function vpSaveChanges() {
+        if (vpNeedsVenue()) return;
+        var name = document.getElementById('venueName').value.trim();
+        var description = document.getElementById('venueDesc').value.trim();
+        if (!name) { alert('Enter a venue name.'); return; }
+
+        var body = new FormData();
+        body.append('venue_id', VP_VENUE_ID);
+        body.append('name', name);
+        body.append('description', description);
+        body.append('csrf', VP_CSRF);
+        fetch('venue-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(vpParseApiResponse)
+          .then(function (res) {
+            if (!res.ok) { alert(res.message || 'Could not save the venue.'); return; }
+            alert('Venue saved.\n\n(Assigned Staff on this form is not connected to storage yet.)');
+            location.href = 'venue-management.php';
+          })
+          .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+      }
+    </script>
+    <!-- ============================================================
+         [6b] PAGE SCRIPT — this page's own JS (UI-only, no backend):
          · togglePicker()  show/hide the "Add Staff" picker
          · addStaff()      move a person from the picker to the list
          [SIM] adding/removing staff only changes the page in memory —

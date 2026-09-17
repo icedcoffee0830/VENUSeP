@@ -708,7 +708,7 @@ $roomFormCsrf = csrf_token();
 
         <div class="vm-form-foot">
           <a class="vm-btn vm-btn-outline" href="venue-management.php">Cancel</a>
-          <button type="button" class="vm-btn vm-btn-primary">Save Changes</button>
+          <button type="button" class="vm-btn vm-btn-primary" onclick="vmSaveChanges()">Save Changes</button>
         </div>
         </div>
 
@@ -974,6 +974,7 @@ $roomFormCsrf = csrf_token();
     <script>
       var VMPHOTOS = [];   // [{file, url}], cover-first — mirrors the server
       var VMSEL = 0;
+      var VM_MAX_PHOTOS = 5;   // overwritten from the server's state on load (ROOM_PHOTO_MAX_COUNT)
 
       function vmSetShot(el, url, iconSvg) {
         if (!el) return;
@@ -997,9 +998,11 @@ $roomFormCsrf = csrf_token();
       }
       function vmApplyState(state) {
         VMPHOTOS = state.photos || [];
+        if (state.maxPhotos) VM_MAX_PHOTOS = state.maxPhotos;
         if (VMSEL >= VMPHOTOS.length) VMSEL = 0;
         vmRefreshThumbs();
         vmGalRender();
+        vmGalRenderAdd();
       }
       function vmLoadPhotos() {
         vmInitPano(VM_SAMPLE_PANO);   // shown immediately; swapped for the real one below if saved
@@ -1020,20 +1023,40 @@ $roomFormCsrf = csrf_token();
           '<div style="background:#fff;border-radius:14px;max-width:960px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--vm-font);color:var(--vm-text)">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--vm-border)"><div style="font-weight:700">Room photos</div><button type="button" onclick="vmCloseGallery()" style="background:none;border:none;font-size:20px;color:#606a75;cursor:pointer">&times;</button></div>' +
           '<div style="padding:16px 18px;overflow:auto">' +
-          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-weight:700;font-size:.95rem">Venue uploads</div><label class="vm-btn vm-btn-outline vm-pano-btn" style="min-height:2rem;padding:0 .9rem;display:inline-flex;align-items:center">Add photos<input type="file" accept="image/*" multiple onchange="vmGalAdd(this)" /></label></div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-weight:700;font-size:.95rem">Venue uploads <span id="vmGalCount" style="font-weight:400;color:#8a857d"></span></div><label id="vmGalAddWrap" class="vm-btn vm-btn-outline vm-pano-btn" style="min-height:2rem;padding:0 .9rem;display:inline-flex;align-items:center"><span id="vmGalAddLabel">Add photos</span><input id="vmGalAddInput" type="file" accept="image/*" multiple onchange="vmGalAdd(this)" /></label></div>' +
           '<div id="vmGalBig" class="vm-galbig"></div>' +
           '<div id="vmGalGrid" class="vm-galgrid"></div>' +
-          '<p style="color:#8a857d;font-size:.78rem;margin:10px 2px 0">Click a photo to make it the cover. The &times; on a thumbnail removes it.</p>' +
+          '<p style="color:#8a857d;font-size:.78rem;margin:10px 2px 0">Click a photo to make it the cover. The &times; on a thumbnail removes it. Up to ' + VM_MAX_PHOTOS + ' photos per room.</p>' +
           '</div></div>';
         ov.addEventListener('click', function (e) { if (e.target === ov) vmCloseGallery(); });
         document.body.appendChild(ov);
         vmGalRender();
+        vmGalRenderAdd();
+      }
+      function vmGalRenderAdd() {
+        var count = document.getElementById('vmGalCount');
+        var wrap = document.getElementById('vmGalAddWrap');
+        var label = document.getElementById('vmGalAddLabel');
+        var input = document.getElementById('vmGalAddInput');
+        if (!count || !wrap || !label || !input) return;   // overlay not open
+        var full = VMPHOTOS.length >= VM_MAX_PHOTOS;
+        count.textContent = '(' + VMPHOTOS.length + ' of ' + VM_MAX_PHOTOS + ')';
+        label.textContent = full ? 'Maximum reached' : 'Add photos';
+        input.disabled = full;
+        wrap.style.opacity = full ? '.5' : '1';
+        wrap.style.cursor = full ? 'default' : 'pointer';
+        wrap.style.pointerEvents = full ? 'none' : 'auto';
       }
       function vmGalAdd(input) {
         var files = input.files;
         input.value = '';
         if (!files || !files.length) return;
         if (vmNeedsRoom()) return;
+        var room = VMPHOTOS.length;
+        if (room >= VM_MAX_PHOTOS) { alert('This room already has the maximum of ' + VM_MAX_PHOTOS + ' photos.'); return; }
+        if (room + files.length > VM_MAX_PHOTOS) {
+          alert('Only ' + (VM_MAX_PHOTOS - room) + ' more photo(s) fit — a room can have at most ' + VM_MAX_PHOTOS + '. The rest will be skipped.');
+        }
         var body = new FormData();
         for (var i = 0; i < files.length; i++) body.append('files[]', files[i]);
         vmApiPost('upload', body).then(function (res) {
@@ -1090,6 +1113,21 @@ $roomFormCsrf = csrf_token();
         }).join('');
       }
       function vmCloseGallery() { var ov = document.getElementById('vmGalOverlay'); if (ov) ov.remove(); }
+
+      /* "Save Changes" — photos and the 360° tour already save themselves the
+         moment you add/remove/reorder them (see vmApiPost above), so there is
+         nothing left to submit for them. This button just confirms that and
+         returns to Venue Management. The other fields on this form (name,
+         capacity, rate, maintenance, amenities) are still [SIM] — same as
+         everywhere else in this mockup — so we say so rather than pretend. */
+      function vmSaveChanges() {
+        if (!VM_ROOM_ID) {
+          alert('This form can\'t create a new room yet — open an existing room from Venue Management to add photos and a 360° tour.');
+          return;
+        }
+        alert('Photos and the 360° tour are saved.\n\n(Name, capacity, rate, maintenance and amenities on this form are not connected to storage yet.)');
+        location.href = 'venue-management.php';
+      }
 
       vmLoadPhotos();
     </script>

@@ -29,7 +29,7 @@ function rpa_reply($status, array $data) {
 }
 
 function rpa_state($roomId) {
-  return ['photos' => rp_list_photos($roomId), 'pano' => rp_pano_url($roomId)];
+  return ['photos' => rp_list_photos($roomId), 'pano' => rp_pano_url($roomId), 'maxPhotos' => ROOM_PHOTO_MAX_COUNT];
 }
 
 venusep_session_start();

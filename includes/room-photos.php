@@ -24,6 +24,7 @@ define('ROOM_PHOTO_WEB_BASE', '../assets/img/venues/rooms');   // relative from 
 define('ROOM_ID_RE', '/^[a-zA-Z0-9_-]{1,40}$/');
 define('ROOM_PHOTO_ALLOWED_EXT', ['jpg', 'jpeg', 'png', 'webp']);
 define('ROOM_PHOTO_MAX_BYTES', 8 * 1024 * 1024);   // 8MB per file
+define('ROOM_PHOTO_MAX_COUNT', 5);                 // gallery photos per room (the 360° is separate, one only)
 
 function rp_room_id_valid($id) {
   return is_string($id) && preg_match(ROOM_ID_RE, $id) === 1;
@@ -152,6 +153,10 @@ function rp_save_order($id, array $files) {
    the gallery was empty. */
 function rp_add_photo($id, $tmpPath, $originalName, &$error) {
   if (!rp_room_id_valid($id)) { $error = 'Invalid room.'; return null; }
+  if (count(rp_list_photos($id)) >= ROOM_PHOTO_MAX_COUNT) {
+    $error = 'This room already has the maximum of ' . ROOM_PHOTO_MAX_COUNT . ' photos. Remove one before adding another.';
+    return null;
+  }
   $ext = rp_validate_image($tmpPath, $originalName, $error);
   if ($ext === null) return null;
 

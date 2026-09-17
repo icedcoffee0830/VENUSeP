@@ -459,7 +459,9 @@ $fqApp = isset($_GET['in']) && $_GET['in'] === 'app';
         gsap.to(el, { opacity: on ? 1 : 0, y: on ? 0 : 24, duration: on ? 1 : 0.4, ease: 'power3.out', overwrite: 'auto',
                       delay: on && i < 2 ? i * 0.12 : 0, clearProps: on ? 'transform' : '' });
       }
-      ScrollTrigger.create({ trigger: el, start: 'top 90%', end: 'bottom top',
+      /* the sticky TOC rides along with the whole FAQ body, so it stays until the BODY ends — not its own slot */
+      var sticky = el.classList.contains('fq-toc') ? el.parentElement : el;
+      ScrollTrigger.create({ trigger: el, start: 'top 90%', endTrigger: sticky, end: 'bottom top',
         onToggle: function (s) { paint(s.isActive); }, onRefresh: function (s) { paint(s.isActive); } });
     });
   })();

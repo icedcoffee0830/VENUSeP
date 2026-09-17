@@ -4,7 +4,7 @@
    venue that exists — add a venue there and it appears here automatically. */
 include __DIR__ . '/../includes/venues.php';
 /* Room photos are keyed by the room's id — see includes/room-photos.php
-   for why this is filesystem-backed rather than a DB table. */
+   for how uploads are stored (DB row in room_media + the file on disk). */
 require_once __DIR__ . '/../includes/room-photos.php';
 include __DIR__ . '/../includes/venue-rooms.php';
 
@@ -205,7 +205,9 @@ $roomFormCsrf = csrf_token();
       .vm-thumbs {
         display: grid;
         gap: 8px;
-        grid-template-columns: repeat(5, 1fr);
+        /* 2 side shots + 3 thumbs = 5 tiles total, matching the 5-photo cap
+           (ROOM_PHOTO_MAX_COUNT) — no tile is ever left with nothing to show. */
+        grid-template-columns: repeat(3, 1fr);
         margin-top: 8px;
         max-width: 100%;
         width: 604px;
@@ -670,16 +672,6 @@ $roomFormCsrf = csrf_token();
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
             </svg>
-          </div>
-          <div class="vm-shot" id="vmThumb3">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
-            </svg>
-          </div>
-          <div class="vm-shot" id="vmThumb4">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
-            </svg>
             <button type="button" class="vm-edit-photos" onclick="vmOpenGallery()">✎ Edit photos</button>
           </div>
         </div>
@@ -914,9 +906,20 @@ $roomFormCsrf = csrf_token();
         alert('Save this room first — photos are attached to a saved room.');
         return true;
       }
+      /* Parses the response as JSON, but if the server sent something else
+         (an HTML error page, a stray PHP warning ahead of the JSON, a
+         redirect to the login page) the failure says exactly what came
+         back instead of the generic "could not reach the server" — that
+         message used to fire for this case too, which hid the real cause. */
+      function vmParseApiResponse(r) {
+        return r.text().then(function (text) {
+          try { return JSON.parse(text); }
+          catch (e) { throw new Error('Unexpected response from the server (HTTP ' + r.status + '): ' + text.slice(0, 300)); }
+        });
+      }
       function vmApiGet(action) {
         return fetch(VM_API + '?action=' + encodeURIComponent(action) + '&room_id=' + encodeURIComponent(VM_ROOM_ID), { credentials: 'same-origin' })
-          .then(function (r) { return r.json(); });
+          .then(vmParseApiResponse);
       }
       function vmApiPost(action, extra) {
         var body = extra instanceof FormData ? extra : new FormData();
@@ -924,7 +927,7 @@ $roomFormCsrf = csrf_token();
         body.append('room_id', VM_ROOM_ID);
         body.append('csrf', VM_CSRF);
         return fetch(VM_API, { method: 'POST', body: body, credentials: 'same-origin' })
-          .then(function (r) { return r.json(); });
+          .then(vmParseApiResponse);
       }
 
       var vmPano = null;
@@ -953,14 +956,14 @@ $roomFormCsrf = csrf_token();
         vmApiPost('upload_pano', body).then(function (res) {
           if (!res.ok) { alert(res.message || 'Could not save the 360° photo.'); return; }
           vmInitPano(res.pano || VM_SAMPLE_PANO);
-        }).catch(function () { alert('Could not reach the server.'); });
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
       function vmClearPano() {
         if (vmNeedsRoom()) return;
         vmApiPost('delete_pano').then(function (res) {
           if (!res.ok) { alert(res.message || 'Could not remove the 360° photo.'); return; }
           vmPanoPlaceholder();
-        }).catch(function () { alert('Could not reach the server.'); });
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
     </script>
     <!-- Photo gallery manager: upload / delete / pick the cover — all saved
@@ -985,11 +988,11 @@ $roomFormCsrf = csrf_token();
         var urls = VMPHOTOS.map(function (p) { return p.url; });
         vmSetShot(document.getElementById('vmSideShot0'), urls[0], VM_ICON_28);
         vmSetShot(document.getElementById('vmSideShot1'), urls[1], VM_ICON_28);
-        for (var i = 0; i < 5; i++) {
+        for (var i = 0; i < 3; i++) {
           var el = document.getElementById('vmThumb' + i);
           if (!el) continue;
           var url = urls[i + 2];
-          if (i === 4) {
+          if (i === 2) {
             el.innerHTML = (url ? '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0" alt="" />' : VM_ICON_22)
               + '<button type="button" class="vm-edit-photos" onclick="vmOpenGallery()">✎ Edit photos</button>';
           } else {
@@ -1009,10 +1012,10 @@ $roomFormCsrf = csrf_token();
         vmInitPano(VM_SAMPLE_PANO);   // shown immediately; swapped for the real one below if saved
         if (!VM_ROOM_ID) return;
         vmApiGet('list').then(function (res) {
-          if (!res.ok) return;
+          if (!res.ok) { console.error('vmLoadPhotos: server replied not-ok:', res); return; }
           vmApplyState(res);
           if (res.pano) vmInitPano(res.pano);
-        }).catch(function () {});
+        }).catch(function (err) { console.error('vmLoadPhotos failed — photos/360 may not reflect what is actually saved:', err); });
       }
 
       function vmOpenGallery() {
@@ -1065,7 +1068,7 @@ $roomFormCsrf = csrf_token();
           VMSEL = (res.photos || []).length - 1;
           vmApplyState(res);
           if (res.warning) alert(res.warning);
-        }).catch(function () { alert('Could not reach the server.'); });
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
       function vmGalSelect(i) {
         VMSEL = i;
@@ -1080,7 +1083,7 @@ $roomFormCsrf = csrf_token();
           if (!res.ok) return;
           VMSEL = 0;
           vmApplyState(res);
-        }).catch(function () {});
+        }).catch(function (err) { console.error('vmGalSelect reorder failed:', err); });
       }
       function vmGalDelete(i, e) {
         if (e) e.stopPropagation();
@@ -1092,7 +1095,7 @@ $roomFormCsrf = csrf_token();
         vmApiPost('delete', body).then(function (res) {
           if (!res.ok) { alert(res.message || 'Could not remove that photo.'); return; }
           vmApplyState(res);
-        }).catch(function () { alert('Could not reach the server.'); });
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
       function vmGalRender() {
         var big = document.getElementById('vmGalBig');
@@ -1145,7 +1148,7 @@ $roomFormCsrf = csrf_token();
             alert('Room saved.\n\n(Capacity, rate, maintenance and amenities on this form are not connected to storage yet.)');
             location.href = 'venue-management.php';
           })
-          .catch(function () { alert('Could not reach the server.'); });
+          .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
 
       vmLoadPhotos();

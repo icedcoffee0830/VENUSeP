@@ -1105,10 +1105,11 @@ function detailScreen(){
         ${heroTile(R,0)}
         ${heroTile(R,1)}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;width:604px;max-width:100%">
-        ${[2,3,4,5].map(i=>heroTile(R,i,'aspect-ratio:1/1;border-radius:10px;overflow:hidden')).join('')}
-        ${heroTile(R,6,'aspect-ratio:1/1;border-radius:10px;overflow:hidden;position:relative',
-          (R.photoUrls||[]).length>7?`<div style="position:absolute;inset:0;background:rgba(20,18,15,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600">+${R.photoUrls.length-6} photos</div>`:'')}
+      <!-- 2 side shots above + 3 thumbs here = 5 tiles total, matching the
+           5-photo cap (ROOM_PHOTO_MAX_COUNT) — never more empty slots than
+           a room could actually have photos for. -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;width:604px;max-width:100%">
+        ${[2,3,4].map(i=>heroTile(R,i,'aspect-ratio:1/1;border-radius:10px;overflow:hidden')).join('')}
       </div>
 
       <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;margin:22px 2px 4px">

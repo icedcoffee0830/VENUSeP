@@ -31,6 +31,11 @@ $placeholderBookings = [
     ['bookingId'=>'VB-2026-012','customerName'=>'Nathan Garcia','venue'=>'Obrero Function Hall','eventDate'=>'2026-08-12','bookingDate'=>'2026-07-12','paymentMethod'=>'GCash','paymentStatus'=>'Refunded','status'=>'Rejected','amount'=>3000],
     ['bookingId'=>'VB-2026-013','customerName'=>'Grace Lim','venue'=>'Alumni Grand Ballroom','eventDate'=>'2026-08-14','bookingDate'=>'2026-07-14','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Approved','amount'=>5000],
     ['bookingId'=>'VB-2026-014','customerName'=>'Marco Santos','venue'=>'Heritage Function Room','eventDate'=>'2026-08-18','bookingDate'=>'2026-07-15','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Approved','amount'=>2500],
+    /* [SIM] post-pay rows (DB-DECISIONS #18): approved but the event is still ahead
+       ("Payment pending"), finished and inside the window ("Payment due"), window missed ("Overdue"). */
+    ['bookingId'=>'VB-2026-016','customerName'=>'Nina Bautista','venue'=>'CIC Audio-Visual Room','eventDate'=>'2026-08-24','bookingDate'=>'2026-07-18','paymentMethod'=>'GCash','paymentStatus'=>'Payment pending','status'=>'Approved','amount'=>2000],
+    ['bookingId'=>'VB-2026-017','customerName'=>'Ramon Ortega','venue'=>'Obrero Function Hall','eventDate'=>'2026-07-15','bookingDate'=>'2026-06-20','paymentMethod'=>'Cash','paymentStatus'=>'Payment due','status'=>'Completed','amount'=>3000],
+    ['bookingId'=>'VB-2026-018','customerName'=>'Liza Mercado','venue'=>'Alumni Boardroom','eventDate'=>'2026-07-06','bookingDate'=>'2026-06-12','paymentMethod'=>'GCash','paymentStatus'=>'Overdue','status'=>'Completed','amount'=>1500],
     ['bookingId'=>'VB-2026-015','customerName'=>'Janelle Cruz','venue'=>'CIC Audio-Visual Room','eventDate'=>'2026-08-20','bookingDate'=>'2026-07-16','paymentMethod'=>'Cash','paymentStatus'=>'Paid','status'=>'Completed','amount'=>2000],
 ];
 
@@ -237,6 +242,9 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
                       <option value="">All</option>
                       <option value="Paid">Paid</option>
                       <option value="Pending">Pending</option>
+                      <option value="Payment pending">Payment pending</option>
+                      <option value="Payment due">Payment due</option>
+                      <option value="Overdue">Overdue</option>
                       <option value="Unpaid">Unpaid</option>
                       <option value="Refunded">Refunded</option>
                     </select>
@@ -304,6 +312,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         const badgeClass = (value) => ({
           Paid: 't-green', Approved: 't-green',
           Pending: 't-amber',
+          'Payment pending': 't-gray', 'Payment due': 't-amber', Overdue: 't-red',   /* post-pay states */
           Rejected: 't-red',
           Unpaid: 't-gray', Cancelled: 't-gray',
           Refunded: 't-navy', Completed: 't-navy',

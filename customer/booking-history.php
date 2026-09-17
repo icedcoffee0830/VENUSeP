@@ -111,6 +111,12 @@ $emptyBookingMessage = 'No booking history found.';
       .badge-refund-requested { background: #fbf1dd; color: #8a5a00; }
       .badge-refund-action-needed { background: #fdf3e6; color: #8a5a12; }
       .badge-refund-denied { background: #fcecec; color: #b23a3a; }
+      /* post-pay states (DB-DECISIONS #18): waiting for the event · window open · window missed */
+      .badge-payment-pending { background: #eef0f2; color: #55606b; }
+      .badge-payment-due { background: #fbf1dd; color: #8a5a00; }
+      .badge-overdue { background: #fcecec; color: #b23a3a; }
+      .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+      .booking-pay-note.is-overdue { color: #b23a3a; }
 
       /* row actions */
       .booking-actions { display: inline-flex; gap: 6px; }
@@ -236,7 +242,17 @@ $emptyBookingMessage = 'No booking history found.';
                           <td><?php echo bh_e($booking['eventDate']); ?></td>
                           <td><?php echo bh_e($booking['bookingDate']); ?></td>
                           <td class="booking-amount"><?php echo bh_e($booking['amount']); ?></td>
-                          <td><span class="booking-badge <?php echo bh_badge($booking['paymentStatus']); ?>"><?php echo bh_e($booking['paymentStatus']); ?></span></td>
+                          <td>
+                            <span class="booking-badge <?php echo bh_badge($booking['paymentStatus']); ?>"><?php echo bh_e($booking['paymentStatus']); ?></span>
+                            <?php /* post-pay bookings say WHEN — the date comes from the shared rule (includes/refund-policy.php) */
+                            if ($booking['paymentStatus'] === 'Payment pending'): ?>
+                              <span class="booking-pay-note">opens <?php echo bh_e($booking['payment']['opensLabel']); ?></span>
+                            <?php elseif ($booking['paymentStatus'] === 'Payment due'): ?>
+                              <span class="booking-pay-note">pay by <?php echo bh_e($booking['payment']['payByLabel']); ?></span>
+                            <?php elseif ($booking['paymentStatus'] === 'Overdue'): ?>
+                              <span class="booking-pay-note is-overdue">was due <?php echo bh_e($booking['payment']['payByLabel']); ?> &middot; can still be paid</span>
+                            <?php endif; ?>
+                          </td>
                           <td><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span></td>
                           <td>
                             <div class="booking-actions">

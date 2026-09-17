@@ -95,9 +95,13 @@ that way. The indefinite-closure "review nag" is derived from age today; a real
   verifies GCash receipts; cash is confirmed by staff. `payment_method ENUM('gcash','cash')`.
 - **Two-axis status** (already the shape): a `reservation_status` and a
   `payment_status`, not one blended column. Staff see the full taxonomy
-  (`locked / await_gcash / await_pos / confirmed / paid_cash / overdue / refund_* …`);
+  (`locked / await_event / await_gcash / await_pos / confirmed / paid_cash / overdue / refund_* …`);
   customers see softened labels (`Pending / Approved / Completed / Cancelled /
   Rejected` + `Paid / Pending / Unpaid / Refunded`). One machine, two vocabularies.
+- **Payment timing follows the refund switch** (DB-DECISIONS #18, 2026-09-17). Refunds
+  OFF = post-pay: approval puts the booking in `await_event`, payment opens after the
+  last day and is due within `postpay_grace_days`; missed = `overdue`, never released.
+  Refunds ON = the original pre-pay flow. Per booking, from `refunds_allowed`.
 - **Hostel adds `await_pos`** — the one status that waits on another office (CEDU), not
   the customer. And the **OR is a document, not a payment status** — a nullable
   `official_receipt_no` recorded *after* `confirmed`, plus a check-in flag.

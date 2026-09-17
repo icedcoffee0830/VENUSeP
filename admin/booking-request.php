@@ -271,6 +271,9 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         confirmed:     { t: 'Payment confirmed',           c: 'b-green' },
         paid_cash:     { t: 'Paid at cashier',             c: 'b-green' },
         overdue:       { t: 'Payment overdue',             c: 'b-red'   },
+        /* POST-PAY (DB-DECISIONS #18): approved while refunds were OFF — nothing
+           can be paid until the event is over, then it is due within the grace days. */
+        await_event:   { t: 'Payment due after event',     c: 'b-gray'  },
         refund_req:    { t: 'Refund · under verification', c: 'b-navy'  },
         refund_done:   { t: 'Refunded',                    c: 'b-green' },
         refund_denied: { t: 'Refund denied',               c: 'b-red'   },
@@ -279,10 +282,22 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         refund_fix:    { t: 'Refund · returned for correction', c: 'b-amber' },
       };
 
+      /* PAYMENT TIMING follows the refund switch — the shared rule from
+         includes/refund-policy.php (same as every customer page). Rows carry
+         startIso/endIso so approve() can compute the pay-by for either policy. */
+      <?php echo payment_policy_js(); ?>
       const DATA = {
+        'BRQ-2432': { id:'BRQ-2432', name:'Nina Bautista', type:'Faculty · CIC', email:'nbautista@usep.edu.ph', phone:'0917 301 5566',
+          event:'CIC Thesis Colloquium', room:'CIC Audio-Visual Room', venue:'USeP Venues', capacity:120, attendees:80,
+          dates:'Jul 30, 2026', startIso:'2026-07-30', endIso:'2026-07-30', feeDay:'₱2,000', days:1, total:'₱2,000', payBy:'Aug 2, 2026', method:'gcash',
+          submitted:'Jul 14, 2026 · 10:20 AM', res:'approved', pay:'await_event', idStatus:'approved', idLabel:'USeP Faculty ID',
+          sched:[{d:'Thu, Jul 30',t:'8:00 AM – 12:00 PM'}],
+          tl:[{w:'Jul 14 · 10:20 AM — Customer',x:'Booking submitted',m:'Single-day request with USeP Faculty ID attached. Customer confirmed the booking is non-refundable.'},
+              {w:'Jul 14 · 3:05 PM — M. Robles (staff)',x:'ID + reservation approved',m:'Post-pay booking: payment opens after Jul 30 and is due by Aug 2 (3 days after the event).'}] },
+
         'BRQ-2431': { id:'BRQ-2431', name:'Juan Miguel Dela Cruz', type:'Student · CIC', email:'jmdelacruz@usep.edu.ph', phone:'0917 555 0123',
           event:'CIC Research Colloquium', room:'Alumni Grand Ballroom', venue:'Bahay Alumni', capacity:300, attendees:220,
-          dates:'Jul 23 – 25, 2026', feeDay:'₱5,000', days:3, total:'₱15,000', payBy:'Jul 22, 2026', method:'gcash',
+          dates:'Jul 23 – 25, 2026', startIso:'2026-07-23', endIso:'2026-07-25', feeDay:'₱5,000', days:3, total:'₱15,000', payBy:'Jul 22, 2026', method:'gcash',
           submitted:'Jul 14, 2026 · 9:02 AM', res:'pending', pay:'locked', idStatus:'pending', idLabel:'USeP Student ID',
           sched:[{d:'Day 1 · Thu, Jul 23',t:'7:00 AM – 4:30 PM'},{d:'Day 2 · Fri, Jul 24',t:'7:00 AM – 4:30 PM'},{d:'Day 3 · Sat, Jul 25',t:'7:00 AM – 4:30 PM'}],
           tl:[{w:'Jul 14 · 9:02 AM — Customer',x:'Booking submitted',m:'Multi-day request (3 days) with USeP Student ID attached.'}] },
@@ -867,7 +882,11 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         }
         switch (cur.pay) {
           case 'locked': return banner('bn-gray', 'Payment is locked', 'The customer cannot pay until you approve the ID and the reservation.') +
-            `<div class="br-kvgrid">${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}${kv('Pay-by once approved', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')}</div>`;
+            `<div class="br-kvgrid">${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}${PAY_POLICY.prepay
+              ? kv('Pay-by once approved', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')
+              : kv('Payment timing', 'Post-pay <span class="soft">(opens after the event, due ' + PAY_POLICY.graceDays + ' days later)</span>')}</div>`;
+          case 'await_event': return banner('bn-gray', 'Payment opens after the event', 'Post-pay booking: nothing is owed until the event is over. The customer cannot pay early. The system opens payment the day after the last booked day.') +
+            `<div class="br-kvgrid">${kv('Payment opens', 'the day after the event')}${kv('Due by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
           case 'await_gcash': return banner('bn-amber', 'Awaiting GCash payment', 'The customer was notified. The receipt will be auto-checked the moment it is uploaded.') +
             `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}</div>`;
           case 'await_cash': return banner('bn-amber', 'Awaiting cash payment at the cashier', 'Confirm here once the cashier records the payment.') +
@@ -1023,7 +1042,9 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
                   <div class="br-kvgrid">
                     ${kv('Room', esc(cur.room))}${kv('Venue', esc(cur.venue))}
                     ${kv(cur.days > 1 ? 'Dates' : 'Date', esc(cur.dates))}${kv('Attendees', cur.attendees + ' / ' + cur.capacity + (over ? ' <span style="color:#8a5a12">· over capacity</span>' : ''))}
-                    ${kv('Fee', esc(cur.total) + ' <span class="soft">(' + esc(cur.feeDay) + '/day × ' + cur.days + ')</span>')}${kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')}
+                    ${kv('Fee', esc(cur.total) + ' <span class="soft">(' + esc(cur.feeDay) + '/day × ' + cur.days + ')</span>')}${cur.pay === 'await_event' || (!PAY_POLICY.prepay && ['pending','locked'].includes(cur.pay))
+                      ? kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(post-pay · ' + PAY_POLICY.graceDays + ' days after the event)</span>')
+                      : kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')}
                   </div>
                   <div style="margin-top:0.8rem">
                     <div class="br-h2" style="margin-bottom:0.45rem">Daily schedule</div>
@@ -1087,6 +1108,16 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         cur.idStatus = 'approved'; cur.res = 'approved';
         /* HOSTEL: approving does NOT unlock payment. The POS has to come back
            from CEDU first — that is the extra gate the venue flow does not have. */
+        /* POST-PAY (refunds OFF): approval only confirms the slot. Payment opens
+           after the last day and is due within the grace days — the DB does this
+           in sp_approve_booking() from the booking's refunds_allowed snapshot. */
+        if (!PAY_POLICY.prepay) {
+          const pb = payPolicyFor(cur.startIso || cur.endIso, cur.endIso);
+          cur.pay = 'await_event';
+          if (pb.payBy) cur.payBy = pb.label;
+          cur.tl.push({ w: now(), x: 'ID + reservation approved', m: 'Post-pay booking: payment opens ' + (pb.opensLabel || 'after the event') + ' and is due by ' + cur.payBy + ' (' + PAY_POLICY.graceDays + ' days after the event).' + (cur.kind === 'hostel' ? ' POS to be requested from CEDU after check-out.' : '') });
+          render(); return;
+        }
         if (cur.kind === 'hostel') {
           cur.pay = 'await_pos';
           cur.tl.push({ w: now(), x: 'ID + reservation approved', m: 'Payment stays locked until the POS comes back from CEDU.' });

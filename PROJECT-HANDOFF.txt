@@ -226,8 +226,11 @@ ROOT
     2. Reservation is PENDING; payment is LOCKED until staff approve ID+reservation.
     3. Approved → payment unlocks. Pay by GCash (auto-checked) or cash.
     4. Staff confirm the payment → CONFIRMED.
-  Rules baked in: pay at least 1 DAY before the event (late bookings pay
-  immediately on approval); a rejected auto-check holds the slot for a 48-hour
+  Rules baked in (refunds ON = pre-pay): pay at least 1 DAY before the event (late
+  bookings pay immediately on approval). Refunds OFF (the USeP default, 2026-09-17) =
+  POST-PAY: payment stays locked until the event/stay is over, then is due within 3
+  days (postpay_grace_days); missed = OVERDUE, nothing released; hostel POS is fetched
+  after check-out. See DB-DECISIONS #18. A rejected auto-check holds the slot for a 48-hour
   resubmit window (bounded by the pay-by deadline); staff can OVERRIDE a wrong
   auto-rejection with a required note (duplicate-ref overrides are admin-only).
 

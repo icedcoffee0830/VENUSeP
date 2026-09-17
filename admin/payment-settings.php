@@ -290,9 +290,9 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                   <?php if (!$rsDbOk): ?>
                     <p class="rs-state rs-error">The database cannot be reached, so this setting cannot be read or changed right now. Until it is back, customers are shown the no-refund policy.</p>
                   <?php elseif ($rsEnabled): ?>
-                    <p class="rs-state"><strong>Customers may request refunds</strong> on bookings they make while this is ON.</p>
+                    <p class="rs-state"><strong>Customers may request refunds</strong> on bookings they make while this is ON. Those bookings are <strong>paid before the event</strong> (after approval, by the day before).</p>
                   <?php else: ?>
-                    <p class="rs-state"><strong>All new bookings are non-refundable.</strong> Customers must confirm they understand this before they book. This is USeP's normal policy.</p>
+                    <p class="rs-state"><strong>All new bookings are non-refundable</strong> and are <strong>paid after the event</strong> &mdash; payment opens the day after the last booked day and is due within <?php echo (int) $POSTPAY_GRACE_DAYS; ?> days; unpaid bookings go overdue, nothing is released. Customers must confirm they understand this before they book. This is USeP's normal policy.</p>
                   <?php endif; ?>
                 </div>
                 <div>
@@ -452,11 +452,13 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
             'Customers will be able to request refunds on bookings made <strong>from now on</strong>.',
             'Bookings made while refunds were OFF <strong>stay non-refundable</strong>, because their customers agreed to that.',
             'The landing page, FAQ and checkout will stop saying bookings are non-refundable.',
+            'New bookings switch to <strong>pre-pay</strong>: paid after approval, by the day before the event; unpaid holds are released.',
             '<strong>Only enable this if the University\'s policy officially allows refunds.</strong>'
           ] : [
             'Customers <strong>can no longer request refunds</strong> on new bookings, and must confirm a booking is non-refundable before making it.',
             '<strong>' + plural(openRequests(), 'open refund request is', 'open refund requests are') + '</strong> still waiting. Staff can still finish them.',
             '<strong>' + plural(STAY_REFUNDABLE, 'booking', 'bookings') + '</strong> made while refunds were ON <strong>' + (STAY_REFUNDABLE === 1 ? 'stays' : 'stay') + ' refundable</strong>, because their customers were promised that.',
+            'New bookings switch to <strong>post-pay</strong>: nothing is paid until the event is over, then it is due within ' + <?php echo (int) $POSTPAY_GRACE_DAYS; ?> + ' days. Unpaid bookings go overdue instead of being released.',
             'Closures by USeP are not affected. Those customers are still offered a replacement or their money back.'
           ];
           list.innerHTML = items.map(function (t) { return '<li>' + t + '</li>'; }).join('');

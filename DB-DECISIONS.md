@@ -177,6 +177,39 @@ so the live DB now matches this file. Kept from it: the test logins
 Cajipoe*) — **test passwords only**. `customers` now has its own `id` (#4), so
 `customer-login.php` reads `c.id AS customer_id`.
 
+## 18. Payment timing follows the refund switch — 2026-09-17
+USeP does not refund, so it must not hold money for a service it may not be
+able to deliver (a room closed for maintenance after payment). The **same
+switch** (#16) therefore decides **when** a booking is paid, and each booking
+keeps the policy it was made under (`bookings.refunds_allowed`, already
+snapshotted). No second setting.
+
+| | refunds ON = **pre-pay** (the original flow) | refunds OFF = **post-pay** (USeP default) |
+|---|---|---|
+| Payment opens | at approval | **after the last booked day** (event end / check-out) |
+| Pay by | 23:59 the day before the first day; if already past, before it starts | **`postpay_grace_days` (3) after the last day**, 23:59 |
+| Missed | hold **released**, payment `expired` | booking stays; payment **`overdue`** — chasing it is staff's job |
+| Can still pay after | no | **yes** — it simply turns Paid late |
+| Hostel POS (CEDU) | before check-in, as before | **after check-out**, then the guest pays within the grace days |
+
+- **Customer cannot pay early under post-pay.** Deliberate: no money changes
+  hands until the event has actually happened.
+- New payment status **`await_event`** ("Payment due after event" / customer
+  "Payment pending") — the post-pay holding state between approval and the
+  last day. Customer labels for `await_gcash`/`await_cash` become
+  "Payment due".
+- **One place computes the dates:** `fn_payment_deadline(booking)` (with
+  `fn_booking_first_day` / `fn_booking_last_day`). **One entry point for
+  approval:** `sp_approve_booking(booking, staff)` picks status + deadline
+  for either type and either policy. `sp_expire_due_bookings()` now also
+  opens post-pay payment windows and marks overdue. `sp_start_await_pos` is
+  policy-aware. `v_booking_summary` exposes `payment_policy`,
+  `first_day`, `last_day`.
+- The two-axis status carries it: a finished, unpaid post-pay booking reads
+  *Completed · Payment due*.
+- Not built: notifications when a payment window opens. The customer sees it
+  on booking history and the booking page.
+
 ---
 
 ## Open items (not yet decided)

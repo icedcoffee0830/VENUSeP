@@ -230,7 +230,15 @@ $fqApp = isset($_GET['in']) && $_GET['in'] === 'app';
           </details>
           <details>
             <summary>When do I have to pay?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
+<?php if ($REFUNDS_ENABLED): /* pre-pay — the refund switch also sets payment timing (DB-DECISIONS #18) */ ?>
             <p class="fq-a">Payment opens only <strong>after your request is approved</strong>. You must pay at least <strong>1 day before your event</strong> &mdash; bookings made closer to the event than that are paid immediately upon approval. A reservation left unpaid past its deadline may be released back to availability.</p>
+<?php else: ?>
+            <p class="fq-a"><strong>After your event, not before.</strong> Staff approve your ID and reservation first; that holds your slot. Payment opens the day after your last booked day and is due within <strong><?php echo (int) $POSTPAY_GRACE_DAYS; ?> days</strong> &mdash; GCash or cash at the venue office. You cannot pay earlier. A booking not paid within the window is marked <strong>overdue</strong>; it can still be paid, but overdue accounts may not be able to book again until it is settled.</p>
+          </details>
+          <details>
+            <summary>Why do I pay after the event instead of before?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
+            <p class="fq-a">Because bookings are non-refundable. USeP does not hold your money for a venue it might still have to close &mdash; you pay once the event has actually taken place. If USeP has to close or cancel your venue before then, there is nothing to refund: you are simply offered a replacement room or a new date.</p>
+<?php endif; ?>
           </details>
         </section>
 
@@ -270,7 +278,11 @@ $fqApp = isset($_GET['in']) && $_GET['in'] === 'app';
           </details>
           <details>
             <summary>How do I pay for a hostel bed?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
+<?php if ($REFUNDS_ENABLED): ?>
             <p class="fq-a">Hostel payments go through <strong>CEDU</strong>. After staff approve your ID, they obtain a payment order from CEDU for your stay; you then pay &mdash; GCash to the business account, or cash to staff &mdash; and receive the <strong>Official Receipt</strong>. Your bed is held while this happens.</p>
+<?php else: ?>
+            <p class="fq-a">Hostel payments go through <strong>CEDU</strong>, and &mdash; like venues &mdash; you pay <strong>after your stay</strong>. Staff approve your ID and hold your beds. After you check out they obtain a payment order (POS) from CEDU; payment opens then and is due within <strong><?php echo (int) $POSTPAY_GRACE_DAYS; ?> days of your check-out day</strong> &mdash; GCash to the designated account, or cash to staff &mdash; and you receive the <strong>Official Receipt</strong>.</p>
+<?php endif; ?>
           </details>
         </section>
 
@@ -312,7 +324,7 @@ $fqApp = isset($_GET['in']) && $_GET['in'] === 'app';
             <summary>Can I pay in cash instead of GCash?<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>
             <!-- The office name and hours mirror CASH_PAY in room-reservation.php — still a
                  placeholder until the venue office confirms them; keep the two in sync. -->
-            <p class="fq-a">Yes. Choose <strong>"Cash &mdash; walk-in"</strong> at the payment step. Your reservation is submitted and held, and you pay in person at the <strong>USeP Cashier &mdash; Venue Reservations Window</strong> on campus (Monday to Friday, 8:00 AM &ndash; 5:00 PM). Quote your booking code and bring a valid ID. The booking is confirmed once the cashier records your payment &mdash; pay before your event date, or the slot may be released.</p>
+            <p class="fq-a">Yes. Choose <strong>"Cash &mdash; walk-in"</strong> at the payment step. Your reservation is submitted and held, and you pay in person at the <strong>USeP Cashier &mdash; Venue Reservations Window</strong> on campus (Monday to Friday, 8:00 AM &ndash; 5:00 PM). Quote your booking code and bring a valid ID. The booking is confirmed once the cashier records your payment<?php echo $REFUNDS_ENABLED ? ' &mdash; pay before your event date, or the slot may be released.' : '. Under the post-pay policy you do this after the event, within the ' . (int) $POSTPAY_GRACE_DAYS . '-day window.'; ?></p>
           </details>
         </section>
 

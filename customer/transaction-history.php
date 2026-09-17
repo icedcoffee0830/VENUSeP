@@ -24,10 +24,14 @@ $customerBookings = [
     ['106','Admin Conference Hall','2026-09-12','Cancelled','Refunded','GCash',1800],
     ['107','Alumni Grand Ballroom','2026-09-15','Approved','Paid','GCash',5000],
     ['108','Obrero Function Hall','2026-09-18','Pending','Pending','Cash',3000],
-    ['109','USeP Gymnasium','2026-09-22','Approved','Paid','GCash',8000],
+    /* [SIM] post-pay rows (DB-DECISIONS #18): a future booking cannot be paid yet
+       ("Payment pending"); a finished one is "Payment due", then "Overdue". */
+    ['109','USeP Gymnasium','2026-09-22','Approved','Payment pending','GCash',8000],
     ['110','CIC Audio-Visual Room','2026-09-25','Cancelled','Refunded','GCash',2000],
-    ['111','Heritage Function Room','2026-09-28','Approved','Paid','Cash',2500],
+    ['111','Heritage Function Room','2026-09-28','Approved','Payment pending','Cash',2500],
     ['112','Alumni Boardroom','2026-10-02','Pending','Pending','Cash',1500],
+    ['113','USeP Gymnasium','2026-09-15','Completed','Payment due','GCash',8000],
+    ['114','Admin Conference Hall','2026-09-05','Completed','Overdue','Cash',1800],
 ];
 $transactionRows = [];
 foreach ($customerBookings as $index => $b) {
@@ -190,6 +194,9 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
                       <option value="">All</option>
                       <option value="Paid">Paid</option>
                       <option value="Pending">Pending</option>
+                      <option value="Payment pending">Payment pending</option>
+                      <option value="Payment due">Payment due</option>
+                      <option value="Overdue">Overdue</option>
                       <option value="Unpaid">Unpaid</option>
                       <option value="Refunded">Refunded</option>
                     </select>
@@ -241,6 +248,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         const parseDate = (value) => { const p = Date.parse(value); return Number.isNaN(p) ? 0 : p; };
         const badgeClass = (value) => ({
           Paid: 't-green', Approved: 't-green', Pending: 't-amber',
+          'Payment pending': 't-gray', 'Payment due': 't-amber', Overdue: 't-red',   /* post-pay states */
           Unpaid: 't-gray', Rejected: 't-red', Refunded: 't-navy', Completed: 't-navy', Cancelled: 't-gray',
         }[value] || 't-gray');
         const statusBadge = (cell) => `<span class="t-badge ${badgeClass(cell.getValue())}">${cell.getValue()}</span>`;

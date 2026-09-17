@@ -221,9 +221,10 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
          Statuses follow the agreed payment-status taxonomy:
          reservation status and payment status are SEPARATE badges. */
       const RES = {
-        pending:  { t: 'Pending review', c: 'b-amber' },
-        approved: { t: 'Approved',       c: 'b-green' },
-        released: { t: 'Released',       c: 'b-gray'  },
+        pending:   { t: 'Pending review', c: 'b-amber' },
+        approved:  { t: 'Approved',       c: 'b-green' },
+        completed: { t: 'Completed',      c: 'b-navy'  },
+        released:  { t: 'Released',       c: 'b-gray'  },
       };
       const PAY = {
         locked:      { t: 'Payment locked',              c: 'b-gray'  },
@@ -235,6 +236,9 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         confirmed:   { t: 'Payment confirmed',           c: 'b-green' },
         paid_cash:   { t: 'Paid at cashier',             c: 'b-green' },
         overdue:     { t: 'Payment overdue',             c: 'b-red'   },
+        /* POST-PAY (DB-DECISIONS #18): approved while refunds were OFF, so nothing
+           can be paid until the event is over. Not waiting on anyone. */
+        await_event: { t: 'Payment due after event',     c: 'b-gray'  },
         refund_req:  { t: 'Refund · under verification', c: 'b-navy'  },
         /* Filed, but the Official Receipt has not arrived. The claim can still be
            decided; only the PAYOUT waits (agreed 2026-09-09). */
@@ -244,6 +248,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         await_pos:   { t: 'Awaiting POS · CEDU',         c: 'b-amber' },
       };
       const BR = [
+        { id: 'BRQ-2432', name: 'Nina Bautista', type: 'Faculty · CIC', room: 'CIC Audio-Visual Room', venue: 'USeP Venues', dates: 'Jul 30, 2026', res: 'approved', pay: 'await_event', act: 'Post-pay · payment opens Jul 31, due Aug 2', cls: '', cat: '' },
         { id: 'BRQ-2431', name: 'Juan Miguel Dela Cruz', type: 'Student · CIC', room: 'Alumni Grand Ballroom', venue: 'Bahay Alumni', dates: 'Jul 23 – 25, 2026', res: 'pending', pay: 'locked', act: 'Review the submitted ID', cls: 'warn', cat: 'id' },
         { id: 'BRQ-2430', name: 'Maria Santos', type: 'Faculty · CBA', room: 'Heritage Function Room', venue: 'Bahay Alumni', dates: 'Jul 20, 2026', res: 'approved', pay: 'await_gcash', act: 'Pay by Jul 19 · customer notified', cls: '', cat: '' },
         { id: 'BRQ-2429', name: 'Rafael Lim', type: 'Org · JPIA', room: 'CIC Audio-Visual Room', venue: 'USeP Venues', dates: 'Jul 18, 2026', res: 'approved', pay: 'auto_pass', act: 'Match ref 3042 137 089838 in GCash', cls: 'warn', cat: 'confirm' },
@@ -251,7 +256,8 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         { id: 'BRQ-2427', name: 'Leo Garcia', type: 'Staff · OSAS', room: 'Obrero Function Hall', venue: 'USeP Venues', dates: 'Jul 24 – 27, 2026', res: 'approved', pay: 'rejected', act: 'Resubmit window ends Jul 16 · 2:10 PM', cls: 'warn', cat: '' },
         { id: 'BRQ-2426', name: 'Carmen Uy', type: 'Faculty · CAS', room: 'Admin Conference Hall', venue: 'USeP Venues', dates: 'Jul 22, 2026', res: 'approved', pay: 'await_cash', act: 'Pay at cashier by Jul 21', cls: '', cat: '' },
         { id: 'BRQ-2425', name: 'Paolo Mendoza', type: 'Org · Honor Society', room: 'USeP Gymnasium', venue: 'USeP Venues', dates: 'Aug 2, 2026', res: 'approved', pay: 'confirmed', act: 'Confirmed by M. Robles · Jul 13', cls: '', cat: '' },
-        { id: 'BRQ-2424', name: 'Grace Tan', type: 'Student · CIC', room: 'Garden Pavilion', venue: 'Bahay Alumni', dates: 'Jul 17, 2026', res: 'approved', pay: 'overdue', act: 'Deadline passed Jul 16 · slot releasable', cls: 'late', cat: 'overdue' },
+        { id: 'BRQ-2424', name: 'Grace Tan', type: 'Student · CIC', room: 'Garden Pavilion', venue: 'Bahay Alumni', dates: 'Jul 17, 2026', res: 'approved', pay: 'overdue', act: 'Pre-pay booking · deadline passed Jul 16 · slot releasable', cls: 'late', cat: 'overdue' },
+        { id: 'BRQ-2420', name: 'Ramon Ortega', type: 'Org · CSC', room: 'Obrero Function Hall', venue: 'USeP Venues', dates: 'Jul 6, 2026', res: 'completed', pay: 'overdue', act: 'Post-pay window ended Jul 9 · still payable · follow up', cls: 'late', cat: 'overdue' },
         /* REFUNDS ARE STAFF WORK — they get a `cat` (and therefore a tab and a
            place in the needs-action count) for the same reason 'pos' does: nobody
            else surfaces them, and the customer's booking is ALREADY cancelled and

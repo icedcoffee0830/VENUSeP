@@ -1,10 +1,11 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
-/* The demo customer's own bookings, from THE one source. Needed here because a
-   refund filed on the customer side has to appear in this queue, and until the
-   database exists the two sides have separate seed data. At DB time both sides
-   simply SELECT the same `bookings` rows and this include goes away. */
-require_once __DIR__ . '/../includes/customer-bookings.php';
+/* THE QUEUE, from the same `bookings` rows the customer's own history reads.
+   The row builder lives in includes/bookings.php so this page and the
+   dashboard's "needs action" preview cannot disagree about how much work is
+   waiting — they were separate hand-written arrays and had already drifted. */
+require_once __DIR__ . '/../includes/bookings.php';
+$brRows = booking_queue_rows();
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -215,16 +216,23 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
          ============================================================ -->
     <!-- Shared refund state — the ONE source, also included by both customer
          pages. Must load BEFORE this page's script, which reads from it. -->
-    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
+    <?php /* refund-store.php is gone: refunds are `refunds` rows now, not browser storage. */ ?>
     <script>
       /* Booking Requests queue — static mockup data + client-side filtering.
          Statuses follow the agreed payment-status taxonomy:
          reservation status and payment status are SEPARATE badges. */
+      /* Every reservation_statuses code, because the queue now renders whatever
+         the database holds — an unmapped code used to crash the row builder. */
       const RES = {
         pending:   { t: 'Pending review', c: 'b-amber' },
         approved:  { t: 'Approved',       c: 'b-green' },
         completed: { t: 'Completed',      c: 'b-navy'  },
         released:  { t: 'Released',       c: 'b-gray'  },
+        rejected:  { t: 'Rejected',       c: 'b-red'   },
+        cancelled: { t: 'Cancelled',      c: 'b-gray'  },
+        /* USeP closed the room while this booking was inside the closure. The
+           customer is owed a replacement, a new date, or a non-deniable refund. */
+        disrupted: { t: 'Room closed · action needed', c: 'b-red' },
       };
       const PAY = {
         locked:      { t: 'Payment locked',              c: 'b-gray'  },
@@ -246,33 +254,23 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         refund_fix:  { t: 'Refund · returned for correction',   c: 'b-amber' },
         /* HOSTEL ONLY — waiting on CEDU, not on the customer. */
         await_pos:   { t: 'Awaiting POS · CEDU',         c: 'b-amber' },
+        /* The rest of the payment_statuses taxonomy. The mockup only listed the
+           states its invented rows happened to use; the database can produce
+           every one, and a missing key here renders an empty badge. */
+        expired:          { t: 'Expired',                       c: 'b-gray'  },
+        under_review:     { t: 'Receipt · manual review',       c: 'b-amber' },
+        refund_requested: { t: 'Refund · under verification',   c: 'b-navy'  },
+        refund_correction:{ t: 'Refund · returned for correction', c: 'b-amber' },
+        refund_await_or:  { t: 'Refund · awaiting Official Receipt', c: 'b-amber' },
+        refund_processing:{ t: 'Refund · processing',           c: 'b-navy'  },
+        refunded:         { t: 'Refunded',                      c: 'b-gray'  },
+        refund_denied:    { t: 'Refund denied',                 c: 'b-red'   },
       };
-      const BR = [
-        { id: 'BRQ-2432', name: 'Nina Bautista', type: 'Faculty · CIC', room: 'CIC Audio-Visual Room', venue: 'USeP Venues', dates: 'Jul 30, 2026', res: 'approved', pay: 'await_event', act: 'Post-pay · payment opens Jul 31, due Aug 2', cls: '', cat: '' },
-        { id: 'BRQ-2431', name: 'Juan Miguel Dela Cruz', type: 'Student · CIC', room: 'Alumni Grand Ballroom', venue: 'Bahay Alumni', dates: 'Jul 23 – 25, 2026', res: 'pending', pay: 'locked', act: 'Review the submitted ID', cls: 'warn', cat: 'id' },
-        { id: 'BRQ-2430', name: 'Maria Santos', type: 'Faculty · CBA', room: 'Heritage Function Room', venue: 'Bahay Alumni', dates: 'Jul 20, 2026', res: 'approved', pay: 'await_gcash', act: 'Pay by Jul 19 · customer notified', cls: '', cat: '' },
-        { id: 'BRQ-2429', name: 'Rafael Lim', type: 'Org · JPIA', room: 'CIC Audio-Visual Room', venue: 'USeP Venues', dates: 'Jul 18, 2026', res: 'approved', pay: 'auto_pass', act: 'Match ref 3042 137 089838 in GCash', cls: 'warn', cat: 'confirm' },
-        { id: 'BRQ-2428', name: 'Ana Reyes', type: 'Student · CoE', room: 'Alumni Boardroom', venue: 'Bahay Alumni', dates: 'Jul 21, 2026', res: 'approved', pay: 'review', act: '3 flags need a human look', cls: 'warn', cat: 'review' },
-        { id: 'BRQ-2427', name: 'Leo Garcia', type: 'Staff · OSAS', room: 'Obrero Function Hall', venue: 'USeP Venues', dates: 'Jul 24 – 27, 2026', res: 'approved', pay: 'rejected', act: 'Resubmit window ends Jul 16 · 2:10 PM', cls: 'warn', cat: '' },
-        { id: 'BRQ-2426', name: 'Carmen Uy', type: 'Faculty · CAS', room: 'Admin Conference Hall', venue: 'USeP Venues', dates: 'Jul 22, 2026', res: 'approved', pay: 'await_cash', act: 'Pay at cashier by Jul 21', cls: '', cat: '' },
-        { id: 'BRQ-2425', name: 'Paolo Mendoza', type: 'Org · Honor Society', room: 'USeP Gymnasium', venue: 'USeP Venues', dates: 'Aug 2, 2026', res: 'approved', pay: 'confirmed', act: 'Confirmed by M. Robles · Jul 13', cls: '', cat: '' },
-        { id: 'BRQ-2424', name: 'Grace Tan', type: 'Student · CIC', room: 'Garden Pavilion', venue: 'Bahay Alumni', dates: 'Jul 17, 2026', res: 'approved', pay: 'overdue', act: 'Pre-pay booking · deadline passed Jul 16 · slot releasable', cls: 'late', cat: 'overdue' },
-        { id: 'BRQ-2420', name: 'Ramon Ortega', type: 'Org · CSC', room: 'Obrero Function Hall', venue: 'USeP Venues', dates: 'Jul 6, 2026', res: 'completed', pay: 'overdue', act: 'Post-pay window ended Jul 9 · still payable · follow up', cls: 'late', cat: 'overdue' },
-        /* REFUNDS ARE STAFF WORK — they get a `cat` (and therefore a tab and a
-           place in the needs-action count) for the same reason 'pos' does: nobody
-           else surfaces them, and the customer's booking is ALREADY cancelled and
-           their date already released while this sits unread. `since` is the date
-           the customer submitted the request; the row shows how long it has waited. */
-        { id: 'BRQ-2423', name: 'Diego Cruz', type: 'Alumni', room: 'Heritage Function Room', venue: 'Bahay Alumni', dates: 'Sep 14, 2026', res: 'approved', pay: 'refund_req', act: 'All documents in · verify', cls: 'warn', cat: 'refund', since: '2026-09-06', eventIso: '2026-09-14' },
-        /* [SIM] a second, fresh request — so the tab count and the two ends of the
-           waiting display (today vs several days) are both visible in the mockup. */
-        { id: 'BRQ-2422', name: 'Elena Bautista', type: 'Faculty · CTET', room: 'Admin Conference Hall', venue: 'USeP Venues', dates: 'Sep 30, 2026', res: 'approved', pay: 'refund_or', act: 'Receipts in · OR still to come', cls: 'warn', cat: 'refund', since: '2026-09-09', eventIso: '2026-09-30' },
-        /* HOSTEL requests live in the SAME queue. A queue answers "what needs me
-           now" — splitting it by venue is how work goes unseen. The row shape is
-           identical; only `dates` reads as a stay and the action mentions CEDU. */
-        { id: 'BRQ-2450', name: 'Ana Reyes', type: 'Student · CAS', room: 'Hostel Room 1', venue: 'USeP Hostel', dates: 'Aug 1 – 4, 2026 · 2 beds', res: 'approved', pay: 'await_pos', act: 'Get the POS from CEDU · payment is locked until then', cls: 'warn', cat: 'pos' },
-        { id: 'BRQ-2451', name: 'Luis Ramos', type: 'Student · CIC', room: 'Hostel Room 4', venue: 'USeP Hostel', dates: 'Jul 20 – 22, 2026 · 3 beds', res: 'approved', pay: 'confirmed', act: 'Paid · OR still to come from the cashier', cls: '', cat: '' },
-      ];
+      /* THE QUEUE — real `bookings` rows, shaped in PHP above. This was a
+         hand-written array of 15 invented requests; it is now whatever the
+         database actually holds, so the customer side and this page can never
+         again disagree about which bookings exist. */
+      const BR = <?php echo json_encode($brRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
       const TABS = [
         { k: 'all',     t: 'All' },
         { k: 'id',      t: 'Pending ID review' },
@@ -356,41 +354,11 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         document.getElementById('brCount').textContent = BR.length + ' booking requests · ' + need + ' need action';
         drawRows();
       }
-      /* [SIM] Refunds the CUSTOMER filed. With no database they travel through
-         includes/refund-store.php (browser storage shared by both mockups), so
-         inject them as queue rows — otherwise a refund request would be filed
-         into a void and staff would never see it.
-
-         A request RETURNED for correction is waiting on the customer, not on
-         staff, so it gets no `cat` and no `since`: it shows under All but is
-         deliberately kept out of the refund tab and the needs-action count.
-         Same reasoning as 'await_gcash' — a queue answers "what needs me now". */
-      const SESSION_CUSTOMER = 'Juan Miguel Dela Cruz';   /* PROJECT-HANDOFF 4.9 */
-      const CUSTOMER_BOOKINGS = <?php echo json_encode($customerBookings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-      (function injectCustomerRefunds() {
-        if (!window.RefundStore) return;
-        const all = RefundStore.all();
-        Object.keys(all).forEach(function (ref) {
-          const rec = all[ref];
-          if (!rec || (rec.status !== 'open' && rec.status !== 'fix')) return;
-          if (BR.some(function (r) { return r.id === ref; })) return;
-          const b = CUSTOMER_BOOKINGS.filter(function (x) { return x.bookingId === ref; })[0];
-          if (!b) return;
-          const returned = rec.status === 'fix';
-          BR.unshift({
-            id: ref, name: SESSION_CUSTOMER, type: 'Student · CIC',
-            room: b.roomName, venue: b.venueName, dates: b.eventDate,
-            res: 'approved',
-            pay: returned ? 'refund_fix' : (rec.orPending ? 'refund_or' : 'refund_req'),
-            act: returned ? 'Returned to the customer · waiting on them'
-               : (rec.orPending ? 'Receipts in · OR still to come' : 'All documents in · verify'),
-            cls: 'warn',
-            cat: returned ? '' : 'refund',
-            since: returned ? null : rec.filed,
-            eventIso: b.eventDateIso
-          });
-        });
-      })();
+      /* A refund the customer filed used to reach this queue through
+         includes/refund-store.php — browser storage, shared between two
+         mockups, invisible on any other machine. A refund is now a `refunds`
+         row, so it arrives here the same way every other booking does: it is
+         simply in BR above. The injection that used to live here is gone. */
       draw();
     </script>
   </body>

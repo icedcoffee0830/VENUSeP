@@ -27,18 +27,42 @@
    asking a USeP customer for their USeP ID instead of a driver's licence
    costs them nothing — which is what makes proof affordable here.
    ===================================================================== */
-$DISCOUNT_PERCENT = 20;            // system_settings.discount_percent — the DEFAULT
+/* THE LIVE RATE — system_settings.discount_percent, edited on admin Venue
+   Management and written by admin/discount-save.php (the only writer).
 
-/* [SIM] Admin override. Payment Settings lets an admin change the rate; with no
-   database the value has to live in the browser, and it must reach BOTH the
-   PHP-rendered listing and the JS booking pages — localStorage cannot reach PHP,
-   a cookie can. Validated hard: only 0–100 as plain digits is honoured, anything
-   else falls back to the default. Per-browser, like every [SIM] mechanism, and
-   deleted at DB time when this becomes a real settings row. */
-if (isset($_COOKIE['venusep_discount_percent']) && is_string($_COOKIE['venusep_discount_percent'])) {
-    $ck = $_COOKIE['venusep_discount_percent'];
-    if (preg_match('/^\d{1,3}$/', $ck) && (int) $ck <= 100) $DISCOUNT_PERCENT = (int) $ck;
+   This used to be a per-browser cookie, because there was no database to keep
+   it in: the value had to reach BOTH the PHP-rendered listing and the JS
+   booking pages, and localStorage cannot reach PHP. That is over. One row, one
+   value, the same for every visitor on every machine.
+
+   Validated on the way OUT as well as in: a row that somehow holds nonsense
+   falls back to 20 rather than pricing a booking at 0% or 900%. */
+require_once __DIR__ . '/db.php';
+
+function venusep_discount_percent() {
+    static $pct = null;
+    if ($pct !== null) {
+        return $pct;
+    }
+    $pct = 20;                         // the default, if the row is missing or unreadable
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return $pct;                   // priced pages call venusep_db_or_fail() themselves
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'discount_percent' LIMIT 1");
+        $stmt->execute();
+        $v = $stmt->fetchColumn();
+        if ($v !== false && preg_match('/^\d{1,3}$/', (string) $v) && (int) $v <= 100) {
+            $pct = (int) $v;
+        }
+    } catch (PDOException $e) {
+        // keep the default
+    }
+    return $pct;
 }
+
+$DISCOUNT_PERCENT = venusep_discount_percent();
 $USEP_MAIL_DOMAIN = 'usep.edu.ph';
 
 /* PHP twins of the JS helpers below. The listing page renders its prices in

@@ -7,13 +7,18 @@ include __DIR__ . '/../includes/payment-settings.php';
    the state and asks for confirmation; admin/refund-switch.php does every check.
    customer-bookings.php brings in includes/refund-policy.php and the [SIM]
    bookings, used for the "stay refundable" count in the OFF warning. */
-require_once __DIR__ . '/../includes/customer-bookings.php';
+/* EVERY booking, not the signed-in person's: this card warns how many
+   bookings would keep their refund right if the switch is turned off, and
+   that is a question about the whole system. Including customer-bookings.php
+   here would have counted the ADMIN's own bookings — which is zero, and the
+   warning would have silently read "0 bookings stay refundable" forever. */
+require_once __DIR__ . '/../includes/bookings.php';
 $rsDetails  = refund_setting_details();          // null = database unreachable
 $rsDbOk     = $rsDetails !== null;
 $rsEnabled  = $rsDbOk && $rsDetails['enabled'];
 $rsIsAdmin  = admin_is_admin();                  // staff see the card read-only
 $rsCsrf     = csrf_token();
-$rsStayRefundable = count(array_filter($customerBookings, function ($b) { return $b['refundable']; }));
+$rsStayRefundable = count(array_filter(bookings_all(), function ($b) { return $b['refundable']; }));
 
 /* A lock still running from earlier (the countdown resumes after a reload). */
 $rsLockSeconds = 0;

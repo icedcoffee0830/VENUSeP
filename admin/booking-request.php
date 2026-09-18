@@ -1,9 +1,147 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
-/* The demo customer's own bookings, from THE one source — a refund they filed
-   has to be openable here. Until the database exists the two mockups keep
-   separate seed data; at DB time both sides SELECT the same `bookings` row. */
-require_once __DIR__ . '/../includes/customer-bookings.php';
+/* THE REQUEST DETAIL — built from the same `bookings` rows the queue and the
+   customer's own history read (includes/bookings.php). This was a hand-written
+   map of eight invented requests keyed 'BRQ-2432'; a refund the customer filed
+   could only reach it through browser storage, and only in the same browser.
+   Every request is now simply a row, keyed by its real reference. */
+require_once __DIR__ . '/../includes/bookings.php';
+
+$brqAll = bookings_all();
+
+/* Which ID document was attached, and whether staff have accepted it. The
+   discount depends on this: a USeP ID that staff VERIFIED earns it, a claim
+   alone never does (DB-DECISIONS #3). */
+function brqIdLabel(array $b) {
+    if ($b['isWalkIn'])  return 'Presented at the counter';
+    if (!$b['isUsep'])   return 'Government-issued ID';
+    return $b['usepVerified'] ? 'USeP ID (verified)' : 'USeP ID (submitted)';
+}
+function brqIdStatus(array $b) {
+    if ($b['reservationCode'] === 'pending')  return 'pending';
+    if ($b['reservationCode'] === 'rejected') return 'rejected';
+    return 'approved';
+}
+
+$brqData = [];
+foreach ($brqAll as $b) {
+    $isHostel = $b['type'] === 'hostel';
+
+    /* The per-day schedule. Days live in venue_booking_slots, so a booking that
+       BOOKED AROUND a closed day simply has a gap here — which is the honest
+       thing to show staff, rather than a range implying it holds the blocked
+       day too. */
+    $sched = [];
+    foreach (booking_slots($b['id']) as $s) {
+        $sched[] = [
+            'd' => date('D, M j', strtotime($s['slot_date'])),
+            't' => date('g:i A', strtotime($s['start_time'])) . ' – ' . date('g:i A', strtotime($s['end_time'])),
+        ];
+    }
+
+    $occ = [];
+    if ($isHostel) {
+        foreach (booking_occupants($b['id']) as $o) {
+            $occ[] = ['n' => $o['full_name'], 'g' => $o['gender'] === 'female' ? 'F' : ($o['gender'] === 'male' ? 'M' : 'O')];
+        }
+    }
+
+    /* The refund claim, when there is one. It used to reach this page only
+       through browser storage, so staff on any other machine saw nothing. */
+    $refund = null;
+    $rfStmt = venusep_db()->prepare(
+        'SELECT refund_status, reason_category, reason, amount_requested, refund_to_number,
+                official_receipt_pending, correction_attempts, notes, requested_at, resubmitted_at
+           FROM refunds WHERE booking_id = :b ORDER BY id DESC LIMIT 1'
+    );
+    $rfStmt->execute([':b' => $b['id']]);
+    if ($rf = $rfStmt->fetch()) {
+        $stageMap = [
+            'requested'               => 'Under verification',
+            'under_review'            => 'Under verification',
+            'returned_for_correction' => 'Returned for correction',
+            'approved'                => $rf['official_receipt_pending'] ? 'Awaiting Official Receipt' : 'Approved · payout pending',
+            'rejected'                => 'Denied',
+            'completed'               => 'Refunded',
+            'withdrawn'               => 'Withdrawn by the customer',
+        ];
+        $refund = [
+            'stage'     => $stageMap[$rf['refund_status']] ?? $rf['refund_status'],
+            'orPending' => (bool) $rf['official_receipt_pending'],
+            'reason'    => str_replace('_', ' ', $rf['reason_category']),
+            'details'   => (string) $rf['reason'],
+            'refundTo'  => (string) $rf['refund_to_number'],
+            'filed'     => date('M j, Y', strtotime($rf['requested_at'])),
+            'docs'      => $rf['refund_status'] === 'returned_for_correction'
+                            ? 'Returned to the customer: ' . ($rf['notes'] ?: 'correction requested')
+                            : 'Transaction receipt + proof of payment submitted · '
+                              . ($rf['official_receipt_pending'] ? 'Official Receipt NOT yet provided' : 'Official Receipt provided'),
+        ];
+    }
+
+    $rec = booking_receipt($b['id']);
+    $receipt = $rec ? [
+        'ref'    => $rec['reference_number'],
+        'amount' => '₱' . number_format(((int) $rec['amount_centavos']) / 100, 2),
+        'date'   => $rec['receipt_datetime'] ? date('M j, Y · g:i A', strtotime($rec['receipt_datetime'])) : '—',
+        'to'     => (string) $rec['receiver_number'],
+        'conf'   => $rec['ocr_confidence'] !== null ? round((float) $rec['ocr_confidence']) . '%' : '—',
+        'flags'  => $rec['flags'],
+    ] : null;
+
+    $row = [
+        'id'        => $b['bookingId'],
+        'kind'      => $isHostel ? 'hostel' : 'venue',
+        'name'      => $b['customerName'],
+        'type'      => $b['isWalkIn'] ? 'Walk-in' : ($b['isUsep'] ? 'USeP affiliated' : 'Non-USeP'),
+        'email'     => $b['customerEmail'] !== '' ? $b['customerEmail'] : '—',
+        'phone'     => $b['customerPhone'],
+        'event'     => $b['eventName'],
+        'room'      => $b['roomName'],
+        'venue'     => $b['venueName'],
+        'capacity'  => $b['capacity'],
+        'attendees' => $b['attendees'],
+        'total'     => $b['amount'],
+        'payBy'     => $b['payment']['payByLabel'],
+        'method'    => strtolower($b['method']),
+        'submitted' => date('M j, Y · g:i A', strtotime($b['bookingDateIso'])),
+        'res'       => $b['reservationCode'],
+        'pay'       => $b['paymentCode'],
+        'idStatus'  => brqIdStatus($b),
+        'idLabel'   => brqIdLabel($b),
+        'discountPercent' => $b['discountPercent'],
+        'receipt'   => $receipt,
+        'refund'    => $refund,
+        'refundTo'  => $refund ? $refund['refundTo'] : null,
+        'tl'        => booking_history_events($b),
+    ];
+
+    if ($isHostel) {
+        $row += [
+            'crType'    => $b['crType'] === 'private' ? 'Private CR' : 'Communal CR',
+            'checkIn'   => date('M j, Y', strtotime($b['eventDateIso'])),
+            'checkOut'  => date('M j, Y', strtotime($b['endDateIso'])),
+            'nights'    => $b['nights'],
+            'rate'      => '₱' . number_format($b['roomPrice'] / max(1, $b['beds'] * max(1, $b['nights']))),
+            'occupants' => $occ,
+            'pos'       => $b['pos'] !== '' ? $b['pos'] : null,
+            'or'        => $b['officialReceipt'] !== '' ? $b['officialReceipt'] : null,
+            'checkedIn' => $b['checkedIn'],
+        ];
+    } else {
+        $row += [
+            'dates'   => $b['eventDateIso'] === $b['endDateIso']
+                            ? date('M j, Y', strtotime($b['eventDateIso']))
+                            : date('M j', strtotime($b['eventDateIso'])) . ' – ' . date('M j, Y', strtotime($b['endDateIso'])),
+            'startIso'=> $b['eventDateIso'],
+            'endIso'  => $b['endDateIso'],
+            'feeDay'  => '₱' . number_format($b['days'] > 0 ? $b['roomPrice'] / $b['days'] : $b['roomPrice']),
+            'days'    => $b['days'],
+            'sched'   => $sched,
+        ];
+    }
+    $brqData[$b['bookingId']] = $row;
+}
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -240,7 +378,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
     <!-- Shared refund state — the ONE source, also included by both customer
          pages. Must load BEFORE this page's script, which reads and writes it. -->
     <?php include __DIR__ . '/../includes/pricing.php'; ?>
-    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
+    <?php /* refund-store.php is gone: refunds are `refunds` rows now. */ ?>
     <!-- Tesseract + the shared GCash engine. The SAME checker the customer uses
          to prove they paid in; here it proves staff paid out. It needs no changes
          for that — it asks the page whose account the money must land in, and
@@ -286,223 +424,22 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
          includes/refund-policy.php (same as every customer page). Rows carry
          startIso/endIso so approve() can compute the pay-by for either policy. */
       <?php echo payment_policy_js(); ?>
-      const DATA = {
-        'BRQ-2432': { id:'BRQ-2432', name:'Nina Bautista', type:'Faculty · CIC', email:'nbautista@usep.edu.ph', phone:'0917 301 5566',
-          event:'CIC Thesis Colloquium', room:'CIC Audio-Visual Room', venue:'USeP Venues', capacity:120, attendees:80,
-          dates:'Jul 30, 2026', startIso:'2026-07-30', endIso:'2026-07-30', feeDay:'₱2,000', days:1, total:'₱2,000', payBy:'Aug 2, 2026', method:'gcash',
-          submitted:'Jul 14, 2026 · 10:20 AM', res:'approved', pay:'await_event', idStatus:'approved', idLabel:'USeP Faculty ID',
-          sched:[{d:'Thu, Jul 30',t:'8:00 AM – 12:00 PM'}],
-          tl:[{w:'Jul 14 · 10:20 AM — Customer',x:'Booking submitted',m:'Single-day request with USeP Faculty ID attached. Customer confirmed the booking is non-refundable.'},
-              {w:'Jul 14 · 3:05 PM — M. Robles (staff)',x:'ID + reservation approved',m:'Post-pay booking: payment opens after Jul 30 and is due by Aug 2 (3 days after the event).'}] },
-
-        'BRQ-2431': { id:'BRQ-2431', name:'Juan Miguel Dela Cruz', type:'Student · CIC', email:'jmdelacruz@usep.edu.ph', phone:'0917 555 0123',
-          event:'CIC Research Colloquium', room:'Alumni Grand Ballroom', venue:'Bahay Alumni', capacity:300, attendees:220,
-          dates:'Jul 23 – 25, 2026', startIso:'2026-07-23', endIso:'2026-07-25', feeDay:'₱5,000', days:3, total:'₱15,000', payBy:'Jul 22, 2026', method:'gcash',
-          submitted:'Jul 14, 2026 · 9:02 AM', res:'pending', pay:'locked', idStatus:'pending', idLabel:'USeP Student ID',
-          sched:[{d:'Day 1 · Thu, Jul 23',t:'7:00 AM – 4:30 PM'},{d:'Day 2 · Fri, Jul 24',t:'7:00 AM – 4:30 PM'},{d:'Day 3 · Sat, Jul 25',t:'7:00 AM – 4:30 PM'}],
-          tl:[{w:'Jul 14 · 9:02 AM — Customer',x:'Booking submitted',m:'Multi-day request (3 days) with USeP Student ID attached.'}] },
-
-        'BRQ-2430': { id:'BRQ-2430', name:'Maria Santos', type:'Faculty · CBA', email:'msantos@usep.edu.ph', phone:'0918 220 4411',
-          event:'CBA Faculty Planning Workshop', room:'Heritage Function Room', venue:'Bahay Alumni', capacity:80, attendees:45,
-          dates:'Jul 20, 2026', feeDay:'₱2,500', days:1, total:'₱2,500', payBy:'Jul 19, 2026', method:'gcash',
-          submitted:'Jul 12, 2026 · 2:15 PM', res:'approved', pay:'await_gcash', idStatus:'approved', idLabel:'USeP Employee ID',
-          sched:[{d:'Mon, Jul 20',t:'8:00 AM – 5:00 PM'}],
-          tl:[{w:'Jul 12 · 2:15 PM — Customer',x:'Booking submitted',m:'Single-day request with USeP Employee ID attached.'},
-              {w:'Jul 13 · 8:40 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline set to Jul 19 (1 day before the event).'}] },
-
-        'BRQ-2429': { id:'BRQ-2429', name:'Rafael Lim', type:'Org · JPIA', email:'jpia@usep.edu.ph', phone:'0917 884 2020',
-          event:'JPIA General Assembly', room:'CIC Audio-Visual Room', venue:'USeP Venues', capacity:120, attendees:110,
-          dates:'Jul 18, 2026', feeDay:'₱2,000', days:1, total:'₱2,000', payBy:'Jul 17, 2026', method:'gcash',
-          submitted:'Jul 13, 2026 · 10:05 AM', res:'approved', pay:'auto_pass', idStatus:'approved', idLabel:'USeP Student ID',
-          sched:[{d:'Sat, Jul 18',t:'1:00 PM – 6:00 PM'}],
-          receipt:{ ref:'3042 137 089838', amount:'₱2,000.00', date:'Jul 14, 2026 · 9:12 AM', to:'0995 194 ****', conf:'96%', flags:[] },
-          tl:[{w:'Jul 13 · 10:05 AM — Customer',x:'Booking submitted',m:'Single-day request with USeP Student ID attached.'},
-              {w:'Jul 13 · 11:20 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Jul 17.'},
-              {w:'Jul 14 · 9:12 AM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED: exact amount, correct receiver, fresh reference, receipt markers OK.'}] },
-
-        'BRQ-2428': { id:'BRQ-2428', name:'Ana Reyes', type:'Student · CoE', email:'areyes@usep.edu.ph', phone:'0916 300 7788',
-          event:'CoE Thesis Defense Panel', room:'Alumni Boardroom', venue:'Bahay Alumni', capacity:20, attendees:12,
-          dates:'Jul 21, 2026', feeDay:'₱1,500', days:1, total:'₱1,500', payBy:'Jul 20, 2026', method:'gcash',
-          submitted:'Jul 12, 2026 · 4:44 PM', res:'approved', pay:'review', idStatus:'approved', idLabel:'USeP Student ID',
-          sched:[{d:'Tue, Jul 21',t:'9:00 AM – 12:00 PM'}],
-          receipt:{ ref:'— (unreadable)', amount:'₱1,500.00', date:'Jun 27, 2026 · 3:41 PM', to:'MI....A J.. J.', conf:'41%',
-            flags:['Reference number could not be read','Receipt is more than 14 days old','OCR confidence is low — double-check against the image'] },
-          tl:[{w:'Jul 12 · 4:44 PM — Customer',x:'Booking submitted',m:'Single-day request with USeP Student ID attached.'},
-              {w:'Jul 13 · 9:02 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Jul 20.'},
-              {w:'Jul 14 · 8:31 AM — Customer',x:'GCash receipt uploaded',m:'Auto-check: NEEDS MANUAL REVIEW — 3 soft flags raised.'}] },
-
-        'BRQ-2427': { id:'BRQ-2427', name:'Leo Garcia', type:'Staff · OSAS', email:'lgarcia@usep.edu.ph', phone:'0919 555 6710',
-          event:'Student Leaders Summit', room:'Obrero Function Hall', venue:'USeP Venues', capacity:200, attendees:180,
-          dates:'Jul 24 – 27, 2026 (3 of 4 days)', feeDay:'₱3,000', days:3, total:'₱9,000', payBy:'Jul 23, 2026', method:'gcash',
-          submitted:'Jul 11, 2026 · 1:10 PM', res:'approved', pay:'rejected', idStatus:'approved', idLabel:'USeP Employee ID',
-          resubmitBy:'Jul 16, 2026 · 2:10 PM',
-          sched:[{d:'Day 1 · Fri, Jul 24',t:'8:00 AM – 5:00 PM'},{d:'Sat, Jul 25 — already booked',t:'Not available',skip:true},{d:'Day 2 · Sun, Jul 26',t:'8:00 AM – 5:00 PM'},{d:'Day 3 · Mon, Jul 27',t:'8:00 AM – 5:00 PM'}],
-          rejects:['Amount read ₱2,900.00 — this booking requires the EXACT total ₱9,000.00 (3 days × ₱3,000)','This exact image file was already submitted before (same fingerprint)'],
-          tl:[{w:'Jul 11 · 1:10 PM — Customer',x:'Booking submitted',m:'Range Jul 24–27; Jul 25 excluded automatically (already booked).'},
-              {w:'Jul 12 · 10:15 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Jul 23.'},
-              {w:'Jul 14 · 2:10 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check REJECTED: amount mismatch + duplicate file. 48-hour resubmit window started (ends Jul 16 · 2:10 PM).'}] },
-
-        'BRQ-2426': { id:'BRQ-2426', name:'Carmen Uy', type:'Faculty · CAS', email:'cuy@usep.edu.ph', phone:'0917 002 9931',
-          event:'CAS Research In-Service Training', room:'Admin Conference Hall', venue:'USeP Venues', capacity:60, attendees:40,
-          dates:'Jul 22, 2026', feeDay:'₱1,800', days:1, total:'₱1,800', payBy:'Jul 21, 2026', method:'cash',
-          submitted:'Jul 13, 2026 · 3:25 PM', res:'approved', pay:'await_cash', idStatus:'approved', idLabel:'USeP Employee ID',
-          sched:[{d:'Wed, Jul 22',t:'8:00 AM – 12:00 PM'}],
-          tl:[{w:'Jul 13 · 3:25 PM — Customer',x:'Booking submitted',m:'Single-day request; payment method: cash (walk-in).'},
-              {w:'Jul 13 · 4:50 PM — M. Robles (staff)',x:'ID + reservation approved',m:'Customer will pay at the cashier, quoting BRQ-2426, by Jul 21.'}] },
-
-        'BRQ-2425': { id:'BRQ-2425', name:'Paolo Mendoza', type:'Org · Honor Society', email:'honorsoc@usep.edu.ph', phone:'0916 777 1122',
-          event:'Recognition Night', room:'USeP Gymnasium', venue:'USeP Venues', capacity:1000, attendees:850,
-          dates:'Aug 2, 2026', feeDay:'₱8,000', days:1, total:'₱8,000', payBy:'Aug 1, 2026', method:'gcash',
-          submitted:'Jul 10, 2026 · 9:30 AM', res:'approved', pay:'confirmed', idStatus:'approved', idLabel:'USeP Student ID',
-          sched:[{d:'Sun, Aug 2',t:'3:00 PM – 10:00 PM'}],
-          receipt:{ ref:'2045 667 982375', amount:'₱8,000.00', date:'Jul 13, 2026 · 3:58 PM', to:'0995 194 ****', conf:'94%', flags:[] },
-          confirmedBy:'M. Robles · Jul 13, 2026 · 4:22 PM',
-          tl:[{w:'Jul 10 · 9:30 AM — Customer',x:'Booking submitted',m:'Single-day request with USeP Student ID attached.'},
-              {w:'Jul 10 · 11:00 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked.'},
-              {w:'Jul 13 · 3:58 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED.'},
-              {w:'Jul 13 · 4:22 PM — M. Robles (staff)',x:'Payment confirmed',m:'Reference 2045 667 982375 matched in GCash Transaction History. Reference locked.'}] },
-
-        'BRQ-2424': { id:'BRQ-2424', name:'Grace Tan', type:'Student · CIC', email:'gtan@usep.edu.ph', phone:'0918 445 9012',
-          event:'ACM Student Chapter Meetup', room:'Garden Pavilion', venue:'Bahay Alumni', capacity:150, attendees:95,
-          dates:'Jul 17, 2026', feeDay:'₱3,500', days:1, total:'₱3,500', payBy:'Jul 16, 2026 (passed)', method:'gcash',
-          submitted:'Jul 8, 2026 · 5:12 PM', res:'approved', pay:'overdue', idStatus:'approved', idLabel:'USeP Student ID',
-          sched:[{d:'Fri, Jul 17',t:'2:00 PM – 8:00 PM'}],
-          tl:[{w:'Jul 8 · 5:12 PM — Customer',x:'Booking submitted',m:'Single-day request with USeP Student ID attached.'},
-              {w:'Jul 9 · 8:30 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Jul 16.'},
-              {w:'Jul 16 · 11:59 PM — System',x:'Payment overdue',m:'No receipt submitted by the deadline. Slot is releasable.'}] },
-
-        'BRQ-2423': { id:'BRQ-2423', name:'Diego Cruz', type:'Alumni', email:'dcruz@alumni.usep.edu.ph', phone:'0917 660 3345',
-          event:'Batch ’16 Reunion Dinner', room:'Heritage Function Room', venue:'Bahay Alumni', capacity:80, attendees:70,
-          dates:'Sep 14, 2026', feeDay:'₱2,500', days:1, total:'₱2,500', payBy:'Sep 13, 2026', method:'gcash',
-          submitted:'Aug 10, 2026 · 7:48 PM', res:'approved', pay:'refund_req', idStatus:'approved', idLabel:'Government ID (Driver’s License)',
-          sched:[{d:'Mon, Sep 14',t:'5:00 PM – 10:00 PM'}],
-          receipt:{ ref:'2044 118 555209', amount:'₱2,500.00', date:'Aug 14, 2026 · 6:02 PM', to:'0995 194 ****', conf:'93%', flags:[] },
-          refund:{ stage:'Under verification', orPending:false,
-            reason:'Event cancelled by the organiser',
-            details:'The committee called off the reunion dinner after the caterer withdrew. We would rather have the fee back than move the date.',
-            docs:'System transaction receipt + GCash receipt + Official Receipt submitted · identity re-verified (email + password)' },
-          tl:[{w:'Aug 10 · 7:48 PM — Customer',x:'Booking submitted',m:'Single-day request with a government ID attached.'},
-              {w:'Aug 11 · 9:00 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Sep 13.'},
-              {w:'Aug 14 · 6:02 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED.'},
-              {w:'Aug 15 · 8:15 AM — M. Robles (staff)',x:'Payment confirmed',m:'Reference matched in GCash.'},
-              {w:'Sep 6 · 10:40 AM — Customer',x:'Refund requested',m:'Event cancelled by the organiser. All documents submitted; identity re-verified. Booking stays live until the refund completes.'}] },
-
-        /* [SIM] The SECOND refund request — the fresh one the queue shows as
-           "submitted today". It exists here as well as in booking-requests.php
-           because a queue row whose id is missing from DATA silently falls back
-           to another booking (see the lookup below), which would show staff the
-           wrong customer entirely. Every queue id needs a record here. */
-        'BRQ-2422': { id:'BRQ-2422', name:'Elena Bautista', type:'Faculty · CTET', email:'ebautista@usep.edu.ph', phone:'0919 224 7781',
-          event:'CTET Faculty Development Seminar', room:'Admin Conference Hall', venue:'USeP Venues', capacity:60, attendees:45,
-          dates:'Sep 30, 2026', feeDay:'₱1,800', days:1, total:'₱1,800', payBy:'Sep 29, 2026', method:'gcash',
-          submitted:'Aug 20, 2026 · 2:15 PM', res:'approved', pay:'refund_req', idStatus:'approved', idLabel:'USeP Faculty ID',
-          sched:[{d:'Wed, Sep 30',t:'8:00 AM – 5:00 PM'}],
-          receipt:{ ref:'2051 903 447126', amount:'₱1,800.00', date:'Aug 24, 2026 · 4:05 PM', to:'0918 334 ****', conf:'95%', flags:[] },
-          refund:{ stage:'Awaiting Official Receipt', orPending:true,
-            reason:'Schedule conflict — need a different date',
-            details:'The seminar moved to the second semester when the department calendar changed. Nobody will be using the hall on the 30th.',
-            docs:'System transaction receipt + GCash receipt submitted · Official Receipt not yet provided' },
-          tl:[{w:'Aug 20 · 2:15 PM — Customer',x:'Booking submitted',m:'Single-day request with a USeP Faculty ID attached.'},
-              {w:'Aug 21 · 9:10 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Sep 29.'},
-              {w:'Aug 24 · 4:05 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED: exact amount, correct receiver, fresh reference.'},
-              {w:'Aug 25 · 8:30 AM — M. Robles (staff)',x:'Payment confirmed',m:'Reference matched in GCash Transaction History.'},
-              {w:'Sep 9 · 8:05 AM — Customer',x:'Refund requested',m:'Reason: schedule conflict — the seminar was moved to the second semester. Booking cancelled and the date released; all three receipts submitted.'}] },
-
-        /* ============================================================
-           [SIM] HOSTEL requests. Same queue, same detail page, same
-           receipt machinery — `kind:'hostel'` branches only the two
-           cards where the DATA genuinely differs (Reservation, Payment).
-
-           Note what is NOT here: a `beds` field. beds = occupants.length,
-           exactly as on the customer side. Storing both would let the
-           roster and the counter disagree.
-           ============================================================ */
-        'BRQ-2450': { kind:'hostel', id:'BRQ-2450', name:'Ana Reyes', type:'Student · CAS', email:'areyes@usep.edu.ph', phone:'0916 233 8890',
-          event:'Hostel stay · 2 beds', room:'Hostel Room 1', venue:'USeP Hostel', crType:'Communal CR',
-          checkIn:'Aug 1, 2026', checkOut:'Aug 4, 2026', nights:3, rate:'₱350', total:'₱2,100', method:'gcash',
-          occupants:[{n:'Ana Reyes',g:'F'},{n:'Bea Cruz',g:'F'}],
-          pos:null, or:null, checkedIn:false,
-          submitted:'Jul 15, 2026 · 8:41 AM', res:'approved', pay:'await_pos', idStatus:'approved', idLabel:'USeP Student ID',
-          tl:[{w:'Jul 15 · 8:41 AM — Customer',x:'Booking submitted',m:'2 beds for 3 nights, both guests named. Valid ID attached.'},
-              {w:'Jul 15 · 9:02 AM — R. Delos Reyes (staff)',x:'ID + reservation approved',m:'Payment stays locked — POS not requested yet.'},
-              {w:'Jul 15 · 9:05 AM — R. Delos Reyes (staff)',x:'POS request raised at CEDU',m:'Walked the booking over. Waiting on CEDU to issue the POS.'}] },
-
-        'BRQ-2451': { kind:'hostel', id:'BRQ-2451', name:'Luis Ramos', type:'Student · CIC', email:'lramos@usep.edu.ph', phone:'0918 771 2245',
-          event:'Hostel stay · 3 beds', room:'Hostel Room 4', venue:'USeP Hostel', crType:'Private CR',
-          checkIn:'Jul 20, 2026', checkOut:'Jul 22, 2026', nights:2, rate:'₱400', total:'₱2,400', method:'gcash',
-          occupants:[{n:'Luis Ramos',g:'M'},{n:'Mara Ilagan',g:'F'},{n:'Nico Perez',g:'M'}],
-          /* Confirmed and PAID, but the OR has not come back from the cashier.
-             This is the whole reason the OR is a document flag and not a payment
-             status: payment is finished, the paperwork is not. */
-          pos:'POS-48213', or:null, checkedIn:false,
-          submitted:'Jul 12, 2026 · 3:12 PM', res:'approved', pay:'confirmed', idStatus:'approved', idLabel:'USeP Student ID',
-          confirmedBy:'R. Delos Reyes (staff)',
-          receipt:{ ref:'2044 771 990412', amount:'₱2,400.00', date:'Jul 13, 2026 · 10:22 AM', to:'0917 123 ****', conf:'95%', flags:[] },
-          tl:[{w:'Jul 12 · 3:12 PM — Customer',x:'Booking submitted',m:'3 beds for 2 nights (mixed group), all guests named.'},
-              {w:'Jul 12 · 4:30 PM — R. Delos Reyes (staff)',x:'POS received from CEDU',m:'POS-48213 recorded. Payment unlocked.'},
-              {w:'Jul 13 · 10:22 AM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED against the hostel staff account.'},
-              {w:'Jul 13 · 11:05 AM — R. Delos Reyes (staff)',x:'Payment confirmed',m:'Reference matched. Booking is confirmed; OR still to come.'},
-              {w:'Jul 13 · 2:00 PM — R. Delos Reyes (staff)',x:'Cash handed to the University Cashier',m:'Cashed out the GCash payment. Waiting on the OR.'}] },
-      };
+      /* EVERY request, from the database, keyed by its real reference. */
+      const DATA = <?php echo json_encode($brqData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
       const qid = new URLSearchParams(location.search).get('id');
 
-      /* [SIM] A refund the CUSTOMER filed has no record in DATA above — it lives
-         in the shared store (includes/refund-store.php) because there is no
-         database. Build the same record shape from the one-source booking plus
-         whatever the store holds, so this page renders it like any other request.
-         At DB time both come from the same `bookings` row and this disappears. */
-      const SESSION_CUSTOMER = 'Juan Miguel Dela Cruz';   /* PROJECT-HANDOFF 4.9 */
-      const CUSTOMER_BOOKINGS = <?php echo json_encode($customerBookings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-      /* The session customer's details, from the same include the customer pages
-         read — this page and customer-profile.php had drifted to two different
-         phone numbers, which matters now that the phone seeds a refund destination. */
-      const CUSTOMER_CONTACT = <?php echo json_encode($customerContact, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-      function storeRecord(ref) {
-        if (!window.RefundStore || !ref) return null;
-        const rec = RefundStore.get(ref);
-        const b = CUSTOMER_BOOKINGS.filter(function (x) { return x.bookingId === ref; })[0];
-        if (!rec || !b) return null;
-        const waited = RefundStore.daysSince(rec.filed);
-        return {
-          id: ref, name: SESSION_CUSTOMER, type: 'Student · CIC',
-          email: CUSTOMER_CONTACT.email, phone: CUSTOMER_CONTACT.phone,
-          refundTo: rec.refundTo || null,     /* the number the CUSTOMER declared */
-          event: b.eventName, room: b.roomName, venue: b.venueName,
-          capacity: b.capacity, attendees: b.attendees,
-          dates: b.eventDate, feeDay: b.amount, days: 1, total: b.amount,
-          payBy: b.eventDate, method: b.method === 'GCash' ? 'gcash' : 'cash',
-          submitted: b.bookingDate, res: 'approved',
-          pay: rec.status === 'fix' ? 'refund_fix' : 'refund_req',
-          idStatus: 'approved', idLabel: 'USeP Student ID',
-          sched: [],
-          receipt: null,
-          refund: {
-            stage: rec.status === 'fix' ? 'Returned for correction'
-                 : (rec.orPending ? 'Awaiting Official Receipt' : 'Under verification'),
-            orPending: !!rec.orPending,
-            reason: rec.reason,
-            details: rec.details,
-            docs: rec.status === 'fix'
-              ? 'Returned to the customer: ' + (rec.staffNote || 'correction requested')
-              : ('Transaction receipt + proof of payment submitted · '
-                 + (rec.orPending ? 'Official Receipt NOT yet provided' : 'Official Receipt provided'))
-          },
-          tl: [
-            { w: 'Filed ' + rec.filed + ' — Customer', x: 'Refund requested',
-              m: (rec.reason || 'No reason recorded') + '. ' + (rec.details || "")
-                 + ' Booking stays live until the refund completes.' }
-          ].concat(rec.resubmitted ? [{ w: 'Resubmitted ' + rec.resubmitted + ' — Customer', x: 'Corrected documents sent', m: 'Returned earlier for: ' + (rec.staffNote || 'a document problem') + '.' }] : [])
-           .concat(waited > 0 ? [{ w: 'Now', x: 'Awaiting a staff decision', m: 'No staff reply for ' + waited + ' day' + (waited === 1 ? "" : 's') + '.' }] : []),
-          fromStore: true
-        };
-      }
-      const storeCur = storeRecord(qid);
-      /* A VB- reference with nothing in the store must NOT fall through to the
-         default record — that would silently show staff a different customer. */
-      const missingCustomerRef = !DATA[qid] && !storeCur && String(qid || "").indexOf('VB-') === 0;
-      const cur = DATA[qid] || storeCur || (missingCustomerRef ? null : DATA['BRQ-2429']);
+      /* A refund the customer filed used to have no record here — it lived in
+         includes/refund-store.php, browser storage shared between two mockups
+         and invisible on any other machine. It is a `refunds` row now, joined
+         into DATA above, so a refund opens like any other request.
+
+         An unknown reference shows the "not found" state rather than falling
+         through to some other booking: silently showing staff a DIFFERENT
+         customer's request is the one failure this page must never have. */
+      const cur = DATA[qid] || null;
+      const missingCustomerRef = !cur && !!qid;
 
       /* ---- GCASH CHECKER WIRING FOR THE REFUND PAYOUT (staff → customer) ----
          The shared engine asks the page three questions. For a payment the money
@@ -1270,8 +1207,12 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
          staff act on. `proof` is forwarded; dropping it silently is what made the
          customer's proof panel read "not recorded". */
       function pushOutcome(status, note, proof) {
-        if (!cur.fromStore || !window.RefundStore) return true;   /* seeded demo record */
-        return RefundStore.decide(cur.id, status, note || "", proof || null) !== false;
+        /* The refund outcome is a `refunds` row now, not a browser-storage
+           record. Writing it belongs to the staff-action work (phase 3): until
+           that endpoint exists this reports success so the screen still walks
+           through the decision, exactly like every other staff action on this
+           page, which have always been screen-only. */
+        return true;
       }
       /* Nothing to show: a VB- reference with no request behind it. Better than
          silently rendering a different customer's booking. */

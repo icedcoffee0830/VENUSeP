@@ -836,7 +836,7 @@ var GAL_PHOTOS=[];
 function openGallery(){
   const R=getRoom(); if(!R || document.getElementById('galOverlay')) return;
   GAL_PHOTOS=R.photoUrls||[];
-  const n=GAL_PHOTOS.length||Math.max(1, R.photos||5);
+  const n=GAL_PHOTOS.length||1;          /* no photos yet -> ONE placeholder tile, never a made-up count */
   let thumbs='';
   for(let i=0;i<n;i++){
     const url=GAL_PHOTOS[i];

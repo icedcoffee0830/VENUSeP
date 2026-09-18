@@ -1,4 +1,15 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
+<?php
+/* The charts were four hard-coded arrays covering Q3 2025 to Q2 2026 — a
+   window that ended fifteen months ago — plus a venue breakdown naming
+   "Social Hall" and "Auditorium", which are not rooms in this catalog.
+   They are computed from `bookings` now (includes/bookings.php), so the
+   reports describe whatever the business actually did. */
+require_once __DIR__ . '/../includes/bookings.php';
+
+$rpQuarters = report_quarters(4);
+$rpVenues   = report_by_venue();
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -504,11 +515,13 @@
                 <div class="report-controls">
                     <div class="report-period-control">
                         <strong>Reporting Period:</strong>
+                        <!-- The same quarters the charts below are built from, newest
+                             first. Hard-coded before, so it offered Q3 2025 – Q2 2026
+                             long after the charts had moved on. -->
                         <select class="filter-select" aria-label="Reporting period">
-                            <option selected>Q2 2026</option>
-                            <option>Q1 2026</option>
-                            <option>Q4 2025</option>
-                            <option>Q3 2025</option>
+<?php foreach (array_reverse($rpQuarters) as $rpI => $rpQ): ?>
+                            <option<?php echo $rpI === 0 ? ' selected' : ''; ?>><?php echo htmlspecialchars($rpQ['label']); ?></option>
+<?php endforeach; ?>
                         </select>
                     </div>
                     <span class="tag tag-finalized">Status: Finalized</span>
@@ -622,46 +635,21 @@
     <!-- AdminLTE js removed in the merge (its layout code fought the shared shell) -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.37.1/dist/apexcharts.min.js"></script>
     <script>
-        /*
-            DATABASE INPUT GUIDE:
-            Replace the sample data below with values from your database later.
 
-            PHP example:
-            $quarterLabels = ['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026'];
-            $quarterRevenue = [210000, 245000, 260000, 315000];
-            $averageRevenuePerBooking = [7000, 7903, 8125, 8750];
-            $venueReport = [
-                ['venue' => 'Social Hall', 'events' => 14, 'discounted' => 4, 'cancelled' => 2, 'revenue' => 126000],
-                ['venue' => 'Gymnasium', 'events' => 10, 'discounted' => 2, 'cancelled' => 1, 'revenue' => 98000],
-            ];
+        /* Live aggregates — see report_quarters() / report_by_venue(). */
+        const quarterLabels = <?php echo json_encode(array_column($rpQuarters, 'label')); ?>;
+        const quarterRevenue = <?php echo json_encode(array_map('floatval', array_column($rpQuarters, 'revenue'))); ?>;
+        const averageRevenuePerBooking = <?php echo json_encode(array_map('floatval', array_column($rpQuarters, 'avg'))); ?>;
+        const cancelledByQuarter = <?php echo json_encode(array_map('intval', array_column($rpQuarters, 'cancelled'))); ?>;
 
-            Then echo the arrays into JavaScript using json_encode:
-            const quarterLabels = PHP_JSON_ENCODE_QUARTER_LABELS;
-            const quarterRevenue = PHP_JSON_ENCODE_QUARTER_REVENUE;
-            const averageRevenuePerBooking = PHP_JSON_ENCODE_AVERAGE_REVENUE;
-            const venueReport = PHP_JSON_ENCODE_VENUE_REPORT;
-        */
-
-        const quarterLabels = ['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026'];
-        const quarterRevenue = [210000, 245000, 260000, 315000];
-        const averageRevenuePerBooking = [7000, 7903, 8125, 8750];
-        const cancelledByQuarter = [5, 4, 6, 3];
-
-        /*
-            DATABASE INPUT GUIDE:
-            Keep these property names when replacing this array:
-            venue = venue name
-            events = approved/held bookings for the selected quarter
-            discounted = bookings with a discount attached
-            cancelled = cancelled reservations for the selected quarter
-            revenue = paid revenue for the selected quarter
-        */
-        const venueReport = [
-            { venue: 'Social Hall', events: 14, discounted: 4, cancelled: 2, revenue: 126000 },
-            { venue: 'Gymnasium', events: 10, discounted: 2, cancelled: 1, revenue: 98000 },
-            { venue: 'Auditorium', events: 7, discounted: 1, cancelled: 0, revenue: 63000 },
-            { venue: 'Bahay Alumni', events: 5, discounted: 2, cancelled: 0, revenue: 28000 },
-        ];
+        /* venue = venue name · events = bookings held · discounted = bookings
+           that got the USeP rate · cancelled = fell through · revenue = money
+           actually collected (an unpaid booking inflates nothing). */
+        const venueReport = <?php echo json_encode(array_map(function ($v) {
+            return ['venue' => $v['venue'], 'events' => (int) $v['events'],
+                    'discounted' => (int) $v['discounted'], 'cancelled' => (int) $v['cancelled'],
+                    'revenue' => (float) $v['revenue']];
+        }, $rpVenues), JSON_UNESCAPED_UNICODE); ?>;
 
         const currencyFormatter = new Intl.NumberFormat('en-PH', {
             style: 'currency',

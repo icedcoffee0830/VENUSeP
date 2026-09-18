@@ -90,6 +90,9 @@ function bookings_query(array $opts = []) {
                /* The latest receipt's verdict. 'under_review' means a receipt is
                   in; WHICH queue tab it lands in depends on whether the scanner
                   passed it (staff confirm) or sent it to a human (staff judge). */
+               /* When money actually moved, for the transaction ledger. */
+               (SELECT p.paid_at FROM payments p WHERE p.booking_id = b.id
+                 ORDER BY p.id DESC LIMIT 1) AS paid_at,
                (SELECT gr.verdict FROM gcash_receipts gr WHERE gr.booking_id = b.id
                  ORDER BY gr.id DESC LIMIT 1) AS receipt_verdict,
                (SELECT gr.reference_number FROM gcash_receipts gr WHERE gr.booking_id = b.id
@@ -203,6 +206,7 @@ function booking_shape(array $row) {
         'refundStatus'  => $row['refund_status'],
         'refundFiledIso'=> $row['refund_requested_at'] ? date('Y-m-d', strtotime($row['refund_requested_at'])) : null,
         'refundOrPending' => (bool) $row['refund_or_pending'],
+        'paidAtIso'       => $row['paid_at'] ? date('Y-m-d', strtotime($row['paid_at'])) : null,
         'receiptVerdict'  => $row['receipt_verdict'],       // accepted | manual_review | rejected | null
         'receiptReference'=> (string) $row['receipt_reference'],
         'receiptFlags'    => (int) $row['receipt_flags'],
@@ -366,6 +370,212 @@ function booking_queue_rows() {
         ];
     }
     return $rows;
+}
+
+/* =====================================================================
+   THE TRANSACTION LEDGER — one row per booking, for both portals.
+
+   Pass a customer id for that person's own ledger, or nothing for the
+   staff-wide view. Both transaction-history pages render the same shape;
+   only the admin one shows the customer's name.
+
+   ONE ROW PER BOOKING, not per payment: a booking that has not paid yet
+   still belongs in the ledger (that is what "Payment due" rows are), and
+   a booking never has two competing payments — a rejected receipt is
+   re-submitted against the same one.
+   ===================================================================== */
+function transaction_rows($customerId = null) {
+    $bookings = $customerId
+        ? bookings_for_customer($customerId)
+        : bookings_all();
+
+    $rows = [];
+    foreach ($bookings as $b) {
+        $rows[] = [
+            /* Derived from the BOOKING id, so a transaction keeps its number.
+               These used to be the array index + 1, which meant a row's
+               "transaction ID" changed whenever the list did — the same number
+               could name a different transaction on the next page load. */
+            'transactionId'   => 'TXN-' . date('Y', strtotime($b['bookingDateIso'])) . '-'
+                                 . str_pad((string) $b['id'], 3, '0', STR_PAD_LEFT),
+            'bookingId'       => $b['bookingId'],
+            'customerName'    => $b['customerName'],
+            'venue'           => $b['roomName'],
+            'eventDate'       => $b['eventDate'],
+            /* The day money moved, falling back to the day the booking was made
+               for anything not yet paid. */
+            'transactionDate' => date('F j, Y', strtotime($b['paidAtIso'] ?: $b['bookingDateIso'])),
+            'amount'          => $b['amount'],
+            'paymentMethod'   => $b['method'],
+            'paymentStatus'   => $b['paymentStatus'],
+            'bookingStatus'   => $b['bookingStatus'],
+        ];
+    }
+    return $rows;
+}
+
+/* =====================================================================
+   REPORTS — aggregates for admin/Quarterly_Reports.php.
+
+   Those charts were four hard-coded arrays covering Q3 2025 to Q2 2026,
+   which by now ended fifteen months in the past and named venues ("Social
+   Hall") that are not in the catalog. They are computed here instead, so
+   the reports describe whatever the business actually did.
+
+   A booking counts toward the quarter its EVENT falls in, not the quarter
+   it was booked or paid in: a venue's quarter is the business it hosted.
+   REVENUE counts only money actually collected (confirmed / paid at the
+   cashier), so an unpaid or overdue booking inflates nothing.
+   ===================================================================== */
+
+/* One derived table both report queries read: every booking with its event
+   date, whether its money landed, and whether it fell through. */
+function report_base_sql() {
+    return "SELECT b.id, b.room_id, b.total_amount, b.discount_percent,
+                   b.reservation_status, b.payment_status,
+                   COALESCE(vd.start_date, hd.check_in_date) AS event_date,
+                   IF(b.payment_status IN ('confirmed','paid_cash'), b.total_amount, 0) AS collected,
+                   IF(b.reservation_status IN ('cancelled','rejected','released'), 1, 0) AS fell_through
+              FROM bookings b
+              LEFT JOIN venue_booking_details vd  ON vd.booking_id = b.id
+              LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id";
+}
+
+/* The last $count quarters up to and including the current one, oldest first.
+   Quarters with no business still appear, as zeroes — a missing quarter would
+   silently compress the x-axis and make a quiet period look like growth. */
+function report_quarters($count = 4) {
+    $pdo = venusep_db();
+    $out = [];
+
+    /* Build the window first, so empty quarters are present by construction. */
+    $cursor = strtotime(date('Y-m-01', strtotime('-' . (3 * ($count - 1)) . ' months')));
+    for ($i = 0; $i < $count; $i++) {
+        $y = (int) date('Y', $cursor);
+        $q = (int) ceil((int) date('n', $cursor) / 3);
+        $out["$y-$q"] = [
+            'label' => 'Q' . $q . ' ' . $y,
+            'revenue' => 0.0, 'bookings' => 0, 'cancelled' => 0, 'avg' => 0.0,
+        ];
+        $cursor = strtotime('+3 months', $cursor);
+    }
+    if ($pdo === null) {
+        return array_values($out);
+    }
+
+    try {
+        $rows = $pdo->query(
+            "SELECT YEAR(x.event_date) AS y, QUARTER(x.event_date) AS q,
+                    SUM(x.collected) AS revenue,
+                    SUM(x.fell_through = 0) AS bookings,
+                    SUM(x.fell_through)     AS cancelled,
+                    SUM(x.collected > 0)    AS paid_bookings
+               FROM (" . report_base_sql() . ") x
+              WHERE x.event_date IS NOT NULL
+              GROUP BY y, q"
+        )->fetchAll();
+        foreach ($rows as $r) {
+            $key = $r['y'] . '-' . $r['q'];
+            if (!isset($out[$key])) {
+                continue;                       // outside the window we are charting
+            }
+            $out[$key]['revenue']   = (float) $r['revenue'];
+            $out[$key]['bookings']  = (int) $r['bookings'];
+            $out[$key]['cancelled'] = (int) $r['cancelled'];
+            /* Average per PAID booking, not per booking: dividing collected
+               money by bookings that never paid understates every quarter. */
+            $out[$key]['avg'] = $r['paid_bookings'] > 0
+                ? round((float) $r['revenue'] / (int) $r['paid_bookings'])
+                : 0;
+        }
+    } catch (PDOException $e) { /* the zeroed window still renders */ }
+
+    return array_values($out);
+}
+
+/* Per-venue totals for the breakdown charts and the table. */
+function report_by_venue() {
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return [];
+    }
+    try {
+        return $pdo->query(
+            "SELECT v.name AS venue,
+                    COUNT(*)                        AS events,
+                    SUM(x.discount_percent > 0)     AS discounted,
+                    SUM(x.fell_through)             AS cancelled,
+                    SUM(x.collected)                AS revenue
+               FROM (" . report_base_sql() . ") x
+               JOIN rooms r  ON r.id = x.room_id
+               JOIN venues v ON v.id = r.venue_id
+              GROUP BY v.id, v.name
+              ORDER BY v.id"
+        )->fetchAll();
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
+/* =====================================================================
+   CALENDAR EVENTS — FullCalendar rows for both portals.
+
+   Pass a customer id for "my calendar", or nothing for the staff-wide
+   view (which also labels each event with its room).
+
+   Colour carries the RESERVATION status, because a calendar answers "is
+   this date taken and is it settled" — a cancelled booking must not read
+   like a live one. Payment state is deliberately not encoded: a date is
+   held or it is not, and mixing two axes into one colour is what the
+   two-badge design elsewhere exists to avoid.
+   ===================================================================== */
+function calendar_events($customerId = null) {
+    /* Background, text. Anything that fell through shares the red-ish pair so a
+       dead date is visually distinct from a live one at a glance. */
+    $colors = [
+        'pending'   => ['#fdf3e6', '#8a5a12'],
+        'approved'  => ['#eaf6ef', '#1c7a4f'],
+        'completed' => ['#d7d7d7', '#1f1e1e'],
+        'released'  => ['#efefef', '#6b675f'],
+        'rejected'  => ['#fbd5db', '#b23a3a'],
+        'cancelled' => ['#fbd5db', '#b23a3a'],
+        'disrupted' => ['#fbd5db', '#b23a3a'],
+    ];
+
+    $bookings = $customerId ? bookings_for_customer($customerId) : bookings_all();
+    $events = [];
+    foreach ($bookings as $b) {
+        if (!$b['eventDateIso']) {
+            continue;
+        }
+        $c = isset($colors[$b['reservationCode']]) ? $colors[$b['reservationCode']] : $colors['completed'];
+
+        /* FullCalendar's `end` is EXCLUSIVE, so a booking's last day needs one
+           day added or a three-day event renders as two. A hostel stay already
+           ends on its check-out date, which is the morning everyone leaves —
+           that IS the exclusive end, so it is passed through unchanged. */
+        $end = null;
+        if ($b['type'] === 'hostel') {
+            $end = $b['endDateIso'] ?: null;
+        } elseif ($b['endDateIso'] && $b['endDateIso'] !== $b['eventDateIso']) {
+            $end = date('Y-m-d', strtotime($b['endDateIso'] . ' +1 day'));
+        }
+
+        $event = [
+            'title'           => $customerId
+                                    ? $b['eventName']
+                                    : $b['eventName'] . ' · ' . $b['roomName'],
+            'start'           => $b['eventDateIso'],
+            'backgroundColor' => $c[0],
+            'borderColor'     => $c[0],
+            'textColor'       => $c[1],
+        ];
+        if ($end !== null) {
+            $event['end'] = $end;
+        }
+        $events[] = $event;
+    }
+    return $events;
 }
 
 /* "Oct 18 – Oct 20, 2026", or a single date, or a stay with its bed count. */

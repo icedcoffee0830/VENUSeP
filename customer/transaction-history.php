@@ -7,48 +7,18 @@
    Same Tabulator engine as admin/transaction-history.php, minus the
    "Customer Name" column, on OUR customer shell ($portal='customer').
 
-   [SIM] the $customerBookings block is demo data — replace with a
-   "WHERE customer_id = <session>" query later.
+   The rows come from transaction_rows() in includes/bookings.php — the
+   same builder the admin ledger uses, scoped to the session customer.
+   This page used to declare its own $customerBookings array, which
+   SHADOWED the one the include provides: a second hard-coded copy
+   hiding behind the same variable name, free to disagree with the
+   customer's own booking history. It did.
    ================================================================== */
+require_once __DIR__ . '/../includes/customer-bookings.php';
 
-/* [SIM] this customer's demo bookings → transactions (delete when DB is wired).
-   (id, ROOM, eventDateIso, bookingStatus, paymentStatus, method, amount).
-   Rooms are the real r1–r8 venue rooms; amounts match each room's per-day fee;
-   methods are GCash/Cash ONLY (no Bank Transfer/Maya — the system verifies GCash
-   receipts and takes cash, nothing else). */
-$customerBookings = [
-    ['101','USeP Gymnasium','2026-08-25','Approved','Paid','GCash',8000],
-    ['102','CIC Audio-Visual Room','2026-08-28','Pending','Pending','Cash',2000],
-    ['103','Alumni Grand Ballroom','2026-09-02','Approved','Paid','GCash',5000],
-    ['104','Alumni Boardroom','2026-09-05','Approved','Paid','GCash',1500],
-    ['105','Heritage Function Room','2026-09-08','Pending','Pending','Cash',2500],
-    ['106','Admin Conference Hall','2026-09-12','Cancelled','Refunded','GCash',1800],
-    ['107','Alumni Grand Ballroom','2026-09-15','Approved','Paid','GCash',5000],
-    ['108','Obrero Function Hall','2026-09-18','Pending','Pending','Cash',3000],
-    /* [SIM] post-pay rows (DB-DECISIONS #18): a future booking cannot be paid yet
-       ("Payment pending"); a finished one is "Payment due", then "Overdue". */
-    ['109','USeP Gymnasium','2026-09-22','Approved','Payment pending','GCash',8000],
-    ['110','CIC Audio-Visual Room','2026-09-25','Cancelled','Refunded','GCash',2000],
-    ['111','Heritage Function Room','2026-09-28','Approved','Payment pending','Cash',2500],
-    ['112','Alumni Boardroom','2026-10-02','Pending','Pending','Cash',1500],
-    ['113','USeP Gymnasium','2026-09-15','Completed','Payment due','GCash',8000],
-    ['114','Admin Conference Hall','2026-09-05','Completed','Overdue','Cash',1800],
-];
-$transactionRows = [];
-foreach ($customerBookings as $index => $b) {
-    $transactionRows[] = [
-        'transactionId'   => 'TXN-2026-' . str_pad((string) ($index + 101), 3, '0', STR_PAD_LEFT),
-        'bookingId'       => 'VB-2026-' . $b[0],
-        'venue'           => $b[1],
-        'eventDate'       => date('F j, Y', strtotime($b[2])),
-        'transactionDate' => date('F j, Y', strtotime('2026-07-20 +' . $index . ' days')),
-        'amount'          => '₱' . number_format($b[6]),
-        'paymentMethod'   => $b[5],
-        'paymentStatus'   => $b[4],
-        'bookingStatus'   => $b[3],
-    ];
-}
+$transactionRows = transaction_rows($customerContact['id']);
 $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
+?>
 ?>
 <!DOCTYPE html>
 <!-- MAP: [0] SHELL CSS · [1] PAGE CSS · [2] HEADER · [3] SIDEBAR ·

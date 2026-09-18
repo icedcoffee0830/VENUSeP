@@ -73,7 +73,6 @@ $lpVenueNames = array_values(array_unique(array_column($venueRooms, 'venue')));
 $lpVenueCount = count($lpVenueNames) + 1;                               /* + the hostel */
 $lpSpaceCount = count($venueRooms) + count($hostelRooms);
 $lpBedCount   = array_sum(array_column($hostelRooms, 'beds'));
-$lpMinHostel  = min($HOSTEL_RATES);
 
 /* Footer facts. Confirm these with the venue office before go-live. */
 $lpOfficeWhere = 'USeP Tagum–Mabini Campus, Apokon, Tagum City';
@@ -212,6 +211,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
       font-size: 12px; font-weight: 700; }
     .lp-badge-closed { color: var(--amber); }
     .lp-badge-note { color: var(--muted); }
+    .lp-card-status { display: none; }   /* phone only: the badge's reason, in the card body */
     .lp-card-body { padding: 21px 22px 23px; }
     .lp-card h3 { font-size: 19px; font-weight: 700; letter-spacing: -.012em; }
     .lp-card-meta { margin-top: 7px; font-size: 13.5px; color: var(--muted-2); }
@@ -234,7 +234,6 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
     .lp-venue-foot { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--line-2); display: flex; align-items: center;
       justify-content: space-between; gap: 12px; font-size: 13.5px; }
     .lp-venue-foot .lp-count { font-weight: 600; color: var(--muted-2); }
-    .lp-venue-foot .lp-from { font-family: var(--font-display); font-weight: 700; font-size: 14px; text-align: right; }
 
     /* ------------------------------------------------------------------
        HOW IT WORKS — black with crimson glow
@@ -269,7 +268,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
     .lp-group span { font-size: 14px; color: var(--muted); text-align: right; }
     .lp-grid-3 + .lp-group { margin-top: 44px; }
     /* usep_price_html() prints its note at 11px inline; the page floor is 12px (UI only, the function is untouched) */
-    .lp-card-price span, .lp-venue-foot .lp-from span, .lp-group span span, .lp-cr-head span span, .lp-hs-card .lp-card-meta span { font-size: 12px !important; }
+    .lp-card-price span, .lp-hs-card .lp-card-meta span { font-size: 12px !important; }
 
     /* ------------------------------------------------------------------
        HOSTEL — crimson to black, rooms listed and grouped by CR type
@@ -299,9 +298,6 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
     .lp-hs-card .lp-card-meta s      { color: #ac8f8d !important; }
     .lp-hs-card .lp-card-meta strong { color: #fff !important; }
     .lp-hs-card .lp-card-meta span   { color: #f2d0cb !important; }
-    .lp-cr-head span s      { color: #ac8f8d !important; }
-    .lp-cr-head span strong { color: #fff !important; }
-    .lp-cr-head span span   { color: #f2d0cb !important; }
     .lp-free { margin-top: 15px; display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px; border-radius: 999px;
       font-size: 12px; font-weight: 600; }
     .lp-free i { width: 6px; height: 6px; border-radius: 50%; display: block; }
@@ -404,12 +400,18 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
       .lp-card-price { margin-top: 8px; padding-top: 8px; font-size: 13px; }
       .lp-card-price strong { font-size: 16px; }
       .lp-venue-foot { margin-top: 8px; padding-top: 8px; flex-wrap: wrap; gap: 4px 10px; }
-      .lp-venue-foot .lp-from { text-align: left; }
       .lp-free { margin-top: 8px; }
       .lp-group { flex-direction: column; align-items: flex-start; gap: 4px; margin: 30px 0 12px; }
       .lp-group h3 { font-size: 20px; }
       .lp-grid-3 + .lp-group { margin-top: 32px; }
-      .lp-badge-closed { top: 8px; left: 8px; }
+      /* the badge sits at the top-left of the small photo tile, on one line; a long
+         reason is cut with an ellipsis rather than wrapped (right:13px + left:8px
+         used to stretch it and wrap the text) */
+      .lp-badge { top: 8px; left: 8px; right: auto; padding: 4px 9px; font-size: 11px; white-space: nowrap; }
+      .lp-badge-why { display: none; }
+      .lp-card-status { display: block; margin: 4px 0 0; font-size: 12px; font-weight: 700; line-height: 1.4; }
+      .lp-card-status-closed { color: var(--amber); }
+      .lp-card-status-note { color: var(--muted); }
       /* the four steps: number beside the text instead of above it */
       .lp-step { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 14px; padding: 18px 18px 18px 16px; border-radius: 16px; }
       .lp-step-n { width: 40px; height: 40px; grid-row: 1 / span 2; }
@@ -531,7 +533,6 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
         $rooms = venueRoomsFor($venueRooms, $venueName);
         if (!$rooms) continue;
         $caps  = array_column($rooms, 'capacity');
-        $minFee = min(array_column($rooms, 'fee'));
         $slug  = $lpVenueSlug[$venueName] ?? 'venue';
         $anchor = 'venue-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($venueName)); ?>
         <a class="lp-card lp-venue-card lp-lift" href="#<?php echo htmlspecialchars($anchor); ?>">
@@ -541,7 +542,6 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
             <p class="lp-card-desc"><?php echo htmlspecialchars($lpVenueBlurb[$venueName] ?? ''); ?></p>
             <div class="lp-venue-foot">
               <span class="lp-count"><?php echo count($rooms); ?> spaces &middot; <?php echo (int) min($caps); ?>&ndash;<?php echo number_format(max($caps)); ?> seats</span>
-              <span class="lp-from">from <?php echo usep_price_html((int) $minFee, $isUsep); ?></span>
             </div>
           </div>
         </a>
@@ -553,7 +553,6 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
             <p class="lp-card-desc">Bunk rooms booked by the bed, with communal or private bathrooms.</p>
             <div class="lp-venue-foot">
               <span class="lp-count"><?php echo count($hostelRooms); ?> rooms &middot; <?php echo (int) $lpBedCount; ?> beds</span>
-              <span class="lp-from">from <?php echo usep_price_html((int) $lpMinHostel, $isUsep, '/night'); ?></span>
             </div>
           </div>
         </a>
@@ -631,25 +630,32 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
 <?php foreach ($lpVenueNames as $venueName):
         $rooms  = venueRoomsFor($venueRooms, $venueName);
         if (!$rooms) continue;
-        $anchor = 'venue-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($venueName));   /* Bahay Alumni -> venue-bahay-alumni */
-        $minFee = min(array_column($rooms, 'fee')); ?>
+        $anchor = 'venue-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($venueName));   /* Bahay Alumni -> venue-bahay-alumni */ ?>
       <div class="lp-group" id="<?php echo htmlspecialchars($anchor); ?>" data-reveal>
         <h3><?php echo htmlspecialchars($venueName); ?></h3>
-        <span><?php echo count($rooms); ?> space<?php echo count($rooms) === 1 ? '' : 's'; ?> &middot; from <?php echo usep_price_html((int) $minFee, $isUsep, ' per day'); ?></span>
+        <span><?php echo count($rooms); ?> space<?php echo count($rooms) === 1 ? '' : 's'; ?></span>
       </div>
       <div class="lp-grid-3" data-stagger>
 <?php   foreach ($rooms as $room):
           $mt     = $room['maintenance'];
           $covers = $mt && venueMaintCovers($mt, $lpToday);
           /* the badge is the room's maintenance state, from the shared window */
-          $badge  = '';
-          if ($covers && $mt['blocks']) $badge = '<span class="lp-badge lp-badge-closed">Closed &middot; ' . htmlspecialchars($mt['reason']) . '</span>';
-          elseif ($covers)              $badge = '<span class="lp-badge lp-badge-note">Notice &middot; '  . htmlspecialchars($mt['reason']) . '</span>'; ?>
+          /* the badge on the photo: "Closed · Roof repair". The phone tile is too
+             narrow for the reason, so there the badge keeps only the word and the
+             reason shows as a line in the card body (.lp-card-status) instead. */
+          $badge = ''; $status = '';
+          if ($covers) {
+            $word  = $mt['blocks'] ? 'Closed' : 'Notice';
+            $cls   = $mt['blocks'] ? 'closed' : 'note';
+            $badge  = '<span class="lp-badge lp-badge-' . $cls . '">' . $word . '<span class="lp-badge-why"> &middot; ' . htmlspecialchars($mt['reason']) . '</span></span>';
+            $status = '<p class="lp-card-status lp-card-status-' . $cls . '">' . $word . ' &middot; ' . htmlspecialchars($mt['reason']) . '</p>';
+          } ?>
         <a class="lp-card lp-lift" href="room-reservation.php?room=<?php echo urlencode($room['id']); ?>">
           <?php echo lp_photo_block($room['id'], lp_room_kind($room), $badge); ?>
           <div class="lp-card-body">
             <h3><?php echo htmlspecialchars($room['name']); ?></h3>
             <p class="lp-card-meta">up to <?php echo number_format((int) $room['capacity']); ?> guests</p>
+            <?php echo $status; ?>
             <p class="lp-card-desc"><?php echo htmlspecialchars($room['description']); ?></p>
             <div class="lp-card-price"><?php echo usep_price_html((int) $room['fee'], $isUsep, ' per day'); ?></div>
           </div>
@@ -682,7 +688,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
         if (!$rooms) continue; ?>
       <div class="lp-cr-head" data-reveal>
         <h3><?php echo htmlspecialchars($HOSTEL_CR_LABEL[$crType]); ?></h3>
-        <span><?php echo $crType === 'private' ? 'Bathroom inside the room' : 'Shared bathroom outside the room'; ?> &middot; <?php echo usep_price_html((int) $HOSTEL_RATES[$crType], $isUsep, ' per head, per night'); ?></span>
+        <span><?php echo $crType === 'private' ? 'Bathroom inside the room' : 'Shared bathroom outside the room'; ?></span>
       </div>
       <div class="lp-grid-3" data-stagger>
 <?php foreach ($rooms as $room):

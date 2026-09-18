@@ -59,7 +59,7 @@ if ($portal === 'customer') {
   aside.sidebar .menu i{width:20px;text-align:center;font-size:18px;color:inherit}
   aside.sidebar .menu span{font-size:14px}
   aside.sidebar .menu li:last-child{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}
-  @media (max-width:767.98px){aside.sidebar{transform:translateX(-100%)!important}}
+  @media (max-width:767.98px){aside.sidebar{transform:translateX(-100%)!important;will-change:transform}}   /* will-change: the slide runs on the GPU */
 </style>
 <aside class="sidebar" id="hdSidebar">
   <div class="logo"><img src="../logo/Logo Header 3.png" alt="VENUSeP logo" /></div>

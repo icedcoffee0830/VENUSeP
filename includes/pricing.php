@@ -55,13 +55,15 @@ function usep_discounted($price) {
     global $DISCOUNT_PERCENT;
     return $price - round($price * $DISCOUNT_PERCENT) / 100;
 }
-/* "~~₱5,000~~ ₱4,000" for a USeP account, plain "₱5,000" otherwise. Always
-   carries the condition, because this is a PREVIEW — the ID decides it. */
+/* "~~₱5,000~~ ₱4,000 per day · 20% off" for a USeP account, plain "₱5,000"
+   otherwise. A preview — staff still confirm the discount from the ID at
+   approval — but the listing keeps it to the short "20% off" tag. */
 function usep_price_html($price, $isUsep, $unit = '') {
+    global $DISCOUNT_PERCENT;
     $full = '₱' . number_format($price);
     if (!$isUsep) return $full . $unit;
     return '<s style="color:#a5a19a;font-weight:400">' . $full . '</s> <strong style="color:#1c7a4f">₱' . number_format(usep_discounted($price)) . '</strong>' . $unit
-         . ' <span style="font-size:11px;color:#1c7a4f">· USeP price, with a verified ID</span>';
+         . ' <span style="font-size:11px;color:#1c7a4f;white-space:nowrap">· ' . (int) $DISCOUNT_PERCENT . '% off</span>';
 }
 ?>
 <script>

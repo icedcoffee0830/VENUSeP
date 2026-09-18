@@ -63,7 +63,7 @@ if ($portal === 'customer') {
     nav.app-header .hd-username{display:none}
     nav.app-header .hd-quick span{display:none}
     nav.app-header .hd-quick{padding:0 .55rem}
-    nav.app-header .hd-wrap{flex-direction:row-reverse}      /* phone: the burger sits on the right, like the landing page nav; chip + quick links on the left */
+    nav.app-header .hd-wrap{flex-direction:row-reverse;justify-content:flex-start;gap:.6rem}      /* phone: everything on the right — burger at the edge, chip + quick links beside it */
     body.sb-open aside.sidebar{transform:none!important}
     /* the page dims behind the open sidebar with a fading layer (opacity animates on the GPU);
        the old way — a 100vw box-shadow — repainted the whole screen every frame and stuttered on phones */

@@ -87,7 +87,11 @@ if (!$navAuthed) {                                                      /* a gue
   .cn-menu { display: none; }
   @media (max-width: 720px) {
     .cn-wrap, .cn-nav.is-static .cn-wrap { padding: 0 18px; height: 72px; }
-    .cn-links, .cn-name, .cn-login, .cn-logout { display: none; }
+    .cn-links, .cn-name, .cn-logout { display: none; }
+    /* guest on a phone: "Log in" (outlined) beside "Sign up" (white pill), so
+       the login is one tap without opening the menu */
+    .cn-auth { gap: 8px; }
+    .cn-login { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.55); font-size: 13px; }
     .cn-signup { min-height: 36px; padding: 0 14px; font-size: 13px; }
     .cn-burger { display: grid; }
     .cn-user { padding: 0; border: 0; background: transparent; min-height: 0; }

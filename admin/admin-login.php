@@ -113,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta name="darkreader-lock">
 <meta name="color-scheme" content="light">
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <title>VENUSeP | Admin Login</title>
     <link rel="icon" href="../logo/Logo Header 3.png" type="image/png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -201,13 +201,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       /* ---- phone: the crimson panel becomes a short header strip ---- */
       @media (max-width: 860px) {
         .auth-split { grid-template-columns: 1fr; min-height: 0; }
-        .auth-hero { padding: 26px 24px 30px; justify-content: flex-start; gap: 18px; }
-        .auth-hero-logo { height: 26px; }
-        .auth-hero-title { font-size: 34px; margin-bottom: 8px; }
-        .auth-hero-sub { font-size: 14.5px; }
+        /* a short strip, not a tall panel: the form must start high enough that the
+           password box stays above the keyboard (in-app browsers do not scroll for it) */
+        .auth-hero { padding: 16px 20px 18px; flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; }
+        .auth-hero-logo { height: 22px; }
+        .auth-hero-copy { max-width: none; }
+        .auth-hero-title { font-size: 20px; margin: 0; line-height: 1.15; }
+        .auth-hero-title br { display: none; }
+        .auth-hero-sub { display: none; }
         .auth-hero-foot { display: none; }
         .auth-hero-arcs { right: -40%; top: -60%; width: 160%; height: 220%; }
-        .auth-panel { padding: 30px 24px 44px; }
+        .auth-panel { padding: 22px 20px 40px; }
+        .auth-heading { margin-bottom: 18px; }
+        .auth-brand { display: none; }
+        .auth-title { font-size: 26px; }
+        .form-group { scroll-margin-bottom: 120px; }
         .auth-brand { display: none; }
         .auth-card { max-width: 480px; margin: 0 auto; }
       }
@@ -235,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <svg class="auth-hero-arcs" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g transform="translate(560 300)"><circle r="120"/><circle r="200"/><circle r="280"/><circle r="360"/><circle r="440"/><circle r="520"/></g></svg>
         <img class="auth-hero-logo" src="../logo/Logo Header 3.png" alt="" />
         <div class="auth-hero-copy">
-          <h2 class="auth-hero-title">Welcome to<br />VENUSeP! <span class="auth-wave">&#128075;</span></h2>
+          <h2 class="auth-hero-title">Welcome to <br />VENUSeP! <span class="auth-wave">&#128075;</span></h2>
           <p class="auth-hero-sub">The staff side: review booking requests, confirm payments, and keep the venues and hostel beds up to date.</p>
         </div>
         <p class="auth-hero-foot">&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</p>

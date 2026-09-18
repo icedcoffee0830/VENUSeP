@@ -152,8 +152,26 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
     
       /* current page in the table's pagination: crimson, not black */
       .tabulator .tabulator-footer .tabulator-page.active { background: #a11626; color: #ffffff; border-color: #a11626; }
-          /* type floor (readability): nothing on the page below 12px */
+          /* phone: the folded columns under a row (Tabulator responsiveCollapse) */
+      .tabulator-responsive-collapse { border-top: 1px solid #f2efe9; padding: 6px 12px 8px; }
+      .tabulator-responsive-collapse table { width: 100%; font-size: 13px; }
+      .tabulator-responsive-collapse td { padding: 4px 6px 4px 0; vertical-align: top; }
+      .tabulator-responsive-collapse td:first-child { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); width: 38%; padding-top: 6px; }
+      .tabulator-responsive-collapse-toggle { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; background: #f4f2ee; color: #a11626; font-weight: 700; }
+      /* type floor (readability): nothing on the page below 12px */
       .t-badge, .tabulator-col-title, .th-field label { font-size: 12px !important; }
+          /* ---- phone: white page, cards edge to edge — the details get the width.
+         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      @media (max-width: 767.98px) {
+        body { background: #fff !important; }
+        .app-main { background: #fff !important; }
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+        .th-head h1 { color: #1f1e1e; }
+        .th-head p { color: #6e6a64; }
+        .th-field label { color: #6e6a64; }
+        .th-panel { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      }
     </style>
   </head>
   <body class="customer-transaction-page">
@@ -263,19 +281,21 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 
         const table = new Tabulator('#transaction-history-table', {
           data: rows, layout: 'fitDataStretch', placeholder: 'No transactions found.',
+          responsiveLayout: window.innerWidth < 900 ? 'collapse' : false, responsiveLayoutCollapseStartOpen: false,   /* phone only: extra columns fold under the row (see responsive: on each column); desktop keeps the full table */
           pagination: true, paginationSize: 10, paginationSizeSelector: [10, 25, 50], movableColumns: true,
           initialSort: [{ column: 'transactionDate', dir: 'desc' }],
           columns: [
-            { title: 'Transaction ID', field: 'transactionId', minWidth: 150, width: 150 },
-            { title: 'Booking ID', field: 'bookingId', minWidth: 140, width: 140 },
-            { title: 'Venue', field: 'venue', minWidth: 200, width: 200 },
-            { title: 'Event Date', field: 'eventDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 130, width: 130 },
-            { title: 'Transaction Date', field: 'transactionDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 150, width: 150 },
-            { title: 'Amount', field: 'amount', minWidth: 110, width: 110, hozAlign: 'right' },
-            { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150 },
-            { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 180, width: 180, hozAlign: 'center' },
+            ...(window.innerWidth < 900 ? [{ formatter: 'responsiveCollapse', width: 34, minWidth: 34, hozAlign: 'center', resizable: false, headerSort: false, responsive: 0 }] : []),   /* phone only: the fold/unfold chevron */   /* the fold/unfold chevron (only shows when something is folded) */
+            { title: 'Transaction ID', field: 'transactionId', minWidth: 150, width: 150, responsive: 0 },
+            { title: 'Booking ID', field: 'bookingId', minWidth: 140, width: 140, responsive: 3 },
+            { title: 'Venue', field: 'venue', minWidth: 200, width: 200, responsive: 2 },
+            { title: 'Event Date', field: 'eventDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 130, width: 130, responsive: 4 },
+            { title: 'Transaction Date', field: 'transactionDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 150, width: 150, responsive: 5 },
+            { title: 'Amount', field: 'amount', minWidth: 110, width: 110, hozAlign: 'right', responsive: 0 },
+            { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150, responsive: 6 },
+            { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center', responsive: 1 },
+            { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center', responsive: 2 },
+            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 180, width: 180, hozAlign: 'center', responsive: 7 },
           ],
         });
 

@@ -63,7 +63,12 @@ if ($portal === 'customer') {
     nav.app-header .hd-username{display:none}
     nav.app-header .hd-quick span{display:none}
     nav.app-header .hd-quick{padding:0 .55rem}
-    body.sb-open aside.sidebar{transform:none!important;box-shadow:0 0 0 100vw rgba(0,0,0,.45)!important}
+    nav.app-header .hd-wrap{flex-direction:row-reverse}      /* phone: the burger sits on the right, like the landing page nav; chip + quick links on the left */
+    body.sb-open aside.sidebar{transform:none!important}
+    /* the page dims behind the open sidebar with a fading layer (opacity animates on the GPU);
+       the old way — a 100vw box-shadow — repainted the whole screen every frame and stuttered on phones */
+    body::after{content:"";position:fixed;inset:0;z-index:1034;background:rgba(10,4,5,.5);opacity:0;pointer-events:none;transition:opacity 320ms cubic-bezier(.16,1,.3,1)}
+    body.sb-open::after{opacity:1;pointer-events:auto}
   }
 </style>
 <?php if ($portal === 'customer'): ?>

@@ -106,6 +106,16 @@ require_once __DIR__ . '/../includes/room-photos.php';
   /* the footer — crimson to black; the page is a column so it stays at the bottom on short screens */
   body{display:flex;flex-direction:column;min-height:100vh}
   #app{flex:1 0 auto}
+  /* 360 viewer: the expand button + the scaled-down lightbox (not real fullscreen) */
+  .pnlm-expand{position:absolute;left:4px;top:98px;z-index:3;width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:3px;background:rgba(200,200,200,.8);color:#000;cursor:pointer;box-shadow:0 0 3px rgba(0,0,0,.5)}
+  .pnlm-expand:hover{background:#fff}
+  #panoLightbox{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(10,4,5,.82);opacity:0;transition:opacity 220ms ease}
+  #panoLightbox.open{opacity:1}
+  #panoLightbox .pl-box{position:relative;width:min(1100px,92vw);aspect-ratio:16/9;max-height:82vh;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 30px 90px rgba(0,0,0,.6);transform:scale(.96);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
+  #panoLightbox.open .pl-box{transform:none}
+  #panoLightbox .pl-view{position:absolute;inset:0}
+  #panoLightbox .pl-close{position:absolute;top:10px;right:10px;z-index:5;width:38px;height:38px;border:0;border-radius:999px;background:rgba(255,255,255,.92);color:#1c1b19;font-size:26px;line-height:1;cursor:pointer}
+  @media (max-width:720px){#panoLightbox{padding:12px}#panoLightbox .pl-box{width:100%;aspect-ratio:4/3;max-height:70vh}}
   .bk-footer{position:relative;color:#fff;background:linear-gradient(158deg,#8a1222 0%,#400d16 40%,#14080a 100%)}
   .bk-footer a{color:#e6d7d5}
   .bk-footer a:hover{color:#fff}
@@ -152,6 +162,15 @@ require_once __DIR__ . '/../includes/room-photos.php';
   .bk-more-meta span,.bk-more-price span{color:#f2d0cb!important}
   .bk-more-meta span,.bk-more-price span{font-size:12px!important}   /* type floor: the 11px note from pricing.php */
   #app span[style*="ui-monospace"]{font-size:12px!important}          /* type floor: the "room photo" placeholder labels */
+  /* phone: the 604px photo grid (400 + 196) becomes two columns; the 360 tile spans both */
+  @media (max-width:720px){
+    #app div:has(> #heroPanoSlot){grid-template-columns:1fr 1fr!important;grid-template-rows:220px 120px!important;width:100%!important}
+    #heroPanoSlot{grid-column:1 / span 2!important;grid-row:1!important}
+    /* the photos + the 379px booking form stack instead of sitting side by side */
+    #app main > div[style*="379px"]{grid-template-columns:1fr!important;gap:22px!important}
+    #app aside[style*="sticky"]{position:static!important}
+    #app main{padding-left:16px!important;padding-right:16px!important}
+  }
   .bk-more-free{margin-top:13px;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,209,102,.16);border:1px solid rgba(255,209,102,.42);color:#ffd166}
   .bk-more-free i{width:6px;height:6px;border-radius:50%;background:#ffd166;display:block}
   .bk-more-free.is-none{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.17);color:#bda4a2}
@@ -162,7 +181,22 @@ require_once __DIR__ . '/../includes/room-photos.php';
   .bk-more-alt a{color:#fff;font-weight:600}
   .bk-footer{border-top:1px solid rgba(255,255,255,.12)}
   @media (max-width:1080px){.bk-more-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  @media (max-width:720px){.bk-more-wrap{padding:40px 18px 36px}.bk-more-head{flex-direction:column;align-items:flex-start}.bk-more-grid{grid-template-columns:1fr}.bk-more h2{font-size:26px}}
+  @media (max-width:720px){.bk-more-wrap{padding:40px 18px 36px}.bk-more-head{flex-direction:column;align-items:flex-start}.bk-more-grid{grid-template-columns:1fr;gap:10px}.bk-more h2{font-size:26px}
+    /* phone: compact "More rooms" cards — photo left, text right (same as the landing page) */
+    .bk-more-card{display:grid;grid-template-columns:112px minmax(0,1fr);border-radius:16px}
+    .bk-more-ph{aspect-ratio:auto;height:100%;min-height:104px}
+    .bk-more-tag{display:none}
+    .bk-more-body{padding:12px 14px;min-width:0}
+    .bk-more-body h3{font-size:15px}
+    /* phone: a sticky bar so the booking form (below the description) is one tap away */
+    .bk-cta{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+      background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.1);box-shadow:0 -8px 24px rgba(0,0,0,.08);transform:translateY(110%);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
+    .bk-cta.show{transform:none}
+    .bk-cta-price{font-size:13px;color:#4a463f;line-height:1.3;min-width:0}
+    .bk-cta-price strong{display:block;font-family:Archivo,Inter,sans-serif;font-size:17px;font-weight:800;color:#1c1b19}
+    .bk-cta-btn{flex:none;height:44px;padding:0 18px;border:0;border-radius:12px;background:#a11626;color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+    body.bk-cta-on #app{padding-bottom:72px}
+  }
 </style>
 </head>
 <body>
@@ -672,21 +706,69 @@ function svgUsers(size){ return `<svg width="${size}" height="${size}" viewBox="
    without destroying it, so the constant re-renders from typing guest names
    never reload the panorama. Rebuilt only when the room changes. */
 var HERO = { node:null, viewer:null, roomId:null };
+/* One calibrated viewer for any box. CALIBRATION: the viewer assumes a full
+   sphere (360 x 180, a 2:1 image). Our panoramas are iPhone sweeps — much
+   wider than tall — so shown as a sphere they get squeezed into a narrow
+   corridor. Measure the image first and tell the viewer how many degrees it
+   really spans: an iPhone pano is shot in portrait, so its vertical field of
+   view is ~70 degrees; the horizontal span follows from the aspect ratio.
+   Panning stops at the image edges; zoom is capped so the VERTICAL view never
+   exceeds the image (no black above/below) — that cap depends on the box's
+   shape. A true 2:1 image (the sample) is still treated as a full sphere.
+   onReady(viewer) runs once it is up; stillWanted() lets the caller cancel. */
+function panoViewer(node, src, stillWanted, onReady){
+  const probe=new Image();
+  function build(aspect){
+    const full=aspect===null || Math.abs(aspect-2)<0.15;
+    const vaov=70, haov=full?360:Math.min(340, Math.round(vaov*aspect));
+    const box=node.getBoundingClientRect(), ratio=Math.max(0.5, box.width/Math.max(1,box.height));
+    const fitHfov=Math.floor(2*Math.atan(Math.tan(vaov/2*Math.PI/180)*ratio)*180/Math.PI)-2;
+    const opts={ type:'equirectangular', panorama:src, autoLoad:true, showControls:true, showFullscreenCtrl:false, compass:full,
+      mouseZoom:true, draggable:true, hfov:full?100:Math.min(fitHfov, Math.round(haov*0.55)), minHfov:45, maxHfov:full?120:Math.min(fitHfov, haov-10) };
+    if(!full){ opts.haov=haov; opts.vaov=vaov; opts.minYaw=-haov/2; opts.maxYaw=haov/2; opts.minPitch=-vaov/2; opts.maxPitch=vaov/2; }
+    const v=pannellum.viewer(node, opts); onReady(v); return v;
+  }
+  probe.onload=function(){ if(stillWanted()) build(probe.naturalWidth/Math.max(1,probe.naturalHeight)); };
+  probe.onerror=function(){ if(stillWanted()) build(null); };
+  probe.src=src;
+}
+
+/* "Expand" — our own button in place of the browser's fullscreen. Real
+   fullscreen stretched the image across the whole screen and looked blurry;
+   this opens a dimmed overlay with the panorama at a comfortable size
+   (up to 1100px wide, 16:9), same calibration, Esc / X / click outside closes. */
+function openPanoLightbox(src){
+  if(document.getElementById('panoLightbox')) return;
+  const wrap=document.createElement('div'); wrap.id='panoLightbox';
+  wrap.innerHTML='<div class="pl-box"><div class="pl-view"></div><button type="button" class="pl-close" aria-label="Close">&times;</button></div>';
+  document.body.appendChild(wrap); document.body.style.overflow='hidden';
+  let v=null; const close=function(){ if(v){ try{ v.destroy(); }catch(e){} } wrap.remove(); document.body.style.overflow=''; document.removeEventListener('keydown', onKey); };
+  function onKey(e){ if(e.key==='Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  wrap.addEventListener('click', function(e){ if(e.target===wrap || e.target.closest('.pl-close')) close(); });
+  requestAnimationFrame(function(){ wrap.classList.add('open'); panoViewer(wrap.querySelector('.pl-view'), src, function(){ return wrap.isConnected; }, function(viewer){ v=viewer; }); });
+}
+
 function mountHeroPano(){
   if(state.screen!=='detail') return;
   const slot=document.getElementById('heroPanoSlot');
-  if(!slot || typeof pannellum==='undefined') return;   // offline → leave the placeholder
+  if(!slot || typeof pannellum==='undefined') return;   // offline → leave placeholder
   const R=getRoom(); if(!R) return;
   if(!HERO.node){ HERO.node=document.createElement('div'); HERO.node.style.cssText='position:absolute;inset:0'; }
   if(HERO.node.parentNode!==slot){ slot.innerHTML=''; slot.appendChild(HERO.node); }
   if(HERO.viewer && HERO.roomId===state.roomId) return;  // already live for this room
   if(HERO.viewer){ try{ HERO.viewer.destroy(); }catch(e){} HERO.viewer=null; }
   HERO.node.innerHTML='';
-  HERO.viewer=pannellum.viewer(HERO.node, {
-    type:'equirectangular', panorama:(R.panorama||SAMPLE_PANO), autoLoad:true,
-    showControls:true, compass:true, hfov:100, minHfov:45, maxHfov:120, mouseZoom:true, draggable:true
-  });
   HERO.roomId=state.roomId;
+  const src=R.panorama||SAMPLE_PANO, wanted=state.roomId;
+  panoViewer(HERO.node, src, function(){ return HERO.roomId===wanted && HERO.node.isConnected; }, function(v){
+    HERO.viewer=v;
+    /* the expand button, styled like the viewer's own controls */
+    const btn=document.createElement('button'); btn.type='button'; btn.className='pnlm-expand'; btn.title='View larger'; btn.setAttribute('aria-label','View larger');
+    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+    btn.addEventListener('click', function(e){ e.stopPropagation(); openPanoLightbox(src); });
+    HERO.node.appendChild(btn);
+  });
 }
 
 /* Photo gallery lightbox — view-only, mounted outside #app. Shows the
@@ -1460,15 +1542,26 @@ render();
        staggered entrance; on a same-screen re-render (typing, picking a date)
        the blocks are re-armed silently so nothing jumps under your hands. */
     var appTriggers = [], mode = 'scroll';
+    /* Re-arm the reveal for the blocks of the current screen. Two cases:
+         entrance — the screen changed: hide everything, stagger it in, and
+                    re-measure the whole page (it changed height).
+         instant  — a re-render mid-typing (every keystroke redraws #app): the
+                    same blocks are back as fresh DOM nodes, so just snap each
+                    one to the state it already had. Cheap on purpose: no
+                    pre-hide, no page-wide re-measure, and all style writes
+                    happen before all layout reads (no thrash). This is what
+                    keeps typing smooth on a phone. */
     function armScreen(entrance) {
       appTriggers.forEach(function (t) { t.kill(); }); appTriggers = [];
       var blocks = screenBlocks();
       if (!blocks.length) return;
       mode = entrance ? 'entrance' : 'instant';
+      if (entrance) blocks.forEach(function (el) { gsap.set(el, { opacity: 0, y: 18, scale: .985 }); });   /* writes first */
+      var arming = true;                                                                                    /* then the reads — no writes until every trigger exists */
       blocks.forEach(function (el, i) {
-        gsap.set(el, { opacity: 0, y: 18, scale: .985 });
         function paint(on) {
           if (mode === 'instant') {              /* re-render mid-typing: snap to the right state */
+            if (arming) return;                  /* deferred to the batch below (one layout, not seven) */
             gsap.set(el, { opacity: on ? 1 : 0, y: on ? 0 : 18, scale: on ? 1 : .985, clearProps: on ? 'transform' : '' });
             return;
           }
@@ -1480,9 +1573,41 @@ render();
         appTriggers.push(ScrollTrigger.create({ trigger: el, start: 'top 92%', end: 'bottom top',
           onToggle: function (s) { paint(s.isActive); }, onRefresh: function (s) { paint(s.isActive); } }));
       });
-      ScrollTrigger.refresh();                   /* the screen changed height: re-measure everything below it too */
+      arming = false;
+      if (entrance) ScrollTrigger.refresh();     /* the screen changed height: re-measure everything below it too */
+      else appTriggers.forEach(function (t) { t.vars.onRefresh(t); });   /* each new trigger already knows if it is in view: apply all states in one batch */
       setTimeout(function () { mode = 'scroll'; }, 60);
     }
+    /* PHONE CTA BAR. On a phone the booking form sits below the photos and the
+       description; this bar keeps "Reserve" one tap away and hides itself once
+       the form is on screen. Detail screen only; nothing on desktop. */
+    (function () {
+      if (!window.matchMedia || !window.matchMedia('(max-width: 720px)').matches) return;
+      var bar = document.createElement('div'); bar.className = 'bk-cta'; bar.setAttribute('aria-hidden', 'true');
+      bar.innerHTML = '<div class="bk-cta-price"></div><button type="button" class="bk-cta-btn">Reserve a bed</button>';
+      document.body.appendChild(bar);
+      bar.querySelector('.bk-cta-btn').addEventListener('click', function () {
+        var aside = document.querySelector('#app aside'); if (!aside) return;
+        aside.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var first = aside.querySelector('input, select, button'); if (first) setTimeout(function () { first.focus({ preventScroll: true }); }, 500);
+      });
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { if (en.target === watched) formSeen = en.isIntersecting; });   /* ignore late reports about a form that was re-rendered away */
+        paintBar();
+      }, { threshold: 0.15 });
+      var formSeen = false, watched = null;
+      function paintBar() {
+        var onDetail = typeof state !== 'undefined' && state.screen === 'detail';
+        var aside = document.querySelector('#app aside');
+        if (aside !== watched) { if (watched) io.unobserve(watched); watched = aside; if (aside) io.observe(aside); formSeen = false; }
+        var show = onDetail && aside && !formSeen;
+        if (show) { try { bar.querySelector('.bk-cta-price').innerHTML = '<strong>' + peso(roomRate(getRoom())) + '</strong>per head, per night'; } catch (e) {} }
+        bar.classList.toggle('show', !!show); document.body.classList.toggle('bk-cta-on', !!show);
+      }
+      var r0 = render; render = function () { r0.apply(this, arguments); paintBar(); };
+      paintBar();
+    })();
+
     var lastScreen = (typeof state !== 'undefined' && state.screen) || '';
     var pageRender = render;                          /* the page's own render() */
     render = function () {

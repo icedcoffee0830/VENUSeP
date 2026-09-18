@@ -531,6 +531,8 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
         --calendar-button-active-bg: #a11626;
         --calendar-button-active-text: #ffffff;
       }
+          /* phone: the 7-column month grid scrolls inside its card, not the whole page */
+      @media (max-width: 767.98px) { .calendar-shell { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
     </style>
   </head>
   <body class="calendar-page">

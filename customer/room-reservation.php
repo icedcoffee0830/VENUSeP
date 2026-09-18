@@ -133,6 +133,15 @@
   .bk-more-meta span,.bk-more-price span{color:#f2d0cb!important}
   .bk-more-meta span,.bk-more-price span{font-size:12px!important}   /* type floor: the 11px note from pricing.php */
   #app span[style*="ui-monospace"]{font-size:12px!important}          /* type floor: the "room photo" placeholder labels */
+  /* phone: the 604px photo grid (400 + 196) becomes two columns; the 360 tile spans both */
+  @media (max-width:720px){
+    #app div:has(> #heroPanoSlot){grid-template-columns:1fr 1fr!important;grid-template-rows:220px 120px!important;width:100%!important}
+    #heroPanoSlot{grid-column:1 / span 2!important;grid-row:1!important}
+    /* the photos + the 379px booking form stack instead of sitting side by side */
+    #app main > div[style*="379px"]{grid-template-columns:1fr!important;gap:22px!important}
+    #app aside[style*="sticky"]{position:static!important}
+    #app main{padding-left:16px!important;padding-right:16px!important}
+  }
   .bk-more-free{margin-top:13px;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,209,102,.16);border:1px solid rgba(255,209,102,.42);color:#ffd166}
   .bk-more-free i{width:6px;height:6px;border-radius:50%;background:#ffd166;display:block}
   .bk-more-free.is-none{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.17);color:#bda4a2}

@@ -387,6 +387,34 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
       .lp-footer-office { grid-column: 1 / -1; }
       .lp-footer-bottom { display: grid; gap: 12px; }
       .lp-footer-bottom a { margin: 0 18px 0 0; }
+
+      /* ---- phone: compact cards. The desktop poster card (big photo, paragraph,
+         price) x 13 rooms made the page ~14 screens long. On a phone each card
+         becomes a row: photo on the left, name / capacity / price on the right,
+         description trimmed to two lines. Same links, same content order. ---- */
+      .lp-grid-3 { gap: 10px; }
+      .lp-card { display: grid; grid-template-columns: 118px minmax(0, 1fr); border-radius: 16px; }
+      .lp-card .lp-ph { aspect-ratio: auto; height: 100%; min-height: 128px; }
+      .lp-card .lp-ph .lp-tag { display: none; }
+      .lp-card-body, .lp-venue-card .lp-card-body, .lp-hs-card .lp-card-body { padding: 13px 14px 13px 14px; min-width: 0; }
+      .lp-card h3, .lp-hs-card h3 { font-size: 16px; }
+      .lp-card-meta { margin-top: 3px; font-size: 12.5px; }
+      .lp-card-desc, .lp-venue-card .lp-card-desc { margin-top: 6px; font-size: 13px; line-height: 1.5;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .lp-card-price { margin-top: 8px; padding-top: 8px; font-size: 13px; }
+      .lp-card-price strong { font-size: 16px; }
+      .lp-venue-foot { margin-top: 8px; padding-top: 8px; flex-wrap: wrap; gap: 4px 10px; }
+      .lp-venue-foot .lp-from { text-align: left; }
+      .lp-free { margin-top: 8px; }
+      .lp-group { flex-direction: column; align-items: flex-start; gap: 4px; margin: 30px 0 12px; }
+      .lp-group h3 { font-size: 20px; }
+      .lp-grid-3 + .lp-group { margin-top: 32px; }
+      .lp-badge-closed { top: 8px; left: 8px; }
+      /* the four steps: number beside the text instead of above it */
+      .lp-step { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 14px; padding: 18px 18px 18px 16px; border-radius: 16px; }
+      .lp-step-n { width: 40px; height: 40px; grid-row: 1 / span 2; }
+      .lp-step h3 { margin-top: 0; font-size: 16px; align-self: center; }
+      .lp-step p { margin-top: 0; font-size: 14px; line-height: 1.55; grid-column: 2; }
     }
   </style>
 </head>
@@ -464,7 +492,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
           <svg class="lp-i" width="13" height="13" style="color:var(--gold)" aria-hidden="true"><use href="#lp-i-pin"/></svg>
           USeP Tagum&ndash;Mabini Campus
         </span>
-        <h1 data-hero-item>Reserve a campus venue in<br>minutes, not visits.</h1>
+        <h1 data-hero-item>Reserve a campus venue in <br>minutes, not visits.</h1>
         <p class="lp-hero-sub" data-hero-item>Alumni halls, university venues and hostel beds &mdash; check real availability, reserve online, and pay by GCash or cash.</p>
 
         <div class="lp-hero-actions" data-hero-item>

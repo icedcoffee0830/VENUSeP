@@ -147,6 +147,31 @@ $emptyBookingMessage = 'No booking history found.';
       /* the active tab and the current page in the pagination: crimson, not black */
       .booking-status-tab.active { background: #a11626; border-color: #a11626; color: #ffffff; }
       .booking-pagination button.active { background: #a11626; border-color: #a11626; color: #ffffff; }
+      /* ---- phone: the 9-column table becomes one card per booking. Each cell
+         shows its column name (data-label) in front, the header row is hidden,
+         and the id + status sit on the first line. The sorting/filtering
+         script is untouched — it still works on the same rows. ---- */
+      @media (max-width: 720px) {
+        .booking-history-table { min-width: 0; }
+        .booking-history-table thead { display: none; }
+        .booking-history-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 14px 16px; border-bottom: 1px solid #ece8e1; }
+        .booking-history-table tbody tr:hover { background: transparent; }
+        .booking-history-table td { display: block; padding: 0; border: 0; white-space: normal; font-size: 13px; }
+        .booking-history-table td::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+        .booking-history-table td.booking-id { grid-column: 1; }
+        .booking-history-table td.booking-id::before { display: none; }
+        .booking-history-table td.booking-id strong { font-size: 15px; }
+        .booking-history-table td[data-label="Status"] { grid-column: 2; grid-row: 1; justify-self: end; }
+        .booking-history-table td[data-label="Status"]::before { display: none; }
+        .booking-history-table td[data-label="Event"] { grid-column: 1 / -1; }
+        .booking-history-table td.booking-actions-cell { grid-column: 1 / -1; margin-top: 4px; }
+        .booking-history-table td.booking-actions-cell::before { display: none; }
+        .booking-empty-state td { grid-column: 1 / -1; }
+        .booking-empty-state td::before { display: none; }
+        .booking-actions { flex-wrap: wrap; }
+        .booking-history-filters { grid-template-columns: 1fr 1fr; }
+        .booking-status-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+      }
       /* type floor (readability): nothing on the page below 12px */
       .booking-badge, .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }
     </style>
@@ -239,13 +264,13 @@ $emptyBookingMessage = 'No booking history found.';
                           data-payment-status="<?php echo bh_e($booking['paymentStatus']); ?>"
                           data-status="<?php echo bh_e($booking['bookingStatus']); ?>"
                         >
-                          <td class="booking-id"><strong><?php echo bh_e($booking['bookingId']); ?></strong></td>
-                          <td><?php echo bh_e($booking['venue']); ?></td>
-                          <td><?php echo bh_e($booking['eventName']); ?></td>
-                          <td><?php echo bh_e($booking['eventDate']); ?></td>
-                          <td><?php echo bh_e($booking['bookingDate']); ?></td>
-                          <td class="booking-amount"><?php echo bh_e($booking['amount']); ?></td>
-                          <td>
+                          <td class="booking-id" data-label="Booking"><strong><?php echo bh_e($booking['bookingId']); ?></strong></td>
+                          <td data-label="Venue"><?php echo bh_e($booking['venue']); ?></td>
+                          <td data-label="Event"><?php echo bh_e($booking['eventName']); ?></td>
+                          <td data-label="Event date"><?php echo bh_e($booking['eventDate']); ?></td>
+                          <td data-label="Booked on"><?php echo bh_e($booking['bookingDate']); ?></td>
+                          <td class="booking-amount" data-label="Amount"><?php echo bh_e($booking['amount']); ?></td>
+                          <td data-label="Payment">
                             <span class="booking-badge <?php echo bh_badge($booking['paymentStatus']); ?>"><?php echo bh_e($booking['paymentStatus']); ?></span>
                             <?php /* post-pay bookings say WHEN — the date comes from the shared rule (includes/refund-policy.php) */
                             if ($booking['paymentStatus'] === 'Payment pending'): ?>
@@ -256,8 +281,8 @@ $emptyBookingMessage = 'No booking history found.';
                               <span class="booking-pay-note is-overdue">was due <?php echo bh_e($booking['payment']['payByLabel']); ?> &middot; can still be paid</span>
                             <?php endif; ?>
                           </td>
-                          <td><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span></td>
-                          <td>
+                          <td data-label="Status"><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span></td>
+                          <td data-label="Actions" class="booking-actions-cell">
                             <div class="booking-actions">
                               <!-- [SIM] booking-details.php / rebook.php don't exist yet -->
                               <a class="booking-action" href="#"><i class="bi bi-eye" aria-hidden="true"></i>View</a>

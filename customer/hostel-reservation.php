@@ -171,7 +171,22 @@ require_once __DIR__ . '/../includes/room-photos.php';
   .bk-more-alt a{color:#fff;font-weight:600}
   .bk-footer{border-top:1px solid rgba(255,255,255,.12)}
   @media (max-width:1080px){.bk-more-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  @media (max-width:720px){.bk-more-wrap{padding:40px 18px 36px}.bk-more-head{flex-direction:column;align-items:flex-start}.bk-more-grid{grid-template-columns:1fr}.bk-more h2{font-size:26px}}
+  @media (max-width:720px){.bk-more-wrap{padding:40px 18px 36px}.bk-more-head{flex-direction:column;align-items:flex-start}.bk-more-grid{grid-template-columns:1fr;gap:10px}.bk-more h2{font-size:26px}
+    /* phone: compact "More rooms" cards — photo left, text right (same as the landing page) */
+    .bk-more-card{display:grid;grid-template-columns:112px minmax(0,1fr);border-radius:16px}
+    .bk-more-ph{aspect-ratio:auto;height:100%;min-height:104px}
+    .bk-more-tag{display:none}
+    .bk-more-body{padding:12px 14px;min-width:0}
+    .bk-more-body h3{font-size:15px}
+    /* phone: a sticky bar so the booking form (below the description) is one tap away */
+    .bk-cta{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+      background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.1);box-shadow:0 -8px 24px rgba(0,0,0,.08);transform:translateY(110%);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
+    .bk-cta.show{transform:none}
+    .bk-cta-price{font-size:13px;color:#4a463f;line-height:1.3;min-width:0}
+    .bk-cta-price strong{display:block;font-family:Archivo,Inter,sans-serif;font-size:17px;font-weight:800;color:#1c1b19}
+    .bk-cta-btn{flex:none;height:44px;padding:0 18px;border:0;border-radius:12px;background:#a11626;color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+    body.bk-cta-on #app{padding-bottom:72px}
+  }
 </style>
 </head>
 <body>
@@ -1505,6 +1520,36 @@ render();
       else appTriggers.forEach(function (t) { t.vars.onRefresh(t); });   /* each new trigger already knows if it is in view: apply all states in one batch */
       setTimeout(function () { mode = 'scroll'; }, 60);
     }
+    /* PHONE CTA BAR. On a phone the booking form sits below the photos and the
+       description; this bar keeps "Reserve" one tap away and hides itself once
+       the form is on screen. Detail screen only; nothing on desktop. */
+    (function () {
+      if (!window.matchMedia || !window.matchMedia('(max-width: 720px)').matches) return;
+      var bar = document.createElement('div'); bar.className = 'bk-cta'; bar.setAttribute('aria-hidden', 'true');
+      bar.innerHTML = '<div class="bk-cta-price"></div><button type="button" class="bk-cta-btn">Reserve a bed</button>';
+      document.body.appendChild(bar);
+      bar.querySelector('.bk-cta-btn').addEventListener('click', function () {
+        var aside = document.querySelector('#app aside'); if (!aside) return;
+        aside.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var first = aside.querySelector('input, select, button'); if (first) setTimeout(function () { first.focus({ preventScroll: true }); }, 500);
+      });
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { if (en.target === watched) formSeen = en.isIntersecting; });   /* ignore late reports about a form that was re-rendered away */
+        paintBar();
+      }, { threshold: 0.15 });
+      var formSeen = false, watched = null;
+      function paintBar() {
+        var onDetail = typeof state !== 'undefined' && state.screen === 'detail';
+        var aside = document.querySelector('#app aside');
+        if (aside !== watched) { if (watched) io.unobserve(watched); watched = aside; if (aside) io.observe(aside); formSeen = false; }
+        var show = onDetail && aside && !formSeen;
+        if (show) { try { bar.querySelector('.bk-cta-price').innerHTML = '<strong>' + peso(roomRate(getRoom())) + '</strong>per head, per night'; } catch (e) {} }
+        bar.classList.toggle('show', !!show); document.body.classList.toggle('bk-cta-on', !!show);
+      }
+      var r0 = render; render = function () { r0.apply(this, arguments); paintBar(); };
+      paintBar();
+    })();
+
     var lastScreen = (typeof state !== 'undefined' && state.screen) || '';
     var pageRender = render;                          /* the page's own render() */
     render = function () {

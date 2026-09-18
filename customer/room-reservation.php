@@ -162,6 +162,7 @@ $navMode = 'solid'; include __DIR__ . '/../includes/customer-nav.php'; ?>
    it, so what the customer is told and what is verified cannot diverge. */
 include_once __DIR__ . '/../includes/payment-settings.php';
 include_once __DIR__ . '/../includes/venue-rooms.php';   /* _once: the nav bar already loaded it via the customer record */
+require_once __DIR__ . '/../includes/room-photos.php';
 include_once __DIR__ . '/../includes/pricing.php';   /* USeP discount rate + the account check */
 include_once __DIR__ . '/../includes/gcash-checker.php';
 ?>
@@ -173,7 +174,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
 $mrUsep    = usep_is_account($customerContact['email']);
 $mrToday   = date('Y-m-d');
 $mrCurrent = isset($_GET['room']) && is_string($_GET['room']) ? $_GET['room'] : '';
-function mr_photo($id) { foreach (['jpg','jpeg','png','webp'] as $e) if (file_exists(__DIR__ . "/../assets/img/venues/$id.$e")) return "../assets/img/venues/$id.$e"; return null; }
+function mr_photo($id) { return rp_cover_url($id); }
 function mr_pic($id, $kind, $badge = '') {
   $ph = mr_photo($id);
   $in = $ph ? '<img class="bk-more-img" loading="lazy" src="' . htmlspecialchars($ph) . '" alt="">'
@@ -267,8 +268,17 @@ const REFUNDS_ENABLED = <?php echo $REFUNDS_ENABLED ? 'true' : 'false'; ?>;
    refunds OFF = post-pay (payment opens after the event, due within PAY_POLICY.graceDays). */
 <?php echo payment_policy_js(); ?>
 /* The venue rooms come from the ONE shared source (includes/venue-rooms.php),
-   so this page, the landing page and admin Venue Management cannot disagree. */
-const ROOMS = <?php echo json_encode($venueRooms, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+   so this page, the landing page and admin Venue Management cannot disagree.
+   photoUrls/panorama are merged in from includes/room-photos.php — whatever
+   was uploaded on admin Venue Management (Edit Room -> Edit photos / 360°). */
+<?php
+$mrRoomsWithPhotos = array_map(function ($r) {
+  $r['photoUrls'] = rp_gallery_urls($r['id']);
+  $r['panorama']  = rp_pano_url($r['id']);
+  return $r;
+}, $venueRooms);
+?>
+const ROOMS = <?php echo json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 </script>
 <script>
 /* ============================================================
@@ -734,15 +744,20 @@ function mountHeroPano(){
 }
 
 /* Photo gallery lightbox — view-only for customers, mounted outside #app.
-   Placeholder gradient "photos" (no real images / no user uploads). */
+   Shows the room's real uploaded photos (R.photoUrls); falls back to the
+   numbered gradient placeholders when the room has none yet. */
 const GAL_GRADS=['#eef1f5,#dfe4ea','#f3eee9,#e6ddd3','#e9eef3,#d5e0ea','#eef3ee,#d9e6da','#f3eef1,#e6d5de','#eaf0f3,#d5e2ea','#f2efe8,#e4dccf','#eef3f0,#dbe7df'];
 function galGrad(i){ return 'background:linear-gradient(135deg,'+GAL_GRADS[i%GAL_GRADS.length]+')'; }
+var GAL_PHOTOS=[];
 function openGallery(){
   const R=getRoom(); if(!R || document.getElementById('galOverlay')) return;
-  const n=Math.max(1, R.photos||5);
+  GAL_PHOTOS=R.photoUrls||[];
+  const n=GAL_PHOTOS.length||Math.max(1, R.photos||5);
   let thumbs='';
   for(let i=0;i<n;i++){
-    thumbs+='<button class="galThumb" data-i="'+i+'" onclick="galSelect('+i+')" style="border:2px solid transparent;border-radius:8px;cursor:pointer;padding:0;aspect-ratio:4/3;'+galGrad(i)+';display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 10px ui-monospace,monospace">Photo '+(i+1)+'</button>';
+    const url=GAL_PHOTOS[i];
+    const bg=url?('background-size:cover;background-position:center;background-image:url(\''+url+'\')'):galGrad(i);
+    thumbs+='<button class="galThumb" data-i="'+i+'" onclick="galSelect('+i+')" style="border:2px solid transparent;border-radius:8px;cursor:pointer;padding:0;aspect-ratio:4/3;'+bg+';display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 10px ui-monospace,monospace">'+(url?'':'Photo '+(i+1))+'</button>';
   }
   const ov=document.createElement('div');
   ov.id='galOverlay';
@@ -761,7 +776,11 @@ function openGallery(){
 }
 function galSelect(i){
   const big=document.getElementById('galBig');
-  if(big){ big.setAttribute('style', galGrad(i)+';border-radius:12px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 14px ui-monospace,monospace'); big.textContent='Photo '+(i+1); }
+  const url=GAL_PHOTOS[i];
+  if(big){
+    if(url){ big.setAttribute('style','background-size:cover;background-position:center;background-image:url(\''+url+'\');border-radius:12px;aspect-ratio:16/9'); big.textContent=''; }
+    else { big.setAttribute('style', galGrad(i)+';border-radius:12px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 14px ui-monospace,monospace'); big.textContent='Photo '+(i+1); }
+  }
   const g=document.getElementById('galGrid');
   if(g) g.querySelectorAll('.galThumb').forEach(function(b){ b.style.borderColor=(+b.getAttribute('data-i')===i)?'#a11626':'transparent'; });
 }
@@ -868,6 +887,16 @@ function restart(){ location.href='venusep_venue_booking.php'; }
 function header(){ return ''; }   /* the nav bar is static now: includes/customer-nav.php, above #app */
 
 const PHOTO_TILE = 'background:#e9e7e2;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px);display:flex;align-items:center;justify-content:center';
+
+/* A hero gallery tile: a real uploaded photo (R.photoUrls[i]) if one exists
+   at that index, else the placeholder pattern + "room photo" label. `inner`
+   is extra HTML appended inside the tile (e.g. the "+N photos" overlay). */
+function heroTile(R,i,extraStyle,inner){
+  const url=(R.photoUrls||[])[i];
+  extraStyle=extraStyle||''; inner=inner||'';
+  if(url) return `<div onclick="openGallery()" style="cursor:pointer;background-size:cover;background-position:center;background-image:url('${url}');${extraStyle}">${inner}</div>`;
+  return `<div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE};${extraStyle}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>${inner}</div>`;
+}
 
 /* The maintenance chip — DERIVED from the window, never stored, and shown only
    while the window is still live. No window = no chip: an ordinary room says
@@ -1073,15 +1102,14 @@ function detailScreen(){
         <div id="heroPanoSlot" style="grid-row:1 / span 2;position:relative;${PHOTO_TILE}">
           <span style="font:500 13px/1 ui-monospace,Menlo,monospace;color:#9a958c">360° panorama</span>
         </div>
-        <div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
-        <div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
+        ${heroTile(R,0)}
+        ${heroTile(R,1)}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;width:604px;max-width:100%">
-        ${[1,2,3,4].map(()=>`<div onclick="openGallery()" style="aspect-ratio:1/1;border-radius:10px;overflow:hidden;cursor:pointer;${PHOTO_TILE}"><span style="font:500 10px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>`).join('')}
-        <div onclick="openGallery()" style="aspect-ratio:1/1;border-radius:10px;overflow:hidden;position:relative;cursor:pointer;${PHOTO_TILE}">
-          <span style="font:500 10px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>
-          <div style="position:absolute;inset:0;background:rgba(20,18,15,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600">+${R.photos} photos</div>
-        </div>
+      <!-- 2 side shots above + 3 thumbs here = 5 tiles total, matching the
+           5-photo cap (ROOM_PHOTO_MAX_COUNT) — never more empty slots than
+           a room could actually have photos for. -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;width:604px;max-width:100%">
+        ${[2,3,4].map(i=>heroTile(R,i,'aspect-ratio:1/1;border-radius:10px;overflow:hidden')).join('')}
       </div>
 
       <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;margin:22px 2px 4px">
@@ -1235,7 +1263,7 @@ function reviewScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
       <div style="display:flex;gap:14px;align-items:center;padding:16px;border-bottom:1px solid rgba(0,0,0,.07)">
-        <div style="width:72px;height:72px;border-radius:12px;flex:none;${PHOTO_TILE}"><span style="font:500 9px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
+        ${heroTile(R,0,'width:72px;height:72px;border-radius:12px;flex:none')}
         <div>
           <div style="font-size:17px;font-weight:680">${esc(R.name)}</div>
           <div style="font-size:13px;color:#8a857d;margin-top:3px">${esc(R.venue)} · Up to ${R.capacity} people</div>

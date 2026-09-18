@@ -85,6 +85,33 @@ $venueRooms = [
     'booked' => [['date' => '2026-07-17', 'start' => '09:00', 'end' => '12:00']]],
 ];
 
+/* Name + venue are now DB-backed (rooms.name, rooms.venue_id via venues) —
+   editable from admin/room-form.php (admin/room-save.php). Everything else
+   here stays [SIM] hard-coded. Overlaid onto the array above (rather than
+   read from the DB outright) so every page that includes this file keeps
+   working, unchanged, even when the database is unreachable — it just
+   shows the hard-coded name/venue until the DB comes back (fail safe,
+   same pattern as includes/refund-policy.php). */
+require_once __DIR__ . '/db.php';
+$pdo = venusep_db();
+if ($pdo !== null) {
+  try {
+    $rows = $pdo->query(
+      "SELECT r.room_code, r.name, v.name AS venue_name FROM rooms r
+       JOIN venues v ON v.id = r.venue_id WHERE r.room_type = 'event'"
+    )->fetchAll();
+    $venueRoomsDb = [];
+    foreach ($rows as $row) $venueRoomsDb[$row['room_code']] = $row;
+    foreach ($venueRooms as &$vr) {
+      if (isset($venueRoomsDb[$vr['id']])) {
+        $vr['name']  = $venueRoomsDb[$vr['id']]['name'];
+        $vr['venue'] = $venueRoomsDb[$vr['id']]['venue_name'];
+      }
+    }
+    unset($vr);
+  } catch (Throwable $e) { /* fail safe: keep the hard-coded name/venue */ }
+}
+
 /* Rooms under a given venue — the landing page groups by venue. */
 function venueRoomsFor(array $rooms, $venue) {
   return array_values(array_filter($rooms, function ($r) use ($venue) { return $r['venue'] === $venue; }));

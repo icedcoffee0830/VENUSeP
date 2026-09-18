@@ -87,6 +87,16 @@
   /* the footer — crimson to black; the page is a column so it stays at the bottom on short screens */
   body{display:flex;flex-direction:column;min-height:100vh}
   #app{flex:1 0 auto}
+  /* 360 viewer: the expand button + the scaled-down lightbox (not real fullscreen) */
+  .pnlm-expand{position:absolute;left:4px;top:98px;z-index:3;width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:3px;background:rgba(200,200,200,.8);color:#000;cursor:pointer;box-shadow:0 0 3px rgba(0,0,0,.5)}
+  .pnlm-expand:hover{background:#fff}
+  #panoLightbox{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(10,4,5,.82);opacity:0;transition:opacity 220ms ease}
+  #panoLightbox.open{opacity:1}
+  #panoLightbox .pl-box{position:relative;width:min(1100px,92vw);aspect-ratio:16/9;max-height:82vh;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 30px 90px rgba(0,0,0,.6);transform:scale(.96);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
+  #panoLightbox.open .pl-box{transform:none}
+  #panoLightbox .pl-view{position:absolute;inset:0}
+  #panoLightbox .pl-close{position:absolute;top:10px;right:10px;z-index:5;width:38px;height:38px;border:0;border-radius:999px;background:rgba(255,255,255,.92);color:#1c1b19;font-size:26px;line-height:1;cursor:pointer}
+  @media (max-width:720px){#panoLightbox{padding:12px}#panoLightbox .pl-box{width:100%;aspect-ratio:4/3;max-height:70vh}}
   .bk-footer{position:relative;color:#fff;background:linear-gradient(158deg,#8a1222 0%,#400d16 40%,#14080a 100%)}
   .bk-footer a{color:#e6d7d5}
   .bk-footer a:hover{color:#fff}
@@ -752,6 +762,49 @@ function calHtml(field){
    without destroying it, so the frequent re-renders from the booking form never
    reload the panorama. Rebuilt only when the room changes. */
 var HERO = { node:null, viewer:null, roomId:null };
+/* One calibrated viewer for any box. CALIBRATION: the viewer assumes a full
+   sphere (360 x 180, a 2:1 image). Our panoramas are iPhone sweeps — much
+   wider than tall — so shown as a sphere they get squeezed into a narrow
+   corridor. Measure the image first and tell the viewer how many degrees it
+   really spans: an iPhone pano is shot in portrait, so its vertical field of
+   view is ~70 degrees; the horizontal span follows from the aspect ratio.
+   Panning stops at the image edges; zoom is capped so the VERTICAL view never
+   exceeds the image (no black above/below) — that cap depends on the box's
+   shape. A true 2:1 image (the sample) is still treated as a full sphere.
+   onReady(viewer) runs once it is up; stillWanted() lets the caller cancel. */
+function panoViewer(node, src, stillWanted, onReady){
+  const probe=new Image();
+  function build(aspect){
+    const full=aspect===null || Math.abs(aspect-2)<0.15;
+    const vaov=70, haov=full?360:Math.min(340, Math.round(vaov*aspect));
+    const box=node.getBoundingClientRect(), ratio=Math.max(0.5, box.width/Math.max(1,box.height));
+    const fitHfov=Math.floor(2*Math.atan(Math.tan(vaov/2*Math.PI/180)*ratio)*180/Math.PI)-2;
+    const opts={ type:'equirectangular', panorama:src, autoLoad:true, showControls:true, showFullscreenCtrl:false, compass:full,
+      mouseZoom:true, draggable:true, hfov:full?100:Math.min(fitHfov, Math.round(haov*0.55)), minHfov:45, maxHfov:full?120:Math.min(fitHfov, haov-10) };
+    if(!full){ opts.haov=haov; opts.vaov=vaov; opts.minYaw=-haov/2; opts.maxYaw=haov/2; opts.minPitch=-vaov/2; opts.maxPitch=vaov/2; }
+    const v=pannellum.viewer(node, opts); onReady(v); return v;
+  }
+  probe.onload=function(){ if(stillWanted()) build(probe.naturalWidth/Math.max(1,probe.naturalHeight)); };
+  probe.onerror=function(){ if(stillWanted()) build(null); };
+  probe.src=src;
+}
+
+/* "Expand" — our own button in place of the browser's fullscreen. Real
+   fullscreen stretched the image across the whole screen and looked blurry;
+   this opens a dimmed overlay with the panorama at a comfortable size
+   (up to 1100px wide, 16:9), same calibration, Esc / X / click outside closes. */
+function openPanoLightbox(src){
+  if(document.getElementById('panoLightbox')) return;
+  const wrap=document.createElement('div'); wrap.id='panoLightbox';
+  wrap.innerHTML='<div class="pl-box"><div class="pl-view"></div><button type="button" class="pl-close" aria-label="Close">&times;</button></div>';
+  document.body.appendChild(wrap); document.body.style.overflow='hidden';
+  let v=null; const close=function(){ if(v){ try{ v.destroy(); }catch(e){} } wrap.remove(); document.body.style.overflow=''; document.removeEventListener('keydown', onKey); };
+  function onKey(e){ if(e.key==='Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  wrap.addEventListener('click', function(e){ if(e.target===wrap || e.target.closest('.pl-close')) close(); });
+  requestAnimationFrame(function(){ wrap.classList.add('open'); panoViewer(wrap.querySelector('.pl-view'), src, function(){ return wrap.isConnected; }, function(viewer){ v=viewer; }); });
+}
+
 function mountHeroPano(){
   if(state.screen!=='detail') return;
   const slot=document.getElementById('heroPanoSlot');
@@ -762,11 +815,16 @@ function mountHeroPano(){
   if(HERO.viewer && HERO.roomId===state.roomId) return;  // already live for this room
   if(HERO.viewer){ try{ HERO.viewer.destroy(); }catch(e){} HERO.viewer=null; }
   HERO.node.innerHTML='';
-  HERO.viewer=pannellum.viewer(HERO.node, {
-    type:'equirectangular', panorama:(R.panorama||SAMPLE_PANO), autoLoad:true,
-    showControls:true, compass:true, hfov:100, minHfov:45, maxHfov:120, mouseZoom:true, draggable:true
-  });
   HERO.roomId=state.roomId;
+  const src=R.panorama||SAMPLE_PANO, wanted=state.roomId;
+  panoViewer(HERO.node, src, function(){ return HERO.roomId===wanted && HERO.node.isConnected; }, function(v){
+    HERO.viewer=v;
+    /* the expand button, styled like the viewer's own controls */
+    const btn=document.createElement('button'); btn.type='button'; btn.className='pnlm-expand'; btn.title='View larger'; btn.setAttribute('aria-label','View larger');
+    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+    btn.addEventListener('click', function(e){ e.stopPropagation(); openPanoLightbox(src); });
+    HERO.node.appendChild(btn);
+  });
 }
 
 /* Photo gallery lightbox — view-only for customers, mounted outside #app.

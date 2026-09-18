@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
 <?php
 /* ==================================================================
    REFUND REQUEST — VENUSeP (customer portal)
@@ -257,6 +258,8 @@ $refundReasons = [
       /* primary button: crimson, not black */
       .rr-btn-primary { background: #a11626; border-color: #a11626; color: #ffffff; }
       .rr-btn-primary:hover { background: #7d0f1e; border-color: #7d0f1e; color: #ffffff; }
+          /* type floor (readability): nothing on the page below 12px */
+      .rr-label, .rr-hint, .rr-doc-txt small, .rr-file, .rr-later, .rr-kv span, .rr-total span, .rr-total small { font-size: 12px; }
     </style>
   </head>
   <body class="refund-request-page">

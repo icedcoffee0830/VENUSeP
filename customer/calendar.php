@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
 <?php
 /* ==================================================================
    CUSTOMER CALENDAR — same UI as admin/calendar.php, showing THIS

@@ -21,13 +21,18 @@
    Links and the logo path are relative to customer/. Reads the customer
    record for the name chip. Edit the menu HERE and every page updates.
    ===================================================================== */
+require_once __DIR__ . '/auth.php';                                    /* customer_logged_in() — guest or customer? */
 require_once __DIR__ . '/customer-bookings.php';                       /* $customerContact */
 include_once __DIR__ . '/venue-rooms.php';                             /* $venueRooms — one nav link per venue */
 include_once __DIR__ . '/hostel-rooms.php';                            /* $HOSTEL_VENUE — its name, from the one source */
 $navMode = isset($navMode) ? $navMode : 'solid';
 $navHere = isset($navHere) ? $navHere : '';
 $navSelf = isset($navSelf) ? $navSelf : basename($_SERVER['SCRIPT_NAME']);   /* the page including this bar */
-$navName  = $customerContact['name'];
+$navAuthed = customer_logged_in();
+/* The chip shows WHO LOGGED IN (the session, written by customer-login.php).
+   The rest of the customer pages still show the [SIM] demo customer until the
+   database is wired further — the header is the one part that is already real. */
+$navName  = $navAuthed && !empty($_SESSION['customer_name']) ? $_SESSION['customer_name'] : $customerContact['name'];
 $navFirst = explode(' ', trim($navName))[0];
 $navParts = preg_split('/\s+/', trim($navName));
 $navInit  = strtoupper(substr($navParts[0], 0, 1) . substr(end($navParts), 0, 1));
@@ -43,6 +48,9 @@ $navLinks = array_merge($navLinks, [
   ['bookings', 'booking-history.php',         'My bookings'],
   ['faq',      'faq.php',                     'FAQ'],
 ]);
+if (!$navAuthed) {                                                      /* a guest has no bookings to show */
+  $navLinks = array_values(array_filter($navLinks, function ($l) { return $l[0] !== 'bookings'; }));
+}
 ?>
 <style>
   /* nav styles live HERE so every page gets them with the include */
@@ -66,12 +74,21 @@ $navLinks = array_merge($navLinks, [
   .cn-avatar { width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #1d1214;
     display: grid; place-items: center; font-size: 12.5px; font-weight: 700; }
   .cn-name { font-size: 13.5px; font-weight: 700; }
+  /* guest: Log in (text) + Sign up (pill) where the chip would be; customer: chip + Log out */
+  .cn-auth { display: inline-flex; align-items: center; gap: 14px; }
+  .cn-login { font-size: 14px; font-weight: 600; color: #fff; text-decoration: none; }
+  .cn-login:hover { color: #ffd166; }
+  .cn-signup { display: inline-flex; align-items: center; min-height: 42px; padding: 0 20px; border-radius: 999px; background: #fff; color: #a11626; font-size: 14px; font-weight: 700; text-decoration: none; transition: background 200ms, color 200ms; }
+  .cn-signup:hover { background: #ffd166; color: #120809; }
+  .cn-logout { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.75); text-decoration: none; }
+  .cn-logout:hover { color: #ffd166; }
   .cn-burger { display: none; width: 44px; height: 44px; place-items: center; border-radius: 12px;
     border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); cursor: pointer; }
   .cn-menu { display: none; }
   @media (max-width: 720px) {
     .cn-wrap, .cn-nav.is-static .cn-wrap { padding: 0 18px; height: 72px; }
-    .cn-links, .cn-name { display: none; }
+    .cn-links, .cn-name, .cn-login, .cn-logout { display: none; }
+    .cn-signup { min-height: 36px; padding: 0 14px; font-size: 13px; }
     .cn-burger { display: grid; }
     .cn-user { padding: 0; border: 0; background: transparent; min-height: 0; }
     .cn-logo img { height: 21px; }
@@ -90,10 +107,18 @@ $navLinks = array_merge($navLinks, [
 <?php endforeach; ?>
     </nav>
     <div style="display:flex;align-items:center;gap:10px">
+<?php if ($navAuthed): ?>
       <a class="cn-user" href="customer-profile.php" title="Your profile">
         <span class="cn-avatar"><?php echo htmlspecialchars($navInit); ?></span>
         <span class="cn-name"><?php echo htmlspecialchars($navFirst); ?></span>
       </a>
+      <a class="cn-logout" href="logout.php">Log out</a>
+<?php else: ?>
+      <span class="cn-auth">
+        <a class="cn-login" href="customer-login.php">Log in</a>
+        <a class="cn-signup" href="customer-register.php">Sign up</a>
+      </span>
+<?php endif; ?>
       <button class="cn-burger" type="button" aria-label="Menu" aria-controls="cnMenu" aria-expanded="false" onclick="var m=document.getElementById('cnMenu');m.classList.toggle('open');this.setAttribute('aria-expanded',m.classList.contains('open'))">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
@@ -103,7 +128,13 @@ $navLinks = array_merge($navLinks, [
 <?php foreach ($navLinks as $l): ?>
     <a href="<?php echo htmlspecialchars($l[1]); ?>"<?php echo $l[0] === $navHere ? ' class="is-here"' : ''; ?>><?php echo $l[2]; ?></a>
 <?php endforeach; ?>
+<?php if ($navAuthed): ?>
     <a href="customer-profile.php">Profile</a>
+    <a href="logout.php">Log out</a>
+<?php else: ?>
+    <a href="customer-login.php">Log in</a>
+    <a href="customer-register.php">Sign up</a>
+<?php endif; ?>
   </nav>
 </header>
 <?php if ($navMode === 'hero'): ?>

@@ -11,8 +11,8 @@
    includes this, revisit the paths.
    ===================================================================== */
 $active = isset($active) ? $active : '';
-// $portal picks the menu: 'admin' (default) or 'customer'. Same black look
-// either way — only the links change. Links are bare filenames so they
+// $portal picks the menu: 'admin' (default) or 'customer'. Same crimson look
+// either way (since 2026-09-18) — only the links change. Links are bare filenames so they
 // resolve inside the including page's own folder (admin/ or customer/).
 $portal = isset($portal) ? $portal : 'admin';
 if ($portal === 'customer') {
@@ -37,12 +37,12 @@ if ($portal === 'customer') {
     ['Staff Management',    'venusep_staffManagement.php',     'bi-people'],
     ['Reports',             'Quarterly_Reports.php',           'bi-bar-chart'],
     ['Payment Settings',    'payment-settings.php',            'bi-wallet2'],
+    ['FAQ Management',      'faq-management.php',              'bi-question-circle'],   /* admin-added FAQ entries (2026-09-18) */
     ['Settings',            'venusep_profile.php',             'bi-gear'],
     ['Log Out',             'logout.php',                      'bi-box-arrow-right'],   /* ends the session */
   ];
 }
 ?>
-<?php if ($portal === 'customer'): ?>
 <style>
   /* customer sidebar — crimson to black, continuous with the customer header.
      Same structure and !important discipline as the admin one below. */
@@ -61,27 +61,8 @@ if ($portal === 'customer') {
   aside.sidebar .menu li:last-child{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}
   @media (max-width:767.98px){aside.sidebar{transform:translateX(-100%)!important}}
 </style>
-<?php else: ?>
-<style>
-  /* sidebar styles live HERE so every page gets them with the include.
-     Team look: BLACK (#1f1e1e) sidebar, white text, logo strip on top
-     (continuous with the header bar). Every property is set explicitly
-     with !important so leftover page CSS can never restyle the sidebar. */
-  aside.sidebar{position:fixed!important;left:0!important;top:0!important;width:235px!important;min-width:235px!important;height:100vh!important;background:#1f1e1e!important;color:#fff!important;z-index:1035!important;overflow-y:auto!important;border-right:1px solid #2d2b29!important;box-shadow:none!important;transform:none!important;padding:0!important;margin:0!important}
-  aside.sidebar .logo{height:58px;display:flex;align-items:center;justify-content:center;padding:14px 20px;background:#1f1e1e;border-bottom:1px solid #333}
-  aside.sidebar .logo img{display:block;max-width:150px;max-height:36px;width:auto;height:auto}
-  aside.sidebar .menu{list-style:none;padding:15px 10px;margin:0}
-  aside.sidebar .menu li{margin:0 0 8px;padding:0;list-style:none}
-  aside.sidebar .menu a{display:flex;align-items:center;gap:15px;height:42px;padding:0 15px;color:#e5e5e5!important;background:transparent;text-decoration:none;border-radius:10px;border:1px solid transparent;font-size:14px;transition:.2s}
-  aside.sidebar .menu a:hover{background:#343333!important}
-  aside.sidebar .menu a.active{background:#343333!important;border:1px solid #ffffff40!important}
-  aside.sidebar .menu i{width:20px;text-align:center;font-size:18px;color:inherit}
-  aside.sidebar .menu span{font-size:14px}
-  @media (max-width:767.98px){aside.sidebar{transform:translateX(-100%)!important}}
-</style>
-<?php endif; ?>
-<aside class="sidebar"<?php if ($portal === 'customer') echo ' id="hdSidebar"'; ?>>
-  <div class="logo"><img src="../logo/<?php echo $portal === 'customer' ? 'Logo Header 3.png' : 'Logo Header 2.png'; ?>" alt="VENUSeP logo" /></div>
+<aside class="sidebar" id="hdSidebar">
+  <div class="logo"><img src="../logo/Logo Header 3.png" alt="VENUSeP logo" /></div>
   <ul class="menu">
 <?php foreach ($items as $it): ?>
     <li><a href="<?php echo $it[1]; ?>"<?php echo $it[0] === $active ? ' class="active"' : ''; ?>><i class="bi <?php echo $it[2]; ?>"></i><span><?php echo $it[0]; ?></span></a></li>

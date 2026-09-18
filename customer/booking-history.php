@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
 <?php
 /* ==================================================================
    BOOKING HISTORY — VENUSeP merged system (customer portal)
@@ -146,6 +147,8 @@ $emptyBookingMessage = 'No booking history found.';
       /* the active tab and the current page in the pagination: crimson, not black */
       .booking-status-tab.active { background: #a11626; border-color: #a11626; color: #ffffff; }
       .booking-pagination button.active { background: #a11626; border-color: #a11626; color: #ffffff; }
+      /* type floor (readability): nothing on the page below 12px */
+      .booking-badge, .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }
     </style>
   </head>
   <body class="booking-history-page">

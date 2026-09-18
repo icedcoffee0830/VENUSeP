@@ -1,4 +1,4 @@
-<?php ?>
+<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
 <!DOCTYPE html>
 <!-- ==================================================================
   USeP ROOM RESERVATION — customer booking UI (self-contained mockup)
@@ -131,6 +131,7 @@
   .bk-more-meta s,.bk-more-price s{color:#ac8f8d!important}
   .bk-more-meta strong,.bk-more-price strong{color:#fff!important}
   .bk-more-meta span,.bk-more-price span{color:#f2d0cb!important}
+  .bk-more-meta span,.bk-more-price span{font-size:12px!important}   /* type floor: the 11px note from pricing.php */
   .bk-more-free{margin-top:13px;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,209,102,.16);border:1px solid rgba(255,209,102,.42);color:#ffd166}
   .bk-more-free i{width:6px;height:6px;border-radius:50%;background:#ffd166;display:block}
   .bk-more-free.is-none{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.17);color:#bda4a2}
@@ -1073,13 +1074,13 @@ function detailScreen(){
         <div id="heroPanoSlot" style="grid-row:1 / span 2;position:relative;${PHOTO_TILE}">
           <span style="font:500 13px/1 ui-monospace,Menlo,monospace;color:#9a958c">360° panorama</span>
         </div>
-        <div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
-        <div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
+        <div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE}"><span style="font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
+        <div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE}"><span style="font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;width:604px;max-width:100%">
-        ${[1,2,3,4].map(()=>`<div onclick="openGallery()" style="aspect-ratio:1/1;border-radius:10px;overflow:hidden;cursor:pointer;${PHOTO_TILE}"><span style="font:500 10px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>`).join('')}
+        ${[1,2,3,4].map(()=>`<div onclick="openGallery()" style="aspect-ratio:1/1;border-radius:10px;overflow:hidden;cursor:pointer;${PHOTO_TILE}"><span style="font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span></div>`).join('')}
         <div onclick="openGallery()" style="aspect-ratio:1/1;border-radius:10px;overflow:hidden;position:relative;cursor:pointer;${PHOTO_TILE}">
-          <span style="font:500 10px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>
+          <span style="font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>
           <div style="position:absolute;inset:0;background:rgba(20,18,15,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600">+${R.photos} photos</div>
         </div>
       </div>

@@ -210,6 +210,34 @@ snapshotted). No second setting.
 - Not built: notifications when a payment window opens. The customer sees it
   on booking history and the booking page.
 
+## 19. Admin-managed FAQs — 2026-09-18
+EVERY question on the customer FAQ page lives in the database, so admins and
+staff can add, edit, reorder and hide them without a developer. Two tables:
+`faq_sections` (the six section keys the FAQ page uses as ids — booking,
+discount, hostel, gcash, cash, after) and `faqs`.
+
+- **Built-in questions are seeded rows** (`is_builtin`), not code. They can
+  be edited and hidden but never deleted; the shipped wording is kept in
+  `default_question` / `default_answer` so "Restore original" always works.
+- **Live values are placeholders** filled at render time — `{discount}`,
+  `{grace_days}`, `{rate_communal}`, `{rate_private}`, `{cr_communal}`,
+  `{cr_private}` — so the text never drifts from pricing / hostel / refund
+  settings.
+- **Policy per row** (`any` / `refunds_on` / `refunds_off`): the refund
+  switch (#16) decides which rows customers see, because it also changes the
+  payment-timing wording (#18). The admin page previews the list under
+  either state without changing anything.
+- **Answers are plain text with a little markup** (`**bold**`,
+  `[text](page.php)`, `- ` lists, blank line = paragraph), escaped first —
+  typed HTML is shown, never run. Links may only be relative pages or http(s).
+- **One writer:** `admin/faq-save.php` (POST + CSRF, admin or staff). One
+  reader include: `includes/faqs.php`. The page is `admin/faq-management.php`.
+- **Fail safe:** with the database unreachable the customer page says the FAQ
+  is temporarily unavailable; the admin page says so and offers no form.
+- **Import note:** the seed contains em dashes and curly quotes — import the
+  schema with the client in UTF-8 (the file's `SET NAMES utf8mb4` handles
+  a whole-file import; a piecemeal paste from a Latin-1 terminal does not).
+
 ---
 
 ## Open items (not yet decided)

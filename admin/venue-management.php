@@ -26,6 +26,8 @@ $TODAY = date('Y-m-d');
 include __DIR__ . '/../includes/venues.php';       // the venue list — one source, data-driven
 include __DIR__ . '/../includes/venue-rooms.php';
 include __DIR__ . '/../includes/hostel-rooms.php';
+require_once __DIR__ . '/../includes/room-photos.php';   // real uploaded room cover photos, if any
+require_once __DIR__ . '/../includes/venue-photos.php';  // real uploaded venue cover photos, if any
 include __DIR__ . '/../includes/pricing.php';       // the USeP discount rate — THIS page is the screen that edits it (one rate for all venues)
 
 $rooms = $venueRooms;   // the r1–r8 event rooms, same data the booking page shows
@@ -855,14 +857,18 @@ function vmMaint($m, $today) {
       <!-- VENUES -->
       <div class="vm-section-title">Venues <span>&mdash; locations that hold rooms</span></div>
       <div class="vm-grid">
-        <!-- Venue: Bahay Alumni -->
+        <!-- Venue: Bahay Alumni (venues.id = 1) -->
         <div class="vm-card">
           <div class="vm-thumb">
+<?php $venueCover = vp_cover_url(1); if ($venueCover): ?>
+            <img src="<?php echo htmlspecialchars($venueCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
+<?php else: ?>
             <div class="vm-thumb-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h6" />
               </svg>
             </div>
+<?php endif; ?>
             <div class="vm-name-bar">Bahay Alumni</div>
           </div>
           <div class="vm-venue-body">
@@ -879,18 +885,22 @@ function vmMaint($m, $today) {
             </div>
           </div>
           <div class="vm-card-foot">
-            <a class="vm-edit-link" href="venue-form.php"><span class="plus">✎</span> Edit Details</a>
+            <a class="vm-edit-link" href="venue-form.php?id=1"><span class="plus">✎</span> Edit Details</a>
           </div>
         </div>
 
-        <!-- Venue: USeP Venues -->
+        <!-- Venue: USeP Venues (venues.id = 2) -->
         <div class="vm-card">
           <div class="vm-thumb">
+<?php $venueCover = vp_cover_url(2); if ($venueCover): ?>
+            <img src="<?php echo htmlspecialchars($venueCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
+<?php else: ?>
             <div class="vm-thumb-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h6" />
               </svg>
             </div>
+<?php endif; ?>
             <div class="vm-name-bar">USeP Venues</div>
           </div>
           <div class="vm-venue-body">
@@ -906,21 +916,26 @@ function vmMaint($m, $today) {
             </div>
           </div>
           <div class="vm-card-foot">
-            <a class="vm-edit-link" href="venue-form.php"><span class="plus">✎</span> Edit Details</a>
+            <a class="vm-edit-link" href="venue-form.php?id=2"><span class="plus">✎</span> Edit Details</a>
           </div>
         </div>
 
-        <!-- Venue: USeP Hostel — a venue like any other in the data model, so it
-             is listed here rather than on a page of its own. What differs is how
-             its rooms are BOOKED (per bed) and PAID (through CEDU), not what a
-             venue is. Rooms come from includes/hostel-rooms.php. -->
+        <!-- Venue: USeP Hostel (venues.id = 3) — a venue like any other in the
+             data model, so it is listed here rather than on a page of its own.
+             What differs is how its rooms are BOOKED (per bed) and PAID
+             (through CEDU), not what a venue is. Rooms come from
+             includes/hostel-rooms.php. -->
         <div class="vm-card">
           <div class="vm-thumb">
+<?php $venueCover = vp_cover_url(3); if ($venueCover): ?>
+            <img src="<?php echo htmlspecialchars($venueCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
+<?php else: ?>
             <div class="vm-thumb-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6M2 18h20M2 18v2M22 18v2M6 10V8a2 2 0 0 1 2-2h3v4" />
               </svg>
             </div>
+<?php endif; ?>
             <div class="vm-name-bar"><?php echo htmlspecialchars($HOSTEL_VENUE); ?></div>
           </div>
           <div class="vm-venue-body">
@@ -935,7 +950,7 @@ function vmMaint($m, $today) {
             </div>
           </div>
           <div class="vm-card-foot">
-            <a class="vm-edit-link" href="venue-form.php"><span class="plus">✎</span> Edit Details</a>
+            <a class="vm-edit-link" href="venue-form.php?id=3"><span class="plus">✎</span> Edit Details</a>
           </div>
         </div>
       </div>
@@ -948,11 +963,15 @@ function vmMaint($m, $today) {
         $mt = vmMaint($room['maintenance'], $TODAY); ?>
         <div class="vm-card">
           <div class="vm-thumb" data-room="<?php echo $rn; ?>">
+<?php $roomCover = rp_cover_url($room['id']); if ($roomCover): ?>
+            <img src="<?php echo htmlspecialchars($roomCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
+<?php else: ?>
             <div class="vm-thumb-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6M3 18h18M3 18v2M21 18v2M6 10V7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3" />
               </svg>
             </div>
+<?php endif; ?>
             <div class="vm-dots">
 <?php for ($p = 1; $p <= $room['photos']; $p++): ?>
               <button class="vm-dot-nav<?php echo $p === 1 ? ' active' : ''; ?>" aria-label="Photo <?php echo $p; ?>"></button>
@@ -971,13 +990,13 @@ function vmMaint($m, $today) {
                  ask about it. It asks, and it carries the answer (Reopen) —
                  a passive count would just become furniture on the page. -->
             <span class="vm-review">Closed <?php echo $mt['days']; ?> days &mdash; still closed?
-              <a href="room-form.php" title="[SIM] opens the room's maintenance window">Reopen</a>
+              <a href="room-form.php?id=<?php echo urlencode($room['id']); ?>" title="[SIM] opens the room's maintenance window">Reopen</a>
             </span>
 <?php endif; ?>
 <?php endif; ?>
           </div>
           <div class="vm-card-foot">
-            <a class="vm-edit-link" href="room-form.php"><span class="plus">✎</span> Edit Room</a>
+            <a class="vm-edit-link" href="room-form.php?id=<?php echo urlencode($room['id']); ?>"><span class="plus">✎</span> Edit Room</a>
             <span class="vm-price">₱<?php echo number_format($room['fee'], 2); ?></span>
           </div>
         </div>
@@ -1003,11 +1022,15 @@ function vmMaint($m, $today) {
         $closedNow = $room['maintenance'] && $room['maintenance']['blocks'] && hostelMaintCovers($room['maintenance'], $TODAY); ?>
         <div class="vm-card">
           <div class="vm-thumb" data-room="<?php echo 100 + $hn; ?>">
+<?php $roomCover = rp_cover_url($room['id']); if ($roomCover): ?>
+            <img src="<?php echo htmlspecialchars($roomCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
+<?php else: ?>
             <div class="vm-thumb-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6M2 18h20M2 18v2M22 18v2M6 10V8a2 2 0 0 1 2-2h3v4" />
               </svg>
             </div>
+<?php endif; ?>
             <div class="vm-dots">
 <?php for ($p = 1; $p <= $room['photos']; $p++): ?>
               <button class="vm-dot-nav<?php echo $p === 1 ? ' active' : ''; ?>" aria-label="Photo <?php echo $p; ?>"></button>
@@ -1028,13 +1051,13 @@ function vmMaint($m, $today) {
             <span class="vm-status" title="<?php echo htmlspecialchars($mt['reason']); ?>"><span class="vm-dot <?php echo $mt['dot']; ?>"></span> <?php echo htmlspecialchars($mt['label']); ?></span>
 <?php if ($mt['review']): ?>
             <span class="vm-review">Closed <?php echo $mt['days']; ?> days &mdash; still closed?
-              <a href="hostel-room-form.php" title="[SIM] opens the room's maintenance window">Reopen</a>
+              <a href="hostel-room-form.php?id=<?php echo urlencode($room['id']); ?>" title="[SIM] opens the room's maintenance window">Reopen</a>
             </span>
 <?php endif; ?>
 <?php endif; ?>
           </div>
           <div class="vm-card-foot">
-            <a class="vm-edit-link" href="hostel-room-form.php"><span class="plus">✎</span> Edit Room</a>
+            <a class="vm-edit-link" href="hostel-room-form.php?id=<?php echo urlencode($room['id']); ?>"><span class="plus">✎</span> Edit Room</a>
             <span class="vm-price">₱<?php echo number_format($HOSTEL_RATES[$room['cr_type']]); ?>/head</span>
           </div>
         </div>

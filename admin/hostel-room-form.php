@@ -3,6 +3,20 @@
 /* Venues come from the ONE shared source — the same list the event room form
    uses, so the two forms can never disagree about which venues exist. */
 include __DIR__ . '/../includes/venues.php';
+/* Room photos are keyed by the room's id — see includes/room-photos.php
+   for how uploads are stored (DB row in room_media + the file on disk). */
+require_once __DIR__ . '/../includes/room-photos.php';
+include __DIR__ . '/../includes/hostel-rooms.php';
+
+$roomId = isset($_GET['id']) ? $_GET['id'] : '';
+$roomFormRoom = null;
+if (rp_room_id_valid($roomId)) {
+  foreach ($hostelRooms as $r) {
+    if ($r['id'] === $roomId) { $roomFormRoom = $r; break; }
+  }
+}
+if ($roomFormRoom === null) $roomId = '';   // unknown id — behaves like Add
+$roomFormCsrf = csrf_token();
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -191,7 +205,9 @@ include __DIR__ . '/../includes/venues.php';
       .vm-thumbs {
         display: grid;
         gap: 8px;
-        grid-template-columns: repeat(5, 1fr);
+        /* 2 side shots + 3 thumbs = 5 tiles total, matching the 5-photo cap
+           (ROOM_PHOTO_MAX_COUNT) — no tile is ever left with nothing to show. */
+        grid-template-columns: repeat(3, 1fr);
         margin-top: 8px;
         max-width: 100%;
         width: 604px;
@@ -607,10 +623,12 @@ include __DIR__ . '/../includes/venues.php';
           <div class="container-fluid">
             <div class="vm-page">
       <a class="vm-back" href="venue-management.php">&larr; Back to Venue Management</a>
-      <h1 class="vm-title">Edit Hostel Room</h1>
-      <p class="vm-subtitle">Hostel rooms hold beds. Guests book a bed, not the room — so there is no capacity here, only how many beds exist and what one costs per night.</p>
+      <h1 class="vm-title"><?php echo $roomId ? 'Edit Hostel Room' : 'Add Hostel Room'; ?></h1>
+      <p class="vm-subtitle">Hostel rooms hold beds. Guests book a bed, not the room — so there is no capacity here, only how many beds exist and what one costs per night.<?php if (!$roomId): ?> Photos can be added once the room is saved and has an id.<?php endif; ?></p>
 
       <form class="vm-panel" onsubmit="return false">
+        <input type="hidden" id="vmRoomId" value="<?php echo htmlspecialchars($roomId); ?>" />
+        <input type="hidden" id="vmCsrf" value="<?php echo htmlspecialchars($roomFormCsrf); ?>" />
         <!-- top section: pictures left, primary fields fill the space beside them -->
         <div class="vm-top">
         <div class="vm-top-media">
@@ -621,12 +639,12 @@ include __DIR__ . '/../includes/venues.php';
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
             </svg>
           </div>
-          <div class="vm-shot">
+          <div class="vm-shot" id="vmSideShot0">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
             </svg>
           </div>
-          <div class="vm-shot">
+          <div class="vm-shot" id="vmSideShot1">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
             </svg>
@@ -641,27 +659,17 @@ include __DIR__ . '/../includes/venues.php';
         </div>
         <!-- thumbnail strip, last tile carries the photo manager button -->
         <div class="vm-thumbs">
-          <div class="vm-shot">
+          <div class="vm-shot" id="vmThumb0">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
             </svg>
           </div>
-          <div class="vm-shot">
+          <div class="vm-shot" id="vmThumb1">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
             </svg>
           </div>
-          <div class="vm-shot">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
-            </svg>
-          </div>
-          <div class="vm-shot">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
-            </svg>
-          </div>
-          <div class="vm-shot">
+          <div class="vm-shot" id="vmThumb2">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" />
             </svg>
@@ -674,13 +682,15 @@ include __DIR__ . '/../includes/venues.php';
         <div class="vm-row">
           <div class="vm-field">
             <label for="roomName">Room Name</label>
-            <input id="roomName" class="vm-control" type="text" value="Hostel Room 1" placeholder="e.g. Hostel Room 1" />
+            <input id="roomName" class="vm-control" type="text" value="<?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['name'] : ''); ?>" placeholder="e.g. Hostel Room 1" />
           </div>
           <div class="vm-field">
             <label>Location (Venue)</label>
-            <!-- Options come from includes/venues.php — every venue, data-driven. -->
+            <!-- Options come from includes/venues.php — every venue, data-driven.
+                 The summary + saved value come from rooms.venue_id via the DB
+                 overlay in includes/hostel-rooms.php. -->
             <details class="vm-dd" id="roomLoc">
-              <summary class="vm-dd-trigger">USeP Hostel</summary>
+              <summary class="vm-dd-trigger"><?php echo htmlspecialchars($roomFormRoom && isset($roomFormRoom['venue']) ? $roomFormRoom['venue'] : 'Select a venue'); ?></summary>
               <ul class="vm-dd-menu" aria-label="Location options">
                 <?php echo venueOptions($venues); ?>
               </ul>
@@ -692,7 +702,7 @@ include __DIR__ . '/../includes/venues.php';
 
         <div class="vm-form-foot">
           <a class="vm-btn vm-btn-outline" href="venue-management.php">Cancel</a>
-          <button type="button" class="vm-btn vm-btn-primary">Save Changes</button>
+          <button type="button" class="vm-btn vm-btn-primary" onclick="vmSaveChanges()">Save Changes</button>
         </div>
         </div>
 
@@ -910,18 +920,52 @@ include __DIR__ . '/../includes/venues.php';
       }
       mtSync();
     </script>
-    <!-- 360 panorama: upload an equirectangular image and preview it live -->
+    <!-- 360 panorama: upload an equirectangular image, saved to the server -->
     <!-- ============================================================
-         [6b] PAGE SCRIPT: 360° panorama — loads a sample panorama on
-         start; "Add / replace panorama" feeds an uploaded image into
-         a live Pannellum viewer (drag / zoom to check it works).
-         [SIM] the start-up sample image is a demo, and an uploaded
-         panorama lives only in the browser — the real app will save
-         the upload to the server / database.
+         [6b] PAGE SCRIPT: 360° panorama — loads the room's saved
+         panorama (or a sample, if none yet) into a live Pannellum
+         viewer; "Add / replace" and "Remove" call room-photos-api.php
+         so the file is actually stored under
+         assets/img/venues/rooms/<id>/pano.<ext> and survives a reload.
          ============================================================ -->
     <script>
-      var vmPano = null;
+      var VM_ROOM_ID = document.getElementById('vmRoomId').value;
+      var VM_CSRF = document.getElementById('vmCsrf').value;
+      var VM_API = 'room-photos-api.php';
       var VM_SAMPLE_PANO = 'https://pannellum.org/images/alma.jpg';
+      var VM_ICON_28 = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>';
+      var VM_ICON_22 = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>';
+
+      function vmNeedsRoom() {
+        if (VM_ROOM_ID) return false;
+        alert('Save this room first — photos are attached to a saved room.');
+        return true;
+      }
+      /* Parses the response as JSON, but if the server sent something else
+         (an HTML error page, a stray PHP warning ahead of the JSON, a
+         redirect to the login page) the failure says exactly what came
+         back instead of the generic "could not reach the server" — that
+         message used to fire for this case too, which hid the real cause. */
+      function vmParseApiResponse(r) {
+        return r.text().then(function (text) {
+          try { return JSON.parse(text); }
+          catch (e) { throw new Error('Unexpected response from the server (HTTP ' + r.status + '): ' + text.slice(0, 300)); }
+        });
+      }
+      function vmApiGet(action) {
+        return fetch(VM_API + '?action=' + encodeURIComponent(action) + '&room_id=' + encodeURIComponent(VM_ROOM_ID), { credentials: 'same-origin' })
+          .then(vmParseApiResponse);
+      }
+      function vmApiPost(action, extra) {
+        var body = extra instanceof FormData ? extra : new FormData();
+        body.append('action', action);
+        body.append('room_id', VM_ROOM_ID);
+        body.append('csrf', VM_CSRF);
+        return fetch(VM_API, { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(vmParseApiResponse);
+      }
+
+      var vmPano = null;
       function vmInitPano(src) {
         if (typeof pannellum === 'undefined') { return; }
         if (vmPano) { try { vmPano.destroy(); } catch (e) {} vmPano = null; }
@@ -931,30 +975,84 @@ include __DIR__ . '/../includes/venues.php';
           compass: true, hfov: 100, minHfov: 45, maxHfov: 120, mouseZoom: true, draggable: true,
         });
       }
-      function vmLoadPano(input) {
-        var f = input.files && input.files[0];
-        if (!f) return;
-        vmInitPano(URL.createObjectURL(f));
-      }
-      function vmClearPano() {
+      function vmPanoPlaceholder() {
         if (vmPano) { try { vmPano.destroy(); } catch (e) {} vmPano = null; }
         document.getElementById('vmPanoView').innerHTML =
           '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>';
       }
-      // Load a sample on start so the viewer is visibly working (Edit state).
-      vmInitPano(VM_SAMPLE_PANO);
+      function vmLoadPano(input) {
+        var f = input.files && input.files[0];
+        input.value = '';
+        if (!f) return;
+        if (vmNeedsRoom()) return;
+        vmInitPano(URL.createObjectURL(f));   // instant local preview
+        var body = new FormData();
+        body.append('file', f);
+        vmApiPost('upload_pano', body).then(function (res) {
+          if (!res.ok) { alert(res.message || 'Could not save the 360° photo.'); return; }
+          vmInitPano(res.pano || VM_SAMPLE_PANO);
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+      }
+      function vmClearPano() {
+        if (vmNeedsRoom()) return;
+        vmApiPost('delete_pano').then(function (res) {
+          if (!res.ok) { alert(res.message || 'Could not remove the 360° photo.'); return; }
+          vmPanoPlaceholder();
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+      }
     </script>
-    <!-- Photo gallery manager: add photos (venue uploads only) + pick the cover -->
+    <!-- Photo gallery manager: upload / delete / pick the cover — all saved
+         to the server via room-photos-api.php -->
     <!-- ============================================================
          [6c] PAGE SCRIPT: photo gallery manager — the "Room photos"
          lightbox overlay: upload photos, click a thumbnail to choose
-         the Cover image.
-         [SIM] uploaded photos live only in the browser (gone on
-         refresh) — the real app will save them to the server.
+         the Cover image (persisted immediately as the new photo #1),
+         and remove a photo. The thumbnail strip + side shots on the
+         page itself mirror the same list, cover-first.
          ============================================================ -->
     <script>
-      var VMPHOTOS = [];
+      var VMPHOTOS = [];   // [{file, url}], cover-first — mirrors the server
       var VMSEL = 0;
+      var VM_MAX_PHOTOS = 5;   // overwritten from the server's state on load (ROOM_PHOTO_MAX_COUNT)
+
+      function vmSetShot(el, url, iconSvg) {
+        if (!el) return;
+        el.innerHTML = url ? '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover" alt="" />' : iconSvg;
+      }
+      function vmRefreshThumbs() {
+        var urls = VMPHOTOS.map(function (p) { return p.url; });
+        vmSetShot(document.getElementById('vmSideShot0'), urls[0], VM_ICON_28);
+        vmSetShot(document.getElementById('vmSideShot1'), urls[1], VM_ICON_28);
+        for (var i = 0; i < 3; i++) {
+          var el = document.getElementById('vmThumb' + i);
+          if (!el) continue;
+          var url = urls[i + 2];
+          if (i === 2) {
+            el.innerHTML = (url ? '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0" alt="" />' : VM_ICON_22)
+              + '<button type="button" class="vm-edit-photos" onclick="vmOpenGallery()">✎ Edit photos</button>';
+          } else {
+            vmSetShot(el, url, VM_ICON_22);
+          }
+        }
+      }
+      function vmApplyState(state) {
+        VMPHOTOS = state.photos || [];
+        if (state.maxPhotos) VM_MAX_PHOTOS = state.maxPhotos;
+        if (VMSEL >= VMPHOTOS.length) VMSEL = 0;
+        vmRefreshThumbs();
+        vmGalRender();
+        vmGalRenderAdd();
+      }
+      function vmLoadPhotos() {
+        vmInitPano(VM_SAMPLE_PANO);   // shown immediately; swapped for the real one below if saved
+        if (!VM_ROOM_ID) return;
+        vmApiGet('list').then(function (res) {
+          if (!res.ok) { console.error('vmLoadPhotos: server replied not-ok:', res); return; }
+          vmApplyState(res);
+          if (res.pano) vmInitPano(res.pano);
+        }).catch(function (err) { console.error('vmLoadPhotos failed — photos/360 may not reflect what is actually saved:', err); });
+      }
+
       function vmOpenGallery() {
         if (document.getElementById('vmGalOverlay')) return;
         var ov = document.createElement('div');
@@ -964,21 +1062,81 @@ include __DIR__ . '/../includes/venues.php';
           '<div style="background:#fff;border-radius:14px;max-width:960px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--vm-font);color:var(--vm-text)">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--vm-border)"><div style="font-weight:700">Room photos</div><button type="button" onclick="vmCloseGallery()" style="background:none;border:none;font-size:20px;color:#606a75;cursor:pointer">&times;</button></div>' +
           '<div style="padding:16px 18px;overflow:auto">' +
-          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-weight:700;font-size:.95rem">Venue uploads</div><label class="vm-btn vm-btn-outline vm-pano-btn" style="min-height:2rem;padding:0 .9rem;display:inline-flex;align-items:center">Add photos<input type="file" accept="image/*" multiple onchange="vmGalAdd(this)" /></label></div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-weight:700;font-size:.95rem">Venue uploads <span id="vmGalCount" style="font-weight:400;color:#8a857d"></span></div><label id="vmGalAddWrap" class="vm-btn vm-btn-outline vm-pano-btn" style="min-height:2rem;padding:0 .9rem;display:inline-flex;align-items:center"><span id="vmGalAddLabel">Add photos</span><input id="vmGalAddInput" type="file" accept="image/*" multiple onchange="vmGalAdd(this)" /></label></div>' +
           '<div id="vmGalBig" class="vm-galbig"></div>' +
           '<div id="vmGalGrid" class="vm-galgrid"></div>' +
+          '<p style="color:#8a857d;font-size:.78rem;margin:10px 2px 0">Click a photo to make it the cover. The &times; on a thumbnail removes it. Up to ' + VM_MAX_PHOTOS + ' photos per room.</p>' +
           '</div></div>';
         ov.addEventListener('click', function (e) { if (e.target === ov) vmCloseGallery(); });
         document.body.appendChild(ov);
         vmGalRender();
+        vmGalRenderAdd();
+      }
+      function vmGalRenderAdd() {
+        var count = document.getElementById('vmGalCount');
+        var wrap = document.getElementById('vmGalAddWrap');
+        var label = document.getElementById('vmGalAddLabel');
+        var input = document.getElementById('vmGalAddInput');
+        if (!count || !wrap || !label || !input) return;   // overlay not open
+        var full = VMPHOTOS.length >= VM_MAX_PHOTOS;
+        count.textContent = '(' + VMPHOTOS.length + ' of ' + VM_MAX_PHOTOS + ')';
+        label.textContent = full ? 'Maximum reached' : 'Add photos';
+        input.disabled = full;
+        wrap.style.opacity = full ? '.5' : '1';
+        wrap.style.cursor = full ? 'default' : 'pointer';
+        wrap.style.pointerEvents = full ? 'none' : 'auto';
       }
       function vmGalAdd(input) {
-        var files = input.files; if (!files) return;
-        for (var i = 0; i < files.length; i++) VMPHOTOS.push(URL.createObjectURL(files[i]));
-        VMSEL = VMPHOTOS.length - 1;
-        vmGalRender();
+        // input.files is a LIVE FileList, not a snapshot — clearing
+        // input.value before finishing with `files` empties this same
+        // reference too, silently turning the whole upload into a no-op.
+        // Everything that needs to read `files` (the length checks, the
+        // FormData loop) must happen before input.value is touched.
+        var files = input.files;
+        if (!files || !files.length) { input.value = ''; return; }
+        if (vmNeedsRoom()) { input.value = ''; return; }
+        var room = VMPHOTOS.length;
+        if (room >= VM_MAX_PHOTOS) { alert('This room already has the maximum of ' + VM_MAX_PHOTOS + ' photos.'); input.value = ''; return; }
+        if (room + files.length > VM_MAX_PHOTOS) {
+          alert('Only ' + (VM_MAX_PHOTOS - room) + ' more photo(s) fit — a room can have at most ' + VM_MAX_PHOTOS + '. The rest will be skipped.');
+        }
+        var body = new FormData();
+        for (var i = 0; i < files.length; i++) body.append('files[]', files[i]);
+        input.value = '';   // safe now — the File objects are already captured in `body`
+        vmApiPost('upload', body).then(function (res) {
+          if (!res.ok) { alert(res.message || 'Could not upload those photos.'); return; }
+          VMSEL = (res.photos || []).length - 1;
+          vmApplyState(res);
+          if (res.warning) alert(res.warning);
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
-      function vmGalSelect(i) { VMSEL = i; vmGalRender(); }
+      function vmGalSelect(i) {
+        VMSEL = i;
+        vmGalRender();
+        if (i === 0 || vmNeedsRoom()) return;
+        var order = VMPHOTOS.map(function (p) { return p.file; });
+        var picked = order.splice(i, 1)[0];
+        order.unshift(picked);
+        var body = new FormData();
+        order.forEach(function (f) { body.append('order[]', f); });
+        vmApiPost('reorder', body).then(function (res) {
+          if (!res.ok) return;
+          VMSEL = 0;
+          vmApplyState(res);
+        }).catch(function (err) { console.error('vmGalSelect reorder failed:', err); });
+      }
+      function vmGalDelete(i, e) {
+        if (e) e.stopPropagation();
+        if (vmNeedsRoom()) return;
+        var photo = VMPHOTOS[i];
+        if (!photo || !confirm('Remove this photo?')) return;
+        var body = new FormData();
+        body.append('file', photo.file);
+        vmApiPost('delete', body).then(function (res) {
+          if (!res.ok) { alert(res.message || 'Could not remove that photo.'); return; }
+          vmApplyState(res);
+        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+      }
       function vmGalRender() {
         var big = document.getElementById('vmGalBig');
         var grid = document.getElementById('vmGalGrid');
@@ -989,12 +1147,51 @@ include __DIR__ . '/../includes/venues.php';
           return;
         }
         if (VMSEL >= VMPHOTOS.length) VMSEL = 0;
-        if (big) big.innerHTML = '<img src="' + VMPHOTOS[VMSEL] + '" style="width:100%;height:100%;object-fit:cover" alt="" />';
-        grid.innerHTML = VMPHOTOS.map(function (u, i) {
-          return '<button type="button" class="vm-galthumb' + (i === VMSEL ? ' sel' : '') + '" onclick="vmGalSelect(' + i + ')"><img src="' + u + '" style="width:100%;height:100%;object-fit:cover" alt="" />' + (i === VMSEL ? '<span class="vm-galfeat">Cover</span>' : '') + '</button>';
+        if (big) big.innerHTML = '<img src="' + VMPHOTOS[VMSEL].url + '" style="width:100%;height:100%;object-fit:cover" alt="" />';
+        grid.innerHTML = VMPHOTOS.map(function (p, i) {
+          return '<button type="button" class="vm-galthumb' + (i === VMSEL ? ' sel' : '') + '" onclick="vmGalSelect(' + i + ')">'
+            + '<img src="' + p.url + '" style="width:100%;height:100%;object-fit:cover" alt="" />'
+            + (i === VMSEL ? '<span class="vm-galfeat">Cover</span>' : '')
+            + '<span onclick="vmGalDelete(' + i + ', event)" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(20,18,15,.75);color:#fff;font-size:13px;line-height:20px;text-align:center;cursor:pointer">&times;</span>'
+            + '</button>';
         }).join('');
       }
       function vmCloseGallery() { var ov = document.getElementById('vmGalOverlay'); if (ov) ov.remove(); }
+
+      /* "Save Changes" — photos and the 360° tour already save themselves the
+         moment you add/remove/reorder them (see vmApiPost above); Name and
+         Location save here, to rooms.name / rooms.venue_id via
+         admin/room-save.php. Beds, CR type, rate, maintenance and amenities
+         on this form are still [SIM] — same as everywhere else in this
+         mockup — so the confirmation says so rather than pretend. */
+      function vmSaveChanges() {
+        if (!VM_ROOM_ID) {
+          alert('This form can\'t create a new room yet — open an existing room from Venue Management to add photos and a 360° tour.');
+          return;
+        }
+        var name = document.getElementById('roomName').value.trim();
+        var venueTrigger = document.querySelector('#roomLoc .vm-dd-trigger');
+        var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
+        if (!name) { alert('Enter a room name.'); return; }
+        if (!venue || venue === 'Select a venue') { alert('Choose a location.'); return; }
+
+        var body = new FormData();
+        body.append('room_id', VM_ROOM_ID);
+        body.append('name', name);
+        body.append('venue', venue);
+        body.append('room_type', 'hostel');
+        body.append('csrf', VM_CSRF);
+        fetch('room-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.ok) { alert(res.message || 'Could not save the room.'); return; }
+            alert('Room saved.\n\n(Beds, CR type, rate, maintenance and amenities on this form are not connected to storage yet.)');
+            location.href = 'venue-management.php';
+          })
+          .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+      }
+
+      vmLoadPhotos();
     </script>
     <!-- ============================================================
          [6d] PAGE SCRIPT: At-a-glance & Amenities pools — the fixed

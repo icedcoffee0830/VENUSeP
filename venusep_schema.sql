@@ -131,6 +131,7 @@ CREATE TABLE venues (
     name                VARCHAR(150) NOT NULL,
     venue_type          ENUM('event','hostel') NOT NULL,   -- renamed from venue_kind (#12)
     description         TEXT NULL,
+    cover_photo         VARCHAR(500) NULL,                 -- relative path, set by admin/venue-photo-api.php (one photo per venue, unlike room_media's gallery)
     address             VARCHAR(500) NULL,
     contact_phone       VARCHAR(30) NULL,
     contact_email       VARCHAR(190) NULL,                 -- kept + to be added to UI (#13)
@@ -821,6 +822,53 @@ INSERT INTO maintenance_windows (room_id, from_date, until_date, reason, blocks_
   (8,  '2026-08-03', '2026-08-07', 'Floor refinishing',                          TRUE),   -- HARD, planned
   (11, '2026-07-14', '2026-07-28', 'One of the two ceiling fans is being replaced', FALSE), -- MEDIUM (hostel)
   (13, '2026-08-10', '2026-08-16', 'Bathroom re-tiling',                         TRUE);   -- HARD (hostel)
+
+-- ---- Room photos + 360 panoramas uploaded so far (2026-09-18). The image FILES live in
+--      assets/img/venues/rooms/<room>/ (in git); these rows are what tie each file to its
+--      room, so every copy of the database shows the same gallery. New uploads through
+--      admin Venue Management add rows the same way. Order = filename order. ----
+INSERT INTO room_media (room_id, media_type, file_path, original_filename, display_order, mime_type, file_size_bytes, sha256_hash) VALUES
+  (1, 'photo', '../assets/img/venues/rooms/r1/photos/p_195724e23bd332b6.jpg', 'p_195724e23bd332b6.jpg', 1, 'image/jpeg', 589779, '06c4a8679ffb469e5f25ca3c14809c5c038e691dd6551081d6364ca3a8f4ab69'),
+  (1, 'photo', '../assets/img/venues/rooms/r1/photos/p_5cc146ac1030f1ce.jpg', 'p_5cc146ac1030f1ce.jpg', 2, 'image/jpeg', 488518, '9526d525f304b3bde219308ac1fe3d0ada9589569ece5409bb69d6d75b55361e'),
+  (1, 'photo', '../assets/img/venues/rooms/r1/photos/p_66bc75d5a05605de.jpg', 'p_66bc75d5a05605de.jpg', 3, 'image/jpeg', 516160, 'd32b825d0570c647ca5fe606b3953b4ffeebb5d3caf4d6451cfe99ba2fabf6e3'),
+  (1, 'photo', '../assets/img/venues/rooms/r1/photos/p_c6bc1e7a6e4168ff.jpg', 'p_c6bc1e7a6e4168ff.jpg', 4, 'image/jpeg', 560928, '5628c335ca12087fd6dd957a7ac3ed04e65e831003f5f04ff2e8c578053bf326'),
+  (1, 'photo', '../assets/img/venues/rooms/r1/photos/p_d8cbd39ff33257fb.jpg', 'p_d8cbd39ff33257fb.jpg', 5, 'image/jpeg', 509074, '622e2d5f582f9c4bb74e9c19f69e6809e40321b76bfa14a12a3032d471e468df'),
+  (1, 'panorama_360', '../assets/img/venues/rooms/r1/pano.jpg', 'pano.jpg', 1, 'image/jpeg', 208769, '6bcd595818f9d4fdd43b39a08a8eeb74ff901c41a3de37926a000d9a4680d1b3'),
+  (2, 'photo', '../assets/img/venues/rooms/r2/photos/p_0f58bb13607ed456.jpg', 'p_0f58bb13607ed456.jpg', 1, 'image/jpeg', 814734, '87d3ed682523db3e9fa874079ce970b2eb46ea8b1edacd74d29dacc7975f2ffa'),
+  (2, 'photo', '../assets/img/venues/rooms/r2/photos/p_1bc79a656c05b857.jpg', 'p_1bc79a656c05b857.jpg', 2, 'image/jpeg', 844900, '3ca7c83f3dca683388accad07e2045d3c02f177d1bdaa56ea9e7ea8ae00354dd'),
+  (2, 'photo', '../assets/img/venues/rooms/r2/photos/p_7350c5889584ccf8.jpg', 'p_7350c5889584ccf8.jpg', 3, 'image/jpeg', 312668, 'ca9372736e5af4f9a286251cb7a8701d8abbd709b3cfd3a1964b8dedcd77a699'),
+  (2, 'photo', '../assets/img/venues/rooms/r2/photos/p_8c111e5e53f43f7f.jpg', 'p_8c111e5e53f43f7f.jpg', 4, 'image/jpeg', 1154915, 'f2a5d91f6f206dd624a58513243f4d360b5dc8d3af2d0bfb1b4114d37307e49f'),
+  (2, 'photo', '../assets/img/venues/rooms/r2/photos/p_e2ff3aa8b50bf657.jpg', 'p_e2ff3aa8b50bf657.jpg', 5, 'image/jpeg', 261615, '1546ef0d44a83bcff6dad6589a677733724c9c67843e3d4497d6991e7e1c4bc0'),
+  (2, 'panorama_360', '../assets/img/venues/rooms/r2/pano.jpg', 'pano.jpg', 1, 'image/jpeg', 60515, '28f4801bec240c92b760f78ce894bf25b6251be3b1b7cfc378b8549f776b2cda'),
+  (5, 'photo', '../assets/img/venues/rooms/r5/photos/p_36cd7e532ad40cc2.jpg', 'p_36cd7e532ad40cc2.jpg', 1, 'image/jpeg', 1431677, '632da757bc354291f882803c941c4bbca38976d560e7861be564920330f7ba6d'),
+  (5, 'photo', '../assets/img/venues/rooms/r5/photos/p_4ffd6ea76f8270a7.jpg', 'p_4ffd6ea76f8270a7.jpg', 2, 'image/jpeg', 1455873, '2dbce3539211d9bee594cca18daaa8f2ccaa3976f95b69ead40200bdb4644681'),
+  (5, 'photo', '../assets/img/venues/rooms/r5/photos/p_64bac1882a79228a.jpg', 'p_64bac1882a79228a.jpg', 3, 'image/jpeg', 2463434, 'f7a58cbc4bc47a206c101480b56334d132046e42992d9e0eaf8e33e98532f59e'),
+  (5, 'photo', '../assets/img/venues/rooms/r5/photos/p_aeab7ce563108458.jpg', 'p_aeab7ce563108458.jpg', 4, 'image/jpeg', 1438837, '5c5e91a760c84ba97aed9faea6d0ebf2be8fbfdf7c50cb10b5e57043374cadf1'),
+  (5, 'photo', '../assets/img/venues/rooms/r5/photos/p_f0a6a0527e1a4c18.jpg', 'p_f0a6a0527e1a4c18.jpg', 5, 'image/jpeg', 1445654, 'e918153bde4f3cf35777ff08edbc73f42e6f27961aaf42672bc11e82cee975bb'),
+  (5, 'panorama_360', '../assets/img/venues/rooms/r5/pano.jpg', 'pano.jpg', 1, 'image/jpeg', 559750, '978e9ae3e803dbca17e6f8856d9792126c96d400cd9c27bb9ce9cdd1c132a603'),
+  (7, 'photo', '../assets/img/venues/rooms/r7/photos/p_74e3c2b7ed1a1d22.jpg', 'p_74e3c2b7ed1a1d22.jpg', 1, 'image/jpeg', 1398751, 'bbd9c9cb6cdcc42db5c1631dc9690c19663ab3a7694ea7fd7190263a501cabd0'),
+  (7, 'photo', '../assets/img/venues/rooms/r7/photos/p_f1df6cece7195bac.jpg', 'p_f1df6cece7195bac.jpg', 2, 'image/jpeg', 2019089, '2cb409286fd78a2002cdc3fd46feda0a302a0119ee4de140f38cc934d30c2467'),
+  (9, 'photo', '../assets/img/venues/rooms/h1/photos/p_7b3b957a55ab7c7a.jpg', 'p_7b3b957a55ab7c7a.jpg', 1, 'image/jpeg', 561193, '0ddebb7b304a5587607e46b9acd668561a18d6992a83dc5489c8bd904a50e9b2'),
+  (9, 'photo', '../assets/img/venues/rooms/h1/photos/p_b87804951d282be1.jpg', 'p_b87804951d282be1.jpg', 2, 'image/jpeg', 596420, '8ce6086bbe9dcdc259acc9125b5321edeb49398790dcf8c8c1f14566ccf64b32'),
+  (9, 'photo', '../assets/img/venues/rooms/h1/photos/p_d0ba12453f9cf539.jpg', 'p_d0ba12453f9cf539.jpg', 3, 'image/jpeg', 585915, '9fe7b5cfcc37986fde4efa42e8519efb031f80e942e5bf86e47a512c96c4ce30'),
+  (9, 'panorama_360', '../assets/img/venues/rooms/h1/pano.jpg', 'pano.jpg', 1, 'image/jpeg', 364740, '24fc7e783b3dff62b0484e29171c3fd014575b8aae7427f97e689e575db69154'),
+  (10, 'photo', '../assets/img/venues/rooms/h2/photos/p_2ba8f0737f32daa4.jpg', 'p_2ba8f0737f32daa4.jpg', 1, 'image/jpeg', 519112, '2e6f1dcb018b4c89b85ba6798a23f54da618a6f8c9c8055fb0c8deed4f1d398f'),
+  (10, 'photo', '../assets/img/venues/rooms/h2/photos/p_32db00ff82b43478.jpg', 'p_32db00ff82b43478.jpg', 2, 'image/jpeg', 519112, '2e6f1dcb018b4c89b85ba6798a23f54da618a6f8c9c8055fb0c8deed4f1d398f'),
+  (10, 'photo', '../assets/img/venues/rooms/h2/photos/p_d46604c6349e0aec.jpg', 'p_d46604c6349e0aec.jpg', 3, 'image/jpeg', 568924, '3053d940dfd346596434e8fbe5a8d05c8420455e22d1fca7a5851430f021f904'),
+  (10, 'photo', '../assets/img/venues/rooms/h2/photos/p_d98cb22e5d1dbf65.jpg', 'p_d98cb22e5d1dbf65.jpg', 4, 'image/jpeg', 830636, '0d7968a59ff0a578c3541bb32d237b5e2032bfc3831a845abf728c50cccd6337'),
+  (10, 'photo', '../assets/img/venues/rooms/h2/photos/p_db8b2c04c57b6720.jpg', 'p_db8b2c04c57b6720.jpg', 5, 'image/jpeg', 510233, '8530012c5220f9b8279ada02e51ac9a1eecdd8466a8cd549f2a3833ffa65d591'),
+  (10, 'panorama_360', '../assets/img/venues/rooms/h2/pano.jpg', 'pano.jpg', 1, 'image/jpeg', 390822, 'd0ade09c598f2179ee0123c169206472aa440e2a0146a7829ef4206922005aeb'),
+  (11, 'photo', '../assets/img/venues/rooms/h3/photos/p_12aa33737b93ca3e.jpg', 'p_12aa33737b93ca3e.jpg', 1, 'image/jpeg', 700068, '4f44a08e7227b05c37fa3b04077ca2793593c0352436b8f163406245c2af4751'),
+  (11, 'photo', '../assets/img/venues/rooms/h3/photos/p_387496720e26df7c.jpg', 'p_387496720e26df7c.jpg', 2, 'image/jpeg', 376684, '2df086440c1395940c3c96f25043fe5269f104a0670360aca13431de205ef024'),
+  (11, 'photo', '../assets/img/venues/rooms/h3/photos/p_9ee83973b14d98f2.jpg', 'p_9ee83973b14d98f2.jpg', 3, 'image/jpeg', 460019, 'ccb64c7cafa7bf3ddd67d5b9a26ae299fae3608563a08a39dfdaf321135ec9cf'),
+  (11, 'photo', '../assets/img/venues/rooms/h3/photos/p_a1a3f6b5c25d7b65.jpg', 'p_a1a3f6b5c25d7b65.jpg', 4, 'image/jpeg', 376684, '2df086440c1395940c3c96f25043fe5269f104a0670360aca13431de205ef024'),
+  (11, 'photo', '../assets/img/venues/rooms/h3/photos/p_da28e82f07e66cb8.jpg', 'p_da28e82f07e66cb8.jpg', 5, 'image/jpeg', 436448, 'b629be7be1a1ef5f60474d9c6a3bb7dd63c4ee19d35226593912452756a92963'),
+  (11, 'panorama_360', '../assets/img/venues/rooms/h3/pano.jpg', 'pano.jpg', 1, 'image/jpeg', 61279, '54698a96114677646d79ebc2d4dd2dad3f942e78f376e0871cdb6b74a8db8896');
+
+-- ---- Venue cover photos (assets/img/venues/covers/<venue id>.jpg) ----
+UPDATE venues SET cover_photo = '../assets/img/venues/covers/1.jpg' WHERE id = 1;
+UPDATE venues SET cover_photo = '../assets/img/venues/covers/2.jpg' WHERE id = 2;
+UPDATE venues SET cover_photo = '../assets/img/venues/covers/3.jpg' WHERE id = 3;
 
 -- ---- Test logins (carried over from the live DB, 2026-09-16). TEST PASSWORDS ONLY —
 --      never reuse them for real data. There is no staff account yet (staff UI pending). ----

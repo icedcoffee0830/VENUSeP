@@ -533,6 +533,18 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
       }
           /* phone: the 7-column month grid scrolls inside its card, not the whole page */
       @media (max-width: 767.98px) { .calendar-shell { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+          /* ---- phone: white page, cards edge to edge — the details get the width.
+         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      @media (max-width: 767.98px) {
+        body { background: #fff !important; }
+        .app-main { background: #fff !important; }
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+        .calendar-heading h1 { color: #1f1e1e; }
+        .calendar-heading p { color: #6e6a64; }
+        .calendar-shell { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+        .calendar-page { --calendar-page-bg: #fff; }
+      }
     </style>
   </head>
   <body class="calendar-page">

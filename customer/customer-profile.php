@@ -158,6 +158,18 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
       .btn-profile.btn-profile-primary:hover { background: #7d0f1e; border-color: #7d0f1e; }
           /* type floor (readability): nothing on the page below 12px */
       .profile-meta dt { font-size: 12px; }
+          /* ---- phone: white page, cards edge to edge — the details get the width.
+         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      @media (max-width: 767.98px) {
+        body { background: #fff !important; }
+        .app-main { background: #fff !important; }
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+        .profile-page-header h1 { color: #1f1e1e; }
+        .profile-page-header p { color: #6e6a64; }
+        .profile-summary, .profile-section { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+        .profile-summary, .profile-section { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+      }
     </style>
   </head>
   <body class="customer-profile-page">

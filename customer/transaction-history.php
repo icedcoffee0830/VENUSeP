@@ -160,6 +160,18 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
       .tabulator-responsive-collapse-toggle { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; background: #f4f2ee; color: #a11626; font-weight: 700; }
       /* type floor (readability): nothing on the page below 12px */
       .t-badge, .tabulator-col-title, .th-field label { font-size: 12px !important; }
+          /* ---- phone: white page, cards edge to edge — the details get the width.
+         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      @media (max-width: 767.98px) {
+        body { background: #fff !important; }
+        .app-main { background: #fff !important; }
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+        .th-head h1 { color: #1f1e1e; }
+        .th-head p { color: #6e6a64; }
+        .th-field label { color: #6e6a64; }
+        .th-panel { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      }
     </style>
   </head>
   <body class="customer-transaction-page">

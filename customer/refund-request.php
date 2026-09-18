@@ -260,6 +260,19 @@ $refundReasons = [
       .rr-btn-primary:hover { background: #7d0f1e; border-color: #7d0f1e; color: #ffffff; }
           /* type floor (readability): nothing on the page below 12px */
       .rr-label, .rr-hint, .rr-doc-txt small, .rr-file, .rr-later, .rr-kv span, .rr-total span, .rr-total small { font-size: 12px; }
+          /* ---- phone: white page, cards edge to edge — the details get the width.
+         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      @media (max-width: 767.98px) {
+        body { background: #fff !important; }
+        .app-main { background: #fff !important; }
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+        .rr-page > h1 { color: #1f1e1e; }
+        .rr-page > p { color: #6e6a64; }
+        .rr-back { color: #6e6a64; }
+        .rr-card { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+        .rr-back { color: #a11626; }
+      }
     </style>
   </head>
   <body class="refund-request-page">

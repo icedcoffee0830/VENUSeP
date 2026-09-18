@@ -7,14 +7,13 @@
    decorative for now (no JS yet). hd-* class names are unique on
    purpose so no page stylesheet (incl. AdminLTE's CDN css) restyles it.
 
-   $portal ('admin' default | 'customer') picks the look:
-     admin    — the black bar, unchanged.
-     customer — the crimson bar that matches the customer landing page,
-                a burger that really opens/closes the sidebar, and no
-                search / fullscreen / theme icons (they did nothing).
-                The burger works by setting --venusep-sidebar-width to 0
-                on <body>; every customer page lays out from that variable,
-                so nothing in the pages had to change.
+   $portal ('admin' default | 'customer') picks the MENU, not the look:
+   since 2026-09-18 both portals share the crimson bar that matches the
+   customer landing page — a burger that really opens/closes the sidebar,
+   the account chip, and no search / fullscreen / theme icons (they did
+   nothing). The customer bar adds FAQ + Profile quick links.
+   The burger works by setting --venusep-sidebar-width to 0 on <body>;
+   every page lays out from that variable.
    ===================================================================== */
 $portal   = isset($portal) ? $portal : 'admin';
 $hdName   = $portal === 'customer' ? 'Juan Miguel Dela Cruz' : 'Administrator';
@@ -22,14 +21,17 @@ $hdAvatar = $portal === 'customer' ? 'JM' : 'AD';
 $hdHere   = '';
 if ($portal === 'customer') {
   if (isset($customerContact['name'])) $hdName = $customerContact['name'];   /* pages that load the shared customer record */
+  /* the page started the session (its guard, or its first line); here we only read it */
+  if (!empty($_SESSION['customer_name']) && (isset($_SESSION['account_type']) ? $_SESSION['account_type'] : '') === 'customer') {
+    $hdName = $_SESSION['customer_name'];                                     /* who actually logged in — same as the landing nav chip */
+  }
   $hdParts  = preg_split('/\s+/', trim($hdName));                                /* initials = first + last name, as on the landing page */
   $hdAvatar = strtoupper(substr($hdParts[0], 0, 1) . substr(end($hdParts), 0, 1));
   $hdHere   = basename($_SERVER['SCRIPT_NAME']);                                 /* which page is this — marks the header link */
 }
 ?>
-<?php if ($portal === 'customer'): ?>
 <style>
-  /* customer header — crimson to black, like the landing page's nav */
+  /* the ONE header — crimson to black, like the landing page's nav (both portals) */
   nav.app-header{position:fixed;top:0;right:0;left:var(--venusep-sidebar-width,235px);z-index:1030;height:58px;min-height:58px;color:#fff;display:flex;align-items:center;margin:0;padding:0;
     background:linear-gradient(100deg,#8a1222 0%,#3a0c14 52%,#120809 100%);border-bottom:1px solid rgba(255,255,255,.12);box-shadow:0 8px 24px rgba(10,4,5,.25);
     transition:left 320ms cubic-bezier(.16,1,.3,1)}
@@ -45,7 +47,7 @@ if ($portal === 'customer') {
   nav.app-header .hd-sep{width:1px;height:22px;background:rgba(255,255,255,.18);margin:0 .35rem}
   nav.app-header .hd-user{display:inline-flex;align-items:center;gap:.55rem;padding:.3rem .85rem .3rem .3rem;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-weight:700;font-size:.82rem;text-decoration:none;transition:background 180ms ease}
   nav.app-header .hd-user:hover{background:rgba(255,255,255,.18);color:#fff}
-  nav.app-header .hd-avatar{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#fff;color:#1d1214;font-size:.7rem;font-weight:700}
+  nav.app-header .hd-avatar{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#fff;color:#1d1214;font-size:12px;font-weight:700}
   /* the page behind the cards: the same crimson-to-black as the sidebar and
      header, so the whole viewport reads as one surface. Cards stay white —
      each page keeps its own card styles; this only paints what is behind them.
@@ -64,6 +66,7 @@ if ($portal === 'customer') {
     body.sb-open aside.sidebar{transform:none!important;box-shadow:0 0 0 100vw rgba(0,0,0,.45)!important}
   }
 </style>
+<?php if ($portal === 'customer'): ?>
 <nav class="app-header">
   <div class="hd-wrap">
     <ul class="hd-nav">
@@ -77,6 +80,19 @@ if ($portal === 'customer') {
     </ul>
   </div>
 </nav>
+<?php else: ?>
+<nav class="app-header">
+  <div class="hd-wrap">
+    <ul class="hd-nav">
+      <li><button class="hd-toggle" id="hdBurger" type="button" aria-label="Show or hide the menu" aria-controls="hdSidebar"><i class="bi bi-list"></i></button></li>
+    </ul>
+    <ul class="hd-nav">
+      <li><a class="hd-user" href="venusep_profile.php" title="Your account"><span class="hd-avatar" aria-hidden="true"><?php echo htmlspecialchars($hdAvatar); ?></span><span class="hd-username"><?php echo htmlspecialchars($hdName); ?></span></a></li>
+    </ul>
+  </div>
+</nav>
+<?php include __DIR__ . '/admin-theme.php'; /* the crimson page theme for every admin page, in one place */ ?>
+<?php endif; ?>
 <script>
   /* The burger. Desktop: collapse/expand the sidebar and remember the choice
      for the next page. Phone: the sidebar is hidden by default and the burger
@@ -95,30 +111,3 @@ if ($portal === 'customer') {
     });
   })();
 </script>
-<?php else: ?>
-<style>
-  /* header styles live HERE so every page gets them with the include */
-  nav.app-header{position:fixed;top:0;right:0;left:235px;z-index:1030;height:58px;min-height:58px;background:#1f1e1e;border-bottom:1px solid #111;color:#fff;display:flex;align-items:center;margin:0;padding:0}
-  nav.app-header .hd-wrap{width:100%;padding:0 1.35rem;display:flex;align-items:center;justify-content:space-between}
-  nav.app-header .hd-nav{display:flex;align-items:center;gap:.45rem;margin:0;padding:0;list-style:none}
-  nav.app-header .hd-nav li{margin:0;padding:0;list-style:none}
-  nav.app-header .hd-link{color:#fff;font-size:.95rem;line-height:1;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;padding:.45rem}
-  nav.app-header .hd-toggle{width:38px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:#34312f;border:1px solid #46413d;cursor:default}
-  nav.app-header .hd-user{display:flex;align-items:center;gap:.45rem;margin-left:.7rem;color:#fff;font-weight:700;font-size:.82rem}
-  nav.app-header .hd-avatar{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#6f7983;border:1px solid #9aa2aa;color:#fff;font-size:.72rem;font-weight:700}
-  @media (max-width:767.98px){nav.app-header{left:0;height:56px;min-height:56px}nav.app-header .hd-username{display:none}}
-</style>
-<nav class="app-header">
-  <div class="hd-wrap">
-    <ul class="hd-nav">
-      <li><span class="hd-link hd-toggle" aria-hidden="true"><i class="bi bi-list"></i></span></li>
-    </ul>
-    <ul class="hd-nav">
-      <li><a class="hd-link" aria-label="Search" href="#"><i class="bi bi-search"></i></a></li>
-      <li><a class="hd-link" aria-label="Fullscreen" href="#"><i class="bi bi-arrows-fullscreen"></i></a></li>
-      <li><a class="hd-link" aria-label="Theme" href="#"><i class="bi bi-sun-fill"></i></a></li>
-      <li class="hd-user"><span class="hd-avatar" aria-hidden="true"><?php echo $hdAvatar; ?></span><span class="hd-username"><?php echo $hdName; ?></span></li>
-    </ul>
-  </div>
-</nav>
-<?php endif; ?>

@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; venusep_session_start(); /* public page — the session only tells the header whether someone is logged in */ ?>
 <?php
 /* Both room lists come from ONE shared source each, so this landing page can
    never drift from the booking pages or admin Venue Management. */

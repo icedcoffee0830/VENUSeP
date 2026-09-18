@@ -66,6 +66,31 @@ function admin_is_admin()
     return isset($_SESSION['user_id'], $_SESSION['account_type']) && $_SESSION['account_type'] === 'admin';
 }
 
+/* ---- CUSTOMER SIDE (2026-09-17, ACE) — mirrors admin_require_login() above.
+   The session is what customer-login.php writes: user_id, customer_id,
+   account_type = 'customer'. A staff session does NOT count as a customer —
+   the two sides never mix. Public pages (landing, FAQ, login, register) never
+   call this; the booking + account pages call it as their first line. ---- */
+function customer_logged_in()
+{
+    venusep_session_start();
+    return isset($_SESSION['user_id'], $_SESSION['customer_id'], $_SESSION['account_type'])
+        && $_SESSION['account_type'] === 'customer';
+}
+
+/* Not logged in as a customer -> the customer login page. Always the login
+   page, never back to the requested URL (decided 2026-09-17: no ?next= hop). */
+function customer_require_login()
+{
+    if (!customer_logged_in()) {
+        header('Location: customer-login.php');
+        exit;
+    }
+    /* After logout, the Back button must not show a cached customer page. */
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+}
+
 /* Ends the session completely: the data, the cookie, and the id. */
 function venusep_logout()
 {

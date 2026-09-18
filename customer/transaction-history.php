@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
 <?php
 /* ==================================================================
    TRANSACTION HISTORY — VENUSeP merged system (customer portal)
@@ -151,6 +152,8 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
     
       /* current page in the table's pagination: crimson, not black */
       .tabulator .tabulator-footer .tabulator-page.active { background: #a11626; color: #ffffff; border-color: #a11626; }
+          /* type floor (readability): nothing on the page below 12px */
+      .t-badge, .tabulator-col-title, .th-field label { font-size: 12px !important; }
     </style>
   </head>
   <body class="customer-transaction-page">

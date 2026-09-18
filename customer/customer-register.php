@@ -17,49 +17,122 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VENUSeP | Customer Registration</title>
     <link rel="icon" href="../logo/Logo Header 3.png" type="image/png" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
     <style>
-      /* ---- shared AUTH styles (customer-login + customer-register) ---- */
-      :root { --black: #1f1e1e; --border: #e0dcd4; --muted: #6e6a64; --danger: #b23a3a; }
+      /* ==================================================================
+         AUTH UI — split layout (customer-login + customer-register share it)
+         Left: the crimson panel from the landing hero (gradient, grain, arcs,
+         greeting). Right: the form on white with underline fields.
+         Only the look changed; the form's classes (.input-group, .is-invalid,
+         .validation-message …) are the same names the validation script uses.
+         ================================================================== */
+      :root { --black: #1f1e1e; --ink: #120809; --crimson: #a11626; --crimson-lo: #7d0f1e; --yellow: #ffd166;
+              --border: #d9d4cc; --muted: #6e6a64; --danger: #b23a3a; --font-display: Archivo, Inter, system-ui, sans-serif; }
       * { box-sizing: border-box; }
       html, body { margin: 0; min-height: 100%; }
-      body { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--black); background: #f4f2ee; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
-      .auth-card { width: 100%; max-width: 450px; background: #fff; border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 12px 40px rgba(31, 30, 30, 0.08); padding: 30px 30px 26px; }
-      .auth-brand { display: flex; justify-content: center; margin-bottom: 6px; }
-      .auth-brand img { height: 54px; width: auto; object-fit: contain; }
-      .auth-heading { text-align: center; margin-bottom: 20px; }
-      .auth-title { font-size: 1.4rem; font-weight: 800; margin: 6px 0 3px; }
-      .auth-subtitle { color: var(--muted); font-size: 0.88rem; margin: 0; }
+      body { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--black); background: #fff; min-height: 100vh; }
+
+      /* ---- the split ---- */
+      .auth-split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 100vh; min-height: 100svh; }
+
+      /* ---- left: crimson panel ---- */
+      .auth-hero { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; padding: 48px 56px 36px;
+        color: #fff; background: linear-gradient(162deg, #7d1120 0%, #3c0c14 48%, #120809 100%); }
+      .auth-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(900px 560px at 86% 2%, rgba(232,62,74,.32), transparent 62%), radial-gradient(800px 560px at 6% 100%, rgba(217,147,13,.16), transparent 60%); }
+      .auth-hero-grain { position: absolute; inset: 0; pointer-events: none; opacity: .07; mix-blend-mode: overlay; background-size: 180px 180px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+      .auth-hero-arcs { position: absolute; right: -22%; top: -18%; width: 120%; height: 120%; pointer-events: none; opacity: .95; }
+      .auth-hero-arcs circle { fill: none; stroke: rgba(255,255,255,.11); stroke-width: 1.2; }
+      .auth-hero-logo { position: relative; align-self: flex-start; height: 34px; width: auto; filter: invert(1); }   /* align-self: a flex column would stretch it wide */
+      .auth-hero-copy { position: relative; max-width: 30rem; }
+      .auth-hero-title { font-family: var(--font-display); font-weight: 800; font-size: clamp(42px, 5.2vw, 66px); line-height: 1.02; letter-spacing: -.02em; margin: 0 0 22px; }
+      .auth-wave { display: inline-block; transform-origin: 70% 70%; animation: auth-wave 2.4s ease-in-out 1.2s 2; }
+      @keyframes auth-wave { 0%,100% { transform: rotate(0); } 15% { transform: rotate(16deg); } 30% { transform: rotate(-8deg); } 45% { transform: rotate(14deg); } 60% { transform: rotate(-4deg); } 75% { transform: rotate(8deg); } }
+      .auth-hero-sub { font-size: 17px; line-height: 1.6; color: rgba(255,255,255,.86); margin: 0; }
+      .auth-hero-foot { position: relative; margin: 0; font-size: 13px; color: rgba(255,255,255,.6); }
+
+      /* ---- right: the form panel ---- */
+      .auth-panel { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 48px clamp(24px, 6vw, 88px); }   /* the card sits centred in the panel */
+      .auth-card { width: 100%; max-width: 420px; }
+      .auth-brand { display: block; margin-bottom: clamp(36px, 8vh, 84px); }
+      .auth-brand img { height: 30px; width: auto; display: block; margin: 0 auto; }
+      .auth-heading { margin-bottom: 26px; text-align: center; }
+      .auth-title { font-family: var(--font-display); font-size: 30px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 8px; }
+      .auth-subtitle { color: var(--muted); font-size: 14px; line-height: 1.55; margin: 0; }
+
+/* fields: pill inputs with a leading icon; the label stays for screen readers */
       .form-group { margin-bottom: 14px; }
-      .form-label { display: block; font-size: 0.82rem; font-weight: 700; margin-bottom: 6px; }
-      .input-group { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 11px; background: #fff; overflow: hidden; transition: .18s; }
-      .input-group:focus-within { border-color: var(--black); box-shadow: 0 0 0 3px rgba(31, 30, 30, 0.08); }
+      .form-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      .input-group { display: flex; align-items: center; border: 1.5px solid var(--border); border-radius: 999px; background: #fff; transition: border-color .18s, box-shadow .18s; }
+      .input-group:focus-within { border-color: var(--crimson); box-shadow: 0 0 0 4px rgba(161,22,38,.1); }
       .input-group.is-invalid { border-color: var(--danger); }
-      .input-group-text { display: inline-flex; align-items: center; justify-content: center; width: 42px; align-self: stretch; color: var(--muted); font-size: 0.95rem; }
-      .input-group input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 0.92rem; padding: 11px 12px 11px 0; color: var(--black); }
-      .password-toggle { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 12px; align-self: stretch; }
-      .form-check { display: inline-flex; align-items: center; gap: 7px; font-size: 0.82rem; }
-      .form-check-input { width: 15px; height: 15px; accent-color: var(--black); flex: none; }
+      .input-group-text { display: inline-flex; align-items: center; justify-content: center; width: 46px; align-self: stretch; color: var(--crimson); font-size: 1rem; }
+      .input-group input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14.5px; font-weight: 600; padding: 13px 16px 13px 0; color: var(--ink); }
+      .input-group input::placeholder { color: #a9a39b; font-weight: 500; }
+      /* Chrome paints an autofilled field light blue, which shows as a box inside the pill — keep it white */
+      .input-group input:-webkit-autofill, .input-group input:-webkit-autofill:hover, .input-group input:-webkit-autofill:focus {
+        -webkit-box-shadow: 0 0 0 1000px #fff inset; -webkit-text-fill-color: var(--ink); caret-color: var(--ink); border-radius: 999px; transition: background-color 9999s ease-out; }
+      .password-toggle { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 16px 0 10px; align-self: stretch; }
+      .password-toggle:hover { color: var(--ink); }
+      .auth-options { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 4px 22px; font-size: 13px; }
+      .form-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+      .form-check-input { width: 15px; height: 15px; accent-color: var(--crimson); }
       .form-check-label { color: var(--muted); }
-      .auth-link { color: var(--black); font-weight: 700; text-decoration: none; }
-      .auth-link:hover { text-decoration: underline; }
-      .btn-auth { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; margin-top: 6px; border: 0; border-radius: 12px; background: var(--black); color: #fff; font: inherit; font-size: 0.92rem; font-weight: 700; cursor: pointer; transition: background .18s; }
-      .btn-auth:hover { background: #000; }
-      .validation-message { display: block; min-height: 1em; margin-top: 5px; color: var(--danger); font-size: 0.72rem; }
-      .success-message { display: block; text-align: center; margin-top: 12px; color: #1c7a4f; font-size: 0.82rem; font-weight: 600; }
-      .auth-footer-link { text-align: center; margin: 18px 0 0; font-size: 0.85rem; color: var(--muted); }
-      @media (max-width: 480px) { .auth-card { padding: 24px 20px; } }
+      form > .form-check { margin: 4px 0 4px; }                 /* the register page's terms box stands alone */
+      .auth-link { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+      .auth-link:hover { color: var(--crimson); }
+      .btn-auth { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border: 0; border-radius: 999px;
+        background: var(--crimson); color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; transition: background .18s, transform .18s; box-shadow: 0 10px 24px rgba(161,22,38,.22); }
+      .btn-auth:hover { background: var(--crimson-lo); }
+      .btn-auth:active { transform: translateY(1px); }
+      .btn-auth .bi { display: none; }
+      .validation-message { display: block; min-height: 1em; margin-top: 5px; color: var(--danger); font-size: 12px; }
+      .success-message { display: block; text-align: center; margin-top: 12px; color: #1c7a4f; font-size: 13px; font-weight: 600; }
+      .auth-footer-link { text-align: center; margin: 22px 0 0; font-size: 13.5px; color: var(--muted); }
+      /* the other action: a small prompt, then an outlined pill (white, crimson text + stroke) */
+      .auth-alt { margin-top: 22px; text-align: center; }
+      .auth-alt-text { display: block; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+      .btn-auth-outline { background: #fff; color: var(--crimson); border: 1.5px solid var(--crimson); box-shadow: none; text-decoration: none; }
+      .btn-auth-outline:hover { background: rgba(161,22,38,.06); color: var(--crimson-lo); border-color: var(--crimson-lo); }
+
+      /* ---- phone: the crimson panel becomes a short header strip ---- */
+      @media (max-width: 860px) {
+        .auth-split { grid-template-columns: 1fr; min-height: 0; }
+        .auth-hero { padding: 26px 24px 30px; justify-content: flex-start; gap: 18px; }
+        .auth-hero-logo { height: 26px; }
+        .auth-hero-title { font-size: 34px; margin-bottom: 8px; }
+        .auth-hero-sub { font-size: 14.5px; }
+        .auth-hero-foot { display: none; }
+        .auth-hero-arcs { right: -40%; top: -60%; width: 160%; height: 220%; }
+        .auth-panel { padding: 30px 24px 44px; }
+        .auth-brand { display: none; }
+        .auth-card { max-width: 480px; margin: 0 auto; }
+      }
     </style>
   </head>
   <body class="customer-register-page">
-    <main class="login-page">
-      <section class="login-shell" aria-labelledby="customerRegisterTitle">
+    <main class="auth-split">
+      <!-- the crimson panel: purely decorative, so screen readers skip it -->
+      <aside class="auth-hero" aria-hidden="true">
+        <div class="auth-hero-grain"></div>
+        <svg class="auth-hero-arcs" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g transform="translate(560 300)"><circle r="120"/><circle r="200"/><circle r="280"/><circle r="360"/><circle r="440"/><circle r="520"/></g></svg>
+        <img class="auth-hero-logo" src="../logo/Logo Header 3.png" alt="" />
+        <div class="auth-hero-copy">
+          <h2 class="auth-hero-title">Join<br />VENUSeP! <span class="auth-wave">&#128075;</span></h2>
+          <p class="auth-hero-sub">One account for every campus venue and hostel bed. Book, track your requests and pay online &mdash; all in one place.</p>
+        </div>
+        <p class="auth-hero-foot">&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</p>
+      </aside>
+      <section class="auth-panel" aria-labelledby="customerRegisterTitle">
         <div class="auth-card">
-          <div class="auth-brand"><img src="../logo/Logo Header 3.png" alt="VENUSeP" /></div>
+          <a class="auth-brand" href="venusep_venue_booking.php" title="Back to VENUSeP"><img src="../logo/Logo Header 3.png" alt="VENUSeP" /></a>
           <div class="auth-heading">
-            <h1 class="auth-title" id="customerRegisterTitle">Create an Account</h1>
-            <p class="auth-subtitle">Register to book and manage venue reservations.</p>
+            <h1 class="auth-title" id="customerRegisterTitle">Create your account</h1>
+            <p class="auth-subtitle">It takes less than a minute.</p>
           </div>
 
           <!-- [SIM] on valid input the script redirects to customer-login.php -->
@@ -94,7 +167,10 @@
             <button type="submit" class="btn-auth"><i class="bi bi-person-plus" aria-hidden="true"></i>Create Account</button>
             <small class="success-message" id="registrationSuccessMessage" aria-live="polite"></small>
           </form>
-          <p class="auth-footer-link">Already have an account? <a href="customer-login.php" class="auth-link">Sign in</a></p>
+          <div class="auth-alt">
+            <span class="auth-alt-text">Already have an account?</span>
+            <a class="btn-auth btn-auth-outline" href="customer-login.php">Login</a>
+          </div>
         </div>
       </section>
     </main>

@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
 <?php
 /* ==================================================================
    CUSTOMER PROFILE — VENUSeP merged system (customer portal)
@@ -155,6 +156,8 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
       .btn-profile:hover { background: #fff; border-color: #c9b9b6; }
       .btn-profile.btn-profile-primary { background: #a11626; border-color: #a11626; color: #fff; }
       .btn-profile.btn-profile-primary:hover { background: #7d0f1e; border-color: #7d0f1e; }
+          /* type floor (readability): nothing on the page below 12px */
+      .profile-meta dt { font-size: 12px; }
     </style>
   </head>
   <body class="customer-profile-page">

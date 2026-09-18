@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
 <?php
 /* The hostel's rooms + the availability model live in ONE include, shared with
    the landing page and admin Venue Management, so they cannot drift apart. */
@@ -149,6 +150,8 @@ require_once __DIR__ . '/../includes/room-photos.php';
   .bk-more-meta s,.bk-more-price s{color:#ac8f8d!important}
   .bk-more-meta strong,.bk-more-price strong{color:#fff!important}
   .bk-more-meta span,.bk-more-price span{color:#f2d0cb!important}
+  .bk-more-meta span,.bk-more-price span{font-size:12px!important}   /* type floor: the 11px note from pricing.php */
+  #app span[style*="ui-monospace"]{font-size:12px!important}          /* type floor: the "room photo" placeholder labels */
   .bk-more-free{margin-top:13px;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,209,102,.16);border:1px solid rgba(255,209,102,.42);color:#ffd166}
   .bk-more-free i{width:6px;height:6px;border-radius:50%;background:#ffd166;display:block}
   .bk-more-free.is-none{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.17);color:#bda4a2}

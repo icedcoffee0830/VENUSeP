@@ -1469,15 +1469,26 @@ render();
        staggered entrance; on a same-screen re-render (typing, picking a date)
        the blocks are re-armed silently so nothing jumps under your hands. */
     var appTriggers = [], mode = 'scroll';
+    /* Re-arm the reveal for the blocks of the current screen. Two cases:
+         entrance — the screen changed: hide everything, stagger it in, and
+                    re-measure the whole page (it changed height).
+         instant  — a re-render mid-typing (every keystroke redraws #app): the
+                    same blocks are back as fresh DOM nodes, so just snap each
+                    one to the state it already had. Cheap on purpose: no
+                    pre-hide, no page-wide re-measure, and all style writes
+                    happen before all layout reads (no thrash). This is what
+                    keeps typing smooth on a phone. */
     function armScreen(entrance) {
       appTriggers.forEach(function (t) { t.kill(); }); appTriggers = [];
       var blocks = screenBlocks();
       if (!blocks.length) return;
       mode = entrance ? 'entrance' : 'instant';
+      if (entrance) blocks.forEach(function (el) { gsap.set(el, { opacity: 0, y: 18, scale: .985 }); });   /* writes first */
+      var arming = true;                                                                                    /* then the reads — no writes until every trigger exists */
       blocks.forEach(function (el, i) {
-        gsap.set(el, { opacity: 0, y: 18, scale: .985 });
         function paint(on) {
           if (mode === 'instant') {              /* re-render mid-typing: snap to the right state */
+            if (arming) return;                  /* deferred to the batch below (one layout, not seven) */
             gsap.set(el, { opacity: on ? 1 : 0, y: on ? 0 : 18, scale: on ? 1 : .985, clearProps: on ? 'transform' : '' });
             return;
           }
@@ -1489,7 +1500,9 @@ render();
         appTriggers.push(ScrollTrigger.create({ trigger: el, start: 'top 92%', end: 'bottom top',
           onToggle: function (s) { paint(s.isActive); }, onRefresh: function (s) { paint(s.isActive); } }));
       });
-      ScrollTrigger.refresh();                   /* the screen changed height: re-measure everything below it too */
+      arming = false;
+      if (entrance) ScrollTrigger.refresh();     /* the screen changed height: re-measure everything below it too */
+      else appTriggers.forEach(function (t) { t.vars.onRefresh(t); });   /* each new trigger already knows if it is in view: apply all states in one batch */
       setTimeout(function () { mode = 'scroll'; }, 60);
     }
     var lastScreen = (typeof state !== 'undefined' && state.screen) || '';

@@ -36,9 +36,8 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
   (No [5]: the stock AdminLTE library scripts were dropped in this port —
   the team shell needs no AdminLTE JS. Only FullCalendar loads here.)
 
-  [SIM] marks simulation-only pieces (fake events / demo click actions)
-  that exist so the mockup works on its own — delete or replace them
-  when the real database is connected.
+  Events come from the database. [SIM] now marks only the demo add/delete
+  click actions, which were never part of the booking flow.
   ================================================================== -->
 <html lang="en">
   <head>

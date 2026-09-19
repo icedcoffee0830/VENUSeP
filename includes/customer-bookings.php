@@ -76,6 +76,19 @@ $customerBookings = $customerContact['id']
     ? bookings_for_customer($customerContact['id'])
     : [];
 
+/* DEMO MODE: bookings this browser has pretended to make, merged on top.
+   Without this the customer submits, sees a reference, opens their history and
+   finds nothing — which looks like the booking failed rather than like a demo.
+   They exist only in this session, so nobody else ever sees them, and they are
+   newest-first because a demo booking is the one just made. */
+require_once __DIR__ . '/demo-mode.php';
+if (demo_mode_on() && $customerContact['id']) {
+    $cbDemo = array_filter(demo_bookings(), function ($b) use ($customerContact) {
+        return (int) $b['customerId'] === (int) $customerContact['id'];
+    });
+    $customerBookings = array_merge(array_values($cbDemo), $customerBookings);
+}
+
 /* Look one booking up by its reference WITHIN this customer's own list.
    Scoped on purpose: refund-request.php takes the reference from the URL, and
    this is what stops one customer opening another customer's booking by typing

@@ -71,6 +71,13 @@ if ($portal === 'customer') {
     body.sb-open::after{opacity:1;pointer-events:auto}
   }
 </style>
+<?php
+/* DEMO MODE banner — deliberately the first thing on every admin and
+   customer page. A quiet demo mode is a trap: customers would book and be
+   given a reference for something that was never recorded. */
+require_once __DIR__ . '/demo-mode.php';
+echo demo_banner_html();
+?>
 <?php if ($portal === 'customer'): ?>
 <nav class="app-header">
   <div class="hd-wrap">

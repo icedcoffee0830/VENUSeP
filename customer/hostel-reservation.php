@@ -342,8 +342,28 @@ const RATES    = <?php echo json_encode($HOSTEL_RATES); ?>;
 const CR_LABEL = <?php echo json_encode($HOSTEL_CR_LABEL); ?>;
 const HOSTEL   = <?php echo json_encode($HOSTEL_VENUE); ?>;
 
-/* [SIM] the logged-in customer — from the session in the real app. */
-const ACCOUNT = { name:'Juan Miguel Dela Cruz', role:'Student · CIC', email:'jmdelacruz@usep.edu.ph', phone:'0917 555 0123' };
+/* The logged-in customer, from the session. */
+/* WHO IS ACTUALLY BOOKING — the session's own row. This named Juan Miguel
+   whoever was signed in, so the nav chip and the booking card on the same
+   screen could show two different people. */
+const ACCOUNT = <?php echo json_encode([
+  'name'  => $customerContact['name'],
+  'role'  => $customerContact['universityId'] !== '' ? 'USeP · ' . $customerContact['universityId'] : 'Customer',
+  'email' => $customerContact['email'],
+  'phone' => $customerContact['phone'],
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+const CSRF = <?php echo json_encode(csrf_token()); ?>;
+
+/* Is this a showcase? The "Demo only" panels below stand in for people and
+   offices this page cannot reach — a coordinator approving an ID, CEDU handing
+   over a POS, the cashier issuing an OR. They belong to a demonstration, and a
+   real customer must never be shown a button that claims to approve their own
+   booking. So they render ONLY while demo mode is on (includes/demo-mode.php,
+   switched on admin/venusep_profile.php).
+   Nothing here could ever have changed the database — these functions only move
+   the screen, and the server refuses a payment on a booking it has not approved
+   — but a customer reading "Simulate staff approval" has no way to know that. */
+const DEMO_MODE = <?php echo demo_mode_on() ? 'true' : 'false'; ?>;
 
 /* [SIM] where the customer hands cash to the hostel staff. */
 const CASH_PAY = { where:'USeP Hostel front desk', hours:'Mon–Sat · 8:00 AM – 5:00 PM' };
@@ -601,7 +621,8 @@ function nextDay(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+
 function uploadId(input){
   const f=input.files && input.files[0]; if(!f) return;
   if(state.idFile && state.idFile.url){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
-  state.idFile={ name:f.name, url:URL.createObjectURL(f) };
+  /* keep the File itself — submitRequest() has to upload it, not just preview it */
+  state.idFile={ name:f.name, url:URL.createObjectURL(f), file:f };
   input.value=''; render();
 }
 function setAffiliation(v){ state.affiliated = v; render(); }   /* re-prices instantly */
@@ -613,32 +634,109 @@ function removeId(){
    the booking is made — the policy is agreed at booking time, not at payment. */
 function canSubmitRequest(){ return !!state.idFile && (REFUNDS_ENABLED || state.agreeNoRefund); }
 function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
-function submitRequest(){
+/* Submit FOR REAL. The screen advances when the server has a row, so a guest is
+   never shown a reference for a stay that does not exist. Beds are assigned by
+   sp_assign_bed() against the UNIQUE(bed, night) guard — this page cannot claim
+   a bed, it can only ask for one. */
+let submitting = false;
+async function submitRequest(){
   /* affiliation is a required choice, like the ID — the price depends on it */
-  if(!derive().ready || !canSubmitRequest() || state.affiliated===null) return;
-  state.submitted=true;                      // the form is gone for good — browser Back now leaves the flow
-  state.screen='pending'; state.posNumber=null; window.scrollTo(0,0); render();
+  if(submitting || !derive().ready || !canSubmitRequest() || state.affiliated===null) return;
+  const b = state.booking;
+  const fd = new FormData();
+  fd.append('csrf', CSRF);
+  fd.append('type', 'hostel');
+  fd.append('room', state.roomId);
+  fd.append('check_in', b.checkIn);
+  fd.append('check_out', b.checkOut);
+  /* The page uses F/M for display; the database stores male/female/other. */
+  fd.append('occupants', JSON.stringify(b.occupants.map(function(o){
+    return { name:o.name, gender: o.gender === 'F' ? 'female' : (o.gender === 'M' ? 'male' : 'other') };
+  })));
+  fd.append('affiliated', state.affiliated ? '1' : '0');
+  fd.append('method', state.payMethod || 'gcash');
+  fd.append('agree_no_refund', state.agreeNoRefund ? '1' : '0');
+  fd.append('id_document', state.idFile.file, state.idFile.name);
+
+  submitting = true; render();
+  try{
+    const res = await fetch('booking-submit.php', { method:'POST', body:fd, credentials:'same-origin' });
+    const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
+    if(!out.ok){ submitting=false; state.submitError = out.message || 'Your booking was not submitted.'; render(); return; }
+    state.reference = out.reference;          /* the database owns booking identity */
+    state.bookingDbId = out.bookingId;
+    state.submitError = null;
+    state.submitted = true;                   // the form is gone for good
+    state.screen='pending'; state.posNumber=null; window.scrollTo(0,0);
+  }catch(e){
+    state.submitError = 'Could not reach the server, so your booking was not submitted.';
+  }
+  submitting = false; render();
 }
 /* [SIM] the staff side is not connected — this stands in for a staff member
    walking to CEDU, getting the POS, and typing its number into the booking. */
 function demoRecordPos(){
+  if(!DEMO_MODE) return;     /* live system: staff record the real POS from CEDU */
   state.posNumber='POS-'+Math.floor(10000 + Math.random()*90000);
   state.screen='payment'; window.scrollTo(0,0); render();
 }
 /* [SIM] post-pay only: staff approve the ID + booking. The beds are held; the
    POS is fetched after check-out, so payment stays locked. */
-function demoApprove(){ state.approved=true; window.scrollTo(0,0); render(); }
+function demoApprove(){ if(!DEMO_MODE) return; state.approved=true; window.scrollTo(0,0); render(); }
 /* This stay's payment timing — the shared rule applied to the dates typed. */
 function payByInfo(){ return payPolicyFor(state.booking.checkIn, state.booking.checkOut); }
 function receiptGate(){ return state.payMethod==='cash' ? true : receiptOk(); }
-function confirmBooking(){
+/* Record the payment FOR REAL. The hostel's extra gate still applies first:
+   payment cannot exist before CEDU has issued the POS. The verdict is then
+   recomputed server-side against this booking's total and the HOSTEL's own
+   GCash account — which is a designated staff account, not a business one, so
+   a receipt paid to a venue account is correctly refused here. */
+let paying = false;
+async function confirmBooking(){
+  if(paying) return;
   if(!state.posNumber) return;              // payment cannot exist before the POS
   if(!receiptGate()) return;
-  state.screen='done'; window.scrollTo(0,0); render();
+  const cash = state.payMethod === 'cash';
+
+  const fd = new FormData();
+  fd.append('csrf', CSRF);
+  fd.append('booking', state.reference);
+  fd.append('method', cash ? 'cash' : 'gcash');
+  if(!cash && state.ocr && state.ocr.rec){
+    const rec = state.ocr.rec, p = rec.parsed || {};
+    fd.append('receipt', state.ocr.file, state.ocr.fileName || 'receipt.jpg');
+    fd.append('ref', p.ref || '');
+    fd.append('receiver_name', p.receiverNameMasked || p.receiverNameShort || '');
+    fd.append('receiver_number', p.receiverNumber || '');
+    fd.append('amount_centavos', p.effAmountC != null ? p.effAmountC : '');
+    fd.append('receipt_datetime', p.datetime || '');
+    fd.append('confidence', rec.confidence != null ? rec.confidence : '');
+    fd.append('flags', JSON.stringify(rec.flags || []));
+    fd.append('text_excerpt', rec.textExcerpt || '');
+  }
+
+  paying = true; render();
+  try{
+    const res = await fetch('payment-submit.php', { method:'POST', body:fd, credentials:'same-origin' });
+    const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
+    if(!out.ok){
+      paying = false;
+      state.payError = out.message || 'Your payment was not recorded.';
+      if(out.verdict === 'rejected' && state.ocr && state.ocr.rec){ state.ocr.rec.status = 'rejected'; }
+      render(); return;
+    }
+    state.payError = null;
+    state.paymentVerdict = out.verdict || null;
+    state.screen='done'; window.scrollTo(0,0);
+  }catch(e){
+    state.payError = 'Could not reach the server, so your payment was not recorded.';
+  }
+  paying = false; render();
 }
 /* [SIM] the cashier issuing the OR, which happens AFTER the booking is already
    confirmed — this is why the OR is a document flag and not a payment status. */
 function demoIssueOr(){
+  if(!DEMO_MODE) return;     /* live system: the cashier issues the real OR */
   state.orNumber='OR-'+Math.floor(100000 + Math.random()*900000);
   render();
 }
@@ -1228,16 +1326,22 @@ function pendingScreen(){
       ${PAY_POLICY.prepay?'':'<div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">Payment opens <strong>'+pb.opensLabel+'</strong> (your check-out day) once the POS is in, and is due by <strong>'+pb.label+'</strong> — '+pb.grace+' days after check-out. It cannot be paid earlier. Stays not paid by then are marked overdue.</div>'}
     </div>
 
+    ${DEMO_MODE ? `
     <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
       <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
       ${PAY_POLICY.prepay ? `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">The staff side isn't connected in this mockup — use this to simulate a staff member coming back from ${esc(CEDU.name)} and recording the POS number.</div>
+      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the staff side is standing in — use this to simulate a staff member coming back from ${esc(CEDU.name)} and recording the POS number.</div>
       <button onclick="demoRecordPos()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate POS received → unlock payment</button>` : !state.approved ? `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">The staff side isn't connected in this mockup — use this to simulate the hostel staff approving your ID and booking.</div>
+      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the staff side is standing in — use this to simulate the hostel staff approving your ID and booking.</div>
       <button onclick="demoApprove()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate staff approval</button>` : `
       <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Payment opens by itself after check-out, once staff record the POS from ${esc(CEDU.name)} — use this to jump there.</div>
       <button onclick="demoRecordPos()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate: checked out, POS received → unlock payment</button>`}
-    </div>
+    </div>` : `
+    <!-- Live system: real people do these steps. Say who has it and where the
+         answer will appear, rather than ending the screen on nothing. -->
+    <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
+      <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the hostel staff now${PAY_POLICY.prepay ? `, and they will fetch the POS from ${esc(CEDU.name)} before payment can open` : ''}. You will see the decision and pay for this stay in <a href="booking-history.php" style="color:#1f1e1e;font-weight:640">My Bookings</a>.</div>
+    </div>`}
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse other rooms</button>
   </main>`;
@@ -1453,12 +1557,15 @@ function doneScreen(){
       </div>
     </div>
 
-    ${!or?`
+    ${!or ? (DEMO_MODE ? `
     <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
       <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Nothing emails in this mockup. Use this to simulate the ${esc(CASHIER.name)} issuing the Official Receipt after the staff hand over the money.</div>
+      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the cashier is standing in. Use this to simulate the ${esc(CASHIER.name)} issuing the Official Receipt after the staff hand over the money.</div>
       <button onclick="demoIssueOr()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate OR issued by the cashier</button>
-    </div>`:''}
+    </div>` : `
+    <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
+      <div style="font-size:12.5px;color:#6b675f;line-height:1.6">The ${esc(CASHIER.name)} issues the Official Receipt once the staff hand the money over. It will appear on this stay in <a href="booking-history.php" style="color:#1f1e1e;font-weight:640">My Bookings</a> — you need it at check-in.</div>
+    </div>`) : ''}
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Back to venues</button>
   </main>`;

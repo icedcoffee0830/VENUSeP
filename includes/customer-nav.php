@@ -30,8 +30,9 @@ $navHere = isset($navHere) ? $navHere : '';
 $navSelf = isset($navSelf) ? $navSelf : basename($_SERVER['SCRIPT_NAME']);   /* the page including this bar */
 $navAuthed = customer_logged_in();
 /* The chip shows WHO LOGGED IN (the session, written by customer-login.php).
-   The rest of the customer pages still show the [SIM] demo customer until the
-   database is wired further — the header is the one part that is already real. */
+   Every customer page reads this same session row now. This chip was once the
+   ONLY part that did: the rest showed a hard-coded demo customer, so one screen
+   could name two different people. */
 $navName  = $navAuthed && !empty($_SESSION['customer_name']) ? $_SESSION['customer_name'] : $customerContact['name'];
 $navFirst = explode(' ', trim($navName))[0];
 $navParts = preg_split('/\s+/', trim($navName));
@@ -102,6 +103,14 @@ if (!$navAuthed) {                                                      /* a gue
     .cn-menu a:hover, .cn-menu a.is-here { background: rgba(255,255,255,.1); }
   }
 </style>
+<?php
+/* DEMO MODE banner. The landing page and the FAQ are PUBLIC and use this bar
+   rather than includes/header.php, so the warning has to be repeated here —
+   otherwise the two pages a visitor is most likely to arrive on would be the
+   only ones not saying the system is in a showcase. */
+require_once __DIR__ . '/demo-mode.php';
+echo demo_banner_html();
+?>
 <header class="cn-nav<?php echo $navMode === 'hero' ? '' : ' solid is-static'; ?>" id="cnNav">
   <div class="cn-wrap">
     <a class="cn-logo" href="venusep_venue_booking.php" title="Back to the landing page"><img src="../logo/Logo Header 3.png" alt="VENUSeP"></a>

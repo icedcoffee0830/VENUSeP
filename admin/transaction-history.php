@@ -27,7 +27,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
     [3] SIDEBAR       shared include ($active = 'Transaction History')
     [4] PAGE CONTENT  title, filters, export toolbar, table container
     [6] PAGE SCRIPT   Tabulator table + filtering + CSV/JSON/print
-  [SIM] = demo-only, replace at database time.
+  Rows come from transaction_rows() in includes/bookings.php.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -260,7 +260,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
          ============================================================ -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
-        // [SIM] rows come from the PHP demo block above (swap for DB rows later).
+        // Rows come from transaction_rows() — every customer, staff view.
         const rows = <?php echo $transactionRowsJson; ?>;
         const emptyTransactionMessage = 'No transactions found.';
 

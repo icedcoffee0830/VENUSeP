@@ -1,6 +1,6 @@
 <?php
 /* =====================================================================
-   PRICING & THE USeP DISCOUNT — [SIM] the one source for the rate.
+   PRICING & THE USeP DISCOUNT — the one source for the rate.
    Mirrors system_settings.discount_percent, which is where this lives
    once the database exists (DB-DECISIONS #2: percentage-based, default
    20%, dynamic, staff-editable).

@@ -26,9 +26,8 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
   (No [5]: the stock AdminLTE library scripts were dropped in this port —
   the team shell needs no AdminLTE JS. Only FullCalendar loads here.)
 
-  [SIM] marks simulation-only pieces (fake events / demo click actions)
-  that exist so the mockup works on its own — delete or replace them
-  when the real database is connected.
+  Events come from the database. [SIM] now marks only the demo add/delete
+  click actions, which were never part of the booking flow.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -542,29 +541,13 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const calendarEl = document.getElementById('calendar');
-        const eventColors = {
-          gray: {
-            backgroundColor: '#d7d7d7',
-            textColor: '#1f1e1e',
-          },
-          green: {
-            backgroundColor: '#d9eddc',
-            textColor: '#16a34a',
-          },
-          yellow: {
-            backgroundColor: '#fdf1d7',
-            textColor: '#f59e0b',
-          },
-          red: {
-            backgroundColor: '#fbd5db',
-            textColor: '#ff0000',
-          },
-        };
 
         const calendar = new FullCalendar.Calendar(calendarEl, {
           // 1) Calendar start view/date
           initialView: 'dayGridMonth',
-          initialDate: '2026-02-01',
+          /* No initialDate: the calendar opens on the CURRENT month. It was
+             pinned to '2026-02-01' by the mockup, so staff arrived in a month
+             that was months behind whatever they were working on. */
 
           // 2) Calendar toolbar buttons
           headerToolbar: {
@@ -606,9 +589,6 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
             }
           },
 
-          // 5) Calendar tasks/events
-          // [SIM] hard-coded sample events — swap for booking data from the
-          // database (each approved booking becomes an event here).
           /* Every booking in the system, from includes/bookings.php — the same
              rows the queue and the customer calendars read. This array was
              still AdminLTE's stock demo ("Team Standup", "Sprint Review",
@@ -616,7 +596,6 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
              VENUSeP booking at all. Colour carries the reservation status;
              multi-day bookings span their days. */
           events: <?php echo $calendarEventsJson; ?>,
-          ],
         });
 
         calendar.render();

@@ -53,8 +53,15 @@
    Absence of data never rejects — only positive mismatch does.
    ============================================================ */
 
-/* ---- [SIM] duplicate store — localStorage stands in for the receipts database
-        (the "Reset receipt history (demo)" link clears it) ---- */
+/* ---- duplicate store — a LOCAL HINT ONLY, no longer the record.
+        The real gates are uq_gcash_reference and uq_gcash_file_hash in the
+        database, enforced across EVERY booking by customer/payment-submit.php.
+        This store is per-browser and forgets everything on another machine,
+        which is exactly why it could never be the record; what it still buys
+        is telling someone they are re-uploading a receipt they just tried,
+        without a round trip. Nothing writes to it any more, so in practice it
+        stays empty — it goes when demo mode lands and the [SIM] wiring is
+        cleared out. ---- */
 const GC_STORE_KEY='vsp_gcash_receipts';
 function gcStore(){ try{ return JSON.parse(localStorage.getItem(GC_STORE_KEY)||'[]'); }catch(e){ return []; } }
 function gcRemember(rec){
@@ -391,7 +398,10 @@ async function checkReceipt(input){
   if(!file) return;
   const expectedC=gcExpectedCentavos();
   if(state.ocr && state.ocr.thumb){ try{ URL.revokeObjectURL(state.ocr.thumb); }catch(e){} }
-  state.ocr={ phase:'reading', pct:0, label:'Preparing image', fileName:file.name, thumb:null, rec:null };
+  /* The File itself is kept: confirmBooking() has to UPLOAD the receipt, not
+     just read it. The server stores the image and hashes the bytes that
+     actually arrive, which is what makes the duplicate-file gate real. */
+  state.ocr={ phase:'reading', pct:0, label:'Preparing image', fileName:file.name, file:file, thumb:null, rec:null };
   render();
   try{
     const buf=await file.arrayBuffer();

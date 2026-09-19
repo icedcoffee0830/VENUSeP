@@ -317,3 +317,79 @@ the history is `localStorage`. `includes/pricing.php` validates the cookie hard
   concept needed. Until then the mockup labels the control "Admin only"; there
   is no role distinction to enforce it with.
 - `0` is a valid value and means "discount off".
+
+---
+
+## UPDATE — 2026-09-19: this checklist is complete
+
+Everything above is the ORIGINAL transition plan, kept as a record. The work it
+asked for has been done. Read the 🔴 items as "delivered", not "outstanding".
+
+### The four core items
+
+**1. The customer submit INSERTs the row the admin queue SELECTs** —
+`customer/booking-submit.php` creates the booking; `includes/bookings.php`
+serves both portals from it. Verified live: a customer submits and the booking
+appears in the staff queue immediately, under the right needs-action tab.
+
+**2. One booking ID, owned by the DB** — the reference is *derived*
+(`VB-<year>-<id>`), never stored, so there is no second source of truth for the
+same fact.
+
+**3. Concurrency** — `sp_add_venue_slot()` takes a room+date lock and refuses an
+overlapping hold; `UNIQUE(active_bed_id, night_date)` is the last-bed guard.
+Verified: two customers, same room, same day, overlapping hours — the second is
+refused; non-overlapping hours on the same day succeed.
+
+**4. Re-verify everything server-side** — prices are recomputed from the room's
+own rate, availability is decided by the procedures, and the receipt verdict is
+computed against the booking's total and the venue's own account. The page's
+checks remain for fast feedback only.
+
+### The refund store is gone
+`includes/refund-store.php` is **deleted**. Refunds are `refunds` rows. The
+"⚠️ DELETE AT DB TIME" note above has been honoured.
+
+### The discount
+Moved from a per-browser cookie to `system_settings.discount_percent`, with
+`admin/discount-save.php` as the only writer and every change recorded in
+`system_settings_history` as an event.
+
+### NEW: demo mode — `includes/demo-mode.php`
+
+A showcase must leave the database **byte-for-byte identical**: run the same
+demo ten times and the tenth is identical to the first. Not "clean up
+afterwards" — never write in the first place.
+
+Reads stay real. Transactional writes go to `$_SESSION`, and the customer's own
+views merge that overlay so the flow behaves normally.
+
+| Intercepted | Never intercepted |
+|---|---|
+| `booking-submit.php` | `profile-save.php`, `register-submit.php` |
+| `payment-submit.php` | `staff-save.php`, `venue-save.php`, `room-save.php` |
+| `refund-submit.php` | `gcash-account-save.php`, `discount-save.php` |
+| `booking-action.php` (refunds included) | `refund-switch.php`, `faq-save.php` |
+
+The line is **transactions vs configuration**: setting the system up is not a
+showcase, and blocking it would stop an admin working while demo mode is on.
+Registration is the deliberate exception — an account that vanishes is not an
+account.
+
+⚠️ Half-built demo mode is worse than none: an overlay that catches some writes
+and not others makes a showcase silently write real rows.
+
+**Verified:** a full booking, a payment and a staff approval with it on left the
+database unchanged — 157 bookings, 138 payments, 2 receipts, 7 refunds, 209
+slots, all identical. The same receipt reference and image were then accepted a
+second time, where a live run refuses both as duplicates.
+
+**Danger:** left ON in production, customers book and nothing is recorded — they
+receive a reference for something that does not exist. Hence admin-only,
+password-confirmed (sharing the `users.reauth_*` lockout with the refund switch
+and the payout-account editor), logged to `system_settings_history`, and a
+banner on every page including the public ones.
+
+### Still open
+Disruption flow, notifications, a scheduler for overdue release, staff-to-venue
+assignment, and a server-side OCR port. See the PROJECT-HANDOFF update.

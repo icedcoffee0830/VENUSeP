@@ -1,7 +1,7 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
 /* ==================================================================
-   [SIM] ROOMS — sample data; the real app loads these from the database.
+   ROOMS come from includes/venue-rooms.php + hostel-rooms.php (the database).
 
    Rooms have NO `status` field. "Available"/"Occupied" were only ever the
    booking calendar wearing a word — a second source of truth, free to drift
@@ -129,9 +129,9 @@ function vmMaint($m, $today) {
   (No [5]: the stock AdminLTE library scripts were removed in this port —
   the team shell needs no JS.)
 
-  [SIM] marks simulation-only pieces (fake data / demo actions) that
-  exist so the mockup works on its own — delete or replace them when
-  the real database is connected.
+  [SIM] now marks only what is still deliberately simulated: the demo
+  advance buttons, which stand in for another person, another office or
+  the passage of time. The data is real.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -787,7 +787,7 @@ function vmMaint($m, $today) {
            title bar + "Add" buttons, search box, sort dropdown,
            then the VENUE cards grid and the ROOM cards grid.
            Cards link to venue-form.php / room-form.php.
-           [SIM] every venue/room card below is hard-coded sample
+           Every venue/room card below is drawn from the database, not from
            data — the real app will generate these cards from the
            database, so the hard-coded ones get deleted then.
            ========================================================== -->
@@ -838,7 +838,7 @@ function vmMaint($m, $today) {
            per-venue. Admin only; staff will REQUEST changes once a staff UI
            exists (agreed 2026-09-14). A change is an EVENT — who/when/from/to/
            why — which is both the audit trail and the shape a request takes.
-           [SIM] value → cookie; history → localStorage. Gone at DB time.
+           Value and history are system_settings + system_settings_history.
            Its own panel class, not .vm-card: that one is a grid tile that
            lifts on hover and clips overflow — wrong for a settings control. -->
       <div class="vm-section-title">Pricing <span>&mdash; one rate, every venue and the hostel</span></div>

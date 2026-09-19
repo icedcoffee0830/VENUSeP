@@ -16,6 +16,14 @@ if (isset($_SESSION['user_id'], $_SESSION['account_type'])
 
 $loginError = '';
 
+/* Sent here mid-session because the account was suspended (staff_session_heal()
+   in includes/auth.php). Without this they would land on a bare login form with
+   no idea why they were thrown out, try their password, and be told it was
+   wrong — which it is not. */
+if (isset($_GET['suspended'])) {
+    $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
+}
+
 $pdo = venusep_db();
 if ($pdo === null) {
     // Do not expose database credentials/errors to users.

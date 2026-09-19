@@ -88,16 +88,18 @@ BEGIN
     DELETE FROM bookings;
     DELETE FROM maintenance_windows;
 
-    -- Cast members the seed itself created. The two ORIGINAL accounts
-    -- (admin@gmail.com, customer@gmail.com) are deliberately left alone, and so
-    -- is anything registered during a demo — this proc owns only what it made.
-    DELETE FROM customers
-     WHERE user_id IN (SELECT id FROM users WHERE email IN
-           ('jmdelacruz@usep.edu.ph','msantos@usep.edu.ph','rafael.lim@gmail.com','areyes@usep.edu.ph'))
-        OR (user_id IS NULL AND full_name = 'Carmen Uy');
-    DELETE FROM staff WHERE user_id IN (SELECT id FROM users WHERE email = 'staff@gmail.com');
-    DELETE FROM users WHERE email IN
-          ('jmdelacruz@usep.edu.ph','msantos@usep.edu.ph','rafael.lim@gmail.com','areyes@usep.edu.ph','staff@gmail.com');
+    -- ACCOUNTS ARE DELIBERATELY NOT DELETED.
+    --
+    -- This proc used to drop and recreate the demo cast, which gave every one
+    -- of them a NEW customers.id on each run. Anyone signed in at the time kept
+    -- the OLD id in their session, so their pages still rendered and then every
+    -- booking died on a foreign key — a logged-in customer who could not book,
+    -- with nothing on screen explaining why. Resetting the showcase mid-demo is
+    -- exactly when that would happen.
+    --
+    -- So the reset owns TRANSACTIONS only. sp_seed_cast() below brings the cast
+    -- up to date in place, which keeps their ids, their sessions and anything
+    -- they registered during the demo intact.
 END$$
 
 -- ---------------------------------------------------------------------------
@@ -105,26 +107,44 @@ END$$
 -- ---------------------------------------------------------------------------
 CREATE PROCEDURE sp_seed_cast ()
 BEGIN
+    -- UPSERT, never delete-and-recreate: the cast keeps its ids across every
+    -- reset, so open sessions stay valid and the bookings seeded below always
+    -- attach to the same people. ON DUPLICATE KEY also repairs an account
+    -- somebody changed during a demo — the password goes back to the documented
+    -- one, which is the whole point of a reset.
     INSERT INTO users (email, username, password_hash, account_type) VALUES
       ('jmdelacruz@usep.edu.ph','jmdelacruz','$2y$10$7zUplIjRADM562c.KGOoi.NKXFCxjR9.aKBo.JLU7rkmWMfMAb/Cu','customer'),
       ('msantos@usep.edu.ph',   'msantos',   '$2y$10$xqk06Jr43jCDumVhQtGOy./LZgDhbH.pkXe3Vl1zwYKEgrnhIyVKi','customer'),
       ('rafael.lim@gmail.com',  'rafaellim', '$2y$10$uIFQbvnLz.76joj0xbzhoef2KkXGj8P/08R5lsXWoIvdtC1IKaF4e','customer'),
       ('areyes@usep.edu.ph',    'areyes',    '$2y$10$3JYUTUEMpT4fkVChMTRRnOMl/AeVh4dZpSjZ50damfeM/7rM/L.Cy','customer'),
-      ('staff@gmail.com',       'mrobles',   '$2y$10$y1zDjOwq3k0XMAE1AVY77e2S0SH/pzAx3tbsAR.guPc1ZRBJr2Wu2','staff');
+      ('staff@gmail.com',       'mrobles',   '$2y$10$y1zDjOwq3k0XMAE1AVY77e2S0SH/pzAx3tbsAR.guPc1ZRBJr2Wu2','staff')
+    ON DUPLICATE KEY UPDATE
+      username = VALUES(username), password_hash = VALUES(password_hash),
+      account_type = VALUES(account_type), is_active = 1;
 
     INSERT INTO customers (user_id, full_name, phone, address, university_id_no) VALUES
       ((SELECT id FROM users WHERE email='jmdelacruz@usep.edu.ph'),'Juan Miguel Dela Cruz','09175550123','Obrero, Davao City','2023-00412'),
       ((SELECT id FROM users WHERE email='msantos@usep.edu.ph'),   'Maria Santos',         '09175550188','Matina, Davao City','FAC-2019-0077'),
       ((SELECT id FROM users WHERE email='rafael.lim@gmail.com'),  'Rafael Lim',           '09175550241','Bajada, Davao City',NULL),
-      ((SELECT id FROM users WHERE email='areyes@usep.edu.ph'),    'Ana Reyes',            '09175550356','Tagum City','2024-01180');
+      ((SELECT id FROM users WHERE email='areyes@usep.edu.ph'),    'Ana Reyes',            '09175550356','Tagum City','2024-01180')
+    -- uq_customers_user makes user_id the key, so each cast member keeps one row.
+    ON DUPLICATE KEY UPDATE
+      full_name = VALUES(full_name), phone = VALUES(phone),
+      address = VALUES(address), university_id_no = VALUES(university_id_no);
 
     -- The WALK-IN: a customer with no login at all. Staff book on their behalf
     -- at the counter, which is why customers is decoupled from users.
-    INSERT INTO customers (user_id, full_name, phone, address, university_id_no)
-      VALUES (NULL, 'Carmen Uy', '09175550499', 'Toril, Davao City', NULL);
+    -- The walk-in has NO user_id, so uq_customers_user cannot key an upsert on
+    -- them (multiple NULLs are allowed, by design). Matched on name instead.
+    IF NOT EXISTS (SELECT 1 FROM customers WHERE full_name = 'Carmen Uy' AND user_id IS NULL) THEN
+      INSERT INTO customers (user_id, full_name, phone, address, university_id_no)
+        VALUES (NULL, 'Carmen Uy', '09175550499', 'Toril, Davao City', NULL);
+    END IF;
 
     INSERT INTO staff (user_id, full_name, employee_no, position_role, phone)
-      VALUES ((SELECT id FROM users WHERE email='staff@gmail.com'),'Marites Robles','EMP-2021-0043','Venue Coordinator','09175550511');
+      VALUES ((SELECT id FROM users WHERE email='staff@gmail.com'),'Marites Robles','EMP-2021-0043','Venue Coordinator','09175550511')
+    ON DUPLICATE KEY UPDATE
+      full_name = VALUES(full_name), position_role = VALUES(position_role), phone = VALUES(phone);
 END$$
 
 -- ---------------------------------------------------------------------------

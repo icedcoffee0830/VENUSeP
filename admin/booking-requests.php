@@ -23,9 +23,9 @@ $brRows = booking_queue_rows();
   (No [5]: the stock AdminLTE library scripts were removed in this port —
   the team shell needs no JS.)
 
-  [SIM] marks simulation-only pieces (fake data / demo actions) that
-  exist so the mockup works on its own — delete or replace them when
-  the real database is connected.
+  [SIM] now marks only what is still deliberately simulated: the demo
+  advance buttons, which stand in for another person, another office or
+  the passage of time. The data is real.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -150,6 +150,22 @@ $brRows = booking_queue_rows();
       .r-act.late { color: #b23a3a; font-weight: 600; }
       .r-chev { color: #c9c5bd; font-size: 1.05rem; }
 
+      /* pagination — deliberately the same control as the Transaction History
+         table (Tabulator's footer), down to the page-size choices and the
+         button styling. The queue is a list of links rather than a table, so
+         it cannot BE that table, but it should not behave like a different
+         product either. 157 rows on one endless page was the complaint. */
+      .br-foot { align-items: center; background: #faf9f7; border-top: 1px solid var(--vm-border); display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; padding: 0.6rem 1.1rem; }
+      .br-foot[hidden] { display: none; }
+      .br-pagesize { align-items: center; color: var(--vm-muted); display: flex; font-size: 0.76rem; gap: 0.4rem; }
+      .br-pagesize select { border: 1px solid #d7d7d7; border-radius: 7px; background: #fff; color: #1f1e1e; font-family: inherit; font-size: 0.78rem; padding: 0.2rem 0.4rem; }
+      .br-pages { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+      .br-pbtn { background: #fff; border: 1px solid #d7d7d7; border-radius: 7px; color: #1f1e1e; cursor: pointer; font-family: inherit; font-size: 0.76rem; min-width: 30px; padding: 0.25rem 0.5rem; }
+      .br-pbtn:hover:not(:disabled) { background: #f4f2ee; }
+      .br-pbtn.active { background: var(--vm-dark); border-color: var(--vm-dark); color: #fff; }
+      .br-pbtn:disabled { cursor: not-allowed; opacity: 0.45; }
+      .br-shown { color: var(--vm-muted); font-size: 0.76rem; }
+
       @media (max-width: 1000px) {
         .br-hd, .br-row { grid-template-columns: 1.9fr 1.55fr 22px; }
         .hide-md { display: none; }
@@ -198,6 +214,18 @@ $brRows = booking_queue_rows();
                   <span></span>
                 </div>
                 <div id="brRows"></div>
+                <div class="br-foot" id="brFoot" hidden>
+                  <label class="br-pagesize">Page Size
+                    <select id="brPageSize">
+                      <option value="10" selected>10</option>
+                      <option value="25">25</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </select>
+                  </label>
+                  <span class="br-shown" id="brShown"></span>
+                  <div class="br-pages" id="brPages"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -208,7 +236,7 @@ $brRows = booking_queue_rows();
 <!-- ============================================================
          [6] PAGE SCRIPT — this page's own JS (demo only, no backend):
          · RES / PAY     status-code → badge label + color maps
-         · DATA [SIM]    fake booking requests shown in the queue —
+         · BR            real bookings, shaped by booking_queue_rows() —
                          the real page will load these rows from the
                          database instead
          · row builder   turns each request into a clickable row
@@ -304,8 +332,14 @@ $brRows = booking_queue_rows();
           return a.eventIso < b.eventIso ? -1 : (a.eventIso > b.eventIso ? 1 : 0);
         });
       }
-      function setTab(k) { tab = k; draw(); }
-      function setQ(v) { q = v.trim().toLowerCase(); drawRows(); }
+      /* Paging state. Changing the tab or the search changes WHICH rows exist,
+         so both send you back to page 1 — staying on page 4 of a list that now
+         has two pages reads as an empty queue. */
+      let page = 1, pageSize = 10;
+      function setTab(k) { tab = k; page = 1; draw(); }
+      function setQ(v) { q = v.trim().toLowerCase(); page = 1; drawRows(); }
+      function setPage(n) { page = n; drawRows(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      function setPageSize(n) { pageSize = parseInt(n, 10) || 10; page = 1; drawRows(); }
 
       /* How long the customer has been waiting on STAFF — measured from the day
          they filed. Worded so it is obvious who owes whom: "waiting 3 days" never
@@ -334,8 +368,41 @@ $brRows = booking_queue_rows();
         return s;
       }
 
+      /* First / Prev / a window of page numbers / Next / Last — the same set
+         Tabulator renders under the Transaction History table. The window is
+         five wide so 16 pages do not produce 16 buttons. */
+      function drawPager(total) {
+        const foot = document.getElementById('brFoot');
+        const pages = Math.max(1, Math.ceil(total / pageSize));
+        foot.hidden = total === 0;
+        if (total === 0) { return; }
+
+        const from = (page - 1) * pageSize + 1;
+        const to = Math.min(page * pageSize, total);
+        document.getElementById('brShown').textContent = `Showing ${from}–${to} of ${total}`;
+
+        let first = Math.max(1, page - 2);
+        const last = Math.min(pages, first + 4);
+        first = Math.max(1, last - 4);
+
+        const btn = (label, target, opts) => {
+          const o = opts || {};
+          return `<button type="button" class="br-pbtn${o.active ? ' active' : ''}"${o.disabled ? ' disabled' : ''} onclick="setPage(${target})">${label}</button>`;
+        };
+        let html = btn('First', 1, { disabled: page === 1 }) + btn('Prev', page - 1, { disabled: page === 1 });
+        for (let p = first; p <= last; p++) { html += btn(p, p, { active: p === page }); }
+        html += btn('Next', page + 1, { disabled: page === pages }) + btn('Last', pages, { disabled: page === pages });
+        document.getElementById('brPages').innerHTML = html;
+      }
+
       function drawRows() {
-        document.getElementById('brRows').innerHTML = rowsOf().map(r => `
+        const all = rowsOf();
+        /* Deleting or filtering can leave the current page past the end — land
+           on the last real page instead of showing nothing. */
+        const pages = Math.max(1, Math.ceil(all.length / pageSize));
+        if (page > pages) { page = pages; }
+        if (page < 1) { page = 1; }
+        document.getElementById('brRows').innerHTML = all.slice((page - 1) * pageSize, page * pageSize).map(r => `
           <a class="br-row" href="booking-request.php?id=${r.id}">
             <span><div class="r-id">${r.id}</div><div class="r-name">${esc(r.name)}</div><div class="r-sub">${esc(r.type)}</div></span>
             <span class="hide-md"><div class="r-main">${esc(r.room)}</div><div class="r-sub">${esc(r.venue)}</div></span>
@@ -345,6 +412,7 @@ $brRows = booking_queue_rows();
             <span class="hide-md r-act ${r.cls}">${esc(actLabel(r))}</span>
             <span class="r-chev">&rsaquo;</span>
           </a>`).join('') || '<div style="padding:1.2rem;color:#8a857d;font-size:.85rem">No requests match.</div>';
+        drawPager(all.length);
       }
       function draw() {
         document.getElementById('brTabs').innerHTML = TABS.map(t => `
@@ -359,6 +427,7 @@ $brRows = booking_queue_rows();
          mockups, invisible on any other machine. A refund is now a `refunds`
          row, so it arrives here the same way every other booking does: it is
          simply in BR above. The injection that used to live here is gone. */
+      document.getElementById('brPageSize').addEventListener('change', function () { setPageSize(this.value); });
       draw();
     </script>
   </body>

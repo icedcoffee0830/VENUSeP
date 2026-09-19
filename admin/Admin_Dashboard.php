@@ -6,6 +6,35 @@
    under different customers than the queue did for the same reference. */
 require_once __DIR__ . '/../includes/bookings.php';
 $adRows = booking_queue_rows();
+
+/* The two tiles that were hard-coded: "Today's Bookings" read 2 and Revenue
+   read the Q2 2026 figure from the old Quarterly_Reports arrays — both frozen
+   numbers that happened to look plausible and were true of nothing. */
+$adToday = 0; $adRevenue = 0.0; $adVenues = [];
+try {
+  $adPdo = venusep_db_or_fail();
+  $adToday = (int) $adPdo->query(
+    "SELECT COUNT(*) FROM bookings b
+       LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
+       LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
+      WHERE COALESCE(vd.start_date, hd.check_in_date) = CURDATE()
+        AND b.reservation_status IN ('approved', 'completed')"
+  )->fetchColumn();
+  /* Money COLLECTED this quarter — an unpaid booking inflates nothing. */
+  $adRevenue = (float) $adPdo->query(
+    "SELECT COALESCE(SUM(b.total_amount), 0) FROM bookings b
+       LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
+       LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
+      WHERE b.payment_status IN ('confirmed', 'paid_cash')
+        AND QUARTER(COALESCE(vd.start_date, hd.check_in_date)) = QUARTER(CURDATE())
+        AND YEAR(COALESCE(vd.start_date, hd.check_in_date)) = YEAR(CURDATE())"
+  )->fetchColumn();
+  $adVenues = $adPdo->query(
+    "SELECT v.name, v.description, COUNT(r.id) AS rooms
+       FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
+      WHERE v.is_active = 1 GROUP BY v.id ORDER BY v.id"
+  )->fetchAll();
+} catch (PDOException $e) { /* tiles fall back to zero rather than to a lie */ }
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -920,7 +949,7 @@ tr:hover {
                  buckets as the tabs on booking-requests.php — clicking one opens
                  the queue pre-filtered to that bucket, so dashboard numbers and
                  queue tabs can never disagree.
-                 [SIM] counts are computed from the demo data in the page script. -->
+                 Counts come from booking_queue_rows() — the same rows the queue shows. -->
             <div class="stats-grid">
                 <a class="stat-card" href="booking-requests.php?tab=id">
                     <span class="stat-icon"><i class="bi bi-person-vcard"></i></span>
@@ -949,13 +978,13 @@ tr:hover {
                 <div class="stat-card">
                     <span class="stat-icon"><i class="bi bi-calendar2-check"></i></span>
                     <h3>Today's Bookings</h3>
-                    <div class="number">2</div> <!-- [SIM] demo value -->
+                    <div class="number"><?php echo (int) $adToday; ?></div>
                     <div class="info">Rooms in use today</div>
                 </div>
                 <div class="stat-card">
                     <span class="stat-icon"><i class="bi bi-cash-stack"></i></span>
                     <h3>Revenue</h3>
-                    <div class="number">₱315,000</div> <!-- [SIM] matches Quarterly_Reports Q2 2026 -->
+                    <div class="number">₱<?php echo number_format($adRevenue); ?></div>
                     <div class="info">Current quarter</div>
                 </div>
             </div>
@@ -979,23 +1008,20 @@ tr:hover {
                         <a href="venue-management.php" class="btn btn-small btn-outline">Manage Venues</a>
                     </div>
                     <!-- Venue = location container in the new model (no base rate,
-                         venues aren't bookable). [SIM] hard-coded to match the
-                         venue-management.php cards; comes from the database later. -->
+                    <!-- Venue = a location that holds rooms (no base rate; a venue
+                         is not itself bookable). From the database — this list was
+                         hard-coded to match venue-management.php, so adding a venue
+                         there left the dashboard quietly describing the old world. -->
                     <div>
+<?php foreach ($adVenues as $adV): ?>
                         <div class="ad-venue">
                             <div>
-                                <div class="r-name" style="font-weight:600;font-size:13.5px;color:#1f1e1e">Bahay Alumni</div>
-                                <div class="r-sub" style="font-size:11.5px;color:#8a857d;margin-top:2px">Heritage location for alumni events</div>
+                                <div class="r-name" style="font-weight:600;font-size:13.5px;color:#1f1e1e"><?php echo htmlspecialchars($adV['name']); ?></div>
+                                <div class="r-sub" style="font-size:11.5px;color:#8a857d;margin-top:2px"><?php echo htmlspecialchars((string) $adV['description']); ?></div>
                             </div>
-                            <span style="font-size:12px;color:#6b675f;white-space:nowrap">8 rooms</span>
+                            <span style="font-size:12px;color:#6b675f;white-space:nowrap"><?php echo (int) $adV['rooms']; ?> room<?php echo (int) $adV['rooms'] === 1 ? '' : 's'; ?></span>
                         </div>
-                        <div class="ad-venue">
-                            <div>
-                                <div class="r-name" style="font-weight:600;font-size:13.5px;color:#1f1e1e">USeP Venues</div>
-                                <div class="r-sub" style="font-size:11.5px;color:#8a857d;margin-top:2px">Main campus halls and function rooms</div>
-                            </div>
-                            <span style="font-size:12px;color:#6b675f;white-space:nowrap">12 rooms</span>
-                        </div>
+<?php endforeach; ?>
                     </div>
                 </div>
             </div>

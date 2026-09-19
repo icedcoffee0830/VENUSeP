@@ -137,12 +137,19 @@ function booking_shape(array $row) {
     $firstIso = $isHostel ? $row['check_in_date']  : $row['start_date'];
     $lastIso  = $isHostel ? $row['check_out_date'] : $row['end_date'];
 
-    /* A hostel stay's last BOOKED day is the night before check-out: nights are
-       exclusive of the check-out date, and the payment deadline must count from
-       the last night actually stayed, not from the morning everyone leaves. */
-    $lastBooked = $isHostel && $lastIso
-        ? date('Y-m-d', strtotime($lastIso . ' -1 day'))
-        : $lastIso;
+    /* The LAST BOOKED DAY for the payment deadline is the check-out date itself
+       for a hostel stay, and the end date for an event — exactly what
+       fn_booking_last_day() returns, which is what actually sets
+       bookings.current_deadline_at.
+
+       Do NOT "correct" this to the last night stayed. Nights are exclusive of
+       check-out for COUNTING and PRICING (Aug 1 -> Aug 4 is 3 nights), and that
+       is a different question from when the stay ends for payment purposes.
+       DB-DECISIONS #18 is explicit: post-pay is due grace days after "the last
+       booked day (event end / check-out)". Subtracting a day here made this
+       page display a deadline one day earlier than the one the database
+       enforces — the app and the database disagreeing about the same fact. */
+    $lastBooked = $lastIso;
 
     $nights = $isHostel && $firstIso && $lastIso
         ? max(0, (int) round((strtotime($lastIso) - strtotime($firstIso)) / 86400))
@@ -219,9 +226,27 @@ function booking_shape(array $row) {
         'staffNotes'    => (string) $row['staff_notes'],
     ];
 
-    /* WHEN this booking pays — the same shared rule the booking pages use,
-       applied to the policy this booking was MADE under. */
-    $b['payment']    = payment_policy_for($b['refundsAllowed'], $firstIso ?: date('Y-m-d'), $lastBooked);
+    /* WHEN this booking pays. payment_policy_for() gives the shape — which
+       policy, whether payment is open, whether it is overdue — using the same
+       rule the booking pages apply while a booking is still being typed.
+
+       But the DATE comes from bookings.current_deadline_at, which
+       fn_payment_deadline() wrote and which the system actually enforces
+       against. Recomputing it here would be a second opinion on a stored fact,
+       and the two did drift: the SQL has a branch PHP does not, where a pre-pay
+       booking whose day-before deadline has already passed becomes due at the
+       moment the event STARTS ("pay immediately on approval"), not on a date
+       that is already behind us. Thirty-seven bookings displayed a pay-by date
+       one day earlier than the one being enforced. */
+    $b['payment'] = payment_policy_for($b['refundsAllowed'], $firstIso ?: date('Y-m-d'), $lastBooked);
+    if (!empty($row['current_deadline_at'])) {
+        $ts = strtotime($row['current_deadline_at']);
+        $b['payment']['payByTs']    = $ts;
+        $b['payment']['payByLabel'] = date('M j, Y', $ts);
+        $b['payment']['overdue']    = $b['payment']['policy'] === 'postpay' && $ts < time();
+        $b['payment']['late']       = $b['payment']['policy'] === 'prepay'
+                                        && $ts <= strtotime(($firstIso ?: date('Y-m-d')) . ' 23:59:59');
+    }
     $b['refundable'] = cb_is_refundable($b);
     return $b;
 }
@@ -319,7 +344,7 @@ function booking_queue_action(array $b) {
         case 'under_review':
             return $b['receiptVerdict'] === 'accepted'
                 ? 'Match ref ' . $b['receiptReference'] . ' in GCash'
-                : $b['receiptFlags'] . ' flag' . ($b['receiptFlags'] == 1 ? '' : 's') . ' need a human look';
+                : $b['receiptFlags'] . ($b['receiptFlags'] == 1 ? ' flag needs' : ' flags need') . ' a human look';
         case 'overdue':
             return $b['refundsAllowed']
                 ? 'Pre-pay booking · deadline passed ' . $due . ' · slot releasable'
@@ -493,25 +518,41 @@ function report_quarters($count = 4) {
     return array_values($out);
 }
 
-/* Per-venue totals for the breakdown charts and the table. */
-function report_by_venue() {
+/* Per-venue totals for the breakdown charts and the table.
+   Pass a year+quarter to narrow it; omit both for all time.
+
+   EVERY ACTIVE VENUE APPEARS, even with nothing in it. A venue that simply
+   vanishes from the breakdown in a quiet quarter reads as "this venue was
+   removed", and the donut silently re-proportions around the gap — a quiet
+   quarter and a deleted venue must not look the same. */
+function report_by_venue($year = null, $quarter = null) {
     $pdo = venusep_db();
     if ($pdo === null) {
         return [];
     }
+    $where = '';
+    $args  = [];
+    if ($year !== null && $quarter !== null) {
+        $where = ' AND YEAR(x.event_date) = :y AND QUARTER(x.event_date) = :q';
+        $args  = [':y' => (int) $year, ':q' => (int) $quarter];
+    }
     try {
-        return $pdo->query(
+        $stmt = $pdo->prepare(
             "SELECT v.name AS venue,
-                    COUNT(*)                        AS events,
-                    SUM(x.discount_percent > 0)     AS discounted,
-                    SUM(x.fell_through)             AS cancelled,
-                    SUM(x.collected)                AS revenue
-               FROM (" . report_base_sql() . ") x
-               JOIN rooms r  ON r.id = x.room_id
-               JOIN venues v ON v.id = r.venue_id
+                    COALESCE(SUM(x.id IS NOT NULL), 0)      AS events,
+                    COALESCE(SUM(x.discount_percent > 0), 0) AS discounted,
+                    COALESCE(SUM(x.fell_through), 0)         AS cancelled,
+                    COALESCE(SUM(x.collected), 0)            AS revenue
+               FROM venues v
+               LEFT JOIN rooms r ON r.venue_id = v.id
+               LEFT JOIN (" . report_base_sql() . ") x
+                      ON x.room_id = r.id" . $where . "
+              WHERE v.is_active = 1
               GROUP BY v.id, v.name
               ORDER BY v.id"
-        )->fetchAll();
+        );
+        $stmt->execute($args);
+        return $stmt->fetchAll();
     } catch (PDOException $e) {
         return [];
     }
@@ -612,6 +653,30 @@ function booking_slots($bookingId) {
     }
 }
 
+/* The documents on a booking, newest of each kind. Returns [kind => id], which
+   is all a page needs: the bytes are fetched from document-view.php, which does
+   its own permission check rather than trusting whoever built this list. */
+function booking_document_ids($bookingId) {
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return [];
+    }
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT document_type, MAX(id) AS id FROM booking_documents
+              WHERE booking_id = :b GROUP BY document_type'
+        );
+        $stmt->execute([':b' => (int) $bookingId]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $out[$r['document_type']] = (int) $r['id'];
+        }
+        return $out;
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
 /* The latest GCash receipt on a booking, with its flags decoded. */
 function booking_receipt($bookingId) {
     $pdo = venusep_db();
@@ -620,7 +685,7 @@ function booking_receipt($bookingId) {
     }
     try {
         $stmt = $pdo->prepare(
-            'SELECT reference_number, receiver_name, receiver_number, amount_centavos,
+            'SELECT id, reference_number, receiver_name, receiver_number, amount_centavos,
                     receipt_datetime, ocr_confidence, verdict, flags_json
                FROM gcash_receipts WHERE booking_id = :b ORDER BY id DESC LIMIT 1'
         );
@@ -710,5 +775,62 @@ if (!function_exists('cb_normalise_mobile')) {
         if (strlen($d) === 12 && substr($d, 0, 2) === '63') $d = '0' . substr($d, 2);
         if (strlen($d) === 10 && substr($d, 0, 1) === '9')  $d = '0' . $d;
         return (strlen($d) === 11 && substr($d, 0, 2) === '09') ? $d : null;
+    }
+}
+
+/* EVERY status code the database defines, with the badge label and colour a
+   staff page should show for it. The booking detail page kept its own JS map of
+   three reservation codes and a handful of payment ones, so opening a
+   `completed`, `cancelled`, `rejected` or `disrupted` booking — 124 of the 157
+   in the system — threw on an undefined lookup and rendered a blank page.
+   Labels come from the lookup tables, so a status added later gets a badge
+   without anyone remembering to edit a page. */
+if (!function_exists('status_badge_maps')) {
+    function status_badge_maps() {
+        static $cached = null;
+        if ($cached !== null) { return $cached; }
+
+        /* Colour carries URGENCY, not category: red = someone lost something or
+           is late, amber = waiting on a person, green = settled, navy = in
+           motion but fine, gray = nothing to do yet. */
+        $colours = [
+            'res' => [
+                'pending'   => 'b-amber', 'approved'  => 'b-green',
+                'completed' => 'b-navy',  'released'  => 'b-gray',
+                'cancelled' => 'b-red',   'rejected'  => 'b-red',
+                'disrupted' => 'b-amber',
+            ],
+            'pay' => [
+                'locked'            => 'b-gray',  'await_event'       => 'b-gray',
+                'await_pos'         => 'b-amber', 'await_gcash'       => 'b-amber',
+                'await_cash'        => 'b-amber', 'under_review'      => 'b-amber',
+                'confirmed'         => 'b-green', 'paid_cash'         => 'b-green',
+                'overdue'           => 'b-red',   'expired'           => 'b-red',
+                'refund_requested'  => 'b-navy',  'refund_await_or'   => 'b-amber',
+                'refund_processing' => 'b-navy',  'refund_correction' => 'b-amber',
+                'refunded'          => 'b-green', 'refund_denied'     => 'b-red',
+            ],
+        ];
+
+        $maps = ['res' => [], 'pay' => []];
+        $pdo  = venusep_db();
+        if ($pdo === null) { return $maps; }
+        try {
+            foreach (['res' => 'reservation_statuses', 'pay' => 'payment_statuses'] as $key => $table) {
+                $rows = $pdo->query("SELECT code, staff_label FROM {$table}")->fetchAll();
+                foreach ($rows as $r) {
+                    $maps[$key][$r['code']] = [
+                        't' => $r['staff_label'],
+                        /* An unknown code still gets a badge — a page that cannot
+                           name a status must still open. */
+                        'c' => isset($colours[$key][$r['code']]) ? $colours[$key][$r['code']] : 'b-gray',
+                    ];
+                }
+            }
+        } catch (PDOException $e) {
+            error_log('status_badge_maps: ' . $e->getMessage());
+        }
+        $cached = $maps;
+        return $maps;
     }
 }

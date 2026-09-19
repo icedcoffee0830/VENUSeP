@@ -20,6 +20,18 @@ $rsIsAdmin  = admin_is_admin();                  // staff see the card read-only
 $rsCsrf     = csrf_token();
 $rsStayRefundable = count(array_filter(bookings_all(), function ($b) { return $b['refundable']; }));
 
+/* Refund requests still open. Open requests are finished by staff even after
+   the switch goes OFF (DB-DECISIONS #16), so this is a warning, not a blocker.
+   Counted from the `refunds` table; it used to come from browser storage,
+   which meant it only ever saw requests filed in THIS browser and quietly read
+   zero for every other admin. */
+$rsOpenRefunds = 0;
+try {
+  $rsOpenRefunds = (int) venusep_db()->query(
+    "SELECT COUNT(*) FROM refunds WHERE refund_status IN ('requested','under_review','returned_for_correction','approved')"
+  )->fetchColumn();
+} catch (PDOException $e) { $rsOpenRefunds = 0; }
+
 /* A lock still running from earlier (the countdown resumes after a reload). */
 $rsLockSeconds = 0;
 if ($rsDbOk && $rsIsAdmin) {
@@ -64,8 +76,11 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
   one; they are separate now, so a receipt paid to the wrong venue's account
   is correctly rejected.
 
-  [SIM] nothing persists — Save updates the page only. Wire to a
-  `payment_settings` table keyed by venue when the database exists.
+  Saving is real: admin/gcash-account-save.php supersedes the current row
+  and inserts a new one, so a receipt paid to last month's number can still
+  be explained. It is ADMIN-ONLY and re-asks for the password, because this
+  is where the money lands — anyone with a borrowed admin session could
+  otherwise point a venue's payments at their own number.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -396,9 +411,9 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
       </div>
     </div>
 
-    <!-- Open refund requests live in the [SIM] refund store until bookings are
+    <!-- Open refund requests are counted from the `refunds` table (they were
          in the database; the OFF warning counts them from there. -->
-    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
+    <?php /* refund-store.php is gone: open refunds are counted from the `refunds` table below. */ ?>
 
 <!-- ============================================================
          [7] REFUND SCRIPT — opens the right warning, posts to
@@ -423,11 +438,14 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
         const openBtn = document.getElementById('rsOpen');
 
         const plural = function (n, one, many) { return n + ' ' + (n === 1 ? one : many); };
-        function openRequests() {
-          if (!window.RefundStore) return 0;
-          const all = RefundStore.all();
-          return Object.keys(all).filter(function (k) { return all[k] && (all[k].status === 'open' || all[k].status === 'fix'); }).length;
-        }
+        /* Refunds still open when the switch is about to be turned OFF. Open
+           requests are finished by staff even after it goes off (DB-DECISIONS
+           #16), so this is a warning, not a blocker. Counted server-side from
+           the `refunds` table — it used to come from browser storage, which
+           meant the warning only ever counted requests filed in THIS browser
+           and read zero for everyone else. */
+        const OPEN_REFUNDS = <?php echo (int) $rsOpenRefunds; ?>;
+        function openRequests() { return OPEN_REFUNDS; }
 
         function show(kind, text) { msg.className = 'rs-msg ' + (kind === 'lock' ? 'rs-msg-lock' : 'rs-msg-bad'); msg.textContent = text; msg.hidden = false; }
         function hideMsg() { msg.hidden = true; }
@@ -521,7 +539,7 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
 <?php endif; ?>
 
 <!-- ============================================================
-         [6] PAGE SCRIPT — edit in place. [SIM] Save updates the card
+         [6] PAGE SCRIPT — edit in place. Save posts to gcash-account-save.php
          only; nothing persists and no booking page is affected until
          includes/payment-settings.php is backed by a database.
          ============================================================ -->
@@ -529,6 +547,8 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
       /* The checker compares DIGITS, never the pretty form — so a number is
          valid on its digits alone. 11 digits starting 09 is the PH mobile
          format GCash uses; anything else would silently fail every receipt. */
+      const PS_CSRF = <?php echo json_encode($rsCsrf); ?>;
+
       function psDigits(s) { return String(s).replace(/\D+/g, ''); }
       function psPretty(s) { return psDigits(s).replace(/^(\d{4})(\d{3})(\d{4})$/, '$1 $2 $3'); }
       function psValid(s) { const d = psDigits(s); return d.length === 11 && d.startsWith('09'); }
@@ -576,8 +596,32 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
            every receipt for this venue, quietly. */
         if (!name) { err.textContent = 'The account name cannot be empty — the checker matches it when the number is masked on a receipt.'; err.hidden = false; return; }
         if (!psValid(raw)) { err.textContent = 'Needs 11 digits starting with 09. The checker compares digits, so a number in any other shape rejects every receipt.'; err.hidden = false; return; }
+
+        /* This is where the venue's money lands, so the server re-asks for the
+           password before it will move — same treatment as the refund switch,
+           and for a stronger reason: anyone with a borrowed admin session could
+           otherwise point a venue's payments at their own number. */
+        const pw = window.prompt(
+          'Confirm your admin password to change where ' + card.dataset.venue + ' is paid.\n\n' +
+          'Every future payment for this venue will go to ' + psPretty(raw) + ', and receipts will be checked against it.');
+        if (pw === null) return;                /* cancelled — nothing changes */
+
         err.hidden = true;
-        psRestore(card, name, psPretty(raw), true);
+        const body = new URLSearchParams({
+          csrf: PS_CSRF, venue: card.dataset.venue,
+          account_name: name, mobile_number: psDigits(raw), password: pw
+        });
+        fetch('gcash-account-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+          .then(function (res) {
+            if (!res.ok) {
+              err.textContent = res.message + (res.attemptsLeft != null ? ' ' + res.attemptsLeft + ' attempt(s) left.' : '');
+              err.hidden = false;
+              return;
+            }
+            psRestore(card, name, psPretty(raw), true);
+          })
+          .catch(function () { err.textContent = 'Could not reach the server, so nothing was changed.'; err.hidden = false; });
       }
 
       function psRestore(card, name, number, saved) {
@@ -586,7 +630,7 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
         const eff = card.querySelector('[data-eff]');
         if (eff) eff.remove();
         card.querySelector('.ps-foot').innerHTML =
-          (saved ? '<span class="ps-saved">Saved <span style="font-weight:400;color:#a5a19a">· [SIM] not persisted</span></span>' : '')
+          (saved ? '<span class="ps-saved">Saved</span>' : '')
           + '<button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>';
       }
     </script>

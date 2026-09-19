@@ -23,7 +23,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 <!DOCTYPE html>
 <!-- MAP: [0] SHELL CSS · [1] PAGE CSS · [2] HEADER · [3] SIDEBAR ·
      [4] CONTENT (filters, export, table) · [6] SCRIPT (Tabulator).
-     [SIM] = demo-only, replace at database time. -->
+     Rows come from transaction_rows() in includes/bookings.php. -->
 <html lang="en">
   <head>
 <!-- light mode only: stop browser auto-dark + Dark Reader from repainting the page -->

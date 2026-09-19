@@ -17,6 +17,40 @@ if (rp_room_id_valid($roomId)) {
 }
 if ($roomFormRoom === null) $roomId = '';   // unknown id — behaves like Add
 $roomFormCsrf = csrf_token();
+
+/* THE AMENITY PICKER, built from the real vocabulary (includes/amenities.php)
+   rather than a list of its own.
+
+   This form used to render thirteen generic chips — "Chairs", "Tables" — that
+   existed nowhere else in the system, with `on: true` hard-coded so EVERY room
+   opened showing the same seven pre-selected. It described no room in
+   particular and saved nothing.
+
+   The vocabulary stays PHP-coded (DB-DECISIONS #9); only WHICH keys a room has
+   is stored, in rooms.amenities. */
+require_once __DIR__ . '/../includes/amenities.php';
+
+$rfCurrent = [];
+if ($roomId !== '') {
+    try {
+        $rfStmt = venusep_db_or_fail()->prepare('SELECT amenities FROM rooms WHERE room_code = :c');
+        $rfStmt->execute([':c' => $roomId]);
+        $rfDecoded = json_decode((string) $rfStmt->fetchColumn(), true);
+        $rfCurrent = is_array($rfDecoded) ? $rfDecoded : [];
+    } catch (PDOException $e) {
+        $rfCurrent = [];
+    }
+}
+/* Only the groups an EVENT room can use — "6 bunk beds" is not an option here. */
+$rfPool = [];
+foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
+    $rfKeys = [];
+    foreach ($AMENITY_GROUPS[$rfGroup] as $rfKey) {
+        $rfKeys[] = ['key' => $rfKey, 'label' => $AMENITY_LABELS[$rfKey],
+                     'on' => in_array($rfKey, $rfCurrent, true)];
+    }
+    $rfPool[] = ['group' => $rfGroup, 'items' => $rfKeys];
+}
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -34,9 +68,9 @@ $roomFormCsrf = csrf_token();
   (No [5]: the stock AdminLTE library scripts were removed in this port —
   the team shell needs no JS.)
 
-  [SIM] marks simulation-only pieces (fake data / demo actions) that
-  exist so the mockup works on its own — delete or replace them when
-  the real database is connected.
+  [SIM] now marks only what is still deliberately simulated: the demo
+  advance buttons, which stand in for another person, another office or
+  the passage of time. The data is real.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -729,7 +763,7 @@ $roomFormCsrf = csrf_token();
              form happily took reservations.) Only a closure is a real
              decision, and a closure has DATES — so that is what is
              stored, and the customer-facing label is derived from it.
-             [SIM] nothing saves yet.
+             Saved by admin/room-save.php.
              ========================================================== -->
         <h2 class="vm-section-head">Maintenance</h2>
         <p class="vm-hint">A closure is a <strong>date window</strong>, not a label — the window is what actually stops bookings. Leave this off and the room behaves normally; there is no separate &ldquo;Available&rdquo; setting to keep in sync.</p>
@@ -796,9 +830,27 @@ $roomFormCsrf = csrf_token();
           </div>
         </div>
 
+        <!-- "At a glance" — best for / catering / accessibility. PHP-coded per
+             DB-DECISIONS #9: these are one-line PROSE about a room, not a
+             pickable vocabulary, so they are shown here rather than offered as
+             chips. The pool that used to sit here was a THIRD vocabulary
+             ("Large area", "Near restrooms") that mapped to nothing, saved
+             nothing, and showed the same selections for every room. -->
         <div class="vm-field">
-          <label>Attributes</label>
-          <div id="vmGlancePool" class="vm-poolgrid"></div>
+          <label>At a glance</label>
+<?php $rfGlance = room_glance($roomId); ?>
+          <div class="vm-hint" style="line-height:1.7">
+            <?php if ($rfGlance['bestFor'] === '' && $roomId !== ''): ?>
+              No at-a-glance facts are recorded for this room yet. They are set in
+              <code>includes/amenities.php</code>.
+            <?php elseif ($roomId === ''): ?>
+              Set once the room exists, in <code>includes/amenities.php</code>.
+            <?php else: ?>
+              <strong>Best for:</strong> <?php echo htmlspecialchars($rfGlance['bestFor']); ?><br>
+              <strong>Catering:</strong> <?php echo htmlspecialchars($rfGlance['catering']); ?><br>
+              <strong>Access:</strong> <?php echo htmlspecialchars($rfGlance['accessible']); ?>
+            <?php endif; ?>
+          </div>
         </div>
 
         <hr class="vm-divider" />
@@ -924,7 +976,7 @@ $roomFormCsrf = csrf_token();
       function vmApiPost(action, extra) {
         var body = extra instanceof FormData ? extra : new FormData();
         body.append('action', action);
-        body.append('room_id', VM_ROOM_ID);
+        body.append('room_id', VM_ROOM_ID || '');
         body.append('csrf', VM_CSRF);
         return fetch(VM_API, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(vmParseApiResponse);
@@ -1127,13 +1179,14 @@ $roomFormCsrf = csrf_token();
          moment you add/remove/reorder them (see vmApiPost above); Name and
          Location save here, to rooms.name / rooms.venue_id via
          admin/room-save.php. Capacity, rate, maintenance and amenities on
-         this form are still [SIM] — same as everywhere else in this
+         this form are saved on CREATE; on an edit only name, location and
          mockup — so the confirmation says so rather than pretend. */
       function vmSaveChanges() {
-        if (!VM_ROOM_ID) {
-          alert('This form can\'t create a new room yet — open an existing room from Venue Management to add photos and a 360° tour.');
-          return;
-        }
+        /* No room id = CREATE. The screen always offered "Add Room"; it used
+           to answer with an alert saying it could not. room-save.php generates
+           the room_code (r9, h6) rather than letting anyone type one, because
+           that code is also the photo folder on disk. */
+        var isNew = !VM_ROOM_ID;
         var name = document.getElementById('roomName').value.trim();
         var venueTrigger = document.querySelector('#roomLoc .vm-dd-trigger');
         var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
@@ -1141,16 +1194,20 @@ $roomFormCsrf = csrf_token();
         if (!venue || venue === 'Select a venue') { alert('Choose a location.'); return; }
 
         var body = new FormData();
-        body.append('room_id', VM_ROOM_ID);
+        body.append('room_id', VM_ROOM_ID || '');
         body.append('name', name);
         body.append('venue', venue);
         body.append('room_type', 'event');
+        /* The ticked amenity KEYS. Always sent — an empty list is a real answer
+           (the admin unticked everything), which is why room-save.php
+           distinguishes "absent" from "empty". */
+        body.append('amenities', JSON.stringify(selectedAmenities()));
         body.append('csrf', VM_CSRF);
         fetch('room-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.ok) { alert(res.message || 'Could not save the room.'); return; }
-            alert('Room saved.\n\n(Capacity, rate, maintenance and amenities on this form are not connected to storage yet.)');
+            alert(res.message || 'Room saved.');
             location.href = 'venue-management.php';
           })
           .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
@@ -1163,7 +1220,7 @@ $roomFormCsrf = csrf_token();
          hard-coded {label, icon} catalogs, chip toggling (staff just
          pick what applies), and the "Other" free-text chip. Same
          pools the customer page reads from.
-         [SIM] chip selections are not saved anywhere yet — the real
+         Chip selections ARE saved, as amenity KEYS in rooms.amenities. The
          app will store the chosen tags on the room record. (The
          catalogs themselves are meant to stay hard-coded.)
          ============================================================ -->
@@ -1198,52 +1255,41 @@ $roomFormCsrf = csrf_token();
         };
 
         // Hard-coded pools. `on:true` = pre-selected (this is the Edit state).
-        var GLANCE = [
-          { l: 'Catering', i: I.dome, on: true },
-          { l: 'Large area', i: I.large, on: true },
-          { l: 'Small area', i: I.small },
-          { l: 'On-site parking', i: I.car },
-          { l: 'Wheelchair accessible', i: I.access, on: true },
-          { l: 'Air-conditioned', i: I.wind, on: true },
-          { l: 'Outdoor / semi-outdoor', i: I.sun },
-          { l: 'Natural lighting', i: I.window },
-          { l: 'Stage available', i: I.stage, on: true },
-          { l: 'Wi-Fi', i: I.wifi, on: true },
-          { l: 'Near restrooms', i: I.door },
-        ];
-        var AMENITIES = [
-          { l: 'Projector &amp; screen', i: I.monitor, on: true },
-          { l: 'TV / HDMI', i: I.monitor },
-          { l: 'Sound system', i: I.speaker, on: true },
-          { l: 'Microphones', i: I.mic, on: true },
-          { l: 'Podium', i: I.podium },
-          { l: 'Whiteboard', i: I.board },
-          { l: 'Chairs', i: I.chair, on: true },
-          { l: 'Tables', i: I.table, on: true },
-          { l: 'Coffee station', i: I.coffee },
-          { l: 'Power outlets', i: I.power, on: true },
-          { l: 'Video-conference camera', i: I.camera },
-          { l: 'Backstage / prep room', i: I.door },
-          { l: 'Load-in access', i: I.box },
-        ];
+        /* THE REAL VOCABULARY, grouped, with this room's own selections ticked.
+           Built in PHP above from includes/amenities.php. */
+        var AMENITY_POOL = <?php echo json_encode($rfPool, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 
         var CHECK = '<svg class="vm-chip-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 
-        function build(id, arr) {
-          var el = document.getElementById(id);
+        function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+        /* Each chip carries its KEY. The label is only what a human reads —
+           storing labels would mean rewording one silently orphaned every room
+           that had it, which is the drift the key-based design exists to stop. */
+        function buildAmenities() {
+          var el = document.getElementById('vmAmenityPool');
           if (!el) return;
-          el.innerHTML = arr
-            .map(function (o) {
-              return (
-                '<button type="button" class="vm-chip' + (o.on ? ' selected' : '') + '" aria-pressed="' + (o.on ? 'true' : 'false') + '">' +
-                o.i + '<span>' + o.l + '</span>' + CHECK + '</button>'
-              );
-            })
-            .join('');
+          el.innerHTML = AMENITY_POOL.map(function (g) {
+            return '<div class="vm-pool-group" style="grid-column:1/-1;margin:.5rem 0 .15rem;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8a857d">' +
+                   esc(g.group) + '</div>' +
+                   g.items.map(function (o) {
+                     return '<button type="button" class="vm-chip' + (o.on ? ' selected' : '') +
+                            '" data-amenity="' + esc(o.key) + '" aria-pressed="' + (o.on ? 'true' : 'false') + '">' +
+                            '<span>' + esc(o.label) + '</span>' + CHECK + '</button>';
+                   }).join('');
+          }).join('');
         }
 
-        build('vmGlancePool', GLANCE);
-        build('vmAmenityPool', AMENITIES);
+        /* What the form will send: the keys of every ticked chip, in the order
+           the vocabulary lists them, which is the order the customer sees. */
+        function selectedAmenities() {
+          return Array.prototype.slice
+            .call(document.querySelectorAll('#vmAmenityPool .vm-chip.selected'))
+            .map(function (c) { return c.getAttribute('data-amenity'); })
+            .filter(Boolean);
+        }
+
+        buildAmenities();
 
         // Toggle a chip on click (mockup: just flips the visual selected state).
         document.addEventListener('click', function (e) {

@@ -40,11 +40,12 @@
    snapshot: a booking made while the admin refund switch was OFF is refused
    here, server-side (includes/refund-policy.php).
 
-   [SIM] NOT WIRED: no POST handler, no database, no upload is stored. On
-   submit the page shows its confirmation state and drops the reference in
-   sessionStorage so booking-history.php can show the request as pending.
-   The shape it produces is what admin/booking-request.php consumes
-   (pay:'refund_req').
+   WIRED: submitting POSTs to customer/refund-submit.php, which writes a
+   `refunds` row, moves the booking's payment status to refund_requested and
+   stores the supporting documents outside the web root. The request reaches
+   the staff queue because it IS a row — it used to travel through
+   includes/refund-store.php, browser storage that no staff member on another
+   machine could see.
    ================================================================== */
 require_once __DIR__ . '/../includes/customer-bookings.php';
 
@@ -109,13 +110,16 @@ if ($booking !== null) {
             : 'The official receipt you were given at the counter when you paid. Needed before your refund can be paid out — send it later if you do not have it to hand.'];
 }
 
+/* Keyed by the refunds.reason_category enum, so the form posts the stored
+   value directly. Matching on the DISPLAY TEXT would mean rewording an option
+   silently stopped matching — the same drift that bit the amenity labels. */
 $refundReasons = [
-    'Event cancelled by the organiser',
-    'Schedule conflict — need a different date',
-    'Booked the wrong room or venue',
-    'Room unavailable or closed by USeP',
-    'Paid twice / wrong amount sent',
-    'Other',
+    'event_cancelled'   => 'Event cancelled by the organiser',
+    'schedule_conflict' => 'Schedule conflict — need a different date',
+    'wrong_room'        => 'Booked the wrong room or venue',
+    'venue_unavailable' => 'Room unavailable or closed by USeP',
+    'payment_error'     => 'Paid twice / wrong amount sent',
+    'other'             => 'Other',
 ];
 ?>
 <!DOCTYPE html>
@@ -331,8 +335,8 @@ $refundReasons = [
                             <label class="rr-label rr-req" for="rr-reason">Reason for the refund</label>
                             <select class="rr-control" id="rr-reason" name="reason">
                               <option value="">Select a reason&hellip;</option>
-                              <?php foreach ($refundReasons as $reason): ?>
-                                <option><?php echo bh_e($reason); ?></option>
+                              <?php foreach ($refundReasons as $rrKey => $reason): ?>
+                                <option value="<?php echo bh_e($rrKey); ?>"><?php echo bh_e($reason); ?></option>
                               <?php endforeach; ?>
                             </select>
                           </div>
@@ -485,9 +489,48 @@ $refundReasons = [
       </main>
     </div>
 
-    <!-- Shared refund state — the ONE source, also included by booking-history
-         and both admin pages. See includes/refund-store.php. -->
-    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
+    <!-- The refund's CURRENT state, from the `refunds` table. This used to come
+         from includes/refund-store.php — browser storage shared between the two
+         mockups, which meant a request filed here was invisible to staff on any
+         other machine. It is a row now, so the server simply knows. -->
+    <?php
+      $rrExisting = null;
+      $rrResubmit = false;
+      if ($booking) {
+          $rrStmt = venusep_db()->prepare(
+              'SELECT refund_status, notes, official_receipt_pending, DATE(requested_at) AS filed
+                 FROM refunds WHERE booking_id = :b ORDER BY id DESC LIMIT 1'
+          );
+          $rrStmt->execute([':b' => booking_id_from_reference($booking['bookingId'])]);
+          if ($rrRow = $rrStmt->fetch()) {
+              /* The page's four states, mapped from the seven the chain has.
+                 'withdrawn' deliberately maps to nothing: the customer pulled it,
+                 so they are free to file again as though it never happened. */
+              $rrMap = [
+                  'requested'               => 'open',
+                  'under_review'            => 'open',
+                  'returned_for_correction' => 'fix',
+                  'approved'                => 'open',
+                  'rejected'                => 'denied',
+                  'completed'               => 'refunded',
+              ];
+              if (isset($rrMap[$rrRow['refund_status']])) {
+                  $rrExisting = [
+                      'status'    => $rrMap[$rrRow['refund_status']],
+                      'staffNote' => (string) $rrRow['notes'],
+                      'orPending' => (bool) $rrRow['official_receipt_pending'],
+                      'filed'     => $rrRow['filed'],
+                  ];
+                  $rrResubmit = $rrRow['refund_status'] === 'returned_for_correction';
+              }
+          }
+      }
+    ?>
+    <script>
+      const CSRF        = <?php echo json_encode(csrf_token()); ?>;
+      const RR_EXISTING = <?php echo json_encode($rrExisting, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+      const RR_RESUBMIT = <?php echo $rrResubmit ? 'true' : 'false'; ?>;
+    </script>
 
     <!-- [5] SCRIPT [SIM] — client-side validation and the confirmation swap.
          No POST, no upload is stored. The reference is pushed into
@@ -525,7 +568,7 @@ $refundReasons = [
            fix      -> staff sent it back; show what to correct and let them resubmit
            denied   -> final, nothing more to file
            refunded -> done, nothing more to file */
-        const existing = window.RefundStore ? RefundStore.get(bookingRef) : null;
+        const existing = RR_EXISTING;
         if (existing && existing.status === 'open') {
           form.hidden = true;
           const lede = document.querySelector('.rr-lede'); if (lede) lede.hidden = true;
@@ -626,26 +669,44 @@ $refundReasons = [
             if (!refundTo) { gcashField.focus(); return fail('Enter a valid GCash number in the form 09XX XXX XXXX — this is where your refund will be sent.'); }
           }
 
-          /* File it. The booking is NOT cancelled — this only records that a
-             request exists, which is what the history page and the admin queue
-             both read. See includes/refund-store.php. */
+          /* File it FOR REAL. The booking is NOT cancelled — this records that a
+             request exists, which is what the history page and the staff queue
+             both read. It used to go to includes/refund-store.php, browser
+             storage that no staff member on another machine could ever see. */
           const orStillOwed = docRows.some(function (row) {
             return row.dataset.optional === '1' && row.dataset.pending === '1';
           });
-          if (window.RefundStore && bookingRef) {
-            RefundStore.open({
-              ref: bookingRef,
-              refundTo: refundTo,
-              reason: reason.value,
-              details: details.value.trim(),
-              orPending: orStillOwed
+
+          const fd = new FormData();
+          fd.append('csrf', CSRF);
+          fd.append('booking', bookingRef);
+          fd.append('action', RR_RESUBMIT ? 'resubmit' : 'file');
+          fd.append('reason_category', reason.value);
+          fd.append('reason', details.value.trim());
+          fd.append('refund_to', refundTo || '');
+          fd.append('or_pending', orStillOwed ? '1' : '0');
+          docRows.forEach(function (row) {
+            const f = row.querySelector('input[type="file"]');
+            if (f && f.files && f.files[0]) fd.append('support[]', f.files[0], f.files[0].name);
+          });
+
+          const btn = form.querySelector('button[type="submit"]');
+          if (btn) { btn.disabled = true; }
+          fetch('refund-submit.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+            .then(function (out) {
+              if (btn) { btn.disabled = false; }
+              if (!out.ok) { return fail(out.message || 'Your request was not filed.'); }
+              if (orStillOwed) { const note = document.getElementById('rr-done-or'); if (note) note.hidden = false; }
+              form.hidden = true;
+              document.querySelector('.rr-lede').hidden = true;
+              done.hidden = false;
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            })
+            .catch(function () {
+              if (btn) { btn.disabled = false; }
+              fail('Could not reach the server, so your request was not filed.');
             });
-          }
-          if (orStillOwed) { const note = document.getElementById('rr-done-or'); if (note) note.hidden = false; }
-          form.hidden = true;
-          document.querySelector('.rr-lede').hidden = true;
-          done.hidden = false;
-          window.scrollTo({ top: 0, behavior: 'smooth' });
         });
       });
     </script>

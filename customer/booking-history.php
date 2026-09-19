@@ -27,7 +27,7 @@ $emptyBookingMessage = 'No booking history found.';
   MAP: [0] SHELL CSS · [1] PAGE CSS · [2] HEADER · [3] SIDEBAR ·
        [4] CONTENT (status tabs, filters, table, pagination) ·
        [6] SCRIPT (search/sort/paginate/export/print)
-  [SIM] = demo-only, replace at database time.
+  Bookings come from includes/bookings.php, scoped to the session customer.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -486,32 +486,56 @@ $emptyBookingMessage = 'No booking history found.';
         render();
       });
     </script>
-    <!-- Shared refund state — the ONE source, also read by both admin pages. -->
-    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
+    <!-- [6b] REFUND ACTIONS — which button a row with a refund on it should
+         offer. The payment BADGE already reads correctly without any script:
+         it comes from payment_statuses.customer_label like every other row.
 
-    <!-- [6b] REFUND STATE [SIM] — paints whatever the shared store says about
-         each booking. There is no database, so a request the customer filed and
-         a decision staff made both travel through includes/refund-store.php.
-
-         NOTE WHAT THIS DOES *NOT* DO: filing does not cancel the booking. Agreed
+         NOTE WHAT FILING DOES *NOT* DO: it does not cancel the booking. Agreed
          2026-09-09 — the booking stays the customer's for the whole process and
          the date is released only when the refund is actually COMPLETED. So the
          reservation badge is left alone for every state EXCEPT 'refunded', which
          is the one moment the booking closes. -->
     <script>
+    <?php
+      /* The refund state of this customer's bookings, from the `refunds` table.
+         The PAYMENT BADGE already reads correctly without any of this — it comes
+         from payment_statuses.customer_label like every other row — so all that
+         is left for the browser is swapping the row's ACTION: withdraw an open
+         request, resubmit a corrected one, or offer nothing on a closed one.
+
+         This whole block used to rebuild the badges from includes/refund-store.php
+         because the server had no idea a refund existed. It does now. */
+      $bhRefunds = [];
+      foreach ($customerBookings as $bhB) {
+          if ($bhB['refundStatus'] === null) { continue; }
+          $bhRefunds[$bhB['bookingId']] = [
+              'status' => $bhB['refundStatus'],
+              'note'   => '',
+          ];
+      }
+    ?>
+    <script>
       document.addEventListener('DOMContentLoaded', function () {
-        if (!window.RefundStore) return;
-        const all = RefundStore.all();
-        const refs = Object.keys(all);
+        const CSRF = <?php echo json_encode(csrf_token()); ?>;
+        const REFUNDS = <?php echo json_encode($bhRefunds, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+        const refs = Object.keys(REFUNDS);
         if (!refs.length) return;
 
-        const badge = function (cls, text) { return '<span class="booking-badge ' + cls + '">' + text + '</span>'; };
         const withdraw = function (ref) {
           const ok = window.confirm('Withdraw your refund request for ' + ref + '?\n\nYour booking is not affected either way — it stays yours. You can request a refund again later if you change your mind.');
           if (!ok) return;
-          RefundStore.withdraw(ref);
-          window.location.reload();
+          fetch('refund-submit.php', {
+            method: 'POST', credentials: 'same-origin',
+            body: new URLSearchParams({ csrf: CSRF, booking: ref, action: 'withdraw' })
+          })
+            .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+            .then(function (out) {
+              if (!out.ok) { window.alert(out.message || 'The request was not withdrawn.'); return; }
+              window.location.reload();
+            })
+            .catch(function () { window.alert('Could not reach the server, so nothing was changed.'); });
         };
+
         const action = function (row, cls, icon, text, onClick, href) {
           const link = row.querySelector('.booking-action-refund');
           if (!link) return;
@@ -524,45 +548,27 @@ $emptyBookingMessage = 'No booking history found.';
         };
 
         refs.forEach(function (ref) {
-          const rec = all[ref];
+          const rec = REFUNDS[ref];
           const row = document.querySelector('[data-booking-id="' + String(ref).replace(/[^A-Za-z0-9-]/g, '') + '"]');
           if (!row || !rec) return;
-          const cells = row.querySelectorAll('td');
           const link = row.querySelector('.booking-action-refund');
 
-          if (rec.status === 'open') {
-            row.dataset.paymentStatus = 'Refund requested';
-            cells[6].innerHTML = badge('badge-refund-requested', rec.orPending ? 'Refund · awaiting your OR' : 'Refund requested');
+          /* Open on staff -> the customer can pull it back. */
+          if (rec.status === 'requested' || rec.status === 'under_review' || rec.status === 'approved') {
             action(row, 'booking-action-withdraw', 'bi-x-circle', 'Withdraw request', function () { withdraw(ref); });
-          } else if (rec.status === 'fix') {
-            row.dataset.paymentStatus = 'Refund action needed';
-            cells[6].innerHTML = badge('badge-refund-action-needed', 'Refund · action needed');
+          /* Returned for correction is PAPERWORK, not a denial — they fix it. */
+          } else if (rec.status === 'returned_for_correction') {
             action(row, 'booking-action-fix', 'bi-arrow-counterclockwise', 'Fix and resubmit', null,
               'refund-request.php?booking=' + encodeURIComponent(ref));
-          } else if (rec.status === 'denied') {
-            row.dataset.paymentStatus = 'Refund denied';
-            cells[6].innerHTML = badge('badge-refund-denied', 'Refund denied');
-            if (link) link.remove();
-          } else if (rec.status === 'refunded') {
-            /* the ONLY state that closes the booking and frees the date */
-            const p = rec.proof || {};
-            row.dataset.paymentStatus = 'Refunded';
-            row.dataset.status = 'Cancelled';
-            cells[6].innerHTML = badge('badge-refunded', 'Refunded')
-              + (p.reference ? '<div style="font-size:10.5px;color:#8a857d;margin-top:3px">Ref ' + String(p.reference).replace(/[<>&"]/g, '') + '</div>' : "");
-            cells[7].innerHTML = badge('badge-cancelled', 'Cancelled');
-            /* proof lives on the refund page — the row is too small for a receipt */
-            action(row, 'booking-action-proof', 'bi-receipt', 'View refund proof', null,
-              'refund-request.php?booking=' + encodeURIComponent(ref));
-          }
-          if (rec.staffNote && (rec.status === 'fix' || rec.status === 'denied')) {
-            row.title = 'Staff note: ' + rec.staffNote;
+          /* Closed: denied, paid out, or pulled. Nothing left to offer, and a
+             "Request Refund" button on a refunded booking would be a trap. */
+          } else if (link) {
+            link.remove();
           }
         });
         const search = document.getElementById('booking-history-search');
         if (search) search.dispatchEvent(new Event('input'));
       });
     </script>
-
   </body>
 </html>

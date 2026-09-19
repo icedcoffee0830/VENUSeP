@@ -1,4 +1,40 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
+<?php
+/* The charts were four hard-coded arrays covering Q3 2025 to Q2 2026 — a
+   window that ended fifteen months ago — plus a venue breakdown naming
+   "Social Hall" and "Auditorium", which are not rooms in this catalog.
+   They are computed from `bookings` now (includes/bookings.php), so the
+   reports describe whatever the business actually did. */
+require_once __DIR__ . '/../includes/bookings.php';
+
+$rpQuarters = report_quarters(4);
+$rpVenues   = report_by_venue();          // all time — the default view
+
+/* The venue breakdown for EACH quarter in the window, so the Reporting Period
+   dropdown can narrow the per-venue charts and the stat tiles without a page
+   reload. The TREND charts deliberately keep showing all four quarters: a
+   trend of a single quarter is one dot, and the point of this page is the
+   comparison. The dropdown was previously inert — it changed nothing, which
+   read as the page being broken. */
+$rpByQuarter = [];
+foreach ($rpQuarters as $rpQ) {
+    if (!preg_match('/^Q(\d) (\d{4})$/', $rpQ['label'], $m)) {
+        continue;
+    }
+    $rpByQuarter[] = [
+        'label'     => $rpQ['label'],
+        'revenue'   => (float) $rpQ['revenue'],
+        'avg'       => (float) $rpQ['avg'],
+        'bookings'  => (int) $rpQ['bookings'],
+        'cancelled' => (int) $rpQ['cancelled'],
+        'venues'    => array_map(function ($v) {
+            return ['venue' => $v['venue'], 'events' => (int) $v['events'],
+                    'discounted' => (int) $v['discounted'], 'cancelled' => (int) $v['cancelled'],
+                    'revenue' => (float) $v['revenue']];
+        }, report_by_venue((int) $m[2], (int) $m[1])),
+    ];
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -493,7 +529,7 @@
                 <div class="header">
                     <div>
                         <h1>Quarterly Reports</h1>
-                        <p>Review revenue, booking counts, cancellations, and venue performance for the current quarter.</p>
+                        <p>Review revenue, booking counts, cancellations, and venue performance for the selected quarter.</p>
                     </div>
                     <button class="btn btn-primary" onclick="window.print()">
                         <i class="bi bi-printer"></i>
@@ -504,11 +540,13 @@
                 <div class="report-controls">
                     <div class="report-period-control">
                         <strong>Reporting Period:</strong>
-                        <select class="filter-select" aria-label="Reporting period">
-                            <option selected>Q2 2026</option>
-                            <option>Q1 2026</option>
-                            <option>Q4 2025</option>
-                            <option>Q3 2025</option>
+                        <!-- The same quarters the charts below are built from, newest
+                             first. Hard-coded before, so it offered Q3 2025 – Q2 2026
+                             long after the charts had moved on. -->
+                        <select class="filter-select" id="reportPeriod" aria-label="Reporting period">
+<?php foreach (array_reverse($rpQuarters) as $rpI => $rpQ): ?>
+                            <option value="<?php echo htmlspecialchars($rpQ['label']); ?>"<?php echo $rpI === 0 ? ' selected' : ''; ?>><?php echo htmlspecialchars($rpQ['label']); ?></option>
+<?php endforeach; ?>
                         </select>
                     </div>
                     <span class="tag tag-finalized">Status: Finalized</span>
@@ -537,7 +575,7 @@
                         <span class="stat-icon"><i class="bi bi-receipt-cutoff"></i></span>
                         <h3>Avg. Paid / Booking</h3>
                         <div class="number" id="averageRevenue">₱0</div>
-                        <div class="info">Current quarter</div>
+                        <div class="info">Selected quarter</div>
                     </div>
                 </div>
 
@@ -622,46 +660,33 @@
     <!-- AdminLTE js removed in the merge (its layout code fought the shared shell) -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.37.1/dist/apexcharts.min.js"></script>
     <script>
-        /*
-            DATABASE INPUT GUIDE:
-            Replace the sample data below with values from your database later.
 
-            PHP example:
-            $quarterLabels = ['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026'];
-            $quarterRevenue = [210000, 245000, 260000, 315000];
-            $averageRevenuePerBooking = [7000, 7903, 8125, 8750];
-            $venueReport = [
-                ['venue' => 'Social Hall', 'events' => 14, 'discounted' => 4, 'cancelled' => 2, 'revenue' => 126000],
-                ['venue' => 'Gymnasium', 'events' => 10, 'discounted' => 2, 'cancelled' => 1, 'revenue' => 98000],
-            ];
+        /* Live aggregates — see report_quarters() / report_by_venue(). */
+        const quarterLabels = <?php echo json_encode(array_column($rpQuarters, 'label')); ?>;
+        const quarterRevenue = <?php echo json_encode(array_map('floatval', array_column($rpQuarters, 'revenue'))); ?>;
+        const averageRevenuePerBooking = <?php echo json_encode(array_map('floatval', array_column($rpQuarters, 'avg'))); ?>;
+        const cancelledByQuarter = <?php echo json_encode(array_map('intval', array_column($rpQuarters, 'cancelled'))); ?>;
 
-            Then echo the arrays into JavaScript using json_encode:
-            const quarterLabels = PHP_JSON_ENCODE_QUARTER_LABELS;
-            const quarterRevenue = PHP_JSON_ENCODE_QUARTER_REVENUE;
-            const averageRevenuePerBooking = PHP_JSON_ENCODE_AVERAGE_REVENUE;
-            const venueReport = PHP_JSON_ENCODE_VENUE_REPORT;
-        */
+        /* venue = venue name · events = bookings held · discounted = bookings
+           that got the USeP rate · cancelled = fell through · revenue = money
+           actually collected (an unpaid booking inflates nothing).
 
-        const quarterLabels = ['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026'];
-        const quarterRevenue = [210000, 245000, 260000, 315000];
-        const averageRevenuePerBooking = [7000, 7903, 8125, 8750];
-        const cancelledByQuarter = [5, 4, 6, 3];
+           One breakdown per quarter, in the same order as quarterLabels, so the
+           Reporting Period dropdown can narrow the page without a reload. */
+        const venueByQuarter = <?php echo json_encode($rpByQuarter, JSON_UNESCAPED_UNICODE); ?>;
 
-        /*
-            DATABASE INPUT GUIDE:
-            Keep these property names when replacing this array:
-            venue = venue name
-            events = approved/held bookings for the selected quarter
-            discounted = bookings with a discount attached
-            cancelled = cancelled reservations for the selected quarter
-            revenue = paid revenue for the selected quarter
-        */
-        const venueReport = [
-            { venue: 'Social Hall', events: 14, discounted: 4, cancelled: 2, revenue: 126000 },
-            { venue: 'Gymnasium', events: 10, discounted: 2, cancelled: 1, revenue: 98000 },
-            { venue: 'Auditorium', events: 7, discounted: 1, cancelled: 0, revenue: 63000 },
-            { venue: 'Bahay Alumni', events: 5, discounted: 2, cancelled: 0, revenue: 28000 },
-        ];
+        /* If there are no quarters at all (a brand-new database), fall back to
+           the all-time breakdown so the charts still have something to draw. */
+        const allTimeVenues = <?php echo json_encode(array_map(function ($v) {
+            return ['venue' => $v['venue'], 'events' => (int) $v['events'],
+                    'discounted' => (int) $v['discounted'], 'cancelled' => (int) $v['cancelled'],
+                    'revenue' => (float) $v['revenue']];
+        }, $rpVenues), JSON_UNESCAPED_UNICODE); ?>;
+
+        /* The dropdown opens on the newest quarter, so that is what the venue
+           charts and the stat tiles describe on first paint. */
+        let periodIndex = venueByQuarter.length - 1;
+        let venueReport = venueByQuarter.length ? venueByQuarter[periodIndex].venues : allTimeVenues;
 
         const currencyFormatter = new Intl.NumberFormat('en-PH', {
             style: 'currency',
@@ -670,26 +695,88 @@
         });
 
         const numberFormatter = new Intl.NumberFormat('en-PH');
-        const currentRevenue = quarterRevenue[quarterRevenue.length - 1] || 0;
-        const previousRevenue = quarterRevenue[quarterRevenue.length - 2] || 0;
-        const revenueGrowth = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0;
-        const currentAverageRevenue = averageRevenuePerBooking[averageRevenuePerBooking.length - 1] || 0;
-        const totalEvents = venueReport.reduce((sum, item) => sum + item.events, 0);
 
-        document.querySelector('#revenueGrowthRate').textContent = `${revenueGrowth.toFixed(1)}%`;
-        document.querySelector('#totalRevenue').textContent = currencyFormatter.format(currentRevenue);
-        document.querySelector('#totalEvents').textContent = numberFormatter.format(totalEvents);
-        document.querySelector('#averageRevenue').textContent = currencyFormatter.format(currentAverageRevenue);
+        /* Declared here, filled when the charts are built below: renderPeriod()
+           runs once before that (for the tiles and the table) and then again on
+           every dropdown change, so it has to tolerate charts not existing yet. */
+        let venueRevenueChart = null;
+        let eventsByVenueChart = null;
+        let discountedBookingsChart = null;
 
-        document.querySelector('#venueReportRows').innerHTML = venueReport.map((item) => `
-            <tr>
-                <td><strong>${item.venue}</strong></td>
-                <td>${numberFormatter.format(item.events)}</td>
-                <td>${numberFormatter.format(item.discounted)}</td>
-                <td>${numberFormatter.format(item.cancelled)}</td>
-                <td>${currencyFormatter.format(item.revenue)}</td>
-            </tr>
-        `).join('');
+        function renderPeriod() {
+            const period = venueByQuarter[periodIndex] || null;
+            venueReport = period ? period.venues : allTimeVenues;
+
+            const currentRevenue = period
+                ? period.revenue
+                : venueReport.reduce((sum, item) => sum + item.revenue, 0);
+            const previousRevenue = periodIndex > 0 && venueByQuarter[periodIndex - 1]
+                ? venueByQuarter[periodIndex - 1].revenue
+                : 0;
+            const revenueGrowth = previousRevenue > 0
+                ? ((currentRevenue - previousRevenue) / previousRevenue) * 100
+                : 0;
+            const currentAverageRevenue = period ? period.avg : 0;
+            const totalEvents = venueReport.reduce((sum, item) => sum + item.events, 0);
+
+            /* The oldest quarter in the window has nothing before it to compare
+               against — "0.0%" would read as "flat", which is a claim we cannot
+               make. */
+            document.querySelector('#revenueGrowthRate').textContent = previousRevenue > 0
+                ? `${revenueGrowth.toFixed(1)}%`
+                : '—';
+            document.querySelector('#totalRevenue').textContent = currencyFormatter.format(currentRevenue);
+            document.querySelector('#totalEvents').textContent = numberFormatter.format(totalEvents);
+            document.querySelector('#averageRevenue').textContent = currencyFormatter.format(currentAverageRevenue);
+
+            document.querySelector('#venueReportRows').innerHTML = venueReport.map((item) => `
+                <tr>
+                    <td><strong>${item.venue}</strong></td>
+                    <td>${numberFormatter.format(item.events)}</td>
+                    <td>${numberFormatter.format(item.discounted)}</td>
+                    <td>${numberFormatter.format(item.cancelled)}</td>
+                    <td>${currencyFormatter.format(item.revenue)}</td>
+                </tr>
+            `).join('');
+
+            const venueNames = venueReport.map((item) => item.venue);
+
+            if (venueRevenueChart) {
+                venueRevenueChart.updateOptions({
+                    series: venueReport.map((item) => item.revenue),
+                    labels: venueNames,
+                });
+            }
+            if (eventsByVenueChart) {
+                eventsByVenueChart.updateOptions({
+                    series: [{ name: 'Events Held', data: venueReport.map((item) => item.events) }],
+                    xaxis: { categories: venueNames },
+                });
+            }
+            if (discountedBookingsChart) {
+                discountedBookingsChart.updateOptions({
+                    series: [{ name: 'Discounted Bookings', data: venueReport.map((item) => item.discounted) }],
+                    xaxis: { categories: venueNames },
+                });
+            }
+        }
+
+        renderPeriod();
+
+        /* The trend charts (revenue growth, cancellations) are deliberately NOT
+           narrowed — a trend of one quarter is a single dot, and comparing the
+           quarters is the point of the page. */
+        const reportPeriodSelect = document.querySelector('#reportPeriod');
+        if (reportPeriodSelect) {
+            reportPeriodSelect.addEventListener('change', () => {
+                const picked = venueByQuarter.findIndex((q) => q.label === reportPeriodSelect.value);
+                if (picked === -1) {
+                    return;
+                }
+                periodIndex = picked;
+                renderPeriod();
+            });
+        }
 
         const chartTextColor = '#6f675d';
         const gridColor = '#ececec'; // chart grid lines — neutral gray, same family as the card borders
@@ -766,7 +853,7 @@
             },
         }).render();
 
-        new ApexCharts(document.querySelector('#venueRevenueChart'), {
+        venueRevenueChart = new ApexCharts(document.querySelector('#venueRevenueChart'), {
             series: venueReport.map((item) => item.revenue),
             chart: {
                 height: 320,
@@ -790,9 +877,10 @@
                     },
                 },
             },
-        }).render();
+        });
+        venueRevenueChart.render();
 
-        new ApexCharts(document.querySelector('#eventsByVenueChart'), {
+        eventsByVenueChart = new ApexCharts(document.querySelector('#eventsByVenueChart'), {
             series: [
                 {
                     name: 'Events Held',
@@ -832,9 +920,10 @@
                     },
                 },
             },
-        }).render();
+        });
+        eventsByVenueChart.render();
 
-        new ApexCharts(document.querySelector('#discountedBookingsChart'), {
+        discountedBookingsChart = new ApexCharts(document.querySelector('#discountedBookingsChart'), {
             series: [
                 {
                     name: 'Discounted Bookings',
@@ -875,7 +964,8 @@
                     },
                 },
             },
-        }).render();
+        });
+        discountedBookingsChart.render();
 
         new ApexCharts(document.querySelector('#cancelledReservationsChart'), {
             series: [

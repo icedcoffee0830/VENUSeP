@@ -1,5 +1,49 @@
-<?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
-<?php ?>
+<?php
+require_once __DIR__ . '/../includes/auth.php';
+/* ADMIN ONLY. Creating a staff account already required admin
+   (admin-register.php), so letting any staff member open the page that
+   MANAGES those accounts was an inconsistency, not a feature. */
+admin_require_login(['admin']);
+?>
+<?php
+/* THE REAL STAFF ROSTER. This table shipped with fifteen invented people —
+   "Olivia Bennett", "olivia@example.com" — and three statuses, one of which
+   ("Invited") the database has no way to represent and nothing in the system
+   could ever produce: there is no invitation flow and no email sending.
+   Active / Suspended map onto users.is_active, which is the only account state
+   that exists. */
+require_once __DIR__ . '/../includes/db.php';
+
+$smRows = [];
+try {
+    $smStmt = venusep_db_or_fail()->query(
+        "SELECT u.id, u.email, u.account_type, u.is_active, u.last_login_at,
+                COALESCE(s.full_name, u.username) AS full_name,
+                s.employee_no, s.position_role, s.phone
+           FROM users u
+           LEFT JOIN staff s ON s.user_id = u.id
+          WHERE u.account_type IN ('admin', 'staff')
+          ORDER BY u.account_type, COALESCE(s.full_name, u.username)"
+    );
+    foreach ($smStmt as $r) {
+        $smRows[] = [
+            'id'       => (int) $r['id'],
+            'name'     => (string) $r['full_name'],
+            'email'    => (string) $r['email'],
+            'role'     => $r['account_type'] === 'admin' ? 'Admin' : 'Staff',
+            'status'   => $r['is_active'] ? 'Active' : 'Suspended',
+            'employee' => (string) $r['employee_no'],
+            'position' => (string) $r['position_role'],
+            'phone'    => (string) $r['phone'],
+            'lastLogin'=> $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
+            'isSelf'   => (int) $r['id'] === (int) $_SESSION['user_id'],
+        ];
+    }
+} catch (PDOException $e) {
+    $smRows = [];
+}
+$smCsrf = csrf_token();
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -539,23 +583,40 @@ body {
     };
 
     document.addEventListener('DOMContentLoaded', () => {
-      const data = [
-        { id: 1, name: 'Olivia Bennett', email: 'olivia@example.com', role: 'Staff', status: 'Active' },
-        { id: 2, name: 'Liam Carter', email: 'liam@example.com', role: 'Staff', status: 'Active' },
-        { id: 3, name: 'Emma Dawson', email: 'emma@example.com', role: 'Staff', status: 'Invited' },
-        { id: 4, name: 'Noah Evans', email: 'noah@example.com', role: 'Staff', status: 'Suspended' },
-        { id: 5, name: 'Ava Foster', email: 'ava@example.com', role: 'Staff', status: 'Active' },
-        { id: 6, name: 'Ethan Grant', email: 'ethan@example.com', role: 'Staff', status: 'Active' },
-        { id: 7, name: 'Sophia Hayes', email: 'sophia@example.com', role: 'Staff', status: 'Active' },
-        { id: 8, name: 'Mason Ingram', email: 'mason@example.com', role: 'Staff', status: 'Invited' },
-        { id: 9, name: 'Isabella Jones', email: 'isabella@example.com', role: 'Staff', status: 'Active' },
-        { id: 10, name: 'Lucas Klein', email: 'lucas@example.com', role: 'Staff', status: 'Suspended' },
-        { id: 11, name: 'Mia Lopez', email: 'mia@example.com', role: 'Staff', status: 'Active' },
-        { id: 12, name: 'Logan Moore', email: 'logan@example.com', role: 'Staff', status: 'Active' },
-        { id: 13, name: 'Charlotte Nelson', email: 'charlotte@example.com', role: 'Staff', status: 'Active' },
-        { id: 14, name: 'Henry Owens', email: 'henry@example.com', role: 'Staff', status: 'Invited' },
-        { id: 15, name: 'Amelia Price', email: 'amelia@example.com', role: 'Staff', status: 'Active' },
-      ];
+      /* The real staff-side accounts, from `users` + `staff`. */
+      const data = <?php echo json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+      const CSRF = <?php echo json_encode($smCsrf); ?>;
+
+      /* Every write goes to admin/staff-save.php, which re-checks that the
+         caller is an admin and refuses the two ways an admin could lock
+         everyone out: suspending themselves, or suspending the last active
+         admin. Those checks live there and not here — this is a convenience,
+         not a boundary. */
+      const staffAction = function (body, onOk) {
+        body.append('csrf', CSRF);
+        return fetch('staff-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+          .then(function (res) {
+            if (!res.ok) { window.alert(res.message || 'Nothing was changed.'); return false; }
+            if (typeof onOk === 'function') onOk(res);
+            return true;
+          })
+          .catch(function () { window.alert('Could not reach the server, so nothing was changed.'); return false; });
+      };
+
+      const toggleActive = function (row) {
+        const suspend = row.status === 'Active';
+        const ok = window.confirm(
+          suspend
+            ? 'Suspend ' + row.name + '?\n\nThey will no longer be able to sign in. Everything they have already approved or confirmed keeps their name on it.'
+            : 'Reactivate ' + row.name + '?\n\nThey will be able to sign in again.');
+        if (!ok) return;
+        const body = new FormData();
+        body.append('action', 'set_active');
+        body.append('user_id', row.id);
+        body.append('active', suspend ? '0' : '1');
+        staffAction(body, function () { window.location.reload(); });
+      };
 
       const table = new Tabulator('#users-table', {
         data: data,
@@ -582,9 +643,43 @@ body {
             field: 'status',
             formatter: statusBadge,
             headerFilter: 'list',
-            headerFilterParams: { values: ['', 'Active', 'Invited', 'Suspended'] },
+            /* 'Invited' is gone: users.is_active is a boolean, and nothing in
+               the system can send an invitation, so no account could ever have
+               entered or left that state. */
+            headerFilterParams: { values: ['', 'Active', 'Suspended'] },
             width: 140,
             hozAlign: 'center',
+          },
+          {
+            title: 'Last sign-in',
+            field: 'lastLogin',
+            width: 130,
+            hozAlign: 'center',
+          },
+          {
+            title: '',
+            field: 'id',
+            width: 130,
+            hozAlign: 'center',
+            headerSort: false,
+            formatter: function (cell) {
+              const row = cell.getRow().getData();
+              /* No button on your own row. The server refuses it anyway, but
+                 offering a click that can only fail is worse than not offering
+                 it — and this is the click that would end your own access. */
+              if (row.isSelf) {
+                return '<span style="color:#8a857d;font-size:.78rem">you</span>';
+              }
+              const suspend = row.status === 'Active';
+              return '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
+                (suspend ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
+                ';background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600">' +
+                (suspend ? 'Suspend' : 'Reactivate') + '</button>';
+            },
+            cellClick: function (e, cell) {
+              if (!e.target.closest('.btn-staff-toggle')) return;
+              toggleActive(cell.getRow().getData());
+            },
           },
         ],
       });

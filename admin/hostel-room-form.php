@@ -17,6 +17,30 @@ if (rp_room_id_valid($roomId)) {
 }
 if ($roomFormRoom === null) $roomId = '';   // unknown id — behaves like Add
 $roomFormCsrf = csrf_token();
+
+/* THE AMENITY PICKER, from the real vocabulary — the hostel groups this time.
+   "Load-in access" is not a thing a bed has. The vocabulary stays PHP-coded
+   (DB-DECISIONS #9); only which keys a room has is stored. */
+require_once __DIR__ . '/../includes/amenities.php';
+
+$rfCurrent = [];
+if ($roomId !== '') {
+    try {
+        $rfStmt = venusep_db_or_fail()->prepare('SELECT amenities FROM rooms WHERE room_code = :c');
+        $rfStmt->execute([':c' => $roomId]);
+        $rfDecoded = json_decode((string) $rfStmt->fetchColumn(), true);
+        $rfCurrent = is_array($rfDecoded) ? $rfDecoded : [];
+    } catch (PDOException $e) { $rfCurrent = []; }
+}
+$rfPool = [];
+foreach ($AMENITY_GROUPS_HOSTEL as $rfGroup) {
+    $rfKeys = [];
+    foreach ($AMENITY_GROUPS[$rfGroup] as $rfKey) {
+        $rfKeys[] = ['key' => $rfKey, 'label' => $AMENITY_LABELS[$rfKey],
+                     'on' => in_array($rfKey, $rfCurrent, true)];
+    }
+    $rfPool[] = ['group' => $rfGroup, 'items' => $rfKeys];
+}
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -34,9 +58,9 @@ $roomFormCsrf = csrf_token();
   (No [5]: the stock AdminLTE library scripts were removed in this port —
   the team shell needs no JS.)
 
-  [SIM] marks simulation-only pieces (fake data / demo actions) that
-  exist so the mockup works on its own — delete or replace them when
-  the real database is connected.
+  [SIM] now marks only what is still deliberately simulated: the demo
+  advance buttons, which stand in for another person, another office or
+  the passage of time. The data is real.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -747,7 +771,7 @@ $roomFormCsrf = csrf_token();
              form happily took reservations.) Only a closure is a real
              decision, and a closure has DATES — so that is what is
              stored, and the customer-facing label is derived from it.
-             [SIM] nothing saves yet.
+             Saved by admin/room-save.php.
              ========================================================== -->
         <h2 class="vm-section-head">Maintenance</h2>
         <p class="vm-hint">A closure is a <strong>date window</strong>, not a label — the window is what actually stops bookings. Leave this off and the room behaves normally; there is no separate &ldquo;Available&rdquo; setting to keep in sync.</p>
@@ -816,10 +840,10 @@ $roomFormCsrf = csrf_token();
           </div>
         </div>
 
-        <div class="vm-field">
-          <label>Attributes</label>
-          <div id="vmGlancePool" class="vm-poolgrid"></div>
-        </div>
+        <!-- The pool that sat here was a vocabulary that mapped to nothing and
+             showed the same selections for every room. A hostel room is
+             described by its CR type, its bed count and its amenities, all of
+             which are real fields on this form. -->
 
         <hr class="vm-divider" />
 
@@ -959,7 +983,7 @@ $roomFormCsrf = csrf_token();
       function vmApiPost(action, extra) {
         var body = extra instanceof FormData ? extra : new FormData();
         body.append('action', action);
-        body.append('room_id', VM_ROOM_ID);
+        body.append('room_id', VM_ROOM_ID || '');
         body.append('csrf', VM_CSRF);
         return fetch(VM_API, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(vmParseApiResponse);
@@ -1162,13 +1186,14 @@ $roomFormCsrf = csrf_token();
          moment you add/remove/reorder them (see vmApiPost above); Name and
          Location save here, to rooms.name / rooms.venue_id via
          admin/room-save.php. Beds, CR type, rate, maintenance and amenities
-         on this form are still [SIM] — same as everywhere else in this
+         on this form are saved on CREATE; on an edit only name, location and
          mockup — so the confirmation says so rather than pretend. */
       function vmSaveChanges() {
-        if (!VM_ROOM_ID) {
-          alert('This form can\'t create a new room yet — open an existing room from Venue Management to add photos and a 360° tour.');
-          return;
-        }
+        /* No room id = CREATE. The screen always offered "Add Room"; it used
+           to answer with an alert saying it could not. room-save.php generates
+           the room_code (r9, h6) rather than letting anyone type one, because
+           that code is also the photo folder on disk. */
+        var isNew = !VM_ROOM_ID;
         var name = document.getElementById('roomName').value.trim();
         var venueTrigger = document.querySelector('#roomLoc .vm-dd-trigger');
         var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
@@ -1176,16 +1201,17 @@ $roomFormCsrf = csrf_token();
         if (!venue || venue === 'Select a venue') { alert('Choose a location.'); return; }
 
         var body = new FormData();
-        body.append('room_id', VM_ROOM_ID);
+        body.append('room_id', VM_ROOM_ID || '');
         body.append('name', name);
         body.append('venue', venue);
         body.append('room_type', 'hostel');
+        body.append('amenities', JSON.stringify(selectedAmenities()));
         body.append('csrf', VM_CSRF);
         fetch('room-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.ok) { alert(res.message || 'Could not save the room.'); return; }
-            alert('Room saved.\n\n(Beds, CR type, rate, maintenance and amenities on this form are not connected to storage yet.)');
+            alert(res.message || 'Room saved.');
             location.href = 'venue-management.php';
           })
           .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
@@ -1198,7 +1224,7 @@ $roomFormCsrf = csrf_token();
          hard-coded {label, icon} catalogs, chip toggling (staff just
          pick what applies), and the "Other" free-text chip. Same
          pools the customer page reads from.
-         [SIM] chip selections are not saved anywhere yet — the real
+         Chip selections ARE saved, as amenity KEYS in rooms.amenities. The
          app will store the chosen tags on the room record. (The
          catalogs themselves are meant to stay hard-coded.)
          ============================================================ -->
@@ -1235,48 +1261,37 @@ $roomFormCsrf = csrf_token();
         // Hard-coded pools. `on:true` = pre-selected (this is the Edit state).
         // Hostel catalog — NOT the event-room list. A guest picking a bed cares
         // about the bathroom, the aircon and whether their bag is safe.
-        var GLANCE = [
-          { l: 'Air-conditioned', i: I.wind, on: true },
-          { l: 'Private CR in-room', i: I.door },
-          { l: 'Shared CR outside', i: I.door, on: true },
-          { l: 'Hot shower', i: I.wind },
-          { l: 'Step-free access', i: I.access },
-          { l: 'Ground floor', i: I.small },
-          { l: 'Natural lighting', i: I.window, on: true },
-          { l: 'Quiet side', i: I.sun },
-          { l: 'Wi-Fi', i: I.wifi, on: true },
-          { l: 'Near the front desk', i: I.door },
-        ];
-        var AMENITIES = [
-          { l: 'Bunk beds', i: I.chair, on: true },
-          { l: 'Personal locker per bed', i: I.box, on: true },
-          { l: 'Reading light per bed', i: I.window, on: true },
-          { l: 'Power outlet per bed', i: I.power, on: true },
-          { l: 'Study table', i: I.table },
-          { l: 'Clothes rack', i: I.door },
-          { l: 'Electric fan', i: I.wind },
-          { l: 'Communal lounge access', i: I.coffee, on: true },
-          { l: 'Drinking water station', i: I.coffee },
-          { l: 'Linens provided', i: I.box, on: true },
-        ];
+        /* The hostel vocabulary, grouped, with this room's own selections. */
+        var AMENITY_POOL = <?php echo json_encode($rfPool, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 
         var CHECK = '<svg class="vm-chip-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 
-        function build(id, arr) {
-          var el = document.getElementById(id);
+        function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+        /* Chips carry their KEY, never their label — rewording a label must not
+           orphan the rooms that have it. */
+        function buildAmenities() {
+          var el = document.getElementById('vmAmenityPool');
           if (!el) return;
-          el.innerHTML = arr
-            .map(function (o) {
-              return (
-                '<button type="button" class="vm-chip' + (o.on ? ' selected' : '') + '" aria-pressed="' + (o.on ? 'true' : 'false') + '">' +
-                o.i + '<span>' + o.l + '</span>' + CHECK + '</button>'
-              );
-            })
-            .join('');
+          el.innerHTML = AMENITY_POOL.map(function (g) {
+            return '<div class="vm-pool-group" style="grid-column:1/-1;margin:.5rem 0 .15rem;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8a857d">' +
+                   esc(g.group) + '</div>' +
+                   g.items.map(function (o) {
+                     return '<button type="button" class="vm-chip' + (o.on ? ' selected' : '') +
+                            '" data-amenity="' + esc(o.key) + '" aria-pressed="' + (o.on ? 'true' : 'false') + '">' +
+                            '<span>' + esc(o.label) + '</span>' + CHECK + '</button>';
+                   }).join('');
+          }).join('');
         }
 
-        build('vmGlancePool', GLANCE);
-        build('vmAmenityPool', AMENITIES);
+        function selectedAmenities() {
+          return Array.prototype.slice
+            .call(document.querySelectorAll('#vmAmenityPool .vm-chip.selected'))
+            .map(function (c) { return c.getAttribute('data-amenity'); })
+            .filter(Boolean);
+        }
+
+        buildAmenities();
 
         // Toggle a chip on click (mockup: just flips the visual selected state).
         document.addEventListener('click', function (e) {

@@ -7,55 +7,16 @@
    Rewired to OUR shared shell (header.php + sidebar.php) and restyled
    to the team palette. Same table/filter/export behavior.
 
-   [SIM] the $placeholderBookings array below is demo data — replace the
-   whole block with a real "SELECT ... FROM transactions" query later.
-   Rooms are the real r1–r8 venue rooms (includes/venue-rooms.php) with
-   amounts matching each room's per-day fee; methods are GCash/Cash only.
-   Customer names are varied on purpose (admin sees every customer, not
-   just the session user).
+   The rows come from transaction_rows() in includes/bookings.php — the
+   same builder the CUSTOMER ledger uses, unscoped so staff see every
+   customer. Both pages were hand-written arrays of invented people
+   before, and they named different customers for the same reference.
    ================================================================== */
+require_once __DIR__ . '/../includes/bookings.php';
 
-// [SIM] demo bookings → each becomes one transaction row (delete when DB is wired).
-$placeholderBookings = [
-    ['bookingId'=>'VB-2026-001','customerName'=>'Juan Miguel Dela Cruz','venue'=>'USeP Gymnasium','eventDate'=>'2026-07-18','bookingDate'=>'2026-06-22','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Approved','amount'=>8000],
-    ['bookingId'=>'VB-2026-002','customerName'=>'Marco Santos','venue'=>'CIC Audio-Visual Room','eventDate'=>'2026-07-20','bookingDate'=>'2026-06-24','paymentMethod'=>'Cash','paymentStatus'=>'Pending','status'=>'Pending','amount'=>2000],
-    ['bookingId'=>'VB-2026-003','customerName'=>'Janelle Cruz','venue'=>'Alumni Grand Ballroom','eventDate'=>'2026-07-22','bookingDate'=>'2026-06-25','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Completed','amount'=>5000],
-    ['bookingId'=>'VB-2026-004','customerName'=>'Derek Villanueva','venue'=>'Alumni Boardroom','eventDate'=>'2026-07-25','bookingDate'=>'2026-06-27','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Approved','amount'=>1500],
-    ['bookingId'=>'VB-2026-005','customerName'=>'Bianca Reyes','venue'=>'Obrero Function Hall','eventDate'=>'2026-07-26','bookingDate'=>'2026-06-29','paymentMethod'=>'Cash','paymentStatus'=>'Unpaid','status'=>'Rejected','amount'=>3000],
-    ['bookingId'=>'VB-2026-006','customerName'=>'Paolo Navarro','venue'=>'Admin Conference Hall','eventDate'=>'2026-07-28','bookingDate'=>'2026-07-01','paymentMethod'=>'Cash','paymentStatus'=>'Pending','status'=>'Pending','amount'=>1800],
-    ['bookingId'=>'VB-2026-007','customerName'=>'Hannah Flores','venue'=>'Alumni Grand Ballroom','eventDate'=>'2026-08-02','bookingDate'=>'2026-07-03','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Approved','amount'=>5000],
-    ['bookingId'=>'VB-2026-008','customerName'=>'Carlo Ramirez','venue'=>'Heritage Function Room','eventDate'=>'2026-08-04','bookingDate'=>'2026-07-05','paymentMethod'=>'Cash','paymentStatus'=>'Refunded','status'=>'Completed','amount'=>2500],
-    ['bookingId'=>'VB-2026-009','customerName'=>'Sofia Aquino','venue'=>'USeP Gymnasium','eventDate'=>'2026-08-06','bookingDate'=>'2026-07-06','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Completed','amount'=>8000],
-    ['bookingId'=>'VB-2026-010','customerName'=>'Miguel Castillo','venue'=>'Admin Conference Hall','eventDate'=>'2026-08-08','bookingDate'=>'2026-07-08','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Approved','amount'=>1800],
-    ['bookingId'=>'VB-2026-011','customerName'=>'Andrea Torres','venue'=>'USeP Gymnasium','eventDate'=>'2026-08-10','bookingDate'=>'2026-07-10','paymentMethod'=>'Cash','paymentStatus'=>'Pending','status'=>'Pending','amount'=>8000],
-    ['bookingId'=>'VB-2026-012','customerName'=>'Nathan Garcia','venue'=>'Obrero Function Hall','eventDate'=>'2026-08-12','bookingDate'=>'2026-07-12','paymentMethod'=>'GCash','paymentStatus'=>'Refunded','status'=>'Rejected','amount'=>3000],
-    ['bookingId'=>'VB-2026-013','customerName'=>'Grace Lim','venue'=>'Alumni Grand Ballroom','eventDate'=>'2026-08-14','bookingDate'=>'2026-07-14','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Approved','amount'=>5000],
-    ['bookingId'=>'VB-2026-014','customerName'=>'Marco Santos','venue'=>'Heritage Function Room','eventDate'=>'2026-08-18','bookingDate'=>'2026-07-15','paymentMethod'=>'GCash','paymentStatus'=>'Paid','status'=>'Approved','amount'=>2500],
-    /* [SIM] post-pay rows (DB-DECISIONS #18): approved but the event is still ahead
-       ("Payment pending"), finished and inside the window ("Payment due"), window missed ("Overdue"). */
-    ['bookingId'=>'VB-2026-016','customerName'=>'Nina Bautista','venue'=>'CIC Audio-Visual Room','eventDate'=>'2026-08-24','bookingDate'=>'2026-07-18','paymentMethod'=>'GCash','paymentStatus'=>'Payment pending','status'=>'Approved','amount'=>2000],
-    ['bookingId'=>'VB-2026-017','customerName'=>'Ramon Ortega','venue'=>'Obrero Function Hall','eventDate'=>'2026-07-15','bookingDate'=>'2026-06-20','paymentMethod'=>'Cash','paymentStatus'=>'Payment due','status'=>'Completed','amount'=>3000],
-    ['bookingId'=>'VB-2026-018','customerName'=>'Liza Mercado','venue'=>'Alumni Boardroom','eventDate'=>'2026-07-06','bookingDate'=>'2026-06-12','paymentMethod'=>'GCash','paymentStatus'=>'Overdue','status'=>'Completed','amount'=>1500],
-    ['bookingId'=>'VB-2026-015','customerName'=>'Janelle Cruz','venue'=>'CIC Audio-Visual Room','eventDate'=>'2026-08-20','bookingDate'=>'2026-07-16','paymentMethod'=>'Cash','paymentStatus'=>'Paid','status'=>'Completed','amount'=>2000],
-];
-
-// Shape rows exactly like the future database result columns.
-$transactionRows = [];
-foreach ($placeholderBookings as $index => $booking) {
-    $transactionRows[] = [
-        'transactionId'   => 'TXN-2026-' . str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT),
-        'bookingId'       => $booking['bookingId'],
-        'customerName'    => $booking['customerName'],
-        'venue'           => $booking['venue'],
-        'eventDate'       => date('F j, Y', strtotime($booking['eventDate'])),
-        'transactionDate' => date('F j, Y', strtotime($booking['bookingDate'])),
-        'amount'          => '₱' . number_format($booking['amount']),
-        'paymentMethod'   => $booking['paymentMethod'],
-        'paymentStatus'   => $booking['paymentStatus'],
-        'bookingStatus'   => $booking['status'],
-    ];
-}
+$transactionRows = transaction_rows();     // every customer — this is the staff view
 $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
+?>
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -66,7 +27,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
     [3] SIDEBAR       shared include ($active = 'Transaction History')
     [4] PAGE CONTENT  title, filters, export toolbar, table container
     [6] PAGE SCRIPT   Tabulator table + filtering + CSV/JSON/print
-  [SIM] = demo-only, replace at database time.
+  Rows come from transaction_rows() in includes/bookings.php.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -299,7 +260,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
          ============================================================ -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
-        // [SIM] rows come from the PHP demo block above (swap for DB rows later).
+        // Rows come from transaction_rows() — every customer, staff view.
         const rows = <?php echo $transactionRowsJson; ?>;
         const emptyTransactionMessage = 'No transactions found.';
 

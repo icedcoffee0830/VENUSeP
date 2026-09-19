@@ -1,9 +1,152 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
-/* The demo customer's own bookings, from THE one source — a refund they filed
-   has to be openable here. Until the database exists the two mockups keep
-   separate seed data; at DB time both sides SELECT the same `bookings` row. */
-require_once __DIR__ . '/../includes/customer-bookings.php';
+/* THE REQUEST DETAIL — built from the same `bookings` rows the queue and the
+   customer's own history read (includes/bookings.php). This was a hand-written
+   map of eight invented requests keyed 'BRQ-2432'; a refund the customer filed
+   could only reach it through browser storage, and only in the same browser.
+   Every request is now simply a row, keyed by its real reference. */
+require_once __DIR__ . '/../includes/bookings.php';
+
+$brqAll = bookings_all();
+
+/* Which ID document was attached, and whether staff have accepted it. The
+   discount depends on this: a USeP ID that staff VERIFIED earns it, a claim
+   alone never does (DB-DECISIONS #3). */
+function brqIdLabel(array $b) {
+    if ($b['isWalkIn'])  return 'Presented at the counter';
+    if (!$b['isUsep'])   return 'Government-issued ID';
+    return $b['usepVerified'] ? 'USeP ID (verified)' : 'USeP ID (submitted)';
+}
+function brqIdStatus(array $b) {
+    if ($b['reservationCode'] === 'pending')  return 'pending';
+    if ($b['reservationCode'] === 'rejected') return 'rejected';
+    return 'approved';
+}
+
+$brqData = [];
+foreach ($brqAll as $b) {
+    $isHostel = $b['type'] === 'hostel';
+
+    /* The per-day schedule. Days live in venue_booking_slots, so a booking that
+       BOOKED AROUND a closed day simply has a gap here — which is the honest
+       thing to show staff, rather than a range implying it holds the blocked
+       day too. */
+    $sched = [];
+    foreach (booking_slots($b['id']) as $s) {
+        $sched[] = [
+            'd' => date('D, M j', strtotime($s['slot_date'])),
+            't' => date('g:i A', strtotime($s['start_time'])) . ' – ' . date('g:i A', strtotime($s['end_time'])),
+        ];
+    }
+
+    $occ = [];
+    if ($isHostel) {
+        foreach (booking_occupants($b['id']) as $o) {
+            $occ[] = ['n' => $o['full_name'], 'g' => $o['gender'] === 'female' ? 'F' : ($o['gender'] === 'male' ? 'M' : 'O')];
+        }
+    }
+
+    /* The refund claim, when there is one. It used to reach this page only
+       through browser storage, so staff on any other machine saw nothing. */
+    $refund = null;
+    $rfStmt = venusep_db()->prepare(
+        'SELECT refund_status, reason_category, reason, amount_requested, refund_to_number,
+                official_receipt_pending, correction_attempts, notes, requested_at, resubmitted_at
+           FROM refunds WHERE booking_id = :b ORDER BY id DESC LIMIT 1'
+    );
+    $rfStmt->execute([':b' => $b['id']]);
+    if ($rf = $rfStmt->fetch()) {
+        $stageMap = [
+            'requested'               => 'Under verification',
+            'under_review'            => 'Under verification',
+            'returned_for_correction' => 'Returned for correction',
+            'approved'                => $rf['official_receipt_pending'] ? 'Awaiting Official Receipt' : 'Approved · payout pending',
+            'rejected'                => 'Denied',
+            'completed'               => 'Refunded',
+            'withdrawn'               => 'Withdrawn by the customer',
+        ];
+        $refund = [
+            'stage'     => $stageMap[$rf['refund_status']] ?? $rf['refund_status'],
+            'orPending' => (bool) $rf['official_receipt_pending'],
+            'reason'    => str_replace('_', ' ', $rf['reason_category']),
+            'details'   => (string) $rf['reason'],
+            'refundTo'  => (string) $rf['refund_to_number'],
+            'filed'     => date('M j, Y', strtotime($rf['requested_at'])),
+            'docs'      => $rf['refund_status'] === 'returned_for_correction'
+                            ? 'Returned to the customer: ' . ($rf['notes'] ?: 'correction requested')
+                            : 'Transaction receipt + proof of payment submitted · '
+                              . ($rf['official_receipt_pending'] ? 'Official Receipt NOT yet provided' : 'Official Receipt provided'),
+        ];
+    }
+
+    $rec = booking_receipt($b['id']);
+    $receipt = $rec ? [
+        'ref'    => $rec['reference_number'],
+        'amount' => '₱' . number_format(((int) $rec['amount_centavos']) / 100, 2),
+        'date'   => $rec['receipt_datetime'] ? date('M j, Y · g:i A', strtotime($rec['receipt_datetime'])) : '—',
+        'to'     => (string) $rec['receiver_number'],
+        'conf'   => $rec['ocr_confidence'] !== null ? round((float) $rec['ocr_confidence']) . '%' : '—',
+        'flags'  => $rec['flags'],
+    ] : null;
+
+    $row = [
+        'id'        => $b['bookingId'],
+        'kind'      => $isHostel ? 'hostel' : 'venue',
+        'name'      => $b['customerName'],
+        'type'      => $b['isWalkIn'] ? 'Walk-in' : ($b['isUsep'] ? 'USeP affiliated' : 'Non-USeP'),
+        'email'     => $b['customerEmail'] !== '' ? $b['customerEmail'] : '—',
+        'phone'     => $b['customerPhone'],
+        'event'     => $b['eventName'],
+        'room'      => $b['roomName'],
+        'venue'     => $b['venueName'],
+        'capacity'  => $b['capacity'],
+        'attendees' => $b['attendees'],
+        'total'     => $b['amount'],
+        'payBy'     => $b['payment']['payByLabel'],
+        'method'    => strtolower($b['method']),
+        'submitted' => date('M j, Y · g:i A', strtotime($b['bookingDateIso'])),
+        'res'       => $b['reservationCode'],
+        'pay'       => $b['paymentCode'],
+        'idStatus'  => brqIdStatus($b),
+        'idLabel'   => brqIdLabel($b),
+        'discountPercent' => $b['discountPercent'],
+        'receipt'   => $receipt,
+        /* Ids only — the bytes come from document-view.php, which runs its own
+           permission check rather than trusting this list to have been built
+           for the right person. */
+        'docs'      => booking_document_ids($b['id']),
+        'receiptId' => $rec ? (int) $rec['id'] : null,
+        'refund'    => $refund,
+        'refundTo'  => $refund ? $refund['refundTo'] : null,
+        'tl'        => booking_history_events($b),
+    ];
+
+    if ($isHostel) {
+        $row += [
+            'crType'    => $b['crType'] === 'private' ? 'Private CR' : 'Communal CR',
+            'checkIn'   => date('M j, Y', strtotime($b['eventDateIso'])),
+            'checkOut'  => date('M j, Y', strtotime($b['endDateIso'])),
+            'nights'    => $b['nights'],
+            'rate'      => '₱' . number_format($b['roomPrice'] / max(1, $b['beds'] * max(1, $b['nights']))),
+            'occupants' => $occ,
+            'pos'       => $b['pos'] !== '' ? $b['pos'] : null,
+            'or'        => $b['officialReceipt'] !== '' ? $b['officialReceipt'] : null,
+            'checkedIn' => $b['checkedIn'],
+        ];
+    } else {
+        $row += [
+            'dates'   => $b['eventDateIso'] === $b['endDateIso']
+                            ? date('M j, Y', strtotime($b['eventDateIso']))
+                            : date('M j', strtotime($b['eventDateIso'])) . ' – ' . date('M j, Y', strtotime($b['endDateIso'])),
+            'startIso'=> $b['eventDateIso'],
+            'endIso'  => $b['endDateIso'],
+            'feeDay'  => '₱' . number_format($b['days'] > 0 ? $b['roomPrice'] / $b['days'] : $b['roomPrice']),
+            'days'    => $b['days'],
+            'sched'   => $sched,
+        ];
+    }
+    $brqData[$b['bookingId']] = $row;
+}
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -21,9 +164,9 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
   (No [5]: the stock AdminLTE library scripts were removed in this port —
   the team shell needs no JS.)
 
-  [SIM] marks simulation-only pieces (fake data / demo actions) that
-  exist so the mockup works on its own — delete or replace them when
-  the real database is connected.
+  [SIM] now marks only what is still deliberately simulated: the demo
+  advance buttons, which stand in for another person, another office or
+  the passage of time. The data is real.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -226,21 +369,21 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
 <!-- ============================================================
          [6] PAGE SCRIPT — everything on this page (demo, no backend):
          · RES / PAY / REF   status-code → badge label + color maps
-         · DATA [SIM]        9 fake requests, one per payment status —
+         · DATA              every real booking, keyed by its reference —
                              the real page will load ONE request from
                              the database using the ?id= in the URL
          · header + actions  contextual buttons per current status
          · cards             Customer & ID / Reservation / Payment
                              (receipt evidence, flags, override box)
          · timeline          the audit trail of status changes
-         · demo actions [SIM] change the page in memory only (refresh
+         · staff actions     post to admin/booking-action.php (refresh
                              resets) — the real app will POST to the
                              server and save to the database
          ============================================================ -->
     <!-- Shared refund state — the ONE source, also included by both customer
          pages. Must load BEFORE this page's script, which reads and writes it. -->
     <?php include __DIR__ . '/../includes/pricing.php'; ?>
-    <?php include __DIR__ . '/../includes/refund-store.php'; ?>
+    <?php /* refund-store.php is gone: refunds are `refunds` rows now. */ ?>
     <!-- Tesseract + the shared GCash engine. The SAME checker the customer uses
          to prove they paid in; here it proves staff paid out. It needs no changes
          for that — it asks the page whose account the money must land in, and
@@ -251,258 +394,92 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
       /* Booking Request detail — one full window per request (mockup).
          Reads ?id=BRQ-xxxx; actions update badges + timeline in-page (demo only).
          Statuses follow the agreed payment-status taxonomy. */
-      const RES = {
-        pending:  { t: 'Reservation pending review', c: 'b-amber' },
-        approved: { t: 'Reservation approved',       c: 'b-green' },
-        released: { t: 'Slot released',              c: 'b-gray'  },
-      };
-      const PAY = {
-        locked:        { t: 'Payment locked',              c: 'b-gray'  },
-        /* HOSTEL ONLY. The one genuinely new state the CEDU flow adds: the
-           customer has booked and cannot pay yet, but nothing is wrong and
-           nobody is waiting on THEM — staff are out fetching the POS. Every
-           other waiting state in this list waits on the customer. */
-        await_pos:     { t: 'Awaiting POS · CEDU',         c: 'b-amber' },
-        await_gcash:   { t: 'Awaiting payment · GCash',    c: 'b-amber' },
-        await_cash:    { t: 'Awaiting payment · Cash',     c: 'b-amber' },
-        auto_pass:     { t: 'Receipt passed auto-check',   c: 'b-navy'  },
-        review:        { t: 'Receipt · manual review',     c: 'b-amber' },
-        rejected:      { t: 'Receipt rejected',            c: 'b-red'   },
-        confirmed:     { t: 'Payment confirmed',           c: 'b-green' },
-        paid_cash:     { t: 'Paid at cashier',             c: 'b-green' },
-        overdue:       { t: 'Payment overdue',             c: 'b-red'   },
-        /* POST-PAY (DB-DECISIONS #18): approved while refunds were OFF — nothing
-           can be paid until the event is over, then it is due within the grace days. */
-        await_event:   { t: 'Payment due after event',     c: 'b-gray'  },
-        refund_req:    { t: 'Refund · under verification', c: 'b-navy'  },
-        refund_done:   { t: 'Refunded',                    c: 'b-green' },
-        refund_denied: { t: 'Refund denied',               c: 'b-red'   },
-        /* NOT a denial — a paperwork problem handed back with a window to fix it.
-           Agreed 2026-09-09: denial is final, so a blurry receipt must not be one. */
-        refund_fix:    { t: 'Refund · returned for correction', c: 'b-amber' },
-      };
+      /* Badges for EVERY status the database defines — status_badge_maps() in
+         includes/bookings.php reads the lookup tables. These were hand-written
+         here and covered three reservation codes out of seven: opening a
+         completed, cancelled, rejected or disrupted booking threw on the
+         undefined lookup below and left staff a blank page.
+
+         Two states worth naming: `await_pos` is HOSTEL ONLY and is the one
+         waiting state that waits on another OFFICE rather than the customer,
+         and `refund_correction` is NOT a denial — it is a paperwork problem
+         handed back with a window to fix it (agreed 2026-09-09: denial is
+         final, so a blurry receipt must never be one). */
+      const RES = <?php echo json_encode(status_badge_maps()['res'], JSON_UNESCAPED_UNICODE); ?>;
+      const PAY = <?php echo json_encode(status_badge_maps()['pay'], JSON_UNESCAPED_UNICODE); ?>;
+
+      /* Last line of defence: a code with no badge must still open the page. */
+      function resBadge(code) { return RES[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
+      function payBadge(code) { return PAY[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
+
+      /* A refund claim that is still OPEN — staff can still decide it. All four
+         map to the same panel and the same three outcomes; the difference
+         between them is only what the customer is waiting for. The server
+         re-checks the refund row before recording anything (booking-action.php),
+         so this list decides what is OFFERED, never what is allowed. */
+      const OPEN_REFUND = ['refund_requested', 'refund_await_or', 'refund_processing', 'refund_correction'];
+
+      /* Reservations nobody can act on any more — the event happened, the
+         request was refused, or the dates went back on sale. */
+      const CLOSED_RES = ['completed', 'cancelled', 'rejected', 'released'];
 
       /* PAYMENT TIMING follows the refund switch — the shared rule from
          includes/refund-policy.php (same as every customer page). Rows carry
          startIso/endIso so approve() can compute the pay-by for either policy. */
       <?php echo payment_policy_js(); ?>
-      const DATA = {
-        'BRQ-2432': { id:'BRQ-2432', name:'Nina Bautista', type:'Faculty · CIC', email:'nbautista@usep.edu.ph', phone:'0917 301 5566',
-          event:'CIC Thesis Colloquium', room:'CIC Audio-Visual Room', venue:'USeP Venues', capacity:120, attendees:80,
-          dates:'Jul 30, 2026', startIso:'2026-07-30', endIso:'2026-07-30', feeDay:'₱2,000', days:1, total:'₱2,000', payBy:'Aug 2, 2026', method:'gcash',
-          submitted:'Jul 14, 2026 · 10:20 AM', res:'approved', pay:'await_event', idStatus:'approved', idLabel:'USeP Faculty ID',
-          sched:[{d:'Thu, Jul 30',t:'8:00 AM – 12:00 PM'}],
-          tl:[{w:'Jul 14 · 10:20 AM — Customer',x:'Booking submitted',m:'Single-day request with USeP Faculty ID attached. Customer confirmed the booking is non-refundable.'},
-              {w:'Jul 14 · 3:05 PM — M. Robles (staff)',x:'ID + reservation approved',m:'Post-pay booking: payment opens after Jul 30 and is due by Aug 2 (3 days after the event).'}] },
+      /* EVERY request, from the database, keyed by its real reference. */
+      const DATA = <?php echo json_encode($brqData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+      const CSRF = <?php echo json_encode(csrf_token()); ?>;
 
-        'BRQ-2431': { id:'BRQ-2431', name:'Juan Miguel Dela Cruz', type:'Student · CIC', email:'jmdelacruz@usep.edu.ph', phone:'0917 555 0123',
-          event:'CIC Research Colloquium', room:'Alumni Grand Ballroom', venue:'Bahay Alumni', capacity:300, attendees:220,
-          dates:'Jul 23 – 25, 2026', startIso:'2026-07-23', endIso:'2026-07-25', feeDay:'₱5,000', days:3, total:'₱15,000', payBy:'Jul 22, 2026', method:'gcash',
-          submitted:'Jul 14, 2026 · 9:02 AM', res:'pending', pay:'locked', idStatus:'pending', idLabel:'USeP Student ID',
-          sched:[{d:'Day 1 · Thu, Jul 23',t:'7:00 AM – 4:30 PM'},{d:'Day 2 · Fri, Jul 24',t:'7:00 AM – 4:30 PM'},{d:'Day 3 · Sat, Jul 25',t:'7:00 AM – 4:30 PM'}],
-          tl:[{w:'Jul 14 · 9:02 AM — Customer',x:'Booking submitted',m:'Multi-day request (3 days) with USeP Student ID attached.'}] },
+      /* ============================================================
+         STAFF ACTIONS — every one of them goes to admin/booking-action.php.
 
-        'BRQ-2430': { id:'BRQ-2430', name:'Maria Santos', type:'Faculty · CBA', email:'msantos@usep.edu.ph', phone:'0918 220 4411',
-          event:'CBA Faculty Planning Workshop', room:'Heritage Function Room', venue:'Bahay Alumni', capacity:80, attendees:45,
-          dates:'Jul 20, 2026', feeDay:'₱2,500', days:1, total:'₱2,500', payBy:'Jul 19, 2026', method:'gcash',
-          submitted:'Jul 12, 2026 · 2:15 PM', res:'approved', pay:'await_gcash', idStatus:'approved', idLabel:'USeP Employee ID',
-          sched:[{d:'Mon, Jul 20',t:'8:00 AM – 5:00 PM'}],
-          tl:[{w:'Jul 12 · 2:15 PM — Customer',x:'Booking submitted',m:'Single-day request with USeP Employee ID attached.'},
-              {w:'Jul 13 · 8:40 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline set to Jul 19 (1 day before the event).'}] },
-
-        'BRQ-2429': { id:'BRQ-2429', name:'Rafael Lim', type:'Org · JPIA', email:'jpia@usep.edu.ph', phone:'0917 884 2020',
-          event:'JPIA General Assembly', room:'CIC Audio-Visual Room', venue:'USeP Venues', capacity:120, attendees:110,
-          dates:'Jul 18, 2026', feeDay:'₱2,000', days:1, total:'₱2,000', payBy:'Jul 17, 2026', method:'gcash',
-          submitted:'Jul 13, 2026 · 10:05 AM', res:'approved', pay:'auto_pass', idStatus:'approved', idLabel:'USeP Student ID',
-          sched:[{d:'Sat, Jul 18',t:'1:00 PM – 6:00 PM'}],
-          receipt:{ ref:'3042 137 089838', amount:'₱2,000.00', date:'Jul 14, 2026 · 9:12 AM', to:'0995 194 ****', conf:'96%', flags:[] },
-          tl:[{w:'Jul 13 · 10:05 AM — Customer',x:'Booking submitted',m:'Single-day request with USeP Student ID attached.'},
-              {w:'Jul 13 · 11:20 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Jul 17.'},
-              {w:'Jul 14 · 9:12 AM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED: exact amount, correct receiver, fresh reference, receipt markers OK.'}] },
-
-        'BRQ-2428': { id:'BRQ-2428', name:'Ana Reyes', type:'Student · CoE', email:'areyes@usep.edu.ph', phone:'0916 300 7788',
-          event:'CoE Thesis Defense Panel', room:'Alumni Boardroom', venue:'Bahay Alumni', capacity:20, attendees:12,
-          dates:'Jul 21, 2026', feeDay:'₱1,500', days:1, total:'₱1,500', payBy:'Jul 20, 2026', method:'gcash',
-          submitted:'Jul 12, 2026 · 4:44 PM', res:'approved', pay:'review', idStatus:'approved', idLabel:'USeP Student ID',
-          sched:[{d:'Tue, Jul 21',t:'9:00 AM – 12:00 PM'}],
-          receipt:{ ref:'— (unreadable)', amount:'₱1,500.00', date:'Jun 27, 2026 · 3:41 PM', to:'MI....A J.. J.', conf:'41%',
-            flags:['Reference number could not be read','Receipt is more than 14 days old','OCR confidence is low — double-check against the image'] },
-          tl:[{w:'Jul 12 · 4:44 PM — Customer',x:'Booking submitted',m:'Single-day request with USeP Student ID attached.'},
-              {w:'Jul 13 · 9:02 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Jul 20.'},
-              {w:'Jul 14 · 8:31 AM — Customer',x:'GCash receipt uploaded',m:'Auto-check: NEEDS MANUAL REVIEW — 3 soft flags raised.'}] },
-
-        'BRQ-2427': { id:'BRQ-2427', name:'Leo Garcia', type:'Staff · OSAS', email:'lgarcia@usep.edu.ph', phone:'0919 555 6710',
-          event:'Student Leaders Summit', room:'Obrero Function Hall', venue:'USeP Venues', capacity:200, attendees:180,
-          dates:'Jul 24 – 27, 2026 (3 of 4 days)', feeDay:'₱3,000', days:3, total:'₱9,000', payBy:'Jul 23, 2026', method:'gcash',
-          submitted:'Jul 11, 2026 · 1:10 PM', res:'approved', pay:'rejected', idStatus:'approved', idLabel:'USeP Employee ID',
-          resubmitBy:'Jul 16, 2026 · 2:10 PM',
-          sched:[{d:'Day 1 · Fri, Jul 24',t:'8:00 AM – 5:00 PM'},{d:'Sat, Jul 25 — already booked',t:'Not available',skip:true},{d:'Day 2 · Sun, Jul 26',t:'8:00 AM – 5:00 PM'},{d:'Day 3 · Mon, Jul 27',t:'8:00 AM – 5:00 PM'}],
-          rejects:['Amount read ₱2,900.00 — this booking requires the EXACT total ₱9,000.00 (3 days × ₱3,000)','This exact image file was already submitted before (same fingerprint)'],
-          tl:[{w:'Jul 11 · 1:10 PM — Customer',x:'Booking submitted',m:'Range Jul 24–27; Jul 25 excluded automatically (already booked).'},
-              {w:'Jul 12 · 10:15 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Jul 23.'},
-              {w:'Jul 14 · 2:10 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check REJECTED: amount mismatch + duplicate file. 48-hour resubmit window started (ends Jul 16 · 2:10 PM).'}] },
-
-        'BRQ-2426': { id:'BRQ-2426', name:'Carmen Uy', type:'Faculty · CAS', email:'cuy@usep.edu.ph', phone:'0917 002 9931',
-          event:'CAS Research In-Service Training', room:'Admin Conference Hall', venue:'USeP Venues', capacity:60, attendees:40,
-          dates:'Jul 22, 2026', feeDay:'₱1,800', days:1, total:'₱1,800', payBy:'Jul 21, 2026', method:'cash',
-          submitted:'Jul 13, 2026 · 3:25 PM', res:'approved', pay:'await_cash', idStatus:'approved', idLabel:'USeP Employee ID',
-          sched:[{d:'Wed, Jul 22',t:'8:00 AM – 12:00 PM'}],
-          tl:[{w:'Jul 13 · 3:25 PM — Customer',x:'Booking submitted',m:'Single-day request; payment method: cash (walk-in).'},
-              {w:'Jul 13 · 4:50 PM — M. Robles (staff)',x:'ID + reservation approved',m:'Customer will pay at the cashier, quoting BRQ-2426, by Jul 21.'}] },
-
-        'BRQ-2425': { id:'BRQ-2425', name:'Paolo Mendoza', type:'Org · Honor Society', email:'honorsoc@usep.edu.ph', phone:'0916 777 1122',
-          event:'Recognition Night', room:'USeP Gymnasium', venue:'USeP Venues', capacity:1000, attendees:850,
-          dates:'Aug 2, 2026', feeDay:'₱8,000', days:1, total:'₱8,000', payBy:'Aug 1, 2026', method:'gcash',
-          submitted:'Jul 10, 2026 · 9:30 AM', res:'approved', pay:'confirmed', idStatus:'approved', idLabel:'USeP Student ID',
-          sched:[{d:'Sun, Aug 2',t:'3:00 PM – 10:00 PM'}],
-          receipt:{ ref:'2045 667 982375', amount:'₱8,000.00', date:'Jul 13, 2026 · 3:58 PM', to:'0995 194 ****', conf:'94%', flags:[] },
-          confirmedBy:'M. Robles · Jul 13, 2026 · 4:22 PM',
-          tl:[{w:'Jul 10 · 9:30 AM — Customer',x:'Booking submitted',m:'Single-day request with USeP Student ID attached.'},
-              {w:'Jul 10 · 11:00 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked.'},
-              {w:'Jul 13 · 3:58 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED.'},
-              {w:'Jul 13 · 4:22 PM — M. Robles (staff)',x:'Payment confirmed',m:'Reference 2045 667 982375 matched in GCash Transaction History. Reference locked.'}] },
-
-        'BRQ-2424': { id:'BRQ-2424', name:'Grace Tan', type:'Student · CIC', email:'gtan@usep.edu.ph', phone:'0918 445 9012',
-          event:'ACM Student Chapter Meetup', room:'Garden Pavilion', venue:'Bahay Alumni', capacity:150, attendees:95,
-          dates:'Jul 17, 2026', feeDay:'₱3,500', days:1, total:'₱3,500', payBy:'Jul 16, 2026 (passed)', method:'gcash',
-          submitted:'Jul 8, 2026 · 5:12 PM', res:'approved', pay:'overdue', idStatus:'approved', idLabel:'USeP Student ID',
-          sched:[{d:'Fri, Jul 17',t:'2:00 PM – 8:00 PM'}],
-          tl:[{w:'Jul 8 · 5:12 PM — Customer',x:'Booking submitted',m:'Single-day request with USeP Student ID attached.'},
-              {w:'Jul 9 · 8:30 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Jul 16.'},
-              {w:'Jul 16 · 11:59 PM — System',x:'Payment overdue',m:'No receipt submitted by the deadline. Slot is releasable.'}] },
-
-        'BRQ-2423': { id:'BRQ-2423', name:'Diego Cruz', type:'Alumni', email:'dcruz@alumni.usep.edu.ph', phone:'0917 660 3345',
-          event:'Batch ’16 Reunion Dinner', room:'Heritage Function Room', venue:'Bahay Alumni', capacity:80, attendees:70,
-          dates:'Sep 14, 2026', feeDay:'₱2,500', days:1, total:'₱2,500', payBy:'Sep 13, 2026', method:'gcash',
-          submitted:'Aug 10, 2026 · 7:48 PM', res:'approved', pay:'refund_req', idStatus:'approved', idLabel:'Government ID (Driver’s License)',
-          sched:[{d:'Mon, Sep 14',t:'5:00 PM – 10:00 PM'}],
-          receipt:{ ref:'2044 118 555209', amount:'₱2,500.00', date:'Aug 14, 2026 · 6:02 PM', to:'0995 194 ****', conf:'93%', flags:[] },
-          refund:{ stage:'Under verification', orPending:false,
-            reason:'Event cancelled by the organiser',
-            details:'The committee called off the reunion dinner after the caterer withdrew. We would rather have the fee back than move the date.',
-            docs:'System transaction receipt + GCash receipt + Official Receipt submitted · identity re-verified (email + password)' },
-          tl:[{w:'Aug 10 · 7:48 PM — Customer',x:'Booking submitted',m:'Single-day request with a government ID attached.'},
-              {w:'Aug 11 · 9:00 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Sep 13.'},
-              {w:'Aug 14 · 6:02 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED.'},
-              {w:'Aug 15 · 8:15 AM — M. Robles (staff)',x:'Payment confirmed',m:'Reference matched in GCash.'},
-              {w:'Sep 6 · 10:40 AM — Customer',x:'Refund requested',m:'Event cancelled by the organiser. All documents submitted; identity re-verified. Booking stays live until the refund completes.'}] },
-
-        /* [SIM] The SECOND refund request — the fresh one the queue shows as
-           "submitted today". It exists here as well as in booking-requests.php
-           because a queue row whose id is missing from DATA silently falls back
-           to another booking (see the lookup below), which would show staff the
-           wrong customer entirely. Every queue id needs a record here. */
-        'BRQ-2422': { id:'BRQ-2422', name:'Elena Bautista', type:'Faculty · CTET', email:'ebautista@usep.edu.ph', phone:'0919 224 7781',
-          event:'CTET Faculty Development Seminar', room:'Admin Conference Hall', venue:'USeP Venues', capacity:60, attendees:45,
-          dates:'Sep 30, 2026', feeDay:'₱1,800', days:1, total:'₱1,800', payBy:'Sep 29, 2026', method:'gcash',
-          submitted:'Aug 20, 2026 · 2:15 PM', res:'approved', pay:'refund_req', idStatus:'approved', idLabel:'USeP Faculty ID',
-          sched:[{d:'Wed, Sep 30',t:'8:00 AM – 5:00 PM'}],
-          receipt:{ ref:'2051 903 447126', amount:'₱1,800.00', date:'Aug 24, 2026 · 4:05 PM', to:'0918 334 ****', conf:'95%', flags:[] },
-          refund:{ stage:'Awaiting Official Receipt', orPending:true,
-            reason:'Schedule conflict — need a different date',
-            details:'The seminar moved to the second semester when the department calendar changed. Nobody will be using the hall on the 30th.',
-            docs:'System transaction receipt + GCash receipt submitted · Official Receipt not yet provided' },
-          tl:[{w:'Aug 20 · 2:15 PM — Customer',x:'Booking submitted',m:'Single-day request with a USeP Faculty ID attached.'},
-              {w:'Aug 21 · 9:10 AM — M. Robles (staff)',x:'ID + reservation approved',m:'Payment unlocked. Pay-by deadline Sep 29.'},
-              {w:'Aug 24 · 4:05 PM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED: exact amount, correct receiver, fresh reference.'},
-              {w:'Aug 25 · 8:30 AM — M. Robles (staff)',x:'Payment confirmed',m:'Reference matched in GCash Transaction History.'},
-              {w:'Sep 9 · 8:05 AM — Customer',x:'Refund requested',m:'Reason: schedule conflict — the seminar was moved to the second semester. Booking cancelled and the date released; all three receipts submitted.'}] },
-
-        /* ============================================================
-           [SIM] HOSTEL requests. Same queue, same detail page, same
-           receipt machinery — `kind:'hostel'` branches only the two
-           cards where the DATA genuinely differs (Reservation, Payment).
-
-           Note what is NOT here: a `beds` field. beds = occupants.length,
-           exactly as on the customer side. Storing both would let the
-           roster and the counter disagree.
-           ============================================================ */
-        'BRQ-2450': { kind:'hostel', id:'BRQ-2450', name:'Ana Reyes', type:'Student · CAS', email:'areyes@usep.edu.ph', phone:'0916 233 8890',
-          event:'Hostel stay · 2 beds', room:'Hostel Room 1', venue:'USeP Hostel', crType:'Communal CR',
-          checkIn:'Aug 1, 2026', checkOut:'Aug 4, 2026', nights:3, rate:'₱350', total:'₱2,100', method:'gcash',
-          occupants:[{n:'Ana Reyes',g:'F'},{n:'Bea Cruz',g:'F'}],
-          pos:null, or:null, checkedIn:false,
-          submitted:'Jul 15, 2026 · 8:41 AM', res:'approved', pay:'await_pos', idStatus:'approved', idLabel:'USeP Student ID',
-          tl:[{w:'Jul 15 · 8:41 AM — Customer',x:'Booking submitted',m:'2 beds for 3 nights, both guests named. Valid ID attached.'},
-              {w:'Jul 15 · 9:02 AM — R. Delos Reyes (staff)',x:'ID + reservation approved',m:'Payment stays locked — POS not requested yet.'},
-              {w:'Jul 15 · 9:05 AM — R. Delos Reyes (staff)',x:'POS request raised at CEDU',m:'Walked the booking over. Waiting on CEDU to issue the POS.'}] },
-
-        'BRQ-2451': { kind:'hostel', id:'BRQ-2451', name:'Luis Ramos', type:'Student · CIC', email:'lramos@usep.edu.ph', phone:'0918 771 2245',
-          event:'Hostel stay · 3 beds', room:'Hostel Room 4', venue:'USeP Hostel', crType:'Private CR',
-          checkIn:'Jul 20, 2026', checkOut:'Jul 22, 2026', nights:2, rate:'₱400', total:'₱2,400', method:'gcash',
-          occupants:[{n:'Luis Ramos',g:'M'},{n:'Mara Ilagan',g:'F'},{n:'Nico Perez',g:'M'}],
-          /* Confirmed and PAID, but the OR has not come back from the cashier.
-             This is the whole reason the OR is a document flag and not a payment
-             status: payment is finished, the paperwork is not. */
-          pos:'POS-48213', or:null, checkedIn:false,
-          submitted:'Jul 12, 2026 · 3:12 PM', res:'approved', pay:'confirmed', idStatus:'approved', idLabel:'USeP Student ID',
-          confirmedBy:'R. Delos Reyes (staff)',
-          receipt:{ ref:'2044 771 990412', amount:'₱2,400.00', date:'Jul 13, 2026 · 10:22 AM', to:'0917 123 ****', conf:'95%', flags:[] },
-          tl:[{w:'Jul 12 · 3:12 PM — Customer',x:'Booking submitted',m:'3 beds for 2 nights (mixed group), all guests named.'},
-              {w:'Jul 12 · 4:30 PM — R. Delos Reyes (staff)',x:'POS received from CEDU',m:'POS-48213 recorded. Payment unlocked.'},
-              {w:'Jul 13 · 10:22 AM — Customer',x:'GCash receipt uploaded',m:'Auto-check PASSED against the hostel staff account.'},
-              {w:'Jul 13 · 11:05 AM — R. Delos Reyes (staff)',x:'Payment confirmed',m:'Reference matched. Booking is confirmed; OR still to come.'},
-              {w:'Jul 13 · 2:00 PM — R. Delos Reyes (staff)',x:'Cash handed to the University Cashier',m:'Cashed out the GCash payment. Waiting on the OR.'}] },
-      };
+         These used to change `cur` in the browser and re-render, which looked
+         identical but persisted nothing: approving a booking left the customer
+         still seeing "Pending", and a refresh undid it. Now the server decides
+         what the booking becomes (sp_approve_booking knows a pre-pay hostel
+         approves into await_pos, a post-pay booking into await_event), and the
+         reply is what gets drawn — so the screen can never claim a state the
+         database did not reach.
+         ============================================================ */
+      let acting = false;
+      async function staffAction(action, extra, onOk) {
+        if (acting || !cur) return false;
+        acting = true;
+        const body = new URLSearchParams(Object.assign({ csrf: CSRF, booking: cur.id, action: action }, extra || {}));
+        try {
+          const res = await fetch('booking-action.php', { method: 'POST', body: body, credentials: 'same-origin' });
+          const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });
+          if (!out.ok) { cur.actionError = out.message || 'Nothing was changed.'; acting = false; render(); return false; }
+          cur.actionError = null;
+          if (out.booking) {
+            cur.res = out.booking.res;
+            cur.pay = out.booking.pay;
+            cur.total = out.booking.total;
+            cur.discountPct = out.booking.discount;
+            cur.payBy = out.booking.payBy;
+          }
+          if (typeof onOk === 'function') onOk(out);
+          acting = false; render(); return true;
+        } catch (e) {
+          cur.actionError = 'Could not reach the server, so nothing was changed.';
+          acting = false; render(); return false;
+        }
+      }
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
       const qid = new URLSearchParams(location.search).get('id');
 
-      /* [SIM] A refund the CUSTOMER filed has no record in DATA above — it lives
-         in the shared store (includes/refund-store.php) because there is no
-         database. Build the same record shape from the one-source booking plus
-         whatever the store holds, so this page renders it like any other request.
-         At DB time both come from the same `bookings` row and this disappears. */
-      const SESSION_CUSTOMER = 'Juan Miguel Dela Cruz';   /* PROJECT-HANDOFF 4.9 */
-      const CUSTOMER_BOOKINGS = <?php echo json_encode($customerBookings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-      /* The session customer's details, from the same include the customer pages
-         read — this page and customer-profile.php had drifted to two different
-         phone numbers, which matters now that the phone seeds a refund destination. */
-      const CUSTOMER_CONTACT = <?php echo json_encode($customerContact, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-      function storeRecord(ref) {
-        if (!window.RefundStore || !ref) return null;
-        const rec = RefundStore.get(ref);
-        const b = CUSTOMER_BOOKINGS.filter(function (x) { return x.bookingId === ref; })[0];
-        if (!rec || !b) return null;
-        const waited = RefundStore.daysSince(rec.filed);
-        return {
-          id: ref, name: SESSION_CUSTOMER, type: 'Student · CIC',
-          email: CUSTOMER_CONTACT.email, phone: CUSTOMER_CONTACT.phone,
-          refundTo: rec.refundTo || null,     /* the number the CUSTOMER declared */
-          event: b.eventName, room: b.roomName, venue: b.venueName,
-          capacity: b.capacity, attendees: b.attendees,
-          dates: b.eventDate, feeDay: b.amount, days: 1, total: b.amount,
-          payBy: b.eventDate, method: b.method === 'GCash' ? 'gcash' : 'cash',
-          submitted: b.bookingDate, res: 'approved',
-          pay: rec.status === 'fix' ? 'refund_fix' : 'refund_req',
-          idStatus: 'approved', idLabel: 'USeP Student ID',
-          sched: [],
-          receipt: null,
-          refund: {
-            stage: rec.status === 'fix' ? 'Returned for correction'
-                 : (rec.orPending ? 'Awaiting Official Receipt' : 'Under verification'),
-            orPending: !!rec.orPending,
-            reason: rec.reason,
-            details: rec.details,
-            docs: rec.status === 'fix'
-              ? 'Returned to the customer: ' + (rec.staffNote || 'correction requested')
-              : ('Transaction receipt + proof of payment submitted · '
-                 + (rec.orPending ? 'Official Receipt NOT yet provided' : 'Official Receipt provided'))
-          },
-          tl: [
-            { w: 'Filed ' + rec.filed + ' — Customer', x: 'Refund requested',
-              m: (rec.reason || 'No reason recorded') + '. ' + (rec.details || "")
-                 + ' Booking stays live until the refund completes.' }
-          ].concat(rec.resubmitted ? [{ w: 'Resubmitted ' + rec.resubmitted + ' — Customer', x: 'Corrected documents sent', m: 'Returned earlier for: ' + (rec.staffNote || 'a document problem') + '.' }] : [])
-           .concat(waited > 0 ? [{ w: 'Now', x: 'Awaiting a staff decision', m: 'No staff reply for ' + waited + ' day' + (waited === 1 ? "" : 's') + '.' }] : []),
-          fromStore: true
-        };
-      }
-      const storeCur = storeRecord(qid);
-      /* A VB- reference with nothing in the store must NOT fall through to the
-         default record — that would silently show staff a different customer. */
-      const missingCustomerRef = !DATA[qid] && !storeCur && String(qid || "").indexOf('VB-') === 0;
-      const cur = DATA[qid] || storeCur || (missingCustomerRef ? null : DATA['BRQ-2429']);
+      /* A refund the customer filed used to have no record here — it lived in
+         includes/refund-store.php, browser storage shared between two mockups
+         and invisible on any other machine. It is a `refunds` row now, joined
+         into DATA above, so a refund opens like any other request.
+
+         An unknown reference shows the "not found" state rather than falling
+         through to some other booking: silently showing staff a DIFFERENT
+         customer's request is the one failure this page must never have. */
+      const cur = DATA[qid] || null;
+      const missingCustomerRef = !cur && !!qid;
 
       /* ---- GCASH CHECKER WIRING FOR THE REFUND PAYOUT (staff → customer) ----
          The shared engine asks the page three questions. For a payment the money
@@ -596,7 +573,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         render();
       }
 
-      function completeRefund() {
+      async function completeRefund() {
         const note = ((document.getElementById('payoutNote') || {}).value || "").trim();
         const to   = normMobile(payoutTarget());
         if (!to) { cur.payoutErr = 'Enter the GCash number the refund was sent to — it is the account that paid.'; render(); return; }
@@ -616,8 +593,8 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         /* Write FIRST and check it landed. The customer can withdraw while this
            page is open; showing "Refunded" for a request that no longer exists
            would be a lie staff then act on. */
-        const wrote = pushOutcome('refunded', 'Refund sent to ' + to + (refNo ? ' · GCash ref ' + refNo : "") + (note ? ' · ' + note : ""), {
-          reference: refNo, amount: cur.total, to: to,
+        const wrote = await pushOutcome('refunded', 'Refund sent to ' + to + (refNo ? ' · GCash ref ' + refNo : "") + (note ? ' · ' + note : ""), {
+          reference: refNo, amount: cur.total, amountValue: refundCentavos() / 100, to: to,
           receiptFile: (state.ocr && state.ocr.fileName) || null,
           verified: payoutVerified()
         });
@@ -626,7 +603,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
           render(); return;
         }
         if (rec) gcRemember(rec);        /* consume ref + file hash only once the refund really landed */
-        cur.pay = 'refund_done'; cur.confirmedBy = 'You · just now';
+        cur.pay = 'refunded'; cur.confirmedBy = 'You · just now';
         cur.payoutOpen = false; cur.payoutErr = null;
         cur.tl.push({ w: now(), x: 'Refund completed', m: 'Sent to ' + to + (refNo ? ' (GCash ref ' + refNo + ')' : "")
           + (payoutVerified() ? ', receipt verified.' : ', recorded without a verified receipt: ' + note)
@@ -790,6 +767,17 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
 
       /* which buttons make sense right now (reservation-level, in the header) */
       function hdrActions() {
+        /* A finished booking is a RECORD, not a task. Most bookings in the
+           system are `completed`, and offering them the live queue's buttons
+           would invite staff to act on something that is already over. An open
+           refund is the exception: the booking is cancelled, but the claim it
+           was cancelled for can still be decided. */
+        if (CLOSED_RES.includes(cur.res) && !OPEN_REFUND.includes(cur.pay)) {
+          return `<span class="none">${esc(resBadge(cur.res).t)} &middot; this booking is closed &mdash; nothing left to act on</span>`;
+        }
+        if (cur.res === 'disrupted') {
+          return `<span class="none">The room was closed after this was approved &mdash; the customer has to be moved or refunded</span>`;
+        }
         /* Three outcomes when the customer claims affiliation, because approving
            the ID and granting the discount are different judgements. When they
            have not claimed it, there is nothing to decide — one approve button. */
@@ -798,7 +786,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
             : `<button class="br-btn br-btn-primary" onclick="approveIdRes(false)">Approve ID &amp; reservation</button>`)
           + `<button class="br-btn" onclick="rejectRequest()">Reject request</button>`;
         if (cur.pay === 'overdue') return `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
-        if (cur.pay === 'refund_req' || cur.pay === 'refund_fix') return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button><button class="br-btn" onclick="openAction('fix')">Return for correction</button><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
+        if (OPEN_REFUND.includes(cur.pay)) return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button><button class="br-btn" onclick="openAction('fix')">Return for correction</button><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
         /* Check-in is hostel-only: an event venue has no arrivals. It needs the
            OR in hand, because that is what the guest is asked to show. */
         if (cur.kind === 'hostel' && cur.pay === 'confirmed' && !cur.checkedIn) {
@@ -815,13 +803,20 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         const r = cur.receipt;
         return `
           <div style="display:flex;gap:0.85rem;margin-bottom:0.7rem">
-            <div class="br-receipt">receipt<br>screenshot</div>
+            ${cur.receiptId
+              /* The real screenshot, so staff can read the reference off it
+                 rather than trusting what the scanner claims it says. */
+              ? `<a href="../document-view.php?receipt=${cur.receiptId}" target="_blank" rel="noopener" title="Open the full-size receipt in a new tab">
+                   <img src="../document-view.php?receipt=${cur.receiptId}" alt="GCash receipt"
+                        style="display:block;width:120px;height:150px;object-fit:cover;background:#f4f4f4;border:1px solid var(--vm-border);border-radius:8px">
+                 </a>`
+              : `<div class="br-receipt">receipt<br>screenshot</div>`}
             <div class="br-kvgrid" style="flex:1;align-content:start">
               ${kv('Ref no.', esc(r.ref))}${kv('Amount read', esc(r.amount))}${kv('Amount required', esc(cur.total) + amountVerdict(r.amount, cur.total))}
               ${kv('Receipt date', esc(r.date))}${kv('Sent to', esc(r.to))}
             </div>
           </div>
-          <div style="color:var(--vm-muted);font-size:0.74rem;margin-bottom:0.5rem">OCR confidence ${r.conf} · duplicate check: file + reference not seen before</div>`;
+          <div style="color:var(--vm-muted);font-size:0.74rem;margin-bottom:0.5rem">OCR confidence ${r.conf} &middot; the reference and the file were not seen on any earlier booking</div>`;
       }
 
       /* ============================================================
@@ -892,6 +887,13 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
           case 'await_cash': return banner('bn-amber', 'Awaiting cash payment at the cashier', 'Confirm here once the cashier records the payment.') +
             `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}${kv('Where', 'USeP Cashier — Venue Reservations Window', true)}</div>
              <div style="margin-top:0.8rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Record cash payment</button></div>`;
+          /* NEITHER of the next two states exists in the database: an uploaded
+             receipt always lands in `under_review` (customer/payment-submit.php,
+             DB-DECISIONS #6) and rejecting one reopens `await_gcash`/`await_cash`
+             so the customer can resubmit. They are kept because they are the only
+             place the override-and-confirm box lives; reaching it again needs a
+             decision about how a rejected receipt should be recorded, which is a
+             separate question from this page rendering. */
           case 'auto_pass': return banner('bn-green', 'All automatic checks passed', 'Exact amount · correct receiver · fresh reference · genuine receipt markers.') + receiptBlock() +
             `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="rejectPay()">Reject after GCash check</button></div>
              <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.55rem">Find the reference number in the business GCash Transaction History before confirming.</div>`;
@@ -899,7 +901,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
              out loud that the customer is waiting on US. The pay-by deadline must
              not quietly expire while a receipt sits here: the customer did their
              part, and letting the slot lapse would punish them for our queue. */
-          case 'review': return banner('bn-amber', 'Needs manual review — the customer is waiting on you',
+          case 'under_review': return banner('bn-amber', 'Needs manual review — the customer is waiting on you',
               'The auto-check could not verify everything. Compare the fields against the screenshot; the amount required is shown beside the amount read.') + receiptBlock() +
             flags(cur.receipt.flags, '#c99a3c') +
             `<div class="br-banner bn-gray" style="margin-top:0.7rem"><div>Slot is held while this is with you
@@ -929,26 +931,42 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
           case 'paid_cash': return banner('bn-green', 'Paid at the cashier', esc(cur.confirmedBy || 'Recorded by staff') + ' · official receipt issued at the counter.');
           case 'overdue': return banner('bn-red', 'Payment overdue', 'The pay-by deadline (' + esc(cur.payBy) + ') passed with no valid payment. The slot can be released or the deadline extended.') +
             `<div class="br-kvgrid">${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
-          case 'refund_req':
-          case 'refund_fix': {
-            const pendingOR = !!(cur.refund && cur.refund.orPending);
-            const returned  = cur.pay === 'refund_fix';
+          case 'refund_requested':
+          case 'refund_await_or':
+          case 'refund_processing':
+          case 'refund_correction': {
+            const pendingOR = cur.pay === 'refund_await_or' || !!(cur.refund && cur.refund.orPending);
+            const returned  = cur.pay === 'refund_correction';
             const head = returned ? 'Returned to the customer for correction'
                        : (pendingOR ? 'Refund requested — awaiting Official Receipt'
-                                    : 'Refund requested — under verification');
+                       : (cur.pay === 'refund_processing' ? 'Refund approved — payout in progress'
+                                    : 'Refund requested — under verification'));
             const orNote = pendingOR
               ? ' <strong>The Official Receipt is still outstanding</strong> — the refund cannot be PAID until it arrives, but the claim can be decided on its merits now.'
               : "";
-            return banner(returned || pendingOR ? 'bn-amber' : 'bn-gray', head, esc(cur.refund.docs))
+            /* The `refunds` row can be gone (withdrawn, or an older booking
+               whose claim was purged) while the booking still carries a refund
+               payment status — the panel has to open either way. */
+            return banner(returned || pendingOR ? 'bn-amber' : 'bn-gray', head,
+                          esc(cur.refund ? cur.refund.docs : 'No refund paperwork is on file for this booking.'))
               + refundReasonBlock()
               + actionPanel()
               + payoutPanel()
               + (cur.receipt ? receiptBlock() : "")
               + `<div style="color:var(--vm-muted);font-size:0.76rem;line-height:1.55;margin-top:0.9rem">The booking is <strong>not cancelled</strong> while this is open — the date is released only once the refund is completed. Chain: Requested &rarr; Under verification &rarr; Refunded / Returned for correction / Denied.${orNote}</div>`;
           }
-          case 'refund_done': return banner('bn-green', 'Refunded — booking closed, date released', esc(cur.confirmedBy || 'Processed by staff') + ' · the refund was paid, so this booking is closed and its date is free to be booked again.');
+          case 'refunded': return banner('bn-green', 'Refunded — booking closed, date released', esc(cur.confirmedBy || 'Processed by staff') + ' · the refund was paid, so this booking is closed and its date is free to be booked again.');
           case 'refund_denied': return banner('bn-red', 'Refund denied — booking unaffected', esc(cur.denyReason || 'Requirements not met.') + ' A denial is final; the booking itself is untouched and remains the customer\u2019s.');
-          default: return '';
+          /* The deadline ran out and the system released the slot itself
+             (sp_expire_due_bookings). Nothing is owed and nothing can be paid —
+             the dates are already back on sale. */
+          case 'expired': return banner('bn-gray', 'Payment window expired — slot released',
+              'The pay-by deadline (' + esc(cur.payBy) + ') passed with no payment, so the system released the dates. They are bookable again.');
+          /* Never blank: an unrecognised code still has to name itself, or staff
+             are left looking at an empty panel with no way to tell whether the
+             booking is fine or the page is broken. */
+          default: return banner('bn-gray', esc(payBadge(cur.pay).t),
+              'There is no staff action for this payment state.');
         }
       }
 
@@ -969,7 +987,15 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         const usepAcct = typeof isUsepAccount === 'function' && isUsepAccount(cur.email);
         return `
           <div style="margin-top:0.85rem">
-            <div class="br-idtile">${esc(cur.idLabel)} — image</div>
+            ${cur.docs && cur.docs.customer_id
+              ? `<a href="../document-view.php?doc=${cur.docs.customer_id}" target="_blank" rel="noopener" title="Open the full-size ID in a new tab">
+                   <img src="../document-view.php?doc=${cur.docs.customer_id}" alt="${esc(cur.idLabel)}"
+                        style="display:block;width:100%;max-height:260px;object-fit:contain;background:#f4f4f4;border:1px solid var(--vm-border);border-radius:10px">
+                 </a>`
+              /* No document row: the booking is real but its ID never stored.
+                 Say so plainly — a staff member must not read an empty tile as
+                 "no ID was required". */
+              : `<div class="br-idtile">${cur.idStatus === 'pending' ? 'No ID file on record &mdash; ask the customer to re-upload' : esc(cur.idLabel) + ' &mdash; no file stored'}</div>`}
             <div style="align-items:center;display:flex;gap:0.5rem;justify-content:space-between;margin-top:0.6rem">
               <span class="br-badge ${st === 'approved' ? 'b-green' : st === 'rejected' ? 'b-red' : 'b-amber'}">${st === 'approved' ? 'ID approved' : st === 'rejected' ? 'ID rejected' : 'ID awaiting review'}</span>
               ${st === 'pending' ? '<span style="color:var(--vm-muted);font-size:0.74rem">Approve via the header button — it approves the ID and the reservation together.</span>' : ''}
@@ -1004,8 +1030,8 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
             </div>
             <div>
               <div style="display:flex;flex-wrap:wrap;gap:0.45rem;justify-content:flex-end;margin-bottom:0.6rem">
-                <span class="br-badge ${RES[cur.res].c}">${RES[cur.res].t}</span>
-                <span class="br-badge ${PAY[cur.pay].c}">${PAY[cur.pay].t}</span>
+                <span class="br-badge ${resBadge(cur.res).c}">${esc(resBadge(cur.res).t)}</span>
+                <span class="br-badge ${payBadge(cur.pay).c}">${esc(payBadge(cur.pay).t)}</span>
               </div>
               <div class="br-actions">${hdrActions()}</div>
             </div>
@@ -1087,94 +1113,81 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
          stores the % it received, so changing the live rate later never rewrites
          it. The rate the customer was quoted at booking is the rate they get. */
       function pesoStr(n) { return '₱' + Number(n).toLocaleString('en-PH'); }
-      function lockPrice(withDiscount) {
-        const fee  = parseFloat(String(cur.feeDay || "").replace(/[^0-9.]/g, "")) || 0;
-        const days = Number(cur.days) || 1;
-        const base = fee * days;
-        cur.discountPct = withDiscount ? DISCOUNT_PERCENT : 0;
-        cur.roomPrice   = pesoStr(base);
-        cur.total       = pesoStr(base - Math.round(base * cur.discountPct) / 100);
-      }
       /* Approving answers TWO questions: is the ID valid, and does it prove USeP
          affiliation? `withDiscount` is the second. A valid government ID is a yes
-         to the first and a no to the second — approved, at full price. */
+         to the first and a no to the second — approved, at full price.
+
+         The discount is applied and SNAPSHOTTED server-side, so a later change to
+         the live percentage cannot re-price a booking that was already quoted. */
       function approveIdRes(withDiscount) {
-        cur.idStatus = 'approved'; cur.res = 'approved';
-        lockPrice(!!withDiscount);
-        cur.tl.push({ w: now(), x: 'Affiliation ' + (withDiscount ? 'confirmed' : 'not confirmed'),
-          m: withDiscount
-            ? DISCOUNT_PERCENT + '% USeP discount applied from ' + cur.idLabel + '. Price locked at ' + cur.total + '.'
-            : 'ID accepted but it does not prove USeP affiliation. Full price ' + cur.total + '.' });
-        cur.idStatus = 'approved'; cur.res = 'approved';
-        /* HOSTEL: approving does NOT unlock payment. The POS has to come back
-           from CEDU first — that is the extra gate the venue flow does not have. */
-        /* POST-PAY (refunds OFF): approval only confirms the slot. Payment opens
-           after the last day and is due within the grace days — the DB does this
-           in sp_approve_booking() from the booking's refunds_allowed snapshot. */
-        if (!PAY_POLICY.prepay) {
-          const pb = payPolicyFor(cur.startIso || cur.endIso, cur.endIso);
-          cur.pay = 'await_event';
-          if (pb.payBy) cur.payBy = pb.label;
-          cur.tl.push({ w: now(), x: 'ID + reservation approved', m: 'Post-pay booking: payment opens ' + (pb.opensLabel || 'after the event') + ' and is due by ' + cur.payBy + ' (' + PAY_POLICY.graceDays + ' days after the event).' + (cur.kind === 'hostel' ? ' POS to be requested from CEDU after check-out.' : '') });
-          render(); return;
-        }
-        if (cur.kind === 'hostel') {
-          cur.pay = 'await_pos';
-          cur.tl.push({ w: now(), x: 'ID + reservation approved', m: 'Payment stays locked until the POS comes back from CEDU.' });
-          render(); return;
-        }
-        cur.pay = cur.method === 'cash' ? 'await_cash' : 'await_gcash';
-        cur.tl.push({ w: now(), x: 'ID + reservation approved', m: 'Payment unlocked. Pay-by deadline ' + cur.payBy + ' (1 day before the event).' });
-        render();
+        staffAction('approve', { discount: withDiscount ? '1' : '0' }, function () {
+          cur.idStatus = 'approved';
+          cur.tl.push({ w: now(), x: 'Affiliation ' + (withDiscount ? 'confirmed' : 'not confirmed'),
+            m: withDiscount
+              ? cur.discountPct + '% USeP discount applied from ' + cur.idLabel + '. Price locked at ' + cur.total + '.'
+              : 'ID accepted but it does not prove USeP affiliation. Full price ' + cur.total + '.' });
+          cur.tl.push({ w: now(), x: 'ID + reservation approved',
+            m: cur.pay === 'await_pos'  ? 'Payment stays locked until the POS comes back from CEDU.'
+             : cur.pay === 'await_event' ? 'Post-pay booking: payment opens after the last day and is due by ' + cur.payBy + '.'
+             : 'Payment unlocked. Pay-by deadline ' + cur.payBy + '.' });
+        });
       }
-      /* [SIM] staff came back from CEDU with the POS — this is the moment the
-         customer becomes able to pay at all. */
+
+      /* Staff came back from CEDU with the POS — for a PRE-PAY hostel booking
+         this is the moment the guest becomes able to pay at all. */
       function recordPos() {
         const box = document.getElementById('posNo');
         const val = box ? box.value.trim() : '';
         if (!val) { cur.posErr = 'Enter the POS number CEDU issued — payment cannot open without it.'; render(); return; }
         cur.posErr = null;
-        cur.pos = val;
-        cur.pay = cur.method === 'cash' ? 'await_cash' : 'await_gcash';
-        cur.tl.push({ w: now(), x: 'POS received from CEDU', m: val + ' recorded. Payment unlocked for the guest.' });
-        render();
+        staffAction('record_pos', { pos: val }, function () {
+          cur.pos = val;
+          cur.tl.push({ w: now(), x: 'POS received from CEDU', m: val + ' recorded.' + (cur.pay === 'await_event' ? ' This booking post-pays, so payment still opens after check-out.' : ' Payment unlocked for the guest.') });
+        });
       }
-      /* [SIM] the cashier issued the OR — AFTER the booking was already
-         confirmed. Nothing about the payment changes here. */
+
+      /* The cashier issued the OR — AFTER the booking was already confirmed.
+         Nothing about the PAYMENT changes here: the OR is a document. */
       function recordOr() {
         const box = document.getElementById('orNo');
         const val = box ? box.value.trim() : '';
         if (!val) return;
-        cur.or = val;
-        cur.tl.push({ w: now(), x: 'Official Receipt recorded', m: val + ' issued by the University Cashier. Emailed to the guest; needed at check-in.' });
-        render();
+        staffAction('record_or', { or: val }, function () {
+          cur.or = val;
+          cur.tl.push({ w: now(), x: 'Official Receipt recorded', m: val + ' issued by the University Cashier. Needed at check-in.' });
+        });
       }
-      /* [SIM] the guest arrived and showed their POS + OR. Hostel-only. */
+
+      /* The guest arrived and showed their POS + OR. Hostel-only, manual. */
       function checkIn() {
-        cur.checkedIn = true;
-        cur.tl.push({ w: now(), x: 'Guest checked in', m: 'POS ' + cur.pos + ' and OR ' + cur.or + ' presented and matched against the valid ID.' });
-        render();
+        staffAction('check_in', {}, function () {
+          cur.checkedIn = true;
+          cur.tl.push({ w: now(), x: 'Guest checked in', m: 'POS ' + (cur.pos || '—') + ' and OR ' + (cur.or || '—') + ' presented and matched against the valid ID.' });
+        });
       }
+
       function rejectRequest() {
-        cur.res = 'released'; cur.pay = 'locked';
-        cur.tl.push({ w: now(), x: 'Request rejected', m: 'Reservation released back to availability. Customer notified.' });
-        render();
+        staffAction('reject', { note: 'Reservation released back to availability.' }, function () {
+          cur.tl.push({ w: now(), x: 'Request rejected', m: 'Held dates released back to availability. Customer notified.' });
+        });
       }
+
       function confirmPay() {
         const cash = cur.method === 'cash';
-        cur.pay = cash ? 'paid_cash' : 'confirmed';
-        cur.confirmedBy = 'You · just now';
-        cur.tl.push({ w: now(), x: cash ? 'Cash payment recorded' : 'Payment confirmed', m: cash ? 'Recorded at the cashier; official receipt issued.' : 'Reference matched in GCash Transaction History. Reference locked.' });
-        render();
+        staffAction('confirm_payment', {}, function () {
+          cur.confirmedBy = 'You · just now';
+          cur.tl.push({ w: now(), x: cash ? 'Cash payment recorded' : 'Payment confirmed',
+            m: cash ? 'Recorded at the cashier.' : 'Reference matched in GCash Transaction History. Reference locked.' });
+        });
       }
+
       function rejectPay() {
-        cur.prevPay = cur.pay;               /* so the decision can be taken back */
-        cur.pay = 'rejected';
-        cur.rejectedByStaff = true;      /* a person decided this, not the scanner */
-        cur.rejects = ['Rejected by staff after checking GCash — the reference was not found in the Transaction History (reference freed, record kept for audit).'];
-        cur.resubmitBy = 'Jul 16, 2026 · ' + (cur.resubmitBy ? cur.resubmitBy.split('· ')[1] || '5:00 PM' : '5:00 PM');
-        cur.tl.push({ w: now(), x: 'Receipt rejected', m: '48-hour resubmit window started; customer notified.' });
-        render();
+        const why = 'Rejected by staff after checking GCash — the reference was not found in the Transaction History.';
+        staffAction('reject_payment', { note: why }, function () {
+          cur.rejectedByStaff = true;      /* a person decided this, not the scanner */
+          cur.rejects = [why + ' (reference freed, record kept for audit)'];
+          cur.tl.push({ w: now(), x: 'Receipt rejected', m: 'Payment reopened so the customer can resubmit before the deadline.' });
+        });
       }
       /* Take back a rejection STAFF made and return the receipt to where it was —
          the confirm / reject choice. Only offered for staff rejections: an
@@ -1182,7 +1195,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
          back from those is Override & confirm with a written reason.
          The timeline keeps both entries; undoing a decision is itself a decision. */
       function undoRejection() {
-        cur.pay = cur.prevPay || 'review';
+        cur.pay = cur.prevPay || 'under_review';
         cur.rejectedByStaff = false;
         cur.rejects = []; cur.resubmitBy = null;   /* the 48-hour window dies with the rejection */
         cur.tl.push({ w: now(), x: 'Rejection withdrawn', m: 'Staff took the rejection back; the receipt is under review again.' });
@@ -1228,7 +1241,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         }
       }
       function refreshAction() { readAction(); render(); }
-      function submitAction() {
+      async function submitAction() {
         readAction();
         const deny = cur.actionMode === 'deny';
         if (!cur.actReason) { cur.actErr = 'Choose a reason — the customer sees it.'; render(); return; }
@@ -1242,7 +1255,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
         const msg = deny
           ? cur.actReason + (note ? ' — ' + note : "")
           : (cur.actDoc || fixDocOptions()[0]) + ' — ' + cur.actReason + (note ? ' — ' + note : "");
-        if (!pushOutcome(outcome, msg)) {
+        if (!await pushOutcome(outcome, msg)) {
           cur.actErr = 'This request is no longer open — the customer withdrew it while this page was open. Nothing has been recorded.';
           render(); return;
         }
@@ -1251,7 +1264,7 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
           cur.denyReason = msg;
           cur.tl.push({ w: now(), x: 'Refund denied', m: msg + '. Final — the customer would need to book again. The booking itself is unaffected.' });
         } else {
-          cur.pay = 'refund_fix';
+          cur.pay = 'refund_correction';
           cur.refund = cur.refund || {};
           cur.refund.stage = 'Returned for correction';
           cur.refund.docs = 'Returned to the customer: ' + msg;
@@ -1269,9 +1282,34 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
          it: showing "Refunded" for a request that no longer exists would be a lie
          staff act on. `proof` is forwarded; dropping it silently is what made the
          customer's proof panel read "not recorded". */
-      function pushOutcome(status, note, proof) {
-        if (!cur.fromStore || !window.RefundStore) return true;   /* seeded demo record */
-        return RefundStore.decide(cur.id, status, note || "", proof || null) !== false;
+      /* Write the refund decision to the `refunds` row, and report whether it
+         landed. Callers MUST check the result: the customer can withdraw while
+         this page is open, and showing "Refunded" for a request that no longer
+         exists would be a lie staff then act on. The server re-reads the
+         request's state for exactly that reason.
+
+         Returns a promise now — it talks to admin/booking-action.php instead of
+         browser storage, so callers await it. */
+      async function pushOutcome(status, note, proof) {
+        const map = { fix: 'refund_return', denied: 'refund_deny', refunded: 'refund_complete' };
+        const action = map[status];
+        if (!action) return false;
+        const extra = { note: note || '' };
+        if (proof) {
+          if (proof.reference) extra.payout_reference = proof.reference;
+          if (proof.amountValue) extra.amount = proof.amountValue;
+        }
+        const body = new URLSearchParams(Object.assign({ csrf: CSRF, booking: cur.id, action: action }, extra));
+        try {
+          const res = await fetch('booking-action.php', { method: 'POST', body: body, credentials: 'same-origin' });
+          const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });
+          if (!out.ok) { cur.outcomeError = out.message || 'Nothing was recorded.'; return false; }
+          if (out.booking) { cur.res = out.booking.res; cur.pay = out.booking.pay; }
+          return true;
+        } catch (e) {
+          cur.outcomeError = 'Could not reach the server, so nothing was recorded.';
+          return false;
+        }
       }
       /* Nothing to show: a VB- reference with no request behind it. Better than
          silently rendering a different customer's booking. */

@@ -96,6 +96,11 @@ CREATE TABLE customers (
     phone               VARCHAR(30) NULL,
     address             VARCHAR(500) NULL,
     university_id_no    VARCHAR(80) NULL,
+    -- PROFILE PICTURE ONLY. Never an ID, a receipt or any other document — those
+    -- are booking_documents rows, stored outside the web root and served through
+    -- a permission check. This path is served straight out of assets/ like any
+    -- other image, which is exactly why nothing sensitive may be put here.
+    photo_path          VARCHAR(500) NULL,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uq_customers_user UNIQUE (user_id),     -- multiple NULLs allowed; a login maps to one customer
@@ -112,6 +117,7 @@ CREATE TABLE staff (
     employee_no         VARCHAR(80) NULL,              -- kept + to be added to UI (DB-DECISIONS #13)
     position_role       VARCHAR(120) NULL,             -- renamed from position_title (#12)
     phone               VARCHAR(30) NULL,
+    photo_path          VARCHAR(500) NULL,             -- profile picture only (same rule as customers.photo_path)
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uq_staff_employee_no UNIQUE (employee_no),
@@ -149,9 +155,17 @@ CREATE TABLE rooms (
     name                VARCHAR(150) NOT NULL,
     room_type           ENUM('event','hostel') NOT NULL,   -- must match the venue's venue_type (app-enforced for now)
     description         TEXT NULL,
+    -- Which amenities this room has, as a list of KEYS: ["stage_podium","aircon"].
+    -- The amenity VOCABULARY (label + icon per key) stays PHP-coded, so this adds
+    -- no amenities table and DB-DECISIONS #9 still holds. Keys rather than labels
+    -- so rewording a label in PHP updates every room at once instead of orphaning
+    -- them. On MariaDB `JSON` is an alias for LONGTEXT — the CHECK below is what
+    -- actually enforces well-formed JSON.
+    amenities           JSON NULL,
     is_active           BOOLEAN NOT NULL DEFAULT TRUE,      -- FALSE = retire/hide a room (distinct from a maintenance window)
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT chk_rooms_amenities_json CHECK (amenities IS NULL OR JSON_VALID(amenities)),
     CONSTRAINT uq_rooms_code UNIQUE (room_code),
     CONSTRAINT uq_rooms_venue_name UNIQUE (venue_id, name),
     CONSTRAINT fk_rooms_venue
@@ -684,7 +698,15 @@ INSERT INTO system_settings (setting_key, setting_value, value_type, description
   ('hostel_pos_deadline_hours',       '72', 'integer', 'Hours an approved hostel booking may sit in await_pos before expiry checks release it.'),
   ('hostel_advance_booking_max_days', '7',  'integer', 'Hostel cannot be reserved more than this many days before check-in. Events: no limit.'),
   ('postpay_grace_days',              '3',  'integer', 'Refunds OFF only: days after the last booked day (event end / check-out) the customer has to pay. Past it payment_status becomes overdue; nothing is released.'),
-  ('refunds_enabled',                 '0',  'boolean', 'Customer refund requests. 0 = OFF (all new bookings non-refundable, the USeP default). Admin-only. Snapshotted onto each booking as bookings.refunds_allowed.');
+  ('refunds_enabled',                 '0',  'boolean', 'Customer refund requests. 0 = OFF (all new bookings non-refundable, the USeP default). Admin-only. Snapshotted onto each booking as bookings.refunds_allowed.'),
+  -- Showcase switch. A ROW, not a column, so removing demo mode later is one
+  -- DELETE and leaves nothing behind in the schema. While it is on, booking /
+  -- payment / refund writes go to the PHP session instead of the database, so a
+  -- demo can be repeated forever and changes nothing. SETUP still writes for
+  -- real (venues, rooms, amenities, rates, settings, FAQs, staff) — the split is
+  -- transactions vs configuration. Admin-only, password-confirmed, and every
+  -- page shows a banner while it is on.
+  ('demo_mode',                       '0',  'boolean', 'Showcase mode: booking/payment/refund writes go to the session instead of the database. Setup still writes for real. Admin-only.');
 
 -- ---- FAQ sections (keys = the section ids on customer/faq.php) ----
 INSERT INTO faq_sections (section_key, label, sort_order) VALUES
@@ -781,20 +803,25 @@ INSERT INTO gcash_accounts (venue_id, account_name, mobile_number, note) VALUES
   (3, 'Rina S Delos Reyes', '09171234567', 'USeP Hostel designated staff account (cashed out to the University Cashier). [SIM] placeholder number.');
 
 -- ---- Rooms (r1-r8 event; h1-h5 hostel). NOTE: amenities + at-a-glance are PHP-coded, not stored. ----
-INSERT INTO rooms (id, venue_id, room_code, name, room_type, description) VALUES
-  (1, 1, 'r1', 'Alumni Grand Ballroom', 'event', 'Flagship function hall for balls, conferences, and large ceremonies.'),
-  (2, 1, 'r2', 'Heritage Function Room', 'event', 'Mid-sized room for seminars, homecomings, and department gatherings.'),
-  (3, 1, 'r3', 'Alumni Boardroom',       'event', 'Executive boardroom for meetings, thesis defenses, and interviews.'),
-  (4, 1, 'r4', 'Garden Pavilion',        'event', 'Semi-outdoor pavilion for receptions and evening socials.'),
-  (5, 2, 'r5', 'USeP Gymnasium',         'event', 'Main gymnasium for assemblies, intramurals, and job fairs.'),
-  (6, 2, 'r6', 'CIC Audio-Visual Room',  'event', 'Tiered AV room for colloquia, defenses, and film screenings.'),
-  (7, 2, 'r7', 'Admin Conference Hall',  'event', 'Formal conference hall for council sessions and MOA signings.'),
-  (8, 2, 'r8', 'Obrero Function Hall',   'event', 'Versatile function hall for orientations, trainings, and org events.'),
-  (9,  3, 'h1', 'Hostel Room 1', 'hostel', 'Six-bed room, shared bathroom down the hall.'),
-  (10, 3, 'h2', 'Hostel Room 2', 'hostel', 'Six-bed room, shared bathroom, courtyard-facing (quiet).'),
-  (11, 3, 'h3', 'Hostel Room 3', 'hostel', 'Six-bed room, shared bathroom, ground floor step-free access.'),
-  (12, 3, 'h4', 'Hostel Room 4', 'hostel', 'Six-bed room with a private bathroom in-room.'),
-  (13, 3, 'h5', 'Hostel Room 5', 'hostel', 'Six-bed room with a private bathroom and a study table.');
+-- NOTE: description is the FULL customer-facing text and amenities are the
+--       amenity KEYS (vocabulary: includes/amenities.php). Both are seeded
+--       here so a fresh build matches what the rooms actually show; an
+--       earlier seed carried abbreviated descriptions, which silently
+--       shortened every room page the moment the catalog moved to the DB.
+INSERT INTO rooms (id, venue_id, room_code, name, room_type, description, amenities) VALUES
+  (1, 1, 'r1', 'Alumni Grand Ballroom', 'event', 'The flagship function hall of Bahay Alumni, ideal for graduation balls, conferences, and large university ceremonies. Column-free floor with a raised stage and full lighting rig.', '["stage_raised_podium","stage_lighting","sound_pro","aircon","chairs_300_stackable","led_wall"]'),
+  (2, 1, 'r2', 'Heritage Function Room', 'event', 'A warm, mid-sized room for seminars, alumni homecomings, and department gatherings. Flexible seating layout with a built-in projector.', '["projector_ceiling","aircon","mic_handheld","chairs_tables_60","pantry"]'),
+  (3, 1, 'r3', 'Alumni Boardroom', 'event', 'An executive boardroom for small committee meetings, thesis defenses, and interviews. Conference table seating for up to 20.', '["conference_table","tv_hdmi","aircon","whiteboard","coffee_station"]'),
+  (4, 1, 'r4', 'Garden Pavilion', 'event', 'A semi-outdoor pavilion overlooking the alumni garden, popular for receptions and evening socials. Currently closed for roofing maintenance.', '["open_air_covered","lighting_string_spot","power_catering","seats_150"]'),
+  (5, 2, 'r5', 'USeP Gymnasium', 'event', 'The main university gymnasium for large assemblies, intramurals, job fairs, and commencement exercises. Bleacher and floor seating combined.', '["seating_bleacher_floor","pa_full_court","stage_riser","gates_multiple","backstage"]'),
+  (6, 2, 'r6', 'CIC Audio-Visual Room', 'event', 'A tiered audio-visual room in the College of Information & Computing, suited to colloquia, defenses, and film screenings.', '["seating_tiered","projector_4k","sound_surround","aircon","mic_wireless","wifi"]'),
+  (7, 2, 'r7', 'Admin Conference Hall', 'event', 'A formal conference hall at the Administration building for council sessions, MOA signings, and official university meetings.', '["layout_ushape_theater","projector","aircon","podium_mics","vc_camera"]'),
+  (8, 2, 'r8', 'Obrero Function Hall', 'event', 'A versatile function hall on the Obrero campus for orientations, trainings, and student org events. Open floor with modular staging.', '["stage_modular","projector","aircon","sound_basic","chairs_tables_200","load_in"]'),
+  (9, 3, 'h1', 'Hostel Room 1', 'hostel', 'A six-bed room with bunk beds along both walls and a shared bathroom just down the hall. Each bed has its own locker and reading light.', '["bunk_beds_6","bath_shared_hall","aircon","locker_per_bed","reading_light_per_bed","lounge_access"]'),
+  (10, 3, 'h2', 'Hostel Room 2', 'hostel', 'Six bunk beds with the shared bathroom directly opposite the door. The quietest of the communal rooms — it faces the inner courtyard.', '["bunk_beds_6","bath_shared_opposite","aircon","locker_per_bed","reading_light_per_bed","courtyard_quiet"]'),
+  (11, 3, 'h3', 'Hostel Room 3', 'hostel', 'Six bunk beds with the shared bathroom down the hall. Ground floor, step-free access from the hostel entrance.', '["bunk_beds_6","bath_shared_hall","aircon","locker_per_bed","reading_light_per_bed","step_free_ground"]'),
+  (12, 3, 'h4', 'Hostel Room 4', 'hostel', 'Six bunk beds with a private bathroom inside the room — no queueing down the hall. Hot shower and a wider walkway between bunks.', '["bunk_beds_6","bath_private","hot_shower","aircon","locker_per_bed","reading_light_per_bed"]'),
+  (13, 3, 'h5', 'Hostel Room 5', 'hostel', 'Six bunk beds with a private bathroom and a small study table by the window. Second floor, overlooking the field.', '["bunk_beds_6","bath_private","hot_shower","aircon","study_table","locker_per_bed"]');
 
 INSERT INTO event_room_details (room_id, attendee_capacity, fee_per_day) VALUES
   (1, 300, 5000.00), (2, 80, 2500.00), (3, 20, 1500.00), (4, 150, 3500.00),

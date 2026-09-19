@@ -432,3 +432,53 @@ a room×date truth into a single label on the room will drift.
   stored bed count — those are the exact things we removed.
 
 — End of handoff —
+
+════════════════════════════════════════════════════════════════════════════════
+UPDATE — 2026-09-19: THE DATABASE PHASE IS DONE
+════════════════════════════════════════════════════════════════════════════════
+Everything above this line is the ORIGINAL handoff, kept as a record of how the
+system was designed and why. Most of its DESIGN reasoning still holds exactly.
+Its STATUS claims no longer do.
+
+⚠️ SECTION 0 IS NOW WRONG. It says "Right now it is a FRONT-END MOCKUP: real UI,
+   but NO backend, NO persistence, NO server logic." That was true when it was
+   written. It is not true now. The system runs on its database.
+
+WHAT CHANGED
+  · The catalog (venues, rooms, rates, amenities, maintenance, GCash accounts,
+    the discount rate) is read from the database. The [SIM] arrays are gone.
+  · includes/bookings.php is the ONE read path for both portals. Booking
+    history, the staff queue, the request detail, the dashboard, both
+    transaction ledgers, both calendars and Quarterly Reports all use it.
+  · Writes are real: customers book, pay and file refunds; staff approve,
+    reject, confirm, record the POS and OR, check in, and decide refunds.
+  · Registration, profiles, staff management, venue/room creation, amenity
+    editing and payout-account changes all persist.
+  · sp_seed_demo() (venusep_demo_seed.sql) builds the showcase: 157 bookings
+    covering every reservation and payment status, every date computed from
+    CURDATE() so it never goes stale. Re-run it to reset.
+
+WHAT SECTION 4 GOT RIGHT, AND THE CODE NOW ENFORCES
+  4.1 no room status field · 4.2 beds never stored · 4.3 nights vs days
+  4.4 two availability shapes · 4.5 one account per venue · 4.7 two-axis status
+  4.8 the CEDU flow · 4.10 the refund switch — all of it survived contact with
+  the database unchanged. The design was sound; only the wiring was missing.
+
+WHAT IS STILL NOT BUILT
+  · The disruption flow (§5). One 'disrupted' booking is seeded to prove the
+    data model carries the state; there is no UI to act on it.
+  · Email/notifications. Every "receipt emailed" is still nothing being sent.
+  · Overdue auto-release and the 48-hour resubmit clock need a scheduler.
+  · Staff-to-venue assignment (venue-form.php) — no table for it.
+  · The GCash OCR still runs in the BROWSER. customer/payment-submit.php
+    re-checks the amount and the receiver server-side and the database enforces
+    duplicate reference and duplicate file, but a full OCR port to PHP has not
+    been done. §4.6's warning stands, narrowed.
+
+⚠️ §6 "WHAT THE DATABASE PHASE MUST DO" is a completed checklist, not a to-do
+   list. Read it as a record of what was required.
+
+NEW SINCE: demo mode (includes/demo-mode.php) — while it is on, bookings,
+payments and refunds are NOT written, so the same showcase runs repeatedly and
+changes nothing. Setup still saves for real. Admin-only, password-confirmed,
+with a banner on every page. See DB-TRANSITION.md for the full design.

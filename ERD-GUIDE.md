@@ -156,3 +156,42 @@ corner: it doesn't connect to bookings by a line. The link is the
 `refunds_allowed` copy, made when a booking is created, so add a footnote for it.
 
 **Count check:** 27 tables (+ 5 views, which are not drawn on an ERD).
+
+---
+
+## UPDATE — 2026-09-19: the diagram is accurate, with three new columns
+
+The ERD above still matches the schema. Every relationship it draws is real and
+now carries live data. Three columns were added during the database phase
+(`venusep_migration_01.sql`) — none of them change a relationship, so the
+drawing needs no new lines:
+
+| Table | Column | Why |
+|---|---|---|
+| `rooms` | `amenities` JSON | Which amenity KEYS a room has. The vocabulary stays PHP-coded (DB-DECISIONS #9), so this adds **no table** and no new line on the diagram. |
+| `customers` | `photo_path` | Profile picture only. |
+| `staff` | `photo_path` | Profile picture only. |
+
+Plus one settings ROW, not a column: `system_settings.demo_mode`.
+
+### Worth knowing when reading the diagram
+
+**`booking_documents` and `gcash_receipts` hold PATHS, not files.** The bytes
+live **outside the web root** (`includes/documents.php`), reachable only through
+`document-view.php`, which checks the session first. Profile pictures are the
+opposite case and sit under `assets/` like any other image. The diagram cannot
+show that difference, and it is the most important thing about those two tables.
+
+**`customers.user_id` is nullable and that is load-bearing.** A NULL is a
+walk-in — a real customer with no login, booked at the counter by staff. The
+seed includes one.
+
+**Statuses are lookup TABLES, not enums** (`reservation_statuses`,
+`payment_statuses`), and each row carries BOTH a `staff_label` and a
+`customer_label`. That is why staff see "Awaiting POS - CEDU" where the customer
+sees "Awaiting POS" — neither side writes its own wording.
+
+**The two availability branches are genuinely different shapes**, as §D and §E
+describe: `venue_booking_slots` holds exclusive time ranges, while
+`bed_reservation_nights` holds one row per occupied night per bed. Do not
+redraw them as one.

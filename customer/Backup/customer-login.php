@@ -1,3 +1,4 @@
+<?php /* Old copy kept for reference only — the real page is customer/customer-login.php. */ header('Location: ../customer-login.php'); exit; ?>
 <?php ?>
 <!DOCTYPE html>
 <!-- ==================================================================

@@ -1,4 +1,41 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
+<?php
+/* The needs-action counts and the preview list come from the SAME builder the
+   Booking Requests queue uses (includes/bookings.php). They used to be two
+   hand-written arrays and had already drifted — the dashboard showed requests
+   under different customers than the queue did for the same reference. */
+require_once __DIR__ . '/../includes/bookings.php';
+$adRows = booking_queue_rows();
+
+/* The two tiles that were hard-coded: "Today's Bookings" read 2 and Revenue
+   read the Q2 2026 figure from the old Quarterly_Reports arrays — both frozen
+   numbers that happened to look plausible and were true of nothing. */
+$adToday = 0; $adRevenue = 0.0; $adVenues = [];
+try {
+  $adPdo = venusep_db_or_fail();
+  $adToday = (int) $adPdo->query(
+    "SELECT COUNT(*) FROM bookings b
+       LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
+       LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
+      WHERE COALESCE(vd.start_date, hd.check_in_date) = CURDATE()
+        AND b.reservation_status IN ('approved', 'completed')"
+  )->fetchColumn();
+  /* Money COLLECTED this quarter — an unpaid booking inflates nothing. */
+  $adRevenue = (float) $adPdo->query(
+    "SELECT COALESCE(SUM(b.total_amount), 0) FROM bookings b
+       LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
+       LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
+      WHERE b.payment_status IN ('confirmed', 'paid_cash')
+        AND QUARTER(COALESCE(vd.start_date, hd.check_in_date)) = QUARTER(CURDATE())
+        AND YEAR(COALESCE(vd.start_date, hd.check_in_date)) = YEAR(CURDATE())"
+  )->fetchColumn();
+  $adVenues = $adPdo->query(
+    "SELECT v.name, v.description, COUNT(r.id) AS rooms
+       FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
+      WHERE v.is_active = 1 GROUP BY v.id ORDER BY v.id"
+  )->fetchAll();
+} catch (PDOException $e) { /* tiles fall back to zero rather than to a lie */ }
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -912,7 +949,7 @@ tr:hover {
                  buckets as the tabs on booking-requests.php — clicking one opens
                  the queue pre-filtered to that bucket, so dashboard numbers and
                  queue tabs can never disagree.
-                 [SIM] counts are computed from the demo data in the page script. -->
+                 Counts come from booking_queue_rows() — the same rows the queue shows. -->
             <div class="stats-grid">
                 <a class="stat-card" href="booking-requests.php?tab=id">
                     <span class="stat-icon"><i class="bi bi-person-vcard"></i></span>
@@ -941,13 +978,13 @@ tr:hover {
                 <div class="stat-card">
                     <span class="stat-icon"><i class="bi bi-calendar2-check"></i></span>
                     <h3>Today's Bookings</h3>
-                    <div class="number">2</div> <!-- [SIM] demo value -->
+                    <div class="number"><?php echo (int) $adToday; ?></div>
                     <div class="info">Rooms in use today</div>
                 </div>
                 <div class="stat-card">
                     <span class="stat-icon"><i class="bi bi-cash-stack"></i></span>
                     <h3>Revenue</h3>
-                    <div class="number">₱315,000</div> <!-- [SIM] matches Quarterly_Reports Q2 2026 -->
+                    <div class="number">₱<?php echo number_format($adRevenue); ?></div>
                     <div class="info">Current quarter</div>
                 </div>
             </div>
@@ -971,23 +1008,20 @@ tr:hover {
                         <a href="venue-management.php" class="btn btn-small btn-outline">Manage Venues</a>
                     </div>
                     <!-- Venue = location container in the new model (no base rate,
-                         venues aren't bookable). [SIM] hard-coded to match the
-                         venue-management.php cards; comes from the database later. -->
+                    <!-- Venue = a location that holds rooms (no base rate; a venue
+                         is not itself bookable). From the database — this list was
+                         hard-coded to match venue-management.php, so adding a venue
+                         there left the dashboard quietly describing the old world. -->
                     <div>
+<?php foreach ($adVenues as $adV): ?>
                         <div class="ad-venue">
                             <div>
-                                <div class="r-name" style="font-weight:600;font-size:13.5px;color:#1f1e1e">Bahay Alumni</div>
-                                <div class="r-sub" style="font-size:11.5px;color:#8a857d;margin-top:2px">Heritage location for alumni events</div>
+                                <div class="r-name" style="font-weight:600;font-size:13.5px;color:#1f1e1e"><?php echo htmlspecialchars($adV['name']); ?></div>
+                                <div class="r-sub" style="font-size:11.5px;color:#8a857d;margin-top:2px"><?php echo htmlspecialchars((string) $adV['description']); ?></div>
                             </div>
-                            <span style="font-size:12px;color:#6b675f;white-space:nowrap">8 rooms</span>
+                            <span style="font-size:12px;color:#6b675f;white-space:nowrap"><?php echo (int) $adV['rooms']; ?> room<?php echo (int) $adV['rooms'] === 1 ? '' : 's'; ?></span>
                         </div>
-                        <div class="ad-venue">
-                            <div>
-                                <div class="r-name" style="font-weight:600;font-size:13.5px;color:#1f1e1e">USeP Venues</div>
-                                <div class="r-sub" style="font-size:11.5px;color:#8a857d;margin-top:2px">Main campus halls and function rooms</div>
-                            </div>
-                            <span style="font-size:12px;color:#6b675f;white-space:nowrap">12 rooms</span>
-                        </div>
+<?php endforeach; ?>
                     </div>
                 </div>
             </div>
@@ -1107,6 +1141,11 @@ const RES = {
   approved:  { t: 'Approved',       c: 'b-green' },
   completed: { t: 'Completed',      c: 'b-navy'  },
   released:  { t: 'Released',       c: 'b-gray'  },
+  /* The rest of reservation_statuses — the preview renders real rows now, and
+     an unmapped code threw on RES[r.res].c. */
+  rejected:  { t: 'Rejected',       c: 'b-red'   },
+  cancelled: { t: 'Cancelled',      c: 'b-gray'  },
+  disrupted: { t: 'Room closed · action needed', c: 'b-red' },
 };
 const PAY = {
   locked:      { t: 'Payment locked',              c: 'b-gray'  },
@@ -1122,20 +1161,19 @@ const PAY = {
      can be paid until the event is over. Not waiting on anyone. */
   await_event: { t: 'Payment due after event',     c: 'b-gray'  },
   refund_req:  { t: 'Refund · under verification', c: 'b-navy'  },
+  /* HOSTEL ONLY — waiting on CEDU, not on the customer. */
+  await_pos:        { t: 'Awaiting POS · CEDU',              c: 'b-amber' },
+  expired:          { t: 'Expired',                          c: 'b-gray'  },
+  under_review:     { t: 'Receipt · manual review',          c: 'b-amber' },
+  refund_requested: { t: 'Refund · under verification',      c: 'b-navy'  },
+  refund_correction:{ t: 'Refund · returned for correction', c: 'b-amber' },
+  refund_await_or:  { t: 'Refund · awaiting Official Receipt', c: 'b-amber' },
+  refund_processing:{ t: 'Refund · processing',              c: 'b-navy'  },
+  refunded:         { t: 'Refunded',                         c: 'b-gray'  },
+  refund_denied:    { t: 'Refund denied',                    c: 'b-red'   },
 };
-const BR = [
-  { id: 'BRQ-2432', name: 'Nina Bautista', type: 'Faculty · CIC', room: 'CIC Audio-Visual Room', venue: 'USeP Venues', dates: 'Jul 30, 2026', res: 'approved', pay: 'await_event', act: 'Post-pay · payment opens Jul 31, due Aug 2', cls: '', cat: '' },
-  { id: 'BRQ-2431', name: 'Juan Miguel Dela Cruz', type: 'Student · CIC', room: 'Alumni Grand Ballroom', venue: 'Bahay Alumni', dates: 'Jul 23 – 25, 2026', res: 'pending', pay: 'locked', act: 'Review the submitted ID', cls: 'warn', cat: 'id' },
-  { id: 'BRQ-2430', name: 'Maria Santos', type: 'Faculty · CBA', room: 'Heritage Function Room', venue: 'Bahay Alumni', dates: 'Jul 20, 2026', res: 'approved', pay: 'await_gcash', act: 'Pay by Jul 19 · customer notified', cls: '', cat: '' },
-  { id: 'BRQ-2429', name: 'Rafael Lim', type: 'Org · JPIA', room: 'CIC Audio-Visual Room', venue: 'USeP Venues', dates: 'Jul 18, 2026', res: 'approved', pay: 'auto_pass', act: 'Match ref 3042 137 089838 in GCash', cls: 'warn', cat: 'confirm' },
-  { id: 'BRQ-2428', name: 'Ana Reyes', type: 'Student · CoE', room: 'Alumni Boardroom', venue: 'Bahay Alumni', dates: 'Jul 21, 2026', res: 'approved', pay: 'review', act: '3 flags need a human look', cls: 'warn', cat: 'review' },
-  { id: 'BRQ-2427', name: 'Leo Garcia', type: 'Staff · OSAS', room: 'Obrero Function Hall', venue: 'USeP Venues', dates: 'Jul 24 – 27, 2026', res: 'approved', pay: 'rejected', act: 'Resubmit window ends Jul 16 · 2:10 PM', cls: 'warn', cat: '' },
-  { id: 'BRQ-2426', name: 'Carmen Uy', type: 'Faculty · CAS', room: 'Admin Conference Hall', venue: 'USeP Venues', dates: 'Jul 22, 2026', res: 'approved', pay: 'await_cash', act: 'Pay at cashier by Jul 21', cls: '', cat: '' },
-  { id: 'BRQ-2425', name: 'Paolo Mendoza', type: 'Org · Honor Society', room: 'USeP Gymnasium', venue: 'USeP Venues', dates: 'Aug 2, 2026', res: 'approved', pay: 'confirmed', act: 'Confirmed by M. Robles · Jul 13', cls: '', cat: '' },
-  { id: 'BRQ-2424', name: 'Grace Tan', type: 'Student · CIC', room: 'Garden Pavilion', venue: 'Bahay Alumni', dates: 'Jul 17, 2026', res: 'approved', pay: 'overdue', act: 'Pre-pay booking · deadline passed Jul 16 · slot releasable', cls: 'late', cat: 'overdue' },
-  { id: 'BRQ-2420', name: 'Ramon Ortega', type: 'Org · CSC', room: 'Obrero Function Hall', venue: 'USeP Venues', dates: 'Jul 6, 2026', res: 'completed', pay: 'overdue', act: 'Post-pay window ended Jul 9 · still payable · follow up', cls: 'late', cat: 'overdue' },
-  { id: 'BRQ-2423', name: 'Diego Cruz', type: 'Alumni', room: 'Heritage Function Room', venue: 'Bahay Alumni', dates: 'Jul 12, 2026', res: 'approved', pay: 'refund_req', act: 'Both receipts submitted · verify', cls: 'warn', cat: '' },
-];
+/* Every booking that needs someone — one builder, shared with the queue. */
+const BR = <?php echo json_encode($adRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 

@@ -8,19 +8,43 @@
    Ported onto OUR shared shell (header + sidebar, $portal='customer')
    and restyled to the team palette. Same sections + validation.
 
-   [SIM] $customerProfile below is demo data; the forms only show
-   front-end success messages. Wire to a real DB + session later.
+   The record is the SESSION'S OWN customers row, and the forms save to
+   profile-save.php. This used to be a hard-coded "Juan Miguel Dela Cruz"
+   whoever was signed in — the page told every customer they were someone
+   else — and "Save" only ever printed a success message.
+
+   Date of Birth was dropped rather than wired: there is no column for it,
+   nothing in the system uses one, and adding a birthdate means collecting
+   personal data with no purpose. University ID takes its place on the
+   form, which the USeP discount actually depends on.
    ================================================================== */
 
-// [SIM] demo customer record (replace with a session-scoped DB query).
+require_once __DIR__ . '/../includes/customer-bookings.php';
+
+$cpRow = [];
+try {
+    $cpStmt = venusep_db_or_fail()->prepare(
+        "SELECT c.full_name, c.phone, c.address, c.university_id_no, c.photo_path,
+                u.email, DATE_FORMAT(c.created_at, '%M %Y') AS member_since
+           FROM customers c LEFT JOIN users u ON u.id = c.user_id
+          WHERE c.id = :id"
+    );
+    $cpStmt->execute([':id' => $customerContact['id']]);
+    $cpRow = $cpStmt->fetch() ?: [];
+} catch (PDOException $e) {
+    $cpRow = [];
+}
+
 $customerProfile = [
-    'name' => 'Juan Miguel Dela Cruz',
-    'email' => 'jmdelacruz@usep.edu.ph',
-    'phone' => '0917 555 0123',
-    'dateOfBirth' => '2002-05-14',
-    'address' => 'Davao City, Philippines',
-    'memberSince' => 'July 2026',
+    'name'         => (string) ($cpRow['full_name'] ?? ''),
+    'email'        => (string) ($cpRow['email'] ?? ''),
+    'phone'        => (string) ($cpRow['phone'] ?? ''),
+    'address'      => (string) ($cpRow['address'] ?? ''),
+    'universityId' => (string) ($cpRow['university_id_no'] ?? ''),
+    'photo'        => (string) ($cpRow['photo_path'] ?? ''),
+    'memberSince'  => (string) ($cpRow['member_since'] ?? ''),
 ];
+$cpCsrf = csrf_token();
 function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
 ?>
 <!DOCTYPE html>
@@ -28,7 +52,7 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
   MAP: [0] SHELL CSS · [1] PAGE CSS · [2] HEADER · [3] SIDEBAR ·
        [4] CONTENT (summary + Personal Info / Security / Preferences /
        Account Actions) · [6] SCRIPT (validation + show/hide password)
-  [SIM] = demo-only, replace at database time.
+  The record is the session customer's own row; the forms save to profile-save.php.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -190,7 +214,11 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
 
               <div class="profile-layout">
                 <aside class="profile-summary" aria-labelledby="profileSummaryName">
-                  <div class="profile-avatar" aria-label="<?php echo cp_e($customerProfile['name']); ?> initials"><?php
+<?php if ($customerProfile['photo'] !== ''): ?>
+                  <img class="profile-avatar" id="profileAvatar" src="../<?php echo cp_e($customerProfile['photo']); ?>"
+                       alt="<?php echo cp_e($customerProfile['name']); ?>" style="object-fit:cover">
+<?php else: ?>
+                  <div class="profile-avatar" id="profileAvatar" aria-label="<?php echo cp_e($customerProfile['name']); ?> initials"><?php
                     /* first two words' initials — the SAME rule as the booking-page
                        header (initials() there), so "Juan Miguel Dela Cruz" -> "JM".
                        Derived, so the avatar can never drift from the name. */
@@ -199,6 +227,7 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                     foreach (array_slice($cpParts, 0, 2) as $cpW) $cpIni .= substr($cpW, 0, 1);
                     echo cp_e(strtoupper($cpIni));
                   ?></div>
+<?php endif; ?>
                   <h2 id="profileSummaryName"><?php echo cp_e($customerProfile['name']); ?></h2>
                   <p class="profile-role">Customer</p>
                   <span class="profile-status"><i class="bi bi-check-circle" aria-hidden="true"></i>Active</span>
@@ -208,8 +237,14 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                     <div><dt>Address</dt><dd><?php echo cp_e($customerProfile['address']); ?></dd></div>
                     <div><dt>Member Since</dt><dd><?php echo cp_e($customerProfile['memberSince']); ?></dd></div>
                   </dl>
-                  <!-- [SIM] avatar upload not built yet -->
-                  <button class="btn-profile" type="button" disabled title="Profile photo uploads are under development"><i class="bi bi-camera" aria-hidden="true"></i>Change Photo</button>
+                  <!-- Profile picture only. Sensitive documents go to booking_documents,
+                       outside the web root, behind document-view.php. -->
+                  <input type="file" id="avatarInput" accept="image/png,image/jpeg,image/webp" hidden>
+                  <button class="btn-profile" type="button" onclick="document.getElementById('avatarInput').click()"><i class="bi bi-camera" aria-hidden="true"></i>Change Photo</button>
+<?php if ($customerProfile['photo'] !== ''): ?>
+                  <button class="btn-profile" type="button" id="avatarRemove"><i class="bi bi-trash" aria-hidden="true"></i>Remove</button>
+<?php endif; ?>
+                  <div class="profile-validation" id="avatarMessage" aria-live="polite"></div>
                 </aside>
 
                 <div class="profile-details">
@@ -220,7 +255,7 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                         <div class="profile-form-group"><label for="fullName">Full Name</label><input class="form-control" id="fullName" name="full_name" type="text" autocomplete="name" value="<?php echo cp_e($customerProfile['name']); ?>" aria-describedby="fullNameValidation" required><small class="profile-validation" id="fullNameValidation" aria-live="polite"></small></div>
                         <div class="profile-form-group"><label for="email">Email Address</label><input class="form-control" id="email" name="email" type="email" autocomplete="email" value="<?php echo cp_e($customerProfile['email']); ?>" aria-describedby="emailValidation" required><small class="profile-validation" id="emailValidation" aria-live="polite"></small></div>
                         <div class="profile-form-group"><label for="contactNumber">Contact Number</label><input class="form-control" id="contactNumber" name="contact_number" type="tel" autocomplete="tel" value="<?php echo cp_e($customerProfile['phone']); ?>" aria-describedby="contactNumberValidation" required><small class="profile-validation" id="contactNumberValidation" aria-live="polite"></small></div>
-                        <div class="profile-form-group"><label for="dateOfBirth">Date of Birth</label><input class="form-control" id="dateOfBirth" name="date_of_birth" type="date" autocomplete="bday" value="<?php echo cp_e($customerProfile['dateOfBirth']); ?>"></div>
+                        <div class="profile-form-group"><label for="universityId">USeP ID number <span style="font-weight:400;color:#8a857d">(optional)</span></label><input class="form-control" id="universityId" name="university_id_no" type="text" value="<?php echo cp_e($customerProfile['universityId']); ?>" placeholder="e.g. 2023-00412"><small class="profile-validation">Staff check your uploaded ID against this when applying the USeP discount.</small></div>
                         <div class="profile-form-group full-width"><label for="address">Address</label><input class="form-control" id="address" name="address" type="text" autocomplete="street-address" value="<?php echo cp_e($customerProfile['address']); ?>" required></div>
                       </div>
                       <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-check2" aria-hidden="true"></i>Save Changes</button><button class="btn-profile" type="reset">Cancel</button></div>
@@ -290,6 +325,49 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
           });
         });
 
+        const CSRF = <?php echo json_encode($cpCsrf); ?>;
+
+        /* ---- profile picture ----
+           A PICTURE ONLY. It is stored under assets/, which the web server
+           hands to anyone with the URL — right for a photo someone chose to
+           show, and the reason IDs and receipts go somewhere else entirely
+           (booking_documents, outside the web root, behind document-view.php). */
+        const avatarInput = document.getElementById('avatarInput');
+        const avatarMsg = document.getElementById('avatarMessage');
+        const sendAvatar = function (body) {
+          avatarMsg.textContent = 'Uploading…';
+          fetch('../profile-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+            .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+            .then(function (res) {
+              avatarMsg.textContent = res.message || '';
+              /* Reload so the header chip and the summary both pick it up
+                 rather than only the one element we happen to know about. */
+              if (res.ok) window.setTimeout(function () { window.location.reload(); }, 600);
+            })
+            .catch(function () { avatarMsg.textContent = 'Could not reach the server.'; });
+        };
+        if (avatarInput) {
+          avatarInput.addEventListener('change', function () {
+            if (!avatarInput.files || !avatarInput.files[0]) return;
+            const body = new FormData();
+            body.append('csrf', CSRF);
+            body.append('action', 'photo');
+            body.append('photo', avatarInput.files[0], avatarInput.files[0].name);
+            avatarInput.value = '';
+            sendAvatar(body);
+          });
+        }
+        const avatarRemove = document.getElementById('avatarRemove');
+        if (avatarRemove) {
+          avatarRemove.addEventListener('click', function () {
+            const body = new FormData();
+            body.append('csrf', CSRF);
+            body.append('action', 'photo');
+            body.append('remove', '1');
+            sendAvatar(body);
+          });
+        }
+
         const profileForm = document.getElementById('customerProfileForm');
         if (profileForm) {
           const profileFields = [
@@ -310,8 +388,34 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
               setFieldError(field, cfg[1], message);
               hasError = hasError || Boolean(message);
             });
-            // [SIM] TODO: replace with CSRF-protected PHP update + DB persistence.
-            document.getElementById('profileSuccessMessage').textContent = hasError ? '' : 'Profile updated successfully.';
+            if (hasError) { document.getElementById('profileSuccessMessage').textContent = ''; return; }
+
+            /* Save FOR REAL. The per-field checks above stay for fast feedback;
+               the server repeats them and owns the one the browser cannot
+               answer — whether the new email is already another account's. */
+            const body = new FormData(profileForm);
+            body.append('csrf', CSRF);
+            body.append('action', 'details');
+            const out = document.getElementById('profileSuccessMessage');
+            out.textContent = 'Saving…';
+            fetch('../profile-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+              .then(function (res) {
+                if (!res.ok) {
+                  out.textContent = '';
+                  const map = { full_name: ['fullName', 'fullNameValidation'], email: ['email', 'emailValidation'],
+                                contact_number: ['contactNumber', 'contactNumberValidation'] };
+                  const t = res.field && map[res.field];
+                  if (t) { const f = document.getElementById(t[0]); setFieldError(f, t[1], res.message); f.focus(); }
+                  else { out.textContent = res.message || 'Nothing was saved.'; }
+                  return;
+                }
+                out.textContent = res.message;
+                /* Repaint the summary card beside the form — leaving the old
+                   name there after a rename would look like the save failed. */
+                document.getElementById('profileSummaryName').textContent = document.getElementById('fullName').value.trim();
+              })
+              .catch(function () { out.textContent = 'Could not reach the server, so nothing was saved.'; });
           });
           profileForm.querySelectorAll('input').forEach(function (field) {
             field.addEventListener('input', function () { setFieldError(field, field.getAttribute('aria-describedby'), ''); });
@@ -338,11 +442,33 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
             setFieldError(cur, 'currentPasswordValidation', curErr);
             setFieldError(nw, 'newPasswordValidation', nwErr);
             setFieldError(cf, 'confirmNewPasswordValidation', cfErr);
-            if (!(curErr || nwErr || cfErr) && any) {
-              // [SIM] TODO: verify current password + password_hash() server-side.
-              document.getElementById('passwordSuccessMessage').textContent = 'Password updated successfully.';
-              passwordForm.reset();
-            }
+            if (curErr || nwErr || cfErr || !any) return;
+
+            /* The CURRENT password is verified server-side — a session alone
+               must never be enough to change the credential that created it,
+               or anyone at an unlocked machine could lock the owner out. */
+            const body = new FormData(passwordForm);
+            body.append('csrf', CSRF);
+            body.append('action', 'password');
+            const out = document.getElementById('passwordSuccessMessage');
+            out.textContent = 'Saving…';
+            fetch('../profile-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+              .then(function (res) {
+                if (!res.ok) {
+                  out.textContent = '';
+                  const map = { current_password: [cur, 'currentPasswordValidation'],
+                                new_password: [nw, 'newPasswordValidation'],
+                                confirm_new_password: [cf, 'confirmNewPasswordValidation'] };
+                  const t = res.field && map[res.field];
+                  if (t) { setFieldError(t[0], t[1], res.message); t[0].focus(); }
+                  else { out.textContent = res.message || 'Your password was not changed.'; }
+                  return;
+                }
+                out.textContent = res.message;
+                passwordForm.reset();
+              })
+              .catch(function () { out.textContent = 'Could not reach the server, so your password was not changed.'; });
           });
           ['currentPassword', 'newPassword', 'confirmNewPassword'].forEach(function (id) {
             document.getElementById(id).addEventListener('input', function () {

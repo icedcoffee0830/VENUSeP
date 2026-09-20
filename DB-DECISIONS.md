@@ -249,3 +249,50 @@ The booking lifecycle, payment taxonomy meaning, CEDU/POS hostel flow, refund
 document requirements, and per-venue GCash separation are as described in
 `PROJECT-HANDOFF.txt`. This file only records the DB-shape decisions made on
 2026-07-19.
+
+---
+
+## UPDATE — 2026-09-19: all locked decisions survived implementation
+
+Every decision above was implemented as written. None needed reversing. Notes
+where reality added detail:
+
+**#2 Pricing** — the rate is snapshotted onto the booking at approval, not at
+submission: the discount is earned by a *verified* USeP ID, so a new booking
+stores the full price and `affiliation_verified = 0` until staff decide.
+
+**#5 GCash accounts** — changing one inserts a NEW row and supersedes the old
+(`valid_until`), so a receipt paid to last month's number can still be
+explained. `uq_gcash_one_active_per_venue` keeps exactly one current.
+
+**#6 Receipt verdicts** — the three verdicts hold. The engine still never
+confirms a payment: the best outcome is `under_review` and a human matches the
+reference. The verdict is now recomputed server-side rather than trusted from
+the browser.
+
+**#9 Amenities are PHP-coded, NOT tables** — honoured, and it needed one
+refinement to survive admins adding rooms. The *vocabulary* (47 keys, labels,
+icons) stays in `includes/amenities.php`. Only *which* keys a room has is
+stored, in a `rooms.amenities` JSON column — **no table**, so the decision holds
+literally. Keys, never labels: rewording a label updates every room instead of
+orphaning them.
+
+**#11 Maintenance** — one window shape, system-wide, as specified. The seed now
+dates every window from `CURDATE()`, because the original hard-coded windows had
+silently expired and taken "medium maintenance" and "a planned closure" out of
+the demo with nothing to announce it.
+
+**#16 Refund switch** — real throughout. Only a *completed payout* frees a
+booking's date; withdrawal and denial leave it whole. Verified.
+
+**#18 Payment timing** — `fn_payment_deadline()` is authoritative. PHP reads the
+stored `bookings.current_deadline_at` rather than recomputing, after the two
+disagreed on 37 bookings: the SQL has a branch PHP lacked, where a pre-pay
+booking whose day-before deadline has passed becomes due the moment the event
+starts.
+
+### Added since
+- `rooms.amenities` (JSON), `customers.photo_path`, `staff.photo_path` — three
+  columns, in `venusep_migration_01.sql`.
+- `system_settings.demo_mode` — a ROW, not a column, so removing demo mode later
+  is one DELETE.

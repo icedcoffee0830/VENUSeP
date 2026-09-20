@@ -1,116 +1,132 @@
 <?php
 /* =====================================================================
-   VENUE ROOMS — [SIM] the event-venue rooms (Bahay Alumni + USeP Venues).
-   THE ONE SOURCE, mirroring includes/hostel-rooms.php.
+   VENUE ROOMS — the event-venue rooms (Bahay Alumni + USeP Venues),
+   read from the database. THE ONE SOURCE, mirroring hostel-rooms.php.
 
    Included by:
      customer/room-reservation.php      (json_encode'd into the booking page)
      customer/venusep_venue_booking.php (the landing list)
      admin/venue-management.php         (the room cards)
 
-   WHY AN INCLUDE: these rooms used to be hand-written SEPARATELY on every
+   WHY ONE SOURCE: these rooms used to be hand-written SEPARATELY on every
    page and had already drifted into four different room universes — the
    booking page had eight rooms, admin Venue Management managed three
-   DIFFERENT ones, and the history pages listed a third set that nobody
-   could book. One source ends that. When the database arrives, this array
-   becomes the `rooms` seed for Bahay Alumni + USeP Venues.
+   DIFFERENT ones, and the history pages listed a third set nobody could
+   book. One source ended that; the database now ends it permanently.
+
+   WHAT COMES FROM WHERE
+     rooms + venues            name, venue, description, active
+     event_room_details        capacity, fee per day
+     rooms.amenities           amenity KEYS -> labels via amenities.php
+     includes/amenities.php    the amenity VOCABULARY + the at-a-glance
+                               facts, both PHP-coded on purpose (#9)
+     maintenance_windows       the closure, if any
+     venue_booking_slots       what is already taken
 
    AVAILABILITY MODEL — a venue room is booked as an exclusive TIME RANGE:
        booked: [ {date, start, end} ]      -> the slot is taken or it is not
    (The hostel's model is different on purpose — per-night BED counts. Do
    not unify the two; an event has hours, a bed has nights.)
 
-   MAINTENANCE — the same window shape used system-wide (see
-   [[room-maintenance-model]]): {from, until, reason, blocks}. `until:null`
-   = indefinite; `blocks:true` = hard (cannot book), false = medium
-   (bookable, the customer is just told). There is NO `status` field:
-   "Available"/"Occupied" were only ever `booked[]` wearing a word.
+   MAINTENANCE — {from, until, reason, blocks}. `until:null` = indefinite;
+   `blocks:true` = hard (cannot book), false = medium (bookable, the
+   customer is just told). There is NO `status` field: "Available" /
+   "Occupied" were only ever `booked[]` wearing a word.
+
+   FAILS LOUD. This file used to fall back to hard-coded rooms when the
+   database was unreachable, which was right when the database supplied
+   only the name. It now supplies the rooms, the prices and what is taken
+   — and a booking page drawn from invented availability would sell a room
+   that is not free. Better to refuse to draw it.
    ===================================================================== */
 
-$venueRooms = [
-  ['id' => 'r1', 'name' => 'Alumni Grand Ballroom', 'venue' => 'Bahay Alumni', 'capacity' => 300, 'maintenance' => null, 'fee' => 5000, 'photos' => 5,
-    'description' => 'The flagship function hall of Bahay Alumni, ideal for graduation balls, conferences, and large university ceremonies. Column-free floor with a raised stage and full lighting rig.',
-    'amenities' => ['Raised stage & podium', 'Full stage lighting', 'Professional sound system', 'Air-conditioned', '300 stackable chairs', 'LED wall backdrop'],
-    'bestFor' => 'Graduation balls · Conferences · Ceremonies', 'catering' => 'In-house & outside catering', 'accessible' => 'Wheelchair accessible',
-    'booked' => [['date' => '2026-07-15', 'start' => '08:00', 'end' => '12:00'], ['date' => '2026-07-18', 'start' => '13:00', 'end' => '18:00']]],
-
-  ['id' => 'r2', 'name' => 'Heritage Function Room', 'venue' => 'Bahay Alumni', 'capacity' => 80, 'maintenance' => null, 'fee' => 2500, 'photos' => 4,
-    'description' => 'A warm, mid-sized room for seminars, alumni homecomings, and department gatherings. Flexible seating layout with a built-in projector.',
-    'amenities' => ['Ceiling projector & screen', 'Air-conditioned', 'Handheld microphones', '60 chairs + tables', 'Pantry access'],
-    'bestFor' => 'Seminars · Homecomings · Department events', 'catering' => 'Outside catering allowed', 'accessible' => 'Wheelchair accessible',
-    'booked' => [['date' => '2026-07-12', 'start' => '09:00', 'end' => '17:00'], ['date' => '2026-07-14', 'start' => '08:00', 'end' => '12:00']]],
-
-  ['id' => 'r3', 'name' => 'Alumni Boardroom', 'venue' => 'Bahay Alumni', 'capacity' => 20, 'maintenance' => null, 'fee' => 1500, 'photos' => 3,
-    'description' => 'An executive boardroom for small committee meetings, thesis defenses, and interviews. Conference table seating for up to 20.',
-    'amenities' => ['Conference table', 'Wall-mounted TV / HDMI', 'Air-conditioned', 'Whiteboard', 'Coffee station'],
-    'bestFor' => 'Meetings · Thesis defenses · Interviews', 'catering' => 'Coffee & light snacks', 'accessible' => 'Wheelchair accessible',
-    'booked' => [['date' => '2026-07-16', 'start' => '10:00', 'end' => '12:00']]],
-
-  /* [SIM] HARD + INDEFINITE. Used to read status:'Maintenance' with an empty
-     booked[] — the pill said closed and the form took the reservation anyway.
-     The window is what actually closes it now. */
-  ['id' => 'r4', 'name' => 'Garden Pavilion', 'venue' => 'Bahay Alumni', 'capacity' => 150, 'fee' => 3500, 'photos' => 4,
-    'maintenance' => ['from' => '2026-07-01', 'until' => null, 'reason' => 'Roof repair', 'blocks' => true],
-    'description' => 'A semi-outdoor pavilion overlooking the alumni garden, popular for receptions and evening socials. Currently closed for roofing maintenance.',
-    'amenities' => ['Open-air covered setup', 'String & spot lighting', 'Power outlets for catering', '150 seat capacity'],
-    'bestFor' => 'Receptions · Evening socials', 'catering' => 'Outside catering allowed', 'accessible' => 'Step-free, ground level',
-    'booked' => []],
-
-  ['id' => 'r5', 'name' => 'USeP Gymnasium', 'venue' => 'USeP Venues', 'capacity' => 1000, 'maintenance' => null, 'fee' => 8000, 'photos' => 5,
-    'description' => 'The main university gymnasium for large assemblies, intramurals, job fairs, and commencement exercises. Bleacher and floor seating combined.',
-    'amenities' => ['Bleacher + floor seating', 'Full court PA system', 'Stage riser available', 'Multiple entry gates', 'Backstage rooms'],
-    'bestFor' => 'Assemblies · Intramurals · Job fairs', 'catering' => 'Outside catering allowed', 'accessible' => 'Wheelchair accessible',
-    'booked' => [['date' => '2026-07-20', 'start' => '07:00', 'end' => '19:00']]],
-
-  /* [SIM] MEDIUM — blocks:false. Still fully bookable; the customer is just told. */
-  ['id' => 'r6', 'name' => 'CIC Audio-Visual Room', 'venue' => 'USeP Venues', 'capacity' => 120, 'fee' => 2000, 'photos' => 4,
-    'maintenance' => ['from' => '2026-07-10', 'until' => '2026-07-31', 'reason' => 'One of two aircon units is being replaced', 'blocks' => false],
-    'description' => 'A tiered audio-visual room in the College of Information & Computing, suited to colloquia, defenses, and film screenings.',
-    'amenities' => ['Tiered theater seating', '4K projector & screen', 'Surround sound', 'Air-conditioned', 'Wireless mics', 'Stable Wi-Fi'],
-    'bestFor' => 'Colloquia · Defenses · Film screenings', 'catering' => 'Light snacks only', 'accessible' => 'Wheelchair accessible',
-    'booked' => [['date' => '2026-07-13', 'start' => '13:00', 'end' => '16:00']]],
-
-  ['id' => 'r7', 'name' => 'Admin Conference Hall', 'venue' => 'USeP Venues', 'capacity' => 60, 'maintenance' => null, 'fee' => 1800, 'photos' => 3,
-    'description' => 'A formal conference hall at the Administration building for council sessions, MOA signings, and official university meetings.',
-    'amenities' => ['U-shape / theater layouts', 'Projector & screen', 'Air-conditioned', 'Podium & microphones', 'Video-conference camera'],
-    'bestFor' => 'Council sessions · MOA signings · Meetings', 'catering' => 'In-house catering', 'accessible' => 'Wheelchair accessible',
-    'booked' => [['date' => '2026-07-12', 'start' => '08:00', 'end' => '17:00']]],
-
-  /* [SIM] HARD + PLANNED (from is in the future) — same shape, no extra machinery. */
-  ['id' => 'r8', 'name' => 'Obrero Function Hall', 'venue' => 'USeP Venues', 'capacity' => 200, 'fee' => 3000, 'photos' => 5,
-    'maintenance' => ['from' => '2026-08-03', 'until' => '2026-08-07', 'reason' => 'Floor refinishing', 'blocks' => true],
-    'description' => 'A versatile function hall on the Obrero campus for orientations, trainings, and student org events. Open floor with modular staging.',
-    'amenities' => ['Modular stage', 'Projector & screen', 'Air-conditioned', 'Sound system', '200 chairs + tables', 'Load-in access'],
-    'bestFor' => 'Orientations · Trainings · Org events', 'catering' => 'Outside catering allowed', 'accessible' => 'Wheelchair accessible',
-    'booked' => [['date' => '2026-07-17', 'start' => '09:00', 'end' => '12:00']]],
-];
-
-/* Name + venue are now DB-backed (rooms.name, rooms.venue_id via venues) —
-   editable from admin/room-form.php (admin/room-save.php). Everything else
-   here stays [SIM] hard-coded. Overlaid onto the array above (rather than
-   read from the DB outright) so every page that includes this file keeps
-   working, unchanged, even when the database is unreachable — it just
-   shows the hard-coded name/venue until the DB comes back (fail safe,
-   same pattern as includes/refund-policy.php). */
 require_once __DIR__ . '/db.php';
-$pdo = venusep_db();
-if ($pdo !== null) {
-  try {
-    $rows = $pdo->query(
-      "SELECT r.room_code, r.name, v.name AS venue_name FROM rooms r
-       JOIN venues v ON v.id = r.venue_id WHERE r.room_type = 'event'"
-    )->fetchAll();
-    $venueRoomsDb = [];
-    foreach ($rows as $row) $venueRoomsDb[$row['room_code']] = $row;
-    foreach ($venueRooms as &$vr) {
-      if (isset($venueRoomsDb[$vr['id']])) {
-        $vr['name']  = $venueRoomsDb[$vr['id']]['name'];
-        $vr['venue'] = $venueRoomsDb[$vr['id']]['venue_name'];
-      }
-    }
-    unset($vr);
-  } catch (Throwable $e) { /* fail safe: keep the hard-coded name/venue */ }
+require_once __DIR__ . '/amenities.php';
+
+$vrPdo = venusep_db_or_fail();
+
+/* ---- 1. the rooms themselves ---- */
+$vrRoomRows = $vrPdo->query(
+  "SELECT r.id, r.room_code, r.name, r.description, r.amenities,
+          v.name AS venue_name,
+          d.attendee_capacity, d.fee_per_day
+     FROM rooms r
+     JOIN venues v                  ON v.id = r.venue_id
+     LEFT JOIN event_room_details d ON d.room_id = r.id
+    WHERE r.room_type = 'event' AND r.is_active = 1
+    ORDER BY r.id"
+)->fetchAll();
+
+/* ---- 2. closures, every room in ONE query (never N+1 inside the loop) ----
+   The room array carries ONE maintenance window because the UI shows one
+   line. A room may legitimately have several rows, so pick the one that
+   matters now: a window covering today, otherwise the next one due to
+   start. Anything already finished is ignored — a closure that has ended
+   is not news, and this is exactly how a fixed window self-heals. */
+$vrMaint = [];
+$vrMaintRows = $vrPdo->query(
+  "SELECT m.room_id, m.from_date, m.until_date, m.reason, m.blocks_booking
+     FROM maintenance_windows m
+     JOIN rooms r ON r.id = m.room_id
+    WHERE r.room_type = 'event'
+      AND (m.until_date IS NULL OR m.until_date >= CURDATE())
+    ORDER BY m.room_id,
+             (m.from_date <= CURDATE()) DESC,   -- a live window beats a planned one
+             m.from_date ASC"
+)->fetchAll();
+foreach ($vrMaintRows as $m) {
+  if (isset($vrMaint[$m['room_id']])) continue;          // first per room wins
+  $vrMaint[$m['room_id']] = [
+    'from'   => $m['from_date'],
+    'until'  => $m['until_date'],                        // null = indefinite
+    'reason' => $m['reason'],
+    'blocks' => (bool) $m['blocks_booking'],
+  ];
 }
+
+/* ---- 3. what is already taken, every room in ONE query ----
+   These conditions MIRROR sp_add_venue_slot()'s conflict check, so what a
+   customer is shown as taken is exactly what the database would refuse. If
+   the two ever drifted, a customer could pick a slot this page called free
+   and have the booking rejected at the last step. */
+$vrBooked = [];
+$vrSlotRows = $vrPdo->query(
+  "SELECT s.room_id, s.slot_date, s.start_time, s.end_time
+     FROM venue_booking_slots s
+     JOIN bookings b ON b.id = s.booking_id
+    WHERE s.released_at IS NULL
+      AND b.reservation_status IN ('pending','approved')
+      AND (b.current_deadline_at IS NULL OR b.current_deadline_at > NOW())
+    ORDER BY s.slot_date, s.start_time"
+)->fetchAll();
+foreach ($vrSlotRows as $s) {
+  $vrBooked[$s['room_id']][] = [
+    'date'  => $s['slot_date'],
+    'start' => substr($s['start_time'], 0, 5),           // '08:00:00' -> '08:00'
+    'end'   => substr($s['end_time'], 0, 5),
+  ];
+}
+
+/* ---- 4. assemble the exact shape every page has always consumed ---- */
+$venueRooms = [];
+foreach ($vrRoomRows as $r) {
+  $glance = room_glance($r['room_code']);
+  $venueRooms[] = [
+    'id'          => $r['room_code'],
+    'name'        => $r['name'],
+    'venue'       => $r['venue_name'],
+    'capacity'    => (int) $r['attendee_capacity'],
+    'maintenance' => isset($vrMaint[$r['id']]) ? $vrMaint[$r['id']] : null,
+    'fee'         => (int) $r['fee_per_day'],
+    'description' => (string) $r['description'],
+    'amenities'   => amenity_labels($r['amenities']),
+    'bestFor'     => $glance['bestFor'],
+    'catering'    => $glance['catering'],
+    'accessible'  => $glance['accessible'],
+    'booked'      => isset($vrBooked[$r['id']]) ? $vrBooked[$r['id']] : [],
+  ];
+}
+unset($vrRoomRows, $vrMaintRows, $vrSlotRows, $vrMaint, $vrBooked, $vrPdo);
 
 /* Rooms under a given venue — the landing page groups by venue. */
 function venueRoomsFor(array $rooms, $venue) {

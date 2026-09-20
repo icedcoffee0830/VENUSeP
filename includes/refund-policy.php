@@ -24,7 +24,7 @@
    request the school will not honour is not.
 
    This is the ONE part of the refund flow that is real. Bookings themselves
-   are still [SIM] (includes/customer-bookings.php).
+   are real rows now (refunds, via customer/refund-submit.php).
    ===================================================================== */
 require_once __DIR__ . '/db.php';
 
@@ -85,7 +85,7 @@ $REFUNDS_ENABLED = refunds_enabled();
                              and it can still be paid late.
 
    Mirrors fn_payment_deadline() in venusep_schema.sql. The PHP copy exists so
-   the [SIM] pages can label bookings before the DB is wired; the JS copy
+   the pages can label a booking before it exists; the JS copy
    (payment_policy_js) so the two booking pages can label a booking that is
    still being typed. All three say the same thing — change one, change all.
    ===================================================================== */

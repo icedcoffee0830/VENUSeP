@@ -3,48 +3,19 @@
 /* ==================================================================
    CUSTOMER CALENDAR — same UI as admin/calendar.php, showing THIS
    customer's own bookings. Read-only (a customer only views).
-   [SIM] each booking below becomes one event on its date, colored by
-   status. Replace with a DB query ("WHERE customer_id = <session>").
+
+   Each booking becomes one event on its date, coloured by RESERVATION
+   status, and a multi-day booking spans its days.
+
+   The rows come from includes/bookings.php — the same ones this
+   customer's booking history and transaction ledger read. This was a
+   hand-written list of 24 event names that existed nowhere else in the
+   system, so the calendar showed bookings the history did not have, and
+   the history showed bookings the calendar did not.
    ================================================================== */
-$eventColors = [
-  'Approved'  => ['#d9eddc', '#16a34a'],
-  'Pending'   => ['#fdf1d7', '#f59e0b'],
-  'Completed' => ['#d7d7d7', '#1f1e1e'],
-  'Rejected'  => ['#fbd5db', '#ff0000'],
-  'Cancelled' => ['#fbd5db', '#ff0000'],
-];
-$customerBookingEvents = [
-  // [ event name, date (ISO), status ]
-  ['Intercollege Basketball Finals', '2026-06-28', 'Completed'],
-  ['Research Documentary Screening', '2026-06-20', 'Completed'],
-  ['Leadership Recognition Night',   '2026-06-12', 'Approved'],
-  ['Undergraduate Thesis Defense',   '2026-05-30', 'Completed'],
-  ['Organization Planning Session',  '2026-05-22', 'Cancelled'],
-  ['Digital Literacy Workshop',      '2026-05-15', 'Rejected'],
-  ['Alumni Chapter Reunion',         '2026-04-26', 'Completed'],
-  ['Graduation Fellowship',          '2026-04-18', 'Cancelled'],
-  ['Academic Recognition Ceremony',  '2026-03-28', 'Completed'],
-  ['Campus Wellness Fair',           '2026-03-14', 'Rejected'],
-  ['Community Volleyball Clinic',    '2026-02-21', 'Completed'],
-  ['Licensure Review Session',       '2026-02-08', 'Approved'],
-  ['Intramural Basketball',          '2026-08-25', 'Approved'],
-  ['Thesis Presentation',            '2026-08-28', 'Pending'],
-  ['Student Organization Assembly',  '2026-09-02', 'Approved'],
-  ['Capstone Project Meeting',       '2026-09-05', 'Approved'],
-  ['Research Consultation',          '2026-09-08', 'Pending'],
-  ['Skills Workshop',                '2026-09-12', 'Cancelled'],
-  ['Family Reunion',                 '2026-09-15', 'Approved'],
-  ['Graduation Dinner',              '2026-09-18', 'Pending'],
-  ['Recognition Program',            '2026-09-22', 'Approved'],
-  ['Wellness Camp',                  '2026-09-25', 'Cancelled'],
-  ['Volleyball Clinic',              '2026-09-28', 'Approved'],
-  ['Board Exam Review',              '2026-10-02', 'Pending'],
-];
-$calendarEvents = [];
-foreach ($customerBookingEvents as $ev) {
-  $c = $eventColors[$ev[2]] ?? $eventColors['Completed'];
-  $calendarEvents[] = ['title' => $ev[0], 'start' => $ev[1], 'backgroundColor' => $c[0], 'textColor' => $c[1]];
-}
+require_once __DIR__ . '/../includes/customer-bookings.php';
+
+$calendarEvents = calendar_events($customerContact['id']);
 $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
 ?>
 <!DOCTYPE html>
@@ -65,9 +36,8 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
   (No [5]: the stock AdminLTE library scripts were dropped in this port —
   the team shell needs no AdminLTE JS. Only FullCalendar loads here.)
 
-  [SIM] marks simulation-only pieces (fake events / demo click actions)
-  that exist so the mockup works on its own — delete or replace them
-  when the real database is connected.
+  Events come from the database. [SIM] now marks only the demo add/delete
+  click actions, which were never part of the booking flow.
   ================================================================== -->
 <html lang="en">
   <head>

@@ -1,7 +1,7 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
 <?php
 /* ==================================================================
-   [SIM] ROOMS — sample data; the real app loads these from the database.
+   ROOMS come from includes/venue-rooms.php + hostel-rooms.php (the database).
 
    Rooms have NO `status` field. "Available"/"Occupied" were only ever the
    booking calendar wearing a word — a second source of truth, free to drift
@@ -31,6 +31,28 @@ require_once __DIR__ . '/../includes/venue-photos.php';  // real uploaded venue 
 include __DIR__ . '/../includes/pricing.php';       // the USeP discount rate — THIS page is the screen that edits it (one rate for all venues)
 
 $rooms = $venueRooms;   // the r1–r8 event rooms, same data the booking page shows
+
+/* The rate's change history — system_settings_history, written by
+   admin/discount-save.php. A settings change is an EVENT, not an overwrite,
+   so "why is everything 15% off?" always has an answer. This used to live in
+   localStorage, which meant the history was per-browser and the admin who made
+   the change was the only one who could ever see it. */
+$dcHistory = [];
+try {
+  $dcStmt = venusep_db_or_fail()->query(
+    "SELECT h.old_value, h.new_value, h.change_note, h.changed_at,
+            COALESCE(u.username, u.email, 'Administrator') AS changed_by
+       FROM system_settings_history h
+       LEFT JOIN users u ON u.id = h.changed_by_user_id
+      WHERE h.setting_key = 'discount_percent'
+      ORDER BY h.changed_at DESC, h.id DESC
+      LIMIT 6"
+  );
+  $dcHistory = $dcStmt->fetchAll();
+} catch (PDOException $e) {
+  $dcHistory = [];   // the rate still shows; only its history is missing
+}
+$dcCsrf = csrf_token();
 
 /* Does the window cover this date? -> the booking gate. */
 function vmCovers($m, $ds) {
@@ -107,9 +129,9 @@ function vmMaint($m, $today) {
   (No [5]: the stock AdminLTE library scripts were removed in this port —
   the team shell needs no JS.)
 
-  [SIM] marks simulation-only pieces (fake data / demo actions) that
-  exist so the mockup works on its own — delete or replace them when
-  the real database is connected.
+  [SIM] now marks only what is still deliberately simulated: the demo
+  advance buttons, which stand in for another person, another office or
+  the passage of time. The data is real.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -765,7 +787,7 @@ function vmMaint($m, $today) {
            title bar + "Add" buttons, search box, sort dropdown,
            then the VENUE cards grid and the ROOM cards grid.
            Cards link to venue-form.php / room-form.php.
-           [SIM] every venue/room card below is hard-coded sample
+           Every venue/room card below is drawn from the database, not from
            data — the real app will generate these cards from the
            database, so the hard-coded ones get deleted then.
            ========================================================== -->
@@ -816,7 +838,7 @@ function vmMaint($m, $today) {
            per-venue. Admin only; staff will REQUEST changes once a staff UI
            exists (agreed 2026-09-14). A change is an EVENT — who/when/from/to/
            why — which is both the audit trail and the shape a request takes.
-           [SIM] value → cookie; history → localStorage. Gone at DB time.
+           Value and history are system_settings + system_settings_history.
            Its own panel class, not .vm-card: that one is a grid tile that
            lifts on hover and clips overflow — wrong for a settings control. -->
       <div class="vm-section-title">Pricing <span>&mdash; one rate, every venue and the hostel</span></div>
@@ -851,7 +873,17 @@ function vmMaint($m, $today) {
 
         <div class="vm-setting-hist">
           <div class="vm-setting-hist-title">Change history</div>
-          <div id="dcHistory"></div>
+          <div id="dcHistory">
+<?php if (!$dcHistory): ?>
+            <div class="vm-setting-hist-empty">No changes yet &mdash; the rate is the default from system settings.</div>
+<?php else: foreach ($dcHistory as $h): ?>
+            <div class="vm-setting-row">
+              <b><?php echo (int) $h['old_value']; ?>% &rarr; <?php echo (int) $h['new_value']; ?>%</b>
+              <span class="who"><?php echo htmlspecialchars((string) $h['changed_by']); ?> &middot; <?php echo htmlspecialchars(date('M j, Y, g:i A', strtotime((string) $h['changed_at']))); ?></span>
+              <span class="why"><?php echo htmlspecialchars((string) $h['change_note']); ?></span>
+            </div>
+<?php endforeach; endif; ?>
+          </div>
         </div>
       </section>
       <!-- VENUES -->
@@ -963,7 +995,13 @@ function vmMaint($m, $today) {
         $mt = vmMaint($room['maintenance'], $TODAY); ?>
         <div class="vm-card">
           <div class="vm-thumb" data-room="<?php echo $rn; ?>">
-<?php $roomCover = rp_cover_url($room['id']); if ($roomCover): ?>
+<?php /* One read of the gallery feeds BOTH the cover and the nav dots, so the
+           dots can never claim more photos than the room actually has (they
+           used to be drawn from a hard-coded 'photos' => N that drifted). */
+      $roomPhotos = rp_gallery_urls($room['id']);
+      $roomCover  = $roomPhotos ? $roomPhotos[0] : rp_cover_url($room['id']);   // fall back to the legacy single file
+      $roomDots   = count($roomPhotos) ?: ($roomCover ? 1 : 0);
+      if ($roomCover): ?>
             <img src="<?php echo htmlspecialchars($roomCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
 <?php else: ?>
             <div class="vm-thumb-icon">
@@ -973,7 +1011,7 @@ function vmMaint($m, $today) {
             </div>
 <?php endif; ?>
             <div class="vm-dots">
-<?php for ($p = 1; $p <= $room['photos']; $p++): ?>
+<?php for ($p = 1; $p <= $roomDots; $p++): ?>
               <button class="vm-dot-nav<?php echo $p === 1 ? ' active' : ''; ?>" aria-label="Photo <?php echo $p; ?>"></button>
 <?php endfor; ?>
             </div>
@@ -1022,7 +1060,13 @@ function vmMaint($m, $today) {
         $closedNow = $room['maintenance'] && $room['maintenance']['blocks'] && hostelMaintCovers($room['maintenance'], $TODAY); ?>
         <div class="vm-card">
           <div class="vm-thumb" data-room="<?php echo 100 + $hn; ?>">
-<?php $roomCover = rp_cover_url($room['id']); if ($roomCover): ?>
+<?php /* One read of the gallery feeds BOTH the cover and the nav dots, so the
+           dots can never claim more photos than the room actually has (they
+           used to be drawn from a hard-coded 'photos' => N that drifted). */
+      $roomPhotos = rp_gallery_urls($room['id']);
+      $roomCover  = $roomPhotos ? $roomPhotos[0] : rp_cover_url($room['id']);   // fall back to the legacy single file
+      $roomDots   = count($roomPhotos) ?: ($roomCover ? 1 : 0);
+      if ($roomCover): ?>
             <img src="<?php echo htmlspecialchars($roomCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
 <?php else: ?>
             <div class="vm-thumb-icon">
@@ -1032,7 +1076,7 @@ function vmMaint($m, $today) {
             </div>
 <?php endif; ?>
             <div class="vm-dots">
-<?php for ($p = 1; $p <= $room['photos']; $p++): ?>
+<?php for ($p = 1; $p <= $roomDots; $p++): ?>
               <button class="vm-dot-nav<?php echo $p === 1 ? ' active' : ''; ?>" aria-label="Photo <?php echo $p; ?>"></button>
 <?php endfor; ?>
             </div>
@@ -1140,26 +1184,17 @@ function vmMaint($m, $today) {
         });
       });
     </script>
-    <!-- [6b] DISCOUNT RATE SCRIPT [SIM] — the form is hidden until "Change rate"
-         is clicked, so the resting state is one number and one sentence. A save
-         records an EVENT and writes the cookie includes/pricing.php reads. -->
+    <!-- [6b] DISCOUNT RATE SCRIPT — the form is hidden until "Change rate" is
+         clicked, so the resting state is one number and one sentence. Saving
+         POSTs to admin/discount-save.php, which is the ONLY writer of
+         system_settings.discount_percent and also records the change as an
+         event in system_settings_history. The history list itself is rendered
+         server-side above; after a save we reload so it comes back from the
+         database rather than being patched in by hand. -->
     <script>
       (function () {
-        const HIST = 'venusep_discount_history';
+        const CSRF = <?php echo json_encode($dcCsrf); ?>;
         const $ = function (id) { return document.getElementById(id); };
-        const esc = function (s) { return String(s == null ? "" : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
-        const readHist = function () { try { const v = JSON.parse(localStorage.getItem(HIST) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
-        const fmt = function (iso) { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); };
-        const drawHist = function () {
-          const list = readHist().slice().reverse().slice(0, 6);
-          $('dcHistory').innerHTML = list.length
-            ? list.map(function (h) {
-                return '<div class="vm-setting-row"><b>' + esc(h.from) + '% &rarr; ' + esc(h.to) + '%</b>'
-                  + '<span class="who">' + esc(h.by) + ' &middot; ' + esc(fmt(h.at)) + '</span>'
-                  + '<span class="why">' + esc(h.reason) + '</span></div>';
-              }).join('')
-            : '<div class="vm-setting-hist-empty">No changes yet &mdash; the rate is the default from system settings.</div>';
-        };
         window.dcToggle = function (show) {
           $('dcForm').hidden = !show;
           $('dcOpen').hidden = show;
@@ -1171,24 +1206,28 @@ function vmMaint($m, $today) {
           err.hidden = true; ok.hidden = true;
           const raw = $('dcRate').value.trim(), reason = $('dcReason').value.trim();
           const cur = parseInt($('dcCurrent').textContent, 10);
-          if (!/^\d{1,3}$/.test(raw) || parseInt(raw, 10) > 100) { err.textContent = 'Enter a whole number from 0 to 100.'; err.hidden = false; return; }
+          const fail = function (m) { err.textContent = m; err.hidden = false; };
+          /* Checked here for a fast, friendly message — and again on the server,
+             which is the check that actually counts. */
+          if (!/^\d{1,3}$/.test(raw) || parseInt(raw, 10) > 100) { return fail('Enter a whole number from 0 to 100.'); }
           const next = parseInt(raw, 10);
-          if (next === cur) { err.textContent = 'That is already the current rate.'; err.hidden = false; return; }
-          if (!reason) { err.textContent = 'A reason is required — it goes into the change history.'; err.hidden = false; return; }
-          /* the value: a cookie, so the PHP listing and the JS booking pages read
-             the same number (includes/pricing.php validates it again) */
-          document.cookie = 'venusep_discount_percent=' + next + '; path=/; max-age=31536000; SameSite=Lax';
-          /* the event: who / when / from / to / why */
-          const hist = readHist();
-          hist.push({ at: new Date().toISOString(), by: 'Administrator', from: cur, to: next, reason: reason });
-          try { localStorage.setItem(HIST, JSON.stringify(hist)); } catch (e) { /* history is a nicety; the rate still saved */ }
-          $('dcCurrent').textContent = next + '%';
-          drawHist();
-          $('dcForm').hidden = true; $('dcOpen').hidden = false;
-          ok.hidden = false;
-          setTimeout(function () { ok.hidden = true; }, 4000);
+          if (next === cur) { return fail('That is already the current rate.'); }
+          if (!reason) { return fail('A reason is required — it goes into the change history.'); }
+
+          const body = new URLSearchParams({ csrf: CSRF, percent: String(next), reason: reason });
+          fetch('discount-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+            .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+            .then(function (res) {
+              if (!res.ok) { return fail(res.message || 'The rate was not changed.'); }
+              $('dcCurrent').textContent = next + '%';
+              $('dcForm').hidden = true; $('dcOpen').hidden = false;
+              ok.hidden = false;
+              /* Reload for the history row + every price on this page, which is
+                 rendered in PHP from the rate we just changed. */
+              setTimeout(function () { location.reload(); }, 700);
+            })
+            .catch(function () { fail('Could not reach the server, so the rate was not changed.'); });
         };
-        drawHist();
       })();
     </script>
   </body>

@@ -290,7 +290,7 @@ $mrOthers = array_slice($mrOthers, 0, 4);
   </div>
 </footer>
 <script>
-/* [SIM] every venue's GCash account — replaced by a lookup when there is a DB. */
+/* Every venue's GCash account, from the gcash_accounts table. */
 const GCASH_ACCOUNTS = <?php echo json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 /* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
    OFF = this booking is non-refundable, and the customer must tick that they
@@ -350,8 +350,30 @@ const CASH_PAY = {
   hours:'Mon–Fri · 8:00 AM – 5:00 PM',
 };
 
-/* [SIM] the "logged-in customer" — in the real app this comes from the login session. */
-const ACCOUNT = { name:'Juan Miguel Dela Cruz', role:'Student · CIC', email:'jmdelacruz@usep.edu.ph', phone:'0917 555 0123' };
+/* The logged-in customer, from the session. */
+/* WHO IS ACTUALLY BOOKING — the session's own row, not a hard-coded demo
+   customer. This line used to name Juan Miguel whoever was signed in, so the
+   nav chip (which read the real session) and the booking card on the same
+   screen could show two different people, and the booking was submitted under
+   the hard-coded name. */
+const ACCOUNT = <?php echo json_encode([
+  'name'  => $customerContact['name'],
+  'role'  => $customerContact['universityId'] !== '' ? 'USeP · ' . $customerContact['universityId'] : 'Customer',
+  'email' => $customerContact['email'],
+  'phone' => $customerContact['phone'],
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+const CSRF = <?php echo json_encode(csrf_token()); ?>;
+
+/* Is this a showcase? The "Demo only" panels below stand in for people and
+   offices this page cannot reach — a coordinator approving an ID, CEDU handing
+   over a POS, the cashier issuing an OR. They belong to a demonstration, and a
+   real customer must never be shown a button that claims to approve their own
+   booking. So they render ONLY while demo mode is on (includes/demo-mode.php,
+   switched on admin/venusep_profile.php).
+   Nothing here could ever have changed the database — these functions only move
+   the screen, and the server refuses a payment on a booking it has not approved
+   — but a customer reading "Simulate staff approval" has no way to know that. */
+const DEMO_MODE = <?php echo demo_mode_on() ? 'true' : 'false'; ?>;
 
 /* ROOMS is defined at the top of the page from includes/venue-rooms.php — the ONE
    shared source, so the booking page, the landing page and admin Venue Management
@@ -836,7 +858,7 @@ var GAL_PHOTOS=[];
 function openGallery(){
   const R=getRoom(); if(!R || document.getElementById('galOverlay')) return;
   GAL_PHOTOS=R.photoUrls||[];
-  const n=GAL_PHOTOS.length||Math.max(1, R.photos||5);
+  const n=GAL_PHOTOS.length||1;          /* no photos yet -> ONE placeholder tile, never a made-up count */
   let thumbs='';
   for(let i=0;i<n;i++){
     const url=GAL_PHOTOS[i];
@@ -892,7 +914,11 @@ function uploadId(input){
   input.value='';
   if(!f) return;
   if(state.idFile){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
-  state.idFile={ name:f.name, url:URL.createObjectURL(f) };
+  /* The File itself is kept, not just a preview URL: submitRequest() has to
+     actually upload it. It used to hold only {name, url}, which was all a
+     mockup needed — the object URL shows the thumbnail, the File is what
+     goes to the server. */
+  state.idFile={ name:f.name, url:URL.createObjectURL(f), file:f };
   render();
 }
 /* The affiliation CLAIM. Changing it re-prices instantly, so the customer sees
@@ -906,16 +932,66 @@ function removeId(){
    before it is made — the policy is agreed at booking time, not at payment. */
 function canSubmitRequest(){ return !!state.idFile && (REFUNDS_ENABLED || state.agreeNoRefund); }
 function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
-function submitRequest(){
-  /* affiliation is now a required choice, exactly like the ID upload — the price
+/* Submit the booking FOR REAL. The screen no longer advances on its own: it
+   advances when the server has a row, so a customer is never shown a reference
+   for a booking that does not exist.
+
+   The server re-checks everything sent here — the price from the room's own
+   rate, the slot through sp_add_venue_slot(). These checks stay because they
+   give a fast, friendly message, not because they are trusted. */
+let submitting = false;
+async function submitRequest(){
+  /* affiliation is a required choice, exactly like the ID upload — the price
      depends on it, so it cannot be left unanswered */
-  if(!derive().ready || !canSubmitRequest() || state.affiliated===null) return;
-  state.submitted=true;                      // the form is gone for good — browser Back now leaves the flow
-  state.screen='pending'; render();
+  if(submitting || !derive().ready || !canSubmitRequest() || state.affiliated===null) return;
+  const d = derive();
+
+  /* Per-day hours, keyed by date: a multi-day booking can run different hours
+     each day, which is why times live per DAY and not on the booking header. */
+  const times = {};
+  d.dates.forEach(function(ds){ const t = dayTime(ds); times[ds] = { start:t.start, end:t.end }; });
+
+  const fd = new FormData();
+  fd.append('csrf', CSRF);
+  fd.append('type', 'venue');
+  fd.append('room', state.roomId);
+  fd.append('event_name', state.booking.eventName);
+  fd.append('date_start', state.booking.date);
+  fd.append('date_end', state.booking.dateEnd || state.booking.date);
+  fd.append('attendees', state.booking.attendees);
+  fd.append('times', JSON.stringify(times));
+  fd.append('affiliated', state.affiliated ? '1' : '0');
+  fd.append('method', state.payMethod);
+  fd.append('agree_no_refund', state.agreeNoRefund ? '1' : '0');
+  fd.append('id_document', state.idFile.file, state.idFile.name);
+
+  submitting = true; render();
+  try{
+    const res = await fetch('booking-submit.php', { method:'POST', body:fd, credentials:'same-origin' });
+    const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
+    if(!out.ok){
+      submitting = false;
+      state.submitError = out.message || 'Your booking was not submitted.';
+      render();
+      return;
+    }
+    /* The reference now comes from the database, which owns booking identity —
+       it used to be a random number the page made up for itself. */
+    state.reference = out.reference;
+    state.bookingDbId = out.bookingId;
+    state.submitError = null;
+    state.submitted = true;                  // the form is gone for good — browser Back now leaves the flow
+    state.screen = 'pending';
+  }catch(e){
+    state.submitError = 'Could not reach the server, so your booking was not submitted.';
+  }
+  submitting = false;
+  render();
 }
 /* [SIM] mockup stand-in for the staff side (the two UIs aren't connected yet) —
    delete this + its button once real staff approval updates the booking in the DB */
 function demoApprove(){
+  if(!DEMO_MODE) return;     /* live system: only a coordinator approves a booking */
   state.approved=true;
   /* pre-pay: approval unlocks payment. post-pay: approval only confirms the
      slot — payment stays locked until the event is over. */
@@ -924,7 +1000,7 @@ function demoApprove(){
 }
 /* [SIM] post-pay only — stands in for the calendar rolling past the last day
    (the DB does this in sp_expire_due_bookings). */
-function demoEventOver(){ state.eventOver=true; state.screen='payment'; render(); }
+function demoEventOver(){ if(!DEMO_MODE) return; state.eventOver=true; state.screen='payment'; render(); }
 
 /* This booking's payment timing — the shared rule (payPolicyFor, from
    includes/refund-policy.php) applied to the dates being typed. */
@@ -958,11 +1034,60 @@ function gcExpectedCentavos(){ return Math.round(bookingRows().d.totalFee*100); 
 function gcBookingRef(){ return state.reference; }
 function toggleAgreeExact(el){ state.agreeExact=!!el.checked; render(); }
 function setPayMethod(m){ state.payMethod=m; render(); }
-function confirmBooking(){
-  if(state.payMethod==='cash'){ state.screen='done'; render(); return; }   // walk-in: pay at the office, no receipt yet
-  if(!receiptOk()) return;
-  gcRemember(state.ocr.rec);                        // consume the ref + file hash (duplicate protection)
-  state.screen='done'; render();
+/* Record the payment FOR REAL. The screen advances on the server's answer, so
+   a customer is never told a receipt was accepted that was never stored.
+
+   The verdict shown here is recomputed server-side against the booking's own
+   total and the venue's own GCash account — this page's OCR runs in the
+   browser and is a claim, not evidence. Duplicate references and duplicate
+   images are refused by UNIQUE indexes that hold across EVERY booking, which
+   the old localStorage store could never do: it was per-browser and forgot
+   everything the moment you switched machines. */
+let paying = false;
+async function confirmBooking(){
+  if(paying) return;
+  const cash = state.payMethod === 'cash';
+  if(!cash && !receiptOk()) return;
+
+  const fd = new FormData();
+  fd.append('csrf', CSRF);
+  fd.append('booking', state.reference);
+  fd.append('method', cash ? 'cash' : 'gcash');
+  if(!cash){
+    const rec = state.ocr.rec, p = rec.parsed || {};
+    fd.append('receipt', state.ocr.file, state.ocr.fileName || 'receipt.jpg');
+    fd.append('ref', p.ref || '');
+    fd.append('receiver_name', p.receiverNameMasked || p.receiverNameShort || '');
+    fd.append('receiver_number', p.receiverNumber || '');
+    fd.append('amount_centavos', p.effAmountC != null ? p.effAmountC : '');
+    fd.append('receipt_datetime', p.datetime || '');
+    fd.append('confidence', rec.confidence != null ? rec.confidence : '');
+    fd.append('flags', JSON.stringify(rec.flags || []));
+    fd.append('text_excerpt', rec.textExcerpt || '');
+  }
+
+  paying = true; render();
+  try{
+    const res = await fetch('payment-submit.php', { method:'POST', body:fd, credentials:'same-origin' });
+    const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
+    if(!out.ok){
+      paying = false;
+      state.payError = out.message || 'Your payment was not recorded.';
+      /* A server-side rejection outranks the browser's verdict — it is the one
+         that checked against the real amount and the real account. */
+      if(out.verdict === 'rejected' && state.ocr && state.ocr.rec){
+        state.ocr.rec.status = 'rejected';
+        state.ocr.rec.reasons = (state.ocr.rec.reasons || []).concat(['server_rejected']);
+      }
+      render(); return;
+    }
+    state.payError = null;
+    state.paymentVerdict = out.verdict || null;
+    state.screen = 'done';
+  }catch(e){
+    state.payError = 'Could not reach the server, so your payment was not recorded.';
+  }
+  paying = false; render();
 }
 /* "Browse more rooms" — back to the landing page (it links here again with ?room=) */
 function restart(){ location.href='venusep_venue_booking.php'; }
@@ -1479,14 +1604,21 @@ function pendingScreen(){
       <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">${payWhenText()}${PAY_POLICY.prepay?' — unpaid reservations may be released after the deadline.':'. Bookings not paid by then are marked overdue.'}</div>
     </div>
 
+    ${DEMO_MODE ? `
     <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
       <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
       ${!state.approved ? `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">The staff side isn't connected in this mockup — use this to simulate the coordinator approving your ID and reservation.</div>
+      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the staff side is standing in — use this to simulate the coordinator approving your ID and reservation.</div>
       <button onclick="demoApprove()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">${PAY_POLICY.prepay?'Simulate staff approval → proceed to payment':'Simulate staff approval'}</button>` : `
       <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Payment opens by itself once the calendar passes your last day — use this to jump there.</div>
       <button onclick="demoEventOver()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate: event is over → proceed to payment</button>`}
-    </div>
+    </div>` : `
+    <!-- Live system: a real coordinator does this, and the request is already
+         in their queue. Say where to watch for it rather than leaving the
+         screen looking like it stops here. -->
+    <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
+      <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the venue coordinators now. You will see the decision on this booking in <a href="booking-history.php" style="color:#1f1e1e;font-weight:640">My Bookings</a>, and payment unlocks there once it is approved.</div>
+    </div>`}
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse more rooms</button>
   </main>`;

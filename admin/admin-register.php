@@ -9,9 +9,9 @@
   preserved (department, full name, email, contact, password + confirm,
   terms).
 
-  [SIM] front-end mockup only — no account is created. On valid input it
-  shows a message and redirects to the login page. Replace the inline
-  script with real PHP registration + database insert later.
+  WIRED: posts to register-submit.php, which creates the users + staff rows,
+  then returns to the dashboard. The admin stays signed in as themselves —
+  they created an account, they did not become it.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -224,7 +224,7 @@
       </section>
     </main>
 
-    <!-- [SIM] front-end validation + fake redirect (ported from the teammate's auth.js).
+    <!-- Client-side validation for fast feedback; register-submit.php repeats every check.
          Replace with real PHP registration + database insert later. -->
     <script>
       document.addEventListener('DOMContentLoaded', function () {
@@ -255,6 +255,7 @@
           });
         });
 
+        const CSRF = <?php echo json_encode(csrf_token()); ?>;
         document.querySelectorAll('[data-auth-form]').forEach(function (form) {
           form.querySelectorAll('input').forEach(function (field) {
             field.addEventListener(field.type === 'checkbox' || field.type === 'radio' ? 'change' : 'input', function () {
@@ -304,9 +305,39 @@
               return;
             }
 
-            // TODO: replace with real PHP registration (validate, hash password, insert row).
-            setMessage(form.dataset.successTarget, form.dataset.successMessage);
-            window.setTimeout(function () { window.location.href = form.dataset.redirect; }, 800);
+            /* Create the STAFF account for real. The page is already admin-only
+               (admin_require_login(['admin'])), and the endpoint re-checks that
+               — a page guard is not a security boundary, since this is a POST
+               anyone could aim at directly.
+
+               The admin stays signed in as themselves afterwards: they created
+               an account, they did not become it. */
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+            const body = new FormData(form);
+            body.append('csrf', CSRF);
+            body.append('kind', 'staff');
+            fetch('../register-submit.php', { method: 'POST', body: body, credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+              .then(function (out) {
+                if (submitBtn) submitBtn.disabled = false;
+                if (!out.ok) {
+                  const map = { full_name: 'fullNameValidation', email: 'emailValidation',
+                                contact_number: 'contactNumberValidation', password: 'passwordValidation',
+                                confirm_password: 'confirmPasswordValidation', terms: 'termsValidation',
+                                department: 'departmentValidation' };
+                  const target = out.field && form.querySelector('[name="' + out.field + '"]');
+                  if (target) { setFieldState(target, map[out.field], out.message); target.focus(); }
+                  else { setMessage(form.dataset.successTarget, out.message || 'The account was not created.'); }
+                  return;
+                }
+                setMessage(form.dataset.successTarget, 'Staff account created. Returning to the dashboard…');
+                window.setTimeout(function () { window.location.href = 'Admin_Dashboard.php'; }, 900);
+              })
+              .catch(function () {
+                if (submitBtn) submitBtn.disabled = false;
+                setMessage(form.dataset.successTarget, 'Could not reach the server, so the account was not created.');
+              });
           });
         });
       });

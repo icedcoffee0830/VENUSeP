@@ -1,4 +1,12 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(); ?>
+<?php
+/* EVERY booking, for the staff-wide calendar — from includes/bookings.php,
+   the same rows the queue and the transaction ledger read. */
+require_once __DIR__ . '/../includes/bookings.php';
+
+$calendarEvents = calendar_events();          // no customer id = all customers
+$calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
+?>
 <?php ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -18,9 +26,8 @@
   (No [5]: the stock AdminLTE library scripts were dropped in this port —
   the team shell needs no AdminLTE JS. Only FullCalendar loads here.)
 
-  [SIM] marks simulation-only pieces (fake events / demo click actions)
-  that exist so the mockup works on its own — delete or replace them
-  when the real database is connected.
+  Events come from the database. [SIM] now marks only the demo add/delete
+  click actions, which were never part of the booking flow.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -534,29 +541,13 @@
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const calendarEl = document.getElementById('calendar');
-        const eventColors = {
-          gray: {
-            backgroundColor: '#d7d7d7',
-            textColor: '#1f1e1e',
-          },
-          green: {
-            backgroundColor: '#d9eddc',
-            textColor: '#16a34a',
-          },
-          yellow: {
-            backgroundColor: '#fdf1d7',
-            textColor: '#f59e0b',
-          },
-          red: {
-            backgroundColor: '#fbd5db',
-            textColor: '#ff0000',
-          },
-        };
 
         const calendar = new FullCalendar.Calendar(calendarEl, {
           // 1) Calendar start view/date
           initialView: 'dayGridMonth',
-          initialDate: '2026-02-01',
+          /* No initialDate: the calendar opens on the CURRENT month. It was
+             pinned to '2026-02-01' by the mockup, so staff arrived in a month
+             that was months behind whatever they were working on. */
 
           // 2) Calendar toolbar buttons
           headerToolbar: {
@@ -598,101 +589,13 @@
             }
           },
 
-          // 5) Calendar tasks/events
-          // [SIM] hard-coded sample events — swap for booking data from the
-          // database (each approved booking becomes an event here).
-          events: [
-            {
-              title: 'Team Standup',
-              start: '2026-02-02',
-              ...eventColors.gray,
-            },
-            {
-              title: 'Sprint Review',
-              start: '2026-02-04',
-              ...eventColors.green,
-            },
-            {
-              title: 'Client Call - Acme Corp',
-              start: '2026-02-06',
-              ...eventColors.yellow,
-            },
-            {
-              title: 'Design Review',
-              start: '2026-02-06',
-              ...eventColors.gray,
-            },
-            {
-              title: 'Product Launch',
-              start: '2026-02-10',
-              ...eventColors.red,
-            },
-            {
-              title: 'Lunch & Learn',
-              start: '2026-02-12',
-              ...eventColors.green,
-            },
-            {
-              title: 'Budget Meeting',
-              start: '2026-02-13',
-              ...eventColors.yellow,
-            },
-            {
-              title: '1:1 with Manager',
-              start: '2026-02-14',
-              ...eventColors.gray,
-            },
-            {
-              title: 'Team Standup',
-              start: '2026-02-17',
-              ...eventColors.gray,
-            },
-            {
-              title: 'Sprint Planning',
-              start: '2026-02-18',
-              ...eventColors.green,
-            },
-            {
-              title: 'Stakeholder Demo',
-              start: '2026-02-18',
-              ...eventColors.yellow,
-            },
-            {
-              title: 'Security Audit',
-              start: '2026-02-20',
-              ...eventColors.red,
-            },
-            {
-              title: 'UX Workshop',
-              start: '2026-02-22',
-              ...eventColors.green,
-            },
-            {
-              title: 'Client Call - Globex',
-              start: '2026-02-24',
-              ...eventColors.yellow,
-            },
-            {
-              title: 'Code Freeze',
-              start: '2026-02-26',
-              ...eventColors.red,
-            },
-            {
-              title: 'Team Retrospective',
-              start: '2026-02-27',
-              ...eventColors.gray,
-            },
-            {
-              title: 'Q1 Review',
-              start: '2026-03-02',
-              ...eventColors.green,
-            },
-            {
-              title: 'Conference Travel',
-              start: '2026-03-05',
-              ...eventColors.yellow,
-            },
-          ],
+          /* Every booking in the system, from includes/bookings.php — the same
+             rows the queue and the customer calendars read. This array was
+             still AdminLTE's stock demo ("Team Standup", "Sprint Review",
+             "Client Call - Acme Corp"): the admin calendar had never shown a
+             VENUSeP booking at all. Colour carries the reservation status;
+             multi-day bookings span their days. */
+          events: <?php echo $calendarEventsJson; ?>,
         });
 
         calendar.render();

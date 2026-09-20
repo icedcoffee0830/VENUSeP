@@ -1,12 +1,20 @@
-<?php ?>
+<?php
+/* A CSRF token for the registration POST. The page itself is public — anyone
+   may sign up — but the token stops another site posting this form on a
+   visitor's behalf. */
+require_once __DIR__ . '/../includes/auth.php';
+venusep_session_start();
+$crCsrf = csrf_token();
+?>
 <!DOCTYPE html>
 <!-- ==================================================================
   CUSTOMER REGISTRATION — VENUSeP merged system
   ==================================================================
   Ported from the teammate's customer-register.php. Standalone AUTH page
   (no shell). Restyled to the team palette; fields + validation kept.
-  [SIM] front-end mockup — no account is created; valid input redirects
-  to the login page. Replace the script with PHP registration later.
+  WIRED: posts to register-submit.php, which creates the users + customers
+  rows, then sends them to the login page — signing in proves the password
+  they just chose actually works.
   ================================================================== -->
 <html lang="en">
   <head>
@@ -150,7 +158,7 @@
             <p class="auth-subtitle">It takes less than a minute.</p>
           </div>
 
-          <!-- [SIM] on valid input the script redirects to customer-login.php -->
+          <!-- On success the server has created the account; then to the login page. -->
           <form id="customerRegisterForm" action="" method="post" novalidate data-auth-form="register" data-redirect="customer-login.php" data-success-target="registrationSuccessMessage" data-success-message="Account created successfully. Redirecting to login...">
             <div class="form-group">
               <label for="fullName" class="form-label">Full Name</label>
@@ -190,7 +198,7 @@
       </section>
     </main>
 
-    <!-- [SIM] front-end validation + fake redirect. Replace with PHP registration later. -->
+    <!-- Client-side validation for fast feedback; the server repeats every check. -->
     <script>
       document.addEventListener('DOMContentLoaded', function () {
         const setMessage = function (id, message) { const el = document.getElementById(id); if (el) el.textContent = message; };
@@ -214,6 +222,7 @@
             if (icon) { icon.classList.toggle('bi-eye', !show); icon.classList.toggle('bi-eye-slash', show); }
           });
         });
+        const CSRF = <?php echo json_encode($crCsrf); ?>;
         document.querySelectorAll('[data-auth-form]').forEach(function (form) {
           form.querySelectorAll('input').forEach(function (field) {
             field.addEventListener(field.type === 'checkbox' ? 'change' : 'input', function () { setFieldState(field, field.getAttribute('aria-describedby'), ''); });
@@ -243,9 +252,40 @@
             setFieldState(email, 'emailValidation', emailError);
             hasError = hasError || Boolean(emailError);
             if (hasError) { const f = form.querySelector('[aria-invalid="true"]'); if (f) f.focus(); return; }
-            // TODO: replace with real PHP registration.
-            setMessage(form.dataset.successTarget, form.dataset.successMessage);
-            window.setTimeout(function () { window.location.href = form.dataset.redirect; }, 800);
+
+            /* Create the account FOR REAL. These checks above stay because they
+               give fast, per-field feedback — but the server runs all of them
+               again, and it owns the ones the browser cannot answer honestly:
+               whether the email is already registered, and whether the password
+               hashes and stores. The page only claims success once it has. */
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+            const body = new FormData(form);
+            body.append('csrf', CSRF);
+            body.append('kind', 'customer');
+            fetch('../register-submit.php', { method: 'POST', body: body, credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+              .then(function (out) {
+                if (submitBtn) submitBtn.disabled = false;
+                if (!out.ok) {
+                  /* Put the message on the FIELD it belongs to when the server
+                     names one — "that email is already registered" beside the
+                     email box beats a banner the eye slides past. */
+                  const map = { full_name: 'fullNameValidation', email: 'emailValidation',
+                                contact_number: 'contactNumberValidation', password: 'passwordValidation',
+                                confirm_password: 'confirmPasswordValidation', terms: 'termsValidation' };
+                  const target = out.field && form.querySelector('[name="' + out.field + '"]');
+                  if (target) { setFieldState(target, map[out.field], out.message); target.focus(); }
+                  else { setMessage(form.dataset.successTarget, out.message || 'The account was not created.'); }
+                  return;
+                }
+                setMessage(form.dataset.successTarget, form.dataset.successMessage);
+                window.setTimeout(function () { window.location.href = form.dataset.redirect; }, 800);
+              })
+              .catch(function () {
+                if (submitBtn) submitBtn.disabled = false;
+                setMessage(form.dataset.successTarget, 'Could not reach the server, so the account was not created.');
+              });
           });
         });
       });

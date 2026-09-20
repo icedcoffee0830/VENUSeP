@@ -113,6 +113,7 @@ CREATE TABLE customers (
 
 CREATE TABLE staff (
     user_id             BIGINT UNSIGNED PRIMARY KEY,
+    venue_id            BIGINT UNSIGNED NULL,             -- current assignment; NULL = unassigned/admin-wide
     full_name           VARCHAR(190) NOT NULL,
     employee_no         VARCHAR(80) NULL,              -- kept + to be added to UI (DB-DECISIONS #13)
     position_role       VARCHAR(120) NULL,             -- renamed from position_title (#12)
@@ -147,6 +148,11 @@ CREATE TABLE venues (
     CONSTRAINT uq_venues_code UNIQUE (venue_code),
     CONSTRAINT uq_venues_name UNIQUE (name)
 ) ENGINE=InnoDB;
+
+ALTER TABLE staff
+    ADD CONSTRAINT fk_staff_venue
+        FOREIGN KEY (venue_id) REFERENCES venues(id)
+        ON UPDATE CASCADE ON DELETE SET NULL;
 
 CREATE TABLE rooms (
     id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

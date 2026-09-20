@@ -577,7 +577,6 @@ $venueFormCsrf = csrf_token();
          table exists in the schema, so the confirmation says so rather
          than pretend. */
       function vpSaveChanges() {
-        if (vpNeedsVenue()) return;
         var name = document.getElementById('venueName').value.trim();
         var description = document.getElementById('venueDesc').value.trim();
         if (!name) { alert('Enter a venue name.'); return; }
@@ -592,6 +591,10 @@ $venueFormCsrf = csrf_token();
           .then(function (res) {
             if (!res.ok) { alert(res.message || 'Could not save the venue.'); return; }
             alert('Venue saved.\n\n(Assigned Staff on this form is not connected to storage yet.)');
+            if (res.created && res.venue_id) {
+              location.href = 'venue-form.php?id=' + encodeURIComponent(res.venue_id);
+              return;
+            }
             location.href = 'venue-management.php';
           })
           .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });

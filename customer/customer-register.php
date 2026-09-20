@@ -114,6 +114,7 @@ $crCsrf = csrf_token();
 
       /* ---- phone: the crimson panel becomes a short header strip ---- */
       @media (max-width: 860px) {
+        html, body { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .auth-split { grid-template-columns: 1fr; min-height: 0; }
         /* a short strip, not a tall panel: the form must start high enough that the
            password box stays above the keyboard (in-app browsers do not scroll for it) */
@@ -125,7 +126,7 @@ $crCsrf = csrf_token();
         .auth-hero-sub { display: none; }
         .auth-hero-foot { display: none; }
         .auth-hero-arcs { right: -40%; top: -60%; width: 160%; height: 220%; }
-        .auth-panel { padding: 16px 20px 40px; }
+        .auth-panel { justify-content: flex-start; padding: 16px 20px max(48px, env(safe-area-inset-bottom)); }
         .auth-back { position: static; align-self: flex-start; margin-bottom: 14px; min-height: 32px; }
         .auth-heading { margin-bottom: 18px; }
         .auth-brand { display: none; }
@@ -226,6 +227,10 @@ $crCsrf = csrf_token();
         document.querySelectorAll('[data-auth-form]').forEach(function (form) {
           form.querySelectorAll('input').forEach(function (field) {
             field.addEventListener(field.type === 'checkbox' ? 'change' : 'input', function () { setFieldState(field, field.getAttribute('aria-describedby'), ''); });
+            field.addEventListener('focus', function () {
+              if (!window.matchMedia('(max-width: 860px)').matches) return;
+              window.setTimeout(function () { field.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 250);
+            });
           });
           form.addEventListener('submit', function (event) {
             event.preventDefault();

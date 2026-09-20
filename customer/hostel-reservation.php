@@ -632,7 +632,7 @@ function removeId(){
 }
 /* While refunds are OFF, the guest must acknowledge the stay is final before
    the booking is made — the policy is agreed at booking time, not at payment. */
-function canSubmitRequest(){ return !!state.idFile && (REFUNDS_ENABLED || state.agreeNoRefund); }
+function canSubmitRequest(){ return !!state.idFile && state.affiliated !== null && (REFUNDS_ENABLED || state.agreeNoRefund); }
 function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
 /* Submit FOR REAL. The screen advances when the server has a row, so a guest is
    never shown a reference for a stay that does not exist. Beds are assigned by

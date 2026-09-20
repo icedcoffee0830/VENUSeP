@@ -60,7 +60,28 @@ SET @sql = IF(
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ---------------------------------------------------------------------------
--- 3. system_settings rows.
+-- 3. staff.venue_id — one current venue assignment per staff profile.
+--    NULL preserves every existing row and is valid for unassigned staff/admins.
+--    Deleting a venue clears the assignment; it never deletes the account.
+-- ---------------------------------------------------------------------------
+SET @sql = IF(
+  (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff' AND COLUMN_NAME = 'venue_id') = 0,
+  'ALTER TABLE staff ADD COLUMN venue_id BIGINT UNSIGNED NULL AFTER user_id',
+  'SELECT ''staff.venue_id already exists'' AS note'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+  (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff' AND CONSTRAINT_NAME = 'fk_staff_venue') = 0,
+  'ALTER TABLE staff ADD CONSTRAINT fk_staff_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON UPDATE CASCADE ON DELETE SET NULL',
+  'SELECT ''fk_staff_venue already exists'' AS note'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ---------------------------------------------------------------------------
+-- 4. system_settings rows.
 --    demo_mode — the showcase switch. A ROW, not a column, so removing demo
 --    mode later is one DELETE and leaves no trace in the schema.
 --    discount_percent — already seeded by venusep_schema.sql; the INSERT below

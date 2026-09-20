@@ -292,7 +292,7 @@ booking whose day-before deadline has passed becomes due the moment the event
 starts.
 
 ### Added since
-- `rooms.amenities` (JSON), `customers.photo_path`, `staff.photo_path` — three
-  columns, in `venusep_migration_01.sql`.
+- `rooms.amenities` (JSON), `customers.photo_path`, `staff.photo_path`, and
+  nullable `staff.venue_id` — four columns, in `venusep_migration_01.sql`.
 - `system_settings.demo_mode` — a ROW, not a column, so removing demo mode later
   is one DELETE.

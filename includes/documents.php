@@ -194,5 +194,6 @@ function doc_path($filePath) {
     if ($root === false || $full === false) {
         return null;
     }
+    $root = rtrim($root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
     return strpos($full, $root) === 0 ? $full : null;
 }

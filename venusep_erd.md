@@ -16,6 +16,7 @@ erDiagram
     %% ---------- identity ----------
     USERS ||--o| CUSTOMERS : "may log in as"
     USERS ||--o| STAFF : "may log in as"
+    VENUES ||--o{ STAFF : "assigned to"
 
     %% ---------- venues, rooms, inventory ----------
     VENUES ||--o{ ROOMS : "contains"
@@ -76,6 +77,7 @@ erDiagram
     }
     STAFF {
         bigint user_id PK "-> users"
+        bigint venue_id FK "NULL = unassigned/admin-wide"
         varchar full_name
         varchar employee_no
         varchar position_role

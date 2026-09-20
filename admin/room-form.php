@@ -1198,16 +1198,24 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
         body.append('name', name);
         body.append('venue', venue);
         body.append('room_type', 'event');
+        if (isNew) {
+          body.append('capacity', document.getElementById('roomCap').value);
+          body.append('fee', document.getElementById('roomRate').value);
+        }
         /* The ticked amenity KEYS. Always sent — an empty list is a real answer
            (the admin unticked everything), which is why room-save.php
            distinguishes "absent" from "empty". */
-        body.append('amenities', JSON.stringify(selectedAmenities()));
+        body.append('amenities', JSON.stringify(window.selectedAmenities()));
         body.append('csrf', VM_CSRF);
         fetch('room-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.ok) { alert(res.message || 'Could not save the room.'); return; }
             alert(res.message || 'Room saved.');
+            if (res.created && res.room_id) {
+              location.href = 'room-form.php?id=' + encodeURIComponent(res.room_id);
+              return;
+            }
             location.href = 'venue-management.php';
           })
           .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
@@ -1282,12 +1290,12 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
 
         /* What the form will send: the keys of every ticked chip, in the order
            the vocabulary lists them, which is the order the customer sees. */
-        function selectedAmenities() {
+        window.selectedAmenities = function () {
           return Array.prototype.slice
             .call(document.querySelectorAll('#vmAmenityPool .vm-chip.selected'))
             .map(function (c) { return c.getAttribute('data-amenity'); })
             .filter(Boolean);
-        }
+        };
 
         buildAmenities();
 

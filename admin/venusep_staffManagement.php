@@ -15,13 +15,20 @@ admin_require_login(['admin']);
 require_once __DIR__ . '/../includes/db.php';
 
 $smRows = [];
+$smVenues = [];
 try {
-    $smStmt = venusep_db_or_fail()->query(
+    $smPdo = venusep_db_or_fail();
+    foreach ($smPdo->query('SELECT id, name FROM venues ORDER BY id') as $venue) {
+        $smVenues[] = ['id' => (int) $venue['id'], 'name' => (string) $venue['name']];
+    }
+    $smStmt = $smPdo->query(
         "SELECT u.id, u.email, u.account_type, u.is_active, u.last_login_at,
                 COALESCE(s.full_name, u.username) AS full_name,
-                s.employee_no, s.position_role, s.phone
+                s.employee_no, s.position_role, s.phone, s.venue_id,
+                v.name AS venue_name
            FROM users u
            LEFT JOIN staff s ON s.user_id = u.id
+           LEFT JOIN venues v ON v.id = s.venue_id
           WHERE u.account_type IN ('admin', 'staff')
           ORDER BY u.account_type, COALESCE(s.full_name, u.username)"
     );
@@ -35,12 +42,15 @@ try {
             'employee' => (string) $r['employee_no'],
             'position' => (string) $r['position_role'],
             'phone'    => (string) $r['phone'],
+            'venueId'  => $r['venue_id'] === null ? '' : (string) (int) $r['venue_id'],
+            'venue'    => $r['venue_name'] === null ? 'Unassigned' : (string) $r['venue_name'],
             'lastLogin'=> $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
             'isSelf'   => (int) $r['id'] === (int) $_SESSION['user_id'],
         ];
     }
 } catch (PDOException $e) {
     $smRows = [];
+    $smVenues = [];
 }
 $smCsrf = csrf_token();
 ?>
@@ -585,7 +595,14 @@ body {
     document.addEventListener('DOMContentLoaded', () => {
       /* The real staff-side accounts, from `users` + `staff`. */
       const data = <?php echo json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+      const venues = <?php echo json_encode($smVenues, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
       const CSRF = <?php echo json_encode($smCsrf); ?>;
+      const venueEditorValues = { '': 'Unassigned' };
+      const venueFilterValues = { '': 'All Venues', '__unassigned': 'Unassigned' };
+      venues.forEach(function (venue) {
+        venueEditorValues[String(venue.id)] = venue.name;
+        venueFilterValues[String(venue.id)] = venue.name;
+      });
 
       /* Every write goes to admin/staff-save.php, which re-checks that the
          caller is an admin and refuses the two ways an admin could lock
@@ -637,6 +654,32 @@ body {
             headerFilterParams: { values: ['', 'Staff'] },
             width: 150,
             hozAlign: 'center',
+          },
+          {
+            title: 'Venue',
+            field: 'venueId',
+            formatter: function (cell) {
+              return venueEditorValues[String(cell.getValue())] || 'Unassigned';
+            },
+            editor: 'list',
+            editorParams: { values: venueEditorValues },
+            editable: function (cell) { return cell.getRow().getData().role === 'Staff'; },
+            headerFilter: 'list',
+            headerFilterParams: { values: venueFilterValues, clearable: true },
+            headerFilterFunc: function (filterValue, rowValue) {
+              if (!filterValue) return true;
+              if (filterValue === '__unassigned') return !rowValue;
+              return String(rowValue) === String(filterValue);
+            },
+            width: 175,
+            cellEdited: function (cell) {
+              const row = cell.getRow().getData();
+              const body = new FormData();
+              body.append('action', 'set_venue');
+              body.append('user_id', row.id);
+              body.append('venue_id', cell.getValue() || '');
+              staffAction(body).then(function () { window.location.reload(); });
+            },
           },
           {
             title: 'Status',
@@ -692,6 +735,7 @@ body {
               { field: 'name', type: 'like', value: value },
               { field: 'email', type: 'like', value: value },
               { field: 'role', type: 'like', value: value },
+              { field: 'venue', type: 'like', value: value },
               { field: 'status', type: 'like', value: value },
             ],
           ]);

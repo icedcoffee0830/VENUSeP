@@ -32,6 +32,42 @@ include __DIR__ . '/../includes/pricing.php';       // the USeP discount rate �
 
 $rooms = $venueRooms;   // the r1–r8 event rooms, same data the booking page shows
 
+/* Venue cards must start from venues, not rooms: a newly created venue has no
+   rooms yet and still belongs on this page. LEFT JOINs keep that venue in the
+   result while deriving its active room, hostel-bed and assigned-staff counts. */
+$vmVenueRows = venusep_db_or_fail()->query(
+  "SELECT v.id, v.name, v.venue_type, v.description, v.cover_photo,
+          COUNT(DISTINCT r.id) AS room_count,
+          COUNT(DISTINCT hb.id) AS bed_count,
+          COUNT(DISTINCT s.user_id) AS staff_count
+     FROM venues v
+     LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
+     LEFT JOIN hostel_beds hb ON hb.room_id = r.id AND hb.is_active = 1
+     LEFT JOIN staff s ON s.venue_id = v.id
+    WHERE v.is_active = 1
+    GROUP BY v.id, v.name, v.venue_type, v.description, v.cover_photo
+    ORDER BY v.id"
+)->fetchAll();
+
+$vmStaffByVenue = [];
+$vmStaffRows = venusep_db_or_fail()->query(
+  'SELECT venue_id, full_name FROM staff WHERE venue_id IS NOT NULL ORDER BY full_name'
+)->fetchAll();
+foreach ($vmStaffRows as $vmStaff) {
+  $vmStaffByVenue[(int) $vmStaff['venue_id']][] = (string) $vmStaff['full_name'];
+}
+
+function vmStaffInitials($name) {
+  $parts = preg_split('/\s+/', trim((string) $name));
+  $initials = '';
+  foreach ($parts as $part) {
+    if ($part === '') continue;
+    $initials .= mb_strtoupper(mb_substr($part, 0, 1));
+    if (mb_strlen($initials) >= 2) break;
+  }
+  return $initials !== '' ? $initials : '?';
+}
+
 /* The rate's change history — system_settings_history, written by
    admin/discount-save.php. A settings change is an EVENT, not an overwrite,
    so "why is everything 15% off?" always has an answer. This used to live in
@@ -610,6 +646,33 @@ function vmMaint($m, $today) {
         color: var(--vm-warn);
       }
 
+      .vm-card-actions {
+        align-items: center;
+        display: flex;
+        gap: 0.9rem;
+      }
+
+      .vm-delete-link {
+        background: transparent;
+        border: 0;
+        color: #b42318;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 700;
+        padding: 0;
+      }
+
+      .vm-delete-link:hover {
+        color: #7a1710;
+        text-decoration: underline;
+      }
+
+      .vm-delete-link:disabled {
+        cursor: wait;
+        opacity: 0.55;
+      }
+
       .vm-edit-link .plus {
         align-items: center;
         background: var(--vm-strip);
@@ -889,102 +952,63 @@ function vmMaint($m, $today) {
       <!-- VENUES -->
       <div class="vm-section-title">Venues <span>&mdash; locations that hold rooms</span></div>
       <div class="vm-grid">
-        <!-- Venue: Bahay Alumni (venues.id = 1) -->
+<?php foreach ($vmVenueRows as $venue):
+        $venueId = (int) $venue['id'];
+        $venueName = (string) $venue['name'];
+        $venueCover = $venue['cover_photo'];
+        $venueRoomCount = (int) $venue['room_count'];
+        $venueBedCount = (int) $venue['bed_count'];
+        $venueStaffCount = (int) $venue['staff_count'];
+        $venueStaff = isset($vmStaffByVenue[$venueId]) ? $vmStaffByVenue[$venueId] : [];
+        $visibleStaff = array_slice($venueStaff, 0, 3); ?>
         <div class="vm-card">
           <div class="vm-thumb">
-<?php $venueCover = vp_cover_url(1); if ($venueCover): ?>
+<?php if ($venueCover): ?>
             <img src="<?php echo htmlspecialchars($venueCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
 <?php else: ?>
             <div class="vm-thumb-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h6" />
-              </svg>
-            </div>
-<?php endif; ?>
-            <div class="vm-name-bar">Bahay Alumni</div>
-          </div>
-          <div class="vm-venue-body">
-            <p class="vm-venue-desc">Heritage location for alumni events and functions.</p>
-            <span class="vm-roomcount"><?php echo count(venueRoomsFor($venueRooms, 'Bahay Alumni')); ?> rooms</span>
-            <div class="vm-staff-row">
-              <div class="vm-avatars">
-                <div class="vm-avatar">JD</div>
-                <div class="vm-avatar">MS</div>
-                <div class="vm-avatar">PR</div>
-                <div class="vm-avatar vm-avatar-more">+2</div>
-              </div>
-              <span class="vm-staff-label">Assigned staff</span>
-            </div>
-          </div>
-          <div class="vm-card-foot">
-            <a class="vm-edit-link" href="venue-form.php?id=1"><span class="plus">✎</span> Edit Details</a>
-          </div>
-        </div>
-
-        <!-- Venue: USeP Venues (venues.id = 2) -->
-        <div class="vm-card">
-          <div class="vm-thumb">
-<?php $venueCover = vp_cover_url(2); if ($venueCover): ?>
-            <img src="<?php echo htmlspecialchars($venueCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
-<?php else: ?>
-            <div class="vm-thumb-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h6" />
-              </svg>
-            </div>
-<?php endif; ?>
-            <div class="vm-name-bar">USeP Venues</div>
-          </div>
-          <div class="vm-venue-body">
-            <p class="vm-venue-desc">Main campus location with halls and function rooms.</p>
-            <span class="vm-roomcount"><?php echo count(venueRoomsFor($venueRooms, 'USeP Venues')); ?> rooms</span>
-            <div class="vm-staff-row">
-              <div class="vm-avatars">
-                <div class="vm-avatar">AL</div>
-                <div class="vm-avatar">CT</div>
-                <div class="vm-avatar vm-avatar-more">+1</div>
-              </div>
-              <span class="vm-staff-label">Assigned staff</span>
-            </div>
-          </div>
-          <div class="vm-card-foot">
-            <a class="vm-edit-link" href="venue-form.php?id=2"><span class="plus">✎</span> Edit Details</a>
-          </div>
-        </div>
-
-        <!-- Venue: USeP Hostel (venues.id = 3) — a venue like any other in the
-             data model, so it is listed here rather than on a page of its own.
-             What differs is how its rooms are BOOKED (per bed) and PAID
-             (through CEDU), not what a venue is. Rooms come from
-             includes/hostel-rooms.php. -->
-        <div class="vm-card">
-          <div class="vm-thumb">
-<?php $venueCover = vp_cover_url(3); if ($venueCover): ?>
-            <img src="<?php echo htmlspecialchars($venueCover); ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
-<?php else: ?>
-            <div class="vm-thumb-icon">
+<?php if ($venue['venue_type'] === 'hostel'): ?>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6M2 18h20M2 18v2M22 18v2M6 10V8a2 2 0 0 1 2-2h3v4" />
               </svg>
+<?php else: ?>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h6" />
+              </svg>
+<?php endif; ?>
             </div>
 <?php endif; ?>
-            <div class="vm-name-bar"><?php echo htmlspecialchars($HOSTEL_VENUE); ?></div>
+            <div class="vm-name-bar"><?php echo htmlspecialchars($venueName); ?></div>
           </div>
           <div class="vm-venue-body">
-            <p class="vm-venue-desc">Dormitory rooms booked per bed, not per room. Payment goes through CEDU.</p>
-            <span class="vm-roomcount"><?php echo count($hostelRooms); ?> rooms · <?php echo array_sum(array_column($hostelRooms, 'beds')); ?> beds</span>
+            <p class="vm-venue-desc"><?php echo htmlspecialchars((string) $venue['description']); ?></p>
+            <span class="vm-roomcount"><?php echo $venueRoomCount; ?> <?php echo $venueRoomCount === 1 ? 'room' : 'rooms'; ?><?php if ($venue['venue_type'] === 'hostel'): ?> &middot; <?php echo $venueBedCount; ?> <?php echo $venueBedCount === 1 ? 'bed' : 'beds'; ?><?php endif; ?></span>
             <div class="vm-staff-row">
+<?php if ($venueStaff): ?>
               <div class="vm-avatars">
-                <div class="vm-avatar">RD</div>
-                <div class="vm-avatar">TM</div>
+<?php foreach ($visibleStaff as $staffName): ?>
+                <div class="vm-avatar" title="<?php echo htmlspecialchars($staffName); ?>"><?php echo htmlspecialchars(vmStaffInitials($staffName)); ?></div>
+<?php endforeach; ?>
+<?php if ($venueStaffCount > count($visibleStaff)): ?>
+                <div class="vm-avatar vm-avatar-more">+<?php echo $venueStaffCount - count($visibleStaff); ?></div>
+<?php endif; ?>
               </div>
               <span class="vm-staff-label">Assigned staff</span>
+<?php else: ?>
+              <span class="vm-staff-label">No assigned staff</span>
+<?php endif; ?>
             </div>
           </div>
           <div class="vm-card-foot">
-            <a class="vm-edit-link" href="venue-form.php?id=3"><span class="plus">✎</span> Edit Details</a>
+            <div class="vm-card-actions">
+              <a class="vm-edit-link" href="venue-form.php?id=<?php echo $venueId; ?>"><span class="plus">✎</span> Edit Details</a>
+<?php if (admin_is_admin()): ?>
+              <button type="button" class="vm-delete-link" data-delete-entity="venue" data-delete-id="<?php echo $venueId; ?>" data-delete-name="<?php echo htmlspecialchars($venueName); ?>">Delete Venue</button>
+<?php endif; ?>
+            </div>
           </div>
         </div>
+<?php endforeach; ?>
       </div>
 
       <!-- ROOMS -->
@@ -1034,7 +1058,12 @@ function vmMaint($m, $today) {
 <?php endif; ?>
           </div>
           <div class="vm-card-foot">
-            <a class="vm-edit-link" href="room-form.php?id=<?php echo urlencode($room['id']); ?>"><span class="plus">✎</span> Edit Room</a>
+            <div class="vm-card-actions">
+              <a class="vm-edit-link" href="room-form.php?id=<?php echo urlencode($room['id']); ?>"><span class="plus">✎</span> Edit Room</a>
+<?php if (admin_is_admin()): ?>
+              <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="<?php echo htmlspecialchars($room['id']); ?>" data-delete-name="<?php echo htmlspecialchars($room['name']); ?>">Delete</button>
+<?php endif; ?>
+            </div>
             <span class="vm-price">₱<?php echo number_format($room['fee'], 2); ?></span>
           </div>
         </div>
@@ -1101,7 +1130,12 @@ function vmMaint($m, $today) {
 <?php endif; ?>
           </div>
           <div class="vm-card-foot">
-            <a class="vm-edit-link" href="hostel-room-form.php?id=<?php echo urlencode($room['id']); ?>"><span class="plus">✎</span> Edit Room</a>
+            <div class="vm-card-actions">
+              <a class="vm-edit-link" href="hostel-room-form.php?id=<?php echo urlencode($room['id']); ?>"><span class="plus">✎</span> Edit Room</a>
+<?php if (admin_is_admin()): ?>
+              <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="<?php echo htmlspecialchars($room['id']); ?>" data-delete-name="<?php echo htmlspecialchars($room['name']); ?>">Delete</button>
+<?php endif; ?>
+            </div>
             <span class="vm-price">₱<?php echo number_format($HOSTEL_RATES[$room['cr_type']]); ?>/head</span>
           </div>
         </div>
@@ -1181,6 +1215,33 @@ function vmMaint($m, $today) {
       document.addEventListener('click', (e) => {
         document.querySelectorAll('.vm-dd[open]').forEach((dd) => {
           if (!dd.contains(e.target)) dd.removeAttribute('open');
+        });
+      });
+
+      document.querySelectorAll('[data-delete-entity]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const entity = button.dataset.deleteEntity;
+          const name = button.dataset.deleteName;
+          if (!window.confirm('Delete ' + name + '? This action cannot be undone.')) return;
+
+          const body = new URLSearchParams({
+            csrf: <?php echo json_encode($dcCsrf); ?>,
+            confirm: 'delete',
+            entity: entity,
+          });
+          body.set(entity === 'room' ? 'room_id' : 'venue_id', button.dataset.deleteId);
+          button.disabled = true;
+          fetch('catalog-delete.php', { method: 'POST', body: body, credentials: 'same-origin' })
+            .then((response) => response.json().catch(() => ({ ok: false, message: 'The server sent an unreadable reply.' })))
+            .then((result) => {
+              if (!result.ok) {
+                alert(result.message || 'Nothing was deleted.');
+                return;
+              }
+              location.reload();
+            })
+            .catch(() => alert('Could not reach the server, so nothing was deleted.'))
+            .finally(() => { button.disabled = false; });
         });
       });
     </script>

@@ -454,6 +454,8 @@ WHAT CHANGED
     reject, confirm, record the POS and OR, check in, and decide refunds.
   · Registration, profiles, staff management, venue/room creation, amenity
     editing and payout-account changes all persist.
+  · Staff-to-venue assignment is `staff.venue_id` and is managed in Staff
+    Management. It categorizes accounts only; booking visibility is unchanged.
   · sp_seed_demo() (venusep_demo_seed.sql) builds the showcase: 157 bookings
     covering every reservation and payment status, every date computed from
     CURDATE() so it never goes stale. Re-run it to reset.
@@ -469,7 +471,6 @@ WHAT IS STILL NOT BUILT
     data model carries the state; there is no UI to act on it.
   · Email/notifications. Every "receipt emailed" is still nothing being sent.
   · Overdue auto-release and the 48-hour resubmit clock need a scheduler.
-  · Staff-to-venue assignment (venue-form.php) — no table for it.
   · The GCash OCR still runs in the BROWSER. customer/payment-submit.php
     re-checks the amount and the receiver server-side and the database enforces
     duplicate reference and duplicate file, but a full OCR port to PHP has not

@@ -1198,19 +1198,23 @@ function rank(r) {
 document.getElementById('adRows').innerHTML = BR.slice()
   .sort((a, b) => rank(a) - rank(b))
   .slice(0, 5)
-  .map((r) => `
+  .map((r) => {
+    const res = RES[r.res] || { t: r.res || 'Unknown reservation status', c: 'b-gray' };
+    const pay = PAY[r.pay] || { t: r.pay || 'Unknown payment status', c: 'b-gray' };
+    return `
     <a class="ad-row" href="booking-request.php?id=${r.id}">
       <span><div class="r-name">${esc(r.name)}</div><div class="r-sub">${r.id} · ${esc(r.type)}</div></span>
       <span class="r-roomcol"><div class="r-room">${esc(r.room)}</div><div class="r-sub">${esc(r.dates)}</div></span>
       <span>
         <span class="r-badges">
-          <span class="br-badge ${RES[r.res].c}">${RES[r.res].t}</span>
-          <span class="br-badge ${PAY[r.pay].c}">${PAY[r.pay].t}</span>
+          <span class="br-badge ${res.c}">${res.t}</span>
+          <span class="br-badge ${pay.c}">${pay.t}</span>
         </span>
         <div class="r-act ${r.cls}">${esc(r.act)}</div>
       </span>
       <span class="r-chev">&rsaquo;</span>
-    </a>`).join('');
+    </a>`;
+  }).join('');
 
 /* ---- "+ New Booking" modal (demo wiring so nothing throws) ---- */
 function openModal(id) { document.getElementById(id).classList.add('show'); }

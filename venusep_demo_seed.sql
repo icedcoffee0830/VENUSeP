@@ -141,10 +141,13 @@ BEGIN
         VALUES (NULL, 'Carmen Uy', '09175550499', 'Toril, Davao City', NULL);
     END IF;
 
-    INSERT INTO staff (user_id, full_name, employee_no, position_role, phone)
-      VALUES ((SELECT id FROM users WHERE email='staff@gmail.com'),'Marites Robles','EMP-2021-0043','Venue Coordinator','09175550511')
+    INSERT INTO staff (user_id, venue_id, full_name, employee_no, position_role, phone)
+      VALUES ((SELECT id FROM users WHERE email='staff@gmail.com'),
+              (SELECT id FROM venues WHERE venue_code='BAHAY-ALUMNI'),
+              'Marites Robles','EMP-2021-0043','Venue Coordinator','09175550511')
     ON DUPLICATE KEY UPDATE
-      full_name = VALUES(full_name), position_role = VALUES(position_role), phone = VALUES(phone);
+      venue_id = VALUES(venue_id), full_name = VALUES(full_name),
+      position_role = VALUES(position_role), phone = VALUES(phone);
 END$$
 
 -- ---------------------------------------------------------------------------

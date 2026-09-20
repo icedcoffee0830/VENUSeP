@@ -48,6 +48,7 @@ Format: **child.fk_column → parent.column** · cardinality · label
 |---|---|---|
 | `customers.user_id → users.id` | users 1 — 0..1 customers | may log in as (NULL = walk-in) |
 | `staff.user_id → users.id` | users 1 — 0..1 staff | may log in as |
+| `staff.venue_id → venues.id` | venues 1 — many staff | assigned to (NULL = unassigned/admin-wide) |
 
 ### B. Venues and rooms
 | Connection | Card. | Label |
@@ -162,15 +163,16 @@ corner: it doesn't connect to bookings by a line. The link is the
 ## UPDATE — 2026-09-19: the diagram is accurate, with three new columns
 
 The ERD above still matches the schema. Every relationship it draws is real and
-now carries live data. Three columns were added during the database phase
-(`venusep_migration_01.sql`) — none of them change a relationship, so the
-drawing needs no new lines:
+now carries live data. Four columns were added during the database phase
+(`venusep_migration_01.sql`). The first three do not change relationships;
+`staff.venue_id` adds the nullable staff-to-venue line shown above:
 
 | Table | Column | Why |
 |---|---|---|
 | `rooms` | `amenities` JSON | Which amenity KEYS a room has. The vocabulary stays PHP-coded (DB-DECISIONS #9), so this adds **no table** and no new line on the diagram. |
 | `customers` | `photo_path` | Profile picture only. |
 | `staff` | `photo_path` | Profile picture only. |
+| `staff` | `venue_id` | Nullable current venue assignment; deleting a venue sets it to NULL. |
 
 Plus one settings ROW, not a column: `system_settings.demo_mode`.
 

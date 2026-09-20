@@ -31,6 +31,13 @@ $fqDbOk     = !empty($fqSections);
 $fqCsrf     = csrf_token();
 $fqLive     = $REFUNDS_ENABLED ? 'refunds_on' : 'refunds_off';
 $fqMsg      = isset($_GET['msg']) ? (string) $_GET['msg'] : '';
+function fq_admin_answer_html($answer, $forEditor = false) {
+    return str_replace(
+        'href="booking-history.php"',
+        'href="../customer/booking-history.php"',
+        faq_answer_html($answer, $forEditor)
+    );
+}
 $fqNotes = [
     'added'    => ['ok',  'Question added. Customers can see it on the FAQ page now.'],
     'saved'    => ['ok',  'Changes saved.'],
@@ -257,7 +264,7 @@ function fq_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                     <span class="fq-tb-menu"><button type="button" class="fq-tb" data-menu title="Link to a page on this site"><i class="bi bi-link-45deg" aria-hidden="true"></i>Link to a page <i class="bi bi-chevron-down fq-tb-caret" aria-hidden="true"></i></button>
                       <div class="fq-tb-list">
                         <button type="button" data-link="venusep_venue_booking.php">Venues &amp; rooms (home)</button>
-                        <button type="button" data-link="booking-history.php">Booking history</button>
+                        <button type="button" data-link="../customer/booking-history.php">Booking history</button>
                         <button type="button" data-link="transaction-history.php">Transaction history</button>
                         <button type="button" data-link="customer-profile.php">Profile</button>
                         <button type="button" data-link="faq.php#gcash">FAQ &middot; paying with GCash</button>
@@ -301,7 +308,7 @@ function fq_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                     <?php if ($r['is_changed']): ?><span class="fq-badge changed">Edited from original</span><?php endif; ?>
                     <?php if (!$r['is_active']): ?><span class="fq-badge">Hidden</span><?php endif; ?>
                   </div>
-                  <div class="fq-a"><?php echo faq_answer_html($r['answer']); ?></div>
+                  <div class="fq-a"><?php echo fq_admin_answer_html($r['answer']); ?></div>
                   <div class="fq-meta">Last edited <?php echo fq_e(date('M j, Y · g:i A', strtotime($r['updated_at']))); ?></div>
                 </div>
                 <div class="fq-tools">
@@ -344,7 +351,7 @@ function fq_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                       <span class="fq-tb-menu"><button type="button" class="fq-tb" data-menu title="Link to a page on this site"><i class="bi bi-link-45deg" aria-hidden="true"></i>Link to a page <i class="bi bi-chevron-down fq-tb-caret" aria-hidden="true"></i></button>
                         <div class="fq-tb-list">
                           <button type="button" data-link="venusep_venue_booking.php">Venues &amp; rooms (home)</button>
-                          <button type="button" data-link="booking-history.php">Booking history</button>
+                          <button type="button" data-link="../customer/booking-history.php">Booking history</button>
                           <button type="button" data-link="transaction-history.php">Transaction history</button>
                           <button type="button" data-link="customer-profile.php">Profile</button>
                           <button type="button" data-link="faq.php#gcash">FAQ &middot; paying with GCash</button>
@@ -360,7 +367,7 @@ function fq_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                           <button type="button" data-value="{cr_private}">Room label &middot; private CR<small><?php echo fq_e($HOSTEL_CR_LABEL['private']); ?></small></button>
                         </div></span>
                     </div>
-                    <div class="fq-editor" contenteditable="true" data-placeholder="Type the answer here." aria-label="Answer"><?php echo faq_answer_html($r['answer'], true); ?></div>
+                    <div class="fq-editor" contenteditable="true" data-placeholder="Type the answer here." aria-label="Answer"><?php echo fq_admin_answer_html($r['answer'], true); ?></div>
                     <textarea class="fq-textarea" name="answer" maxlength="4000" hidden><?php echo fq_e($r['answer']); ?></textarea>
                   </div>
                   <div class="fq-actions">

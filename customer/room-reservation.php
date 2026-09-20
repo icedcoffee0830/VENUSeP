@@ -732,7 +732,7 @@ function derive(){
   const bEnd=b.dateEnd||b.date;
   const dateOk=b.date && bEnd && bEnd>=b.date;
   const slotFree=sr.show && sr.ok && !tooSoon;
-  const ready=R && b.eventName && dateOk && slotFree && !isNaN(ba) && ba>0;
+  const ready=R && b.eventName && dateOk && slotFree && !isNaN(ba) && ba>0 && !over;
 
   let hint='';
   if(!b.eventName) hint='Enter an event name to continue';
@@ -1024,7 +1024,7 @@ function removeId(){
 }
 /* While refunds are OFF, the customer must acknowledge the booking is final
    before it is made — the policy is agreed at booking time, not at payment. */
-function canSubmitRequest(){ return !!state.idFile && (REFUNDS_ENABLED || state.agreeNoRefund); }
+function canSubmitRequest(){ return !!state.idFile && state.affiliated !== null && (REFUNDS_ENABLED || state.agreeNoRefund); }
 function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
 /* Submit the booking FOR REAL. The screen no longer advances on its own: it
    advances when the server has a row, so a customer is never shown a reference

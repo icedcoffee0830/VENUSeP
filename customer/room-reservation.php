@@ -131,6 +131,7 @@
   .bk-more-tag{position:absolute;left:13px;bottom:13px;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.17);border:1px solid rgba(255,255,255,.24);color:#fff;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
   .bk-more-badge{position:absolute;right:12px;top:12px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.95);font-size:12px;font-weight:700;color:#705e5e}
   .bk-more-badge.is-closed{color:#8a5a12}
+  .bk-more-status{display:none}   /* phone only: the badge's reason, in the card body */
   .bk-more-body{padding:18px 19px 20px}
   .bk-more-body h3{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;color:#fff}
   .bk-more-meta{margin:7px 0 0;font-size:12.5px;line-height:1.55;color:#d5b8b5}
@@ -156,9 +157,15 @@
   .bk-gal-slide.ph{display:flex;align-items:center;justify-content:center;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px)}
   .bk-gal-slide.ph span{font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c}
   .bk-gal-slide.ph::after{display:none}
-  .bk-gal-pill{position:absolute;top:14px;z-index:2;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;border:1px solid rgba(255,255,255,.28);background:rgba(20,8,10,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;font:600 12.5px/1 'Inter',system-ui,sans-serif;letter-spacing:.01em}
-  button.bk-gal-pill{left:14px;cursor:pointer}
-  button.bk-gal-pill:hover{background:rgba(138,18,34,.85)}
+  .bk-gal-pill{position:absolute;top:14px;z-index:3;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;border:1px solid rgba(255,255,255,.28);background:rgba(20,8,10,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;font:600 12.5px/1 'Inter',system-ui,sans-serif;letter-spacing:.01em}
+  /* first slide: the 360° tour — the panorama as a still, tap to look around (a live viewer here would swallow the swipe) */
+  .bk-gal-360s{appearance:none;border:0;padding:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-family:inherit;text-align:center;user-select:none;-webkit-user-select:none}
+  .bk-gal-360s::before{content:"";position:absolute;inset:0;background:rgba(20,8,10,.34);transition:background 200ms ease}
+  .bk-gal-360s:hover::before{background:rgba(138,18,34,.42)}
+  .bk-gal-360s>*{position:relative;z-index:1}
+  .bk-360-ico{display:grid;place-items:center;width:58px;height:58px;margin-bottom:6px;border-radius:50%;border:1.5px solid rgba(255,255,255,.7);background:rgba(20,8,10,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .bk-gal-360s strong{font-size:20px;font-weight:750;letter-spacing:-.01em}
+  .bk-gal-360s small{font-size:13px;font-weight:500;color:#f2d0cb}
   .bk-gal-count{right:14px;pointer-events:none}
   .bk-gal-dots{position:absolute;left:0;right:0;bottom:14px;z-index:2;display:flex;justify-content:center;gap:6px;pointer-events:none}
   .bk-gal-dots i{display:block;width:7px;height:7px;border-radius:999px;background:rgba(255,255,255,.6);box-shadow:0 1px 3px rgba(0,0,0,.35);transition:width 220ms ease,background 220ms ease}
@@ -190,7 +197,8 @@
     .bk-gal-slide{flex-basis:88%;aspect-ratio:auto;border-radius:16px}
     .bk-gal-slide.solo{flex-basis:100%}
     .bk-gal-pill{top:10px;height:32px;padding:0 11px}
-    button.bk-gal-pill{left:10px}
+    .bk-360-ico{width:48px;height:48px}
+    .bk-gal-360s strong{font-size:17px}
     .bk-gal-count{right:10px}
     .bk-gal-dots{bottom:11px}
     .bk-panel{padding:20px 16px;border-radius:20px}
@@ -215,10 +223,17 @@
   @media (max-width:720px){.bk-more-wrap{padding:40px 18px 36px}.bk-more-head{flex-direction:column;align-items:flex-start}.bk-more-grid{grid-template-columns:1fr;gap:10px}.bk-more h2{font-size:26px}
     /* phone: compact "More rooms" cards — photo left, text right (same as the landing page) */
     .bk-more-card{display:grid;grid-template-columns:112px minmax(0,1fr);border-radius:16px}
-    .bk-more-ph{aspect-ratio:auto;height:100%;min-height:104px}
+    .bk-more-ph{aspect-ratio:auto;height:100%;min-height:118px}
     .bk-more-tag{display:none}
-    .bk-more-body{padding:12px 14px;min-width:0}
-    .bk-more-body h3{font-size:15px}
+    /* the badge sits top-left of the small tile on one line, word only */
+    .bk-more-badge{top:8px;left:8px;right:auto;padding:4px 9px;font-size:12px;white-space:nowrap}
+    .bk-more-why{display:none}
+    .bk-more-body{padding:14px 16px;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px}
+    .bk-more-body h3{font-size:15px;line-height:1.3}
+    .bk-more-meta,.bk-more-price{margin:0}
+    .bk-more-status{display:block;margin:0;font-size:12px;font-weight:700;line-height:1.4;color:#d5b8b5}
+    .bk-more-status.is-closed{color:#ffd166}
+    .bk-more-price{margin-top:2px}
     /* phone: a sticky bar so the booking form (below the description) is one tap away */
     .bk-cta{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
       background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.1);box-shadow:0 -8px 24px rgba(0,0,0,.08);transform:translateY(110%);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
@@ -287,14 +302,20 @@ $mrOthers = array_slice($mrOthers, 0, 4);
     </div>
     <div class="bk-more-grid">
 <?php foreach ($mrOthers as $r):
-        $mt = $r['maintenance']; $covers = $mt && venueMaintCovers($mt, $mrToday); $badge = '';
-        if ($covers && $mt['blocks']) $badge = '<span class="bk-more-badge is-closed">Closed &middot; ' . htmlspecialchars($mt['reason']) . '</span>';
-        elseif ($covers)              $badge = '<span class="bk-more-badge">Notice &middot; '  . htmlspecialchars($mt['reason']) . '</span>'; ?>
+        /* the badge on the photo says "Closed · Roof repair"; the phone tile is too narrow for the
+           reason, so there the badge keeps only the word and the reason moves to a line in the card body */
+        $mt = $r['maintenance']; $covers = $mt && venueMaintCovers($mt, $mrToday); $badge = ''; $status = '';
+        if ($covers) {
+          $word = $mt['blocks'] ? 'Closed' : 'Notice'; $cls = $mt['blocks'] ? ' is-closed' : '';
+          $badge  = '<span class="bk-more-badge' . $cls . '">' . $word . '<span class="bk-more-why"> &middot; ' . htmlspecialchars($mt['reason']) . '</span></span>';
+          $status = '<p class="bk-more-status' . $cls . '">' . $word . ' &middot; ' . htmlspecialchars($mt['reason']) . '</p>';
+        } ?>
       <a class="bk-more-card" href="room-reservation.php?room=<?php echo urlencode($r['id']); ?>">
         <?php echo mr_pic($r['id'], $r['capacity'] >= 500 ? 'gym' : 'hall', $badge); ?>
         <div class="bk-more-body">
           <h3><?php echo htmlspecialchars($r['name']); ?></h3>
           <p class="bk-more-meta"><?php echo htmlspecialchars($r['venue']); ?> &middot; up to <?php echo number_format((int) $r['capacity']); ?> guests</p>
+          <?php echo $status; ?>
           <p class="bk-more-price"><?php echo usep_price_html((int) $r['fee'], $mrUsep, ' per day'); ?></p>
         </div>
       </a>
@@ -901,22 +922,25 @@ function mountGallery(){
   paint();
   t.addEventListener('scroll',paint,{passive:true});
 
-  let drag=null;
-  t.addEventListener('pointerdown',function(e){
-    if(e.pointerType!=='mouse' || e.button!==0 || slides.length<2) return;
-    drag={ x:e.clientX, left:t.scrollLeft, from:nearest() };
-    t.classList.add('drag'); t.setPointerCapture(e.pointerId);
-  });
-  t.addEventListener('pointermove',function(e){ if(drag) t.scrollLeft=drag.left-(e.clientX-drag.x); });
-  const end=function(e){
+  let drag=null, moved=false;
+  const onMove=function(e){ if(!drag) return; const dx=e.clientX-drag.x; if(Math.abs(dx)>5) moved=true; t.scrollLeft=drag.left-dx; };
+  const onUp=function(e){
+    window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); window.removeEventListener('pointercancel',onUp);
     if(!drag) return;
     const dx=e.clientX-drag.x; let i=drag.from;
     if(Math.abs(dx)>40) i=Math.max(0,Math.min(slides.length-1,i+(dx<0?1:-1)));
     drag=null; t.classList.remove('drag');
     t.style.scrollBehavior='smooth'; t.scrollLeft=Math.min(pos(i),maxLeft());
-    setTimeout(function(){ t.style.scrollBehavior=''; },450);
+    setTimeout(function(){ t.style.scrollBehavior=''; moved=false; },450);
   };
-  t.addEventListener('pointerup',end); t.addEventListener('pointercancel',end);
+  t.addEventListener('pointerdown',function(e){
+    if(e.pointerType!=='mouse' || e.button!==0 || slides.length<2) return;
+    drag={ x:e.clientX, left:t.scrollLeft, from:nearest() }; moved=false;
+    t.classList.add('drag');
+    window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp); window.addEventListener('pointercancel',onUp);
+  });
+  /* a drag that ends over the 360° tile must not count as a tap on it */
+  t.addEventListener('click',function(e){ if(moved){ e.preventDefault(); e.stopPropagation(); } },true);
 }
 
 /* Photo gallery lightbox — view-only for customers, mounted outside #app.
@@ -1370,15 +1394,16 @@ function detailScreen(){
   /* photo strip — swipe / drag only. Real uploaded photos, or one placeholder tile
      when the room has none yet (never a made-up count). */
   const photos=(R.photoUrls||[]).filter(Boolean);
-  const slides = photos.length
-    ? photos.map((u,i)=>`<div class="bk-gal-slide${photos.length===1?' solo':''}" role="img" aria-label="${esc(R.name)} — photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></div>`).join('')
-    : `<div class="bk-gal-slide solo ph"><span>room photo</span></div>`;
-  const pano360 = `<button type="button" class="bk-gal-pill" onclick="openRoomPano()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>360° tour</button>`;
+  const total=photos.length+1;                       // the 360° tour is always the first slide
+  const solo=total===1?' solo':'';
+  const tour=`<button type="button" class="bk-gal-slide bk-gal-360s${solo}" onclick="openRoomPano()" aria-label="Open the 360° tour of ${esc(R.name)}" style="background-image:url('${esc(R.panorama||SAMPLE_PANO)}')">
+      <span class="bk-360-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>
+      <strong>360° tour</strong><small>Tap to look around</small></button>`;
+  const slides = tour + photos.map((u,i)=>`<div class="bk-gal-slide" role="img" aria-label="${esc(R.name)} — photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></div>`).join('');
   const gallery = `
       <div class="bk-gal">
-        <div class="bk-gal-track" tabindex="0" aria-label="${esc(R.name)} photos — swipe to browse">${slides}</div>
-        ${pano360}
-        ${photos.length>1?`<span class="bk-gal-pill bk-gal-count"><span class="bk-gal-idx">1</span>&nbsp;/&nbsp;${photos.length}</span><div class="bk-gal-dots">${photos.map((_,i)=>`<i${i?'':' class="on"'}></i>`).join('')}</div>`:''}
+        <div class="bk-gal-track" tabindex="0" aria-label="${esc(R.name)} — 360° tour and photos, swipe to browse">${slides}</div>
+        ${total>1?`<span class="bk-gal-pill bk-gal-count"><span class="bk-gal-idx">1</span>&nbsp;/&nbsp;${total}</span><div class="bk-gal-dots">${Array.from({length:total},(_,i)=>`<i${i?'':' class="on"'}></i>`).join('')}</div>`:''}
       </div>`;
 
   const LBL='font-size:12px;font-weight:600;color:#f2d0cb';

@@ -124,17 +124,17 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
       .tabulator .tabulator-footer .tabulator-page.active { background: #a11626; color: #ffffff; border-color: #a11626; }
       /* type floor (readability): nothing on the page below 12px */
       .t-badge, .tabulator-col-title, .th-field label { font-size: 12px !important; }
-          /* ---- phone: white page, cards edge to edge — the details get the width.
-         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+          /* ---- white page (desktop + phone): the card sits on white, no crimson wash ---- */
+      body { background: #fff !important; }
+      .app-main { background: #fff !important; }
+      .th-head h1 { color: #1f1e1e; }
+      .th-head p { color: #6e6a64; }
+      .th-field label { color: #6e6a64; }
+      .th-panel { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      /* phone: card edge to edge — the details get the width */
       @media (max-width: 767.98px) {
-        body { background: #fff !important; }
-        .app-main { background: #fff !important; }
         .container-fluid { padding-inline: 12px; }
         .app-content-header { padding-top: 16px; }
-        .th-head h1 { color: #1f1e1e; }
-        .th-head p { color: #6e6a64; }
-        .th-field label { color: #6e6a64; }
-        .th-panel { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
       }
     </style>
   </head>

@@ -511,17 +511,16 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
         #calendar .fc-daygrid, #calendar .fc-timegrid { min-width: 700px; }
         #calendar .fc-list { min-width: 0; }
       }
-          /* ---- phone: white page, cards edge to edge — the details get the width.
-         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      /* ---- white page (desktop + phone): the card sits on white, no crimson wash ---- */
+      body { background: #fff !important; }
+      .app-main { background: #fff !important; }
+      .calendar-heading h1 { color: #1f1e1e; }
+      .calendar-heading p { color: #6e6a64; }
+      .calendar-shell { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      .calendar-page { --calendar-page-bg: #fff; }
       @media (max-width: 767.98px) {
-        body { background: #fff !important; }
-        .app-main { background: #fff !important; }
         .container-fluid { padding-inline: 12px; }
         .app-content-header { padding-top: 16px; }
-        .calendar-heading h1 { color: #1f1e1e; }
-        .calendar-heading p { color: #6e6a64; }
-        .calendar-shell { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
-        .calendar-page { --calendar-page-bg: #fff; }
       }
     </style>
   </head>

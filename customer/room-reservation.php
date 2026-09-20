@@ -1583,11 +1583,13 @@ function reviewScreen(){
         <span style="font-size:20px;font-weight:750;letter-spacing:-.01em">${peso(x.d.totalFee)}</span>
       </div>
       ${x.d.discountAmount>0?`
-      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#8a857d;margin-top:-4px;padding-bottom:2px">
-        <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
-        <span style="color:#1c7a4f;font-weight:640">&minus;${peso(x.d.discountAmount)}</span>
-      </div>
-      <div style="font-size:12.5px;color:#a5a19a;line-height:1.5;padding-bottom:4px">Provisional &mdash; staff confirm the discount when they check your USeP ID. Payment only opens after that, so this figure is settled before you pay anything.</div>`:''}
+      <div style="padding:0 16px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13px;line-height:1.4;color:#6e6a64">
+          <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
+          <span style="flex:none;color:#1c7a4f;font-weight:650">&minus;${peso(x.d.discountAmount)}</span>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed rgba(0,0,0,.12);font-size:12.5px;color:#8a857d;line-height:1.6">Provisional &mdash; staff confirm the discount when they check your USeP ID. Payment only opens after that, so this figure is settled before you pay anything.</div>
+      </div>`:''}
     </div>
 
     <!-- USeP AFFILIATION. A claim, not a grant: staff confirm it from the ID

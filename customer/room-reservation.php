@@ -21,7 +21,7 @@
     "---------- helpers"             formatting, icons, date/availability logic
     "---------- actions"             small functions the buttons call
     "---------- custom date-picker"  calendar popup + time dropdowns
-    "---------- 360 panorama"        hero panorama + photo-gallery lightbox
+    "---------- 360 panorama"        360 lightbox, swipe photo strip, photo-gallery lightbox
     "---------- approve-first flow"  ID upload → pending → demo staff approval
     "GCASH RECEIPT CHECKER"          OCR + verdict engine (big banner explains it)
     "---------- shared bits"         page header
@@ -87,9 +87,7 @@
   /* the footer — crimson to black; the page is a column so it stays at the bottom on short screens */
   body{display:flex;flex-direction:column;min-height:100vh}
   #app{flex:1 0 auto}
-  /* 360 viewer: the expand button + the scaled-down lightbox (not real fullscreen) */
-  .pnlm-expand{position:absolute;left:4px;top:98px;z-index:3;width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:3px;background:rgba(200,200,200,.8);color:#000;cursor:pointer;box-shadow:0 0 3px rgba(0,0,0,.5)}
-  .pnlm-expand:hover{background:#fff}
+  /* 360 viewer: the scaled-down lightbox (not real fullscreen) */
   #panoLightbox{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(10,4,5,.82);opacity:0;transition:opacity 220ms ease}
   #panoLightbox.open{opacity:1}
   #panoLightbox .pl-box{position:relative;width:min(1100px,92vw);aspect-ratio:16/9;max-height:82vh;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 30px 90px rgba(0,0,0,.6);transform:scale(.96);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
@@ -143,14 +141,66 @@
   .bk-more-meta span,.bk-more-price span{color:#f2d0cb!important}
   .bk-more-meta span,.bk-more-price span{font-size:12px!important}   /* type floor: the 11px note from pricing.php */
   #app span[style*="ui-monospace"]{font-size:12px!important}          /* type floor: the "room photo" placeholder labels */
-  /* phone: the 604px photo grid (400 + 196) becomes two columns; the 360 tile spans both */
+  /* ---- room page layout: photo strip on top, then details + booking panel side by side ---- */
+  .bk-cols{display:grid;grid-template-columns:minmax(0,1fr) 379px;gap:34px;align-items:start}
+  .bk-aside{position:sticky;top:88px}
+  /* ---- photo strip: swipe / drag only (no arrows, no thumbnails, no click-to-open) ---- */
+  .bk-gal{position:relative;margin:0 0 22px}
+  .bk-gal-track{display:flex;gap:10px;height:400px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;cursor:grab;-webkit-tap-highlight-color:transparent}
+  .bk-gal-track::-webkit-scrollbar{display:none}
+  .bk-gal-track:focus-visible{outline:2px solid rgba(161,22,38,.5);outline-offset:3px;border-radius:20px}
+  .bk-gal-track.drag{scroll-snap-type:none;cursor:grabbing;user-select:none}
+  .bk-gal-slide{position:relative;flex:0 0 auto;height:100%;aspect-ratio:3/2;border-radius:20px;overflow:hidden;background-color:#e9e7e2;background-size:cover;background-position:center;scroll-snap-align:start}
+  .bk-gal-slide::after{content:"";position:absolute;inset:auto 0 0 0;height:38%;background:linear-gradient(180deg,transparent,rgba(14,5,6,.5));pointer-events:none}
+  .bk-gal-slide.solo{flex-basis:100%;aspect-ratio:auto}
+  .bk-gal-slide.ph{display:flex;align-items:center;justify-content:center;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px)}
+  .bk-gal-slide.ph span{font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c}
+  .bk-gal-slide.ph::after{display:none}
+  .bk-gal-pill{position:absolute;top:14px;z-index:2;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;border:1px solid rgba(255,255,255,.28);background:rgba(20,8,10,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;font:600 12.5px/1 'Inter',system-ui,sans-serif;letter-spacing:.01em}
+  button.bk-gal-pill{left:14px;cursor:pointer}
+  button.bk-gal-pill:hover{background:rgba(138,18,34,.85)}
+  .bk-gal-count{right:14px;pointer-events:none}
+  .bk-gal-dots{position:absolute;left:0;right:0;bottom:14px;z-index:2;display:flex;justify-content:center;gap:6px;pointer-events:none}
+  .bk-gal-dots i{display:block;width:7px;height:7px;border-radius:999px;background:rgba(255,255,255,.6);box-shadow:0 1px 3px rgba(0,0,0,.35);transition:width 220ms ease,background 220ms ease}
+  .bk-gal-dots i.on{width:22px;background:#fff}
+  /* ---- booking panel: the landing page's crimson-to-black card ---- */
+  .bk-panel{position:relative;padding:22px 20px 22px;border-radius:24px;color:#fff;background:linear-gradient(162deg,#7d1120 0%,#3c0c14 48%,#17080a 100%);box-shadow:0 26px 64px rgba(138,18,34,.3)}
+  .bk-panel::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(420px 300px at 92% 0%,rgba(232,62,74,.3),transparent 62%),radial-gradient(360px 300px at 4% 100%,rgba(10,4,5,.6),transparent 66%)}
+  .bk-panel>*{position:relative}
+  .bk-panel a{color:#fff;text-decoration:underline;text-underline-offset:2px}
+  .bk-panel a:hover{color:#f2d0cb}
+  .bk-panel input,.bk-panel button[id^="bk-"]{border-color:transparent!important;background:#fff}
+  .bk-panel input:focus,.bk-panel button:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:1px}
+  .bk-panel ::placeholder{color:#a5a19a}
+  .bk-eyebrow{display:block;margin-bottom:8px;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#f2d0cb}
+  .bk-go{width:100%;height:50px;border:none;border-radius:14px;font-size:15px;font-weight:700;transition:transform 160ms ease,background 160ms ease}
+  .bk-go.on{background:#fff;color:#8a1222;cursor:pointer}
+  .bk-go.on:hover{background:#fbeceb}
+  .bk-go.on:active{transform:scale(.98)}
+  .bk-go.off{background:rgba(255,255,255,.16);color:rgba(255,255,255,.62);cursor:not-allowed}
+  /* tablet + phone: everything stacks — photos, title, details, then the booking panel */
+  @media (max-width:900px){
+    .bk-cols{grid-template-columns:1fr;gap:26px}
+    .bk-aside{position:static}
+  }
   @media (max-width:720px){
-    #app div:has(> #heroPanoSlot){grid-template-columns:1fr 1fr!important;grid-template-rows:220px 120px!important;width:100%!important}
-    #heroPanoSlot{grid-column:1 / span 2!important;grid-row:1!important}
-    /* the photos + the 379px booking form stack instead of sitting side by side */
-    #app main > div[style*="379px"]{grid-template-columns:1fr!important;gap:22px!important}
-    #app aside[style*="sticky"]{position:static!important}
     #app main{padding-left:16px!important;padding-right:16px!important}
+    .bk-gal{margin-bottom:18px}
+    .bk-gal-track{height:min(66vw,320px);gap:8px}
+    .bk-gal-slide{flex-basis:88%;aspect-ratio:auto;border-radius:16px}
+    .bk-gal-slide.solo{flex-basis:100%}
+    .bk-gal-pill{top:10px;height:32px;padding:0 11px}
+    button.bk-gal-pill{left:10px}
+    .bk-gal-count{right:10px}
+    .bk-gal-dots{bottom:11px}
+    .bk-panel{padding:20px 16px;border-radius:20px}
+    /* 16px stops iOS Safari zooming the page when a field is focused; taller fields are easier to hit */
+    .bk-panel input{font-size:16px!important;height:46px!important}
+    .bk-panel button[id^="bk-"]{height:46px!important;font-size:14px!important}
+    /* multi-day hours: a narrower "Day 1" column so both times fit a phone */
+    .bk-day-row{grid-template-columns:62px 1fr 1fr!important;gap:6px!important}
+    .bk-day-row.bk-day-off{grid-template-columns:62px 1fr!important}
+    .bk-panel button[id^="bk-t-"] svg:first-child{display:none}
   }
   .bk-more-free{margin-top:13px;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,209,102,.16);border:1px solid rgba(255,209,102,.42);color:#ffd166}
   .bk-more-free i{width:6px;height:6px;border-radius:50%;background:#ffd166;display:block}
@@ -778,12 +828,7 @@ function calHtml(field){
   </div>`;
 }
 
-/* ---------- 360 panorama + photo gallery (room detail hero) ---------- */
-/* Inline 360 panorama in the hero's main tile. One persistent viewer node is
-   moved into the hero slot on each render — appendChild relocates the live node
-   without destroying it, so the frequent re-renders from the booking form never
-   reload the panorama. Rebuilt only when the room changes. */
-var HERO = { node:null, viewer:null, roomId:null };
+/* ---------- 360 panorama (opened from the photo strip's "360° tour" button) + photo gallery lightbox ---------- */
 /* One calibrated viewer for any box. CALIBRATION: the viewer assumes a full
    sphere (360 x 180, a 2:1 image). Our panoramas are iPhone sweeps — much
    wider than tall — so shown as a sphere they get squeezed into a narrow
@@ -827,26 +872,51 @@ function openPanoLightbox(src){
   requestAnimationFrame(function(){ wrap.classList.add('open'); panoViewer(wrap.querySelector('.pl-view'), src, function(){ return wrap.isConnected; }, function(viewer){ v=viewer; }); });
 }
 
-function mountHeroPano(){
-  if(state.screen!=='detail') return;
-  const slot=document.getElementById('heroPanoSlot');
-  if(!slot || typeof pannellum==='undefined') return;   // offline → leave placeholder
-  const R=getRoom(); if(!R) return;
-  if(!HERO.node){ HERO.node=document.createElement('div'); HERO.node.style.cssText='position:absolute;inset:0'; }
-  if(HERO.node.parentNode!==slot){ slot.innerHTML=''; slot.appendChild(HERO.node); }
-  if(HERO.viewer && HERO.roomId===state.roomId) return;  // already live for this room
-  if(HERO.viewer){ try{ HERO.viewer.destroy(); }catch(e){} HERO.viewer=null; }
-  HERO.node.innerHTML='';
-  HERO.roomId=state.roomId;
-  const src=R.panorama||SAMPLE_PANO, wanted=state.roomId;
-  panoViewer(HERO.node, src, function(){ return HERO.roomId===wanted && HERO.node.isConnected; }, function(v){
-    HERO.viewer=v;
-    /* the expand button, styled like the viewer's own controls */
-    const btn=document.createElement('button'); btn.type='button'; btn.className='pnlm-expand'; btn.title='View larger'; btn.setAttribute('aria-label','View larger');
-    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
-    btn.addEventListener('click', function(e){ e.stopPropagation(); openPanoLightbox(src); });
-    HERO.node.appendChild(btn);
+/* "360° tour" — opens the panorama in the lightbox above. */
+function openRoomPano(){ const R=getRoom(); if(R) openPanoLightbox(R.panorama||SAMPLE_PANO); }
+
+/* Photo strip: native scroll-snap does the swiping on touch screens. render()
+   redraws #app on every keystroke, which would snap the strip back to photo 1
+   while someone types — so the position is remembered and put back here. Mouse
+   users get click-and-drag (touch and trackpads already scroll it natively). */
+var GALPOS={ room:null, left:0 };
+function mountGallery(){
+  const t=document.querySelector('#app .bk-gal-track'); if(!t) return;
+  if(GALPOS.room!==state.roomId) GALPOS={ room:state.roomId, left:0 };
+  const slides=Array.from(t.children), dots=Array.from(document.querySelectorAll('#app .bk-gal-dots i')), idxEl=document.querySelector('#app .bk-gal-idx');
+  const pos=function(i){ return slides[i].offsetLeft-slides[0].offsetLeft; };
+  const maxLeft=function(){ return Math.max(0,t.scrollWidth-t.clientWidth); };
+  const nearest=function(){
+    if(t.scrollLeft>=maxLeft()-2) return slides.length-1;
+    let best=0; for(let i=1;i<slides.length;i++) if(Math.abs(pos(i)-t.scrollLeft)<Math.abs(pos(best)-t.scrollLeft)) best=i;
+    return best;
+  };
+  const paint=function(){
+    GALPOS.left=t.scrollLeft;
+    const i=nearest();
+    dots.forEach(function(d,k){ d.classList.toggle('on',k===i); });
+    if(idxEl) idxEl.textContent=i+1;
+  };
+  t.scrollLeft=GALPOS.left;
+  paint();
+  t.addEventListener('scroll',paint,{passive:true});
+
+  let drag=null;
+  t.addEventListener('pointerdown',function(e){
+    if(e.pointerType!=='mouse' || e.button!==0 || slides.length<2) return;
+    drag={ x:e.clientX, left:t.scrollLeft, from:nearest() };
+    t.classList.add('drag'); t.setPointerCapture(e.pointerId);
   });
+  t.addEventListener('pointermove',function(e){ if(drag) t.scrollLeft=drag.left-(e.clientX-drag.x); });
+  const end=function(e){
+    if(!drag) return;
+    const dx=e.clientX-drag.x; let i=drag.from;
+    if(Math.abs(dx)>40) i=Math.max(0,Math.min(slides.length-1,i+(dx<0?1:-1)));
+    drag=null; t.classList.remove('drag');
+    t.style.scrollBehavior='smooth'; t.scrollLeft=Math.min(pos(i),maxLeft());
+    setTimeout(function(){ t.style.scrollBehavior=''; },450);
+  };
+  t.addEventListener('pointerup',end); t.addEventListener('pointercancel',end);
 }
 
 /* Photo gallery lightbox — view-only for customers, mounted outside #app.
@@ -1245,15 +1315,15 @@ function detailScreen(){
       const taken=R.booked.filter(k=>k.date===ds);
       if(taken.length){
         const takenLbl=taken.map(k=>fmtTime(k.start)+'–'+fmtTime(k.end)).join(', ');
-        return `<div style="display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center;margin-bottom:8px">
-          <span style="font-size:12px;font-weight:600;color:#a5a19a">${lbl}<div style="font-size:10px;font-weight:500;color:#a5a19a">booked ${takenLbl}</div></span>
+        return `<div class="bk-day-row bk-day-off" style="display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">${lbl}<div style="font-size:12px;font-weight:500;color:#d5b8b5">booked ${takenLbl}</div></span>
           <span style="height:42px;display:flex;align-items:center;padding:0 11px;border:1px dashed rgba(0,0,0,.14);border-radius:9px;font-size:12px;color:#a5a19a;background:#fff">Not available — already booked</span>
         </div>`;
       }
       n++;
       const t=dayTime(ds);
-      return `<div style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px">
-        <span style="font-size:12px;font-weight:600;color:#5c584f">Day ${n}<div style="font-size:12px;font-weight:500;color:#8a857d">${lbl}</div></span>
+      return `<div class="bk-day-row" style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:600;color:#f2d0cb">Day ${n}<div style="font-size:12px;font-weight:500;color:#d5b8b5">${lbl}</div></span>
         ${timeInput('bk-t-'+ds+'-s',t.start,"setDayTime('"+ds+"','start',this.value)")}
         ${timeInput('bk-t-'+ds+'-e',t.end,"setDayTime('"+ds+"','end',this.value)")}
       </div>`;
@@ -1261,24 +1331,24 @@ function detailScreen(){
     timeSection=`
       <div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-size:12px;font-weight:600;color:#5c584f">Hours per day</span>
-          <button onclick="applyTimeToAll()" style="background:none;border:none;padding:0;font-size:12.5px;font-weight:600;color:#a11626;cursor:pointer">Apply Day 1 to all</button>
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">Hours per day</span>
+          <button onclick="applyTimeToAll()" style="background:none;border:none;padding:0;font-size:12.5px;font-weight:600;color:#fff;text-decoration:underline;cursor:pointer">Apply Day 1 to all</button>
         </div>
-        <div style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;margin-bottom:4px">
-          <span></span><span style="font-size:12px;color:#8a857d">Start</span><span style="font-size:12px;color:#8a857d">End</span>
+        <div class="bk-day-row" style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;margin-bottom:4px">
+          <span></span><span style="font-size:12px;color:#d5b8b5">Start</span><span style="font-size:12px;color:#d5b8b5">End</span>
         </div>
         ${rows}
-        ${d.excluded?`<div style="font-size:12px;color:#a5a19a;margin-top:2px">Unavailable days are left out automatically — you only book and pay for the available days.</div>`:''}
+        ${d.excluded?`<div style="font-size:12px;color:#d5b8b5;margin-top:2px">Unavailable days are left out automatically — you only book and pay for the available days.</div>`:''}
       </div>`;
   } else {
     timeSection=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
         <label style="display:flex;flex-direction:column;gap:5px">
-          <span style="font-size:12px;font-weight:600;color:#5c584f">Start time</span>
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">Start time</span>
           ${timeInput('bk-start',b.start,"setBooking('start',this.value)")}
         </label>
         <label style="display:flex;flex-direction:column;gap:5px">
-          <span style="font-size:12px;font-weight:600;color:#5c584f">End time</span>
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">End time</span>
           ${timeInput('bk-end',b.end,"setBooking('end',this.value)")}
         </label>
       </div>`;
@@ -1293,112 +1363,114 @@ function detailScreen(){
       </div>
     </div>` : '';
 
-  const capacityWarn = d.over ? `<div style="font-size:12px;color:#8a5a12;margin-bottom:10px;line-height:1.4">Exceeds this room's capacity of ${R.capacity}. You can continue, but staff may reject an over-capacity booking.</div>` : '';
+  const capacityWarn = d.over ? `<div style="font-size:12px;color:#ffd166;margin-bottom:10px;line-height:1.4">Exceeds this room's capacity of ${R.capacity}. You can continue, but staff may reject an over-capacity booking.</div>` : '';
 
-  const feeNote = d.days>1 ? `<span style="display:block;font-size:12px;color:#a5a19a;margin-top:1px">${peso(R.fee)} × ${d.days} days</span>` : '';
+  const feeNote = d.days>1 ? `<span style="display:block;font-size:12px;color:#d5b8b5;margin-top:1px">${peso(R.fee)} × ${d.days} days</span>` : '';
 
+  /* photo strip — swipe / drag only. Real uploaded photos, or one placeholder tile
+     when the room has none yet (never a made-up count). */
+  const photos=(R.photoUrls||[]).filter(Boolean);
+  const slides = photos.length
+    ? photos.map((u,i)=>`<div class="bk-gal-slide${photos.length===1?' solo':''}" role="img" aria-label="${esc(R.name)} — photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></div>`).join('')
+    : `<div class="bk-gal-slide solo ph"><span>room photo</span></div>`;
+  const pano360 = `<button type="button" class="bk-gal-pill" onclick="openRoomPano()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>360° tour</button>`;
+  const gallery = `
+      <div class="bk-gal">
+        <div class="bk-gal-track" tabindex="0" aria-label="${esc(R.name)} photos — swipe to browse">${slides}</div>
+        ${pano360}
+        ${photos.length>1?`<span class="bk-gal-pill bk-gal-count"><span class="bk-gal-idx">1</span>&nbsp;/&nbsp;${photos.length}</span><div class="bk-gal-dots">${photos.map((_,i)=>`<i${i?'':' class="on"'}></i>`).join('')}</div>`:''}
+      </div>`;
+
+  const LBL='font-size:12px;font-weight:600;color:#f2d0cb';
   return `
   <main style="max-width:1180px;margin:0 auto;padding:20px 24px 72px">
     <a onclick="goHome()" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:16px">← All rooms</a>
 
-    <div style="display:grid;grid-template-columns:minmax(0,1fr) 379px;gap:34px;align-items:start">
+    ${gallery}
+
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;margin:0 2px 26px">
+      <div style="flex:1;min-width:240px">
+        <h1 style="margin:0 0 6px;font-size:27px;font-weight:700;letter-spacing:-.015em">${esc(R.name)}</h1>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;font-size:14px;color:#4a463f">
+          <span>${esc(R.venue)}</span>
+          <span style="display:inline-flex;align-items:center;gap:6px" title="Up to ${R.capacity} guests">${svgUsers(17)}${R.capacity}</span>
+          ${maintChip(R)}
+        </div>
+      </div>
+    </div>
+
+    <div class="bk-cols">
     <!-- LEFT -->
     <div style="min-width:0">
-      <!-- gallery, booking.com style: big main shot (the 360 panorama) on the
-           left, two stacked photos on the right, thumbnail strip underneath -->
-      <div style="display:grid;grid-template-columns:400px 196px;grid-template-rows:196px 196px;gap:8px;border-radius:14px;overflow:hidden">
-        <div id="heroPanoSlot" style="grid-row:1 / span 2;position:relative;${PHOTO_TILE}">
-          <span style="font:500 13px/1 ui-monospace,Menlo,monospace;color:#9a958c">360° panorama</span>
-        </div>
-        ${heroTile(R,0)}
-        ${heroTile(R,1)}
-      </div>
-      <!-- 2 side shots above + 3 thumbs here = 5 tiles total, matching the
-           5-photo cap (ROOM_PHOTO_MAX_COUNT) — never more empty slots than
-           a room could actually have photos for. -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;width:604px;max-width:100%">
-        ${[2,3,4].map(i=>heroTile(R,i,'aspect-ratio:1/1;border-radius:10px;overflow:hidden')).join('')}
-      </div>
-
-      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;margin:22px 2px 4px">
-        <div style="flex:1;min-width:240px">
-          <h1 style="margin:0 0 6px;font-size:27px;font-weight:700;letter-spacing:-.015em">${esc(R.name)}</h1>
-          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px;font-size:14px;color:#4a463f">
-            <span>${esc(R.venue)}</span>
-            <span style="display:inline-flex;align-items:center;gap:6px" title="Up to ${R.capacity} guests">${svgUsers(17)}${R.capacity}</span>
-            ${maintChip(R)}
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:4px;border-bottom:1px solid rgba(0,0,0,.1);margin-top:18px">${tabs}</div>
+      <div style="display:flex;gap:4px;border-bottom:1px solid rgba(0,0,0,.1);overflow-x:auto;scrollbar-width:none">${tabs}</div>
       <div style="margin-top:24px">${content}</div>
     </div>
 
     <!-- RIGHT: booking panel -->
-    <aside style="position:sticky;top:88px">
-      <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05);padding:18px 18px 20px">
-        <div style="font-size:16px;font-weight:680;margin-bottom:2px">Reserve this room</div>
-        <div style="font-size:12.5px;color:#8a857d;margin-bottom:16px">Pick your dates &amp; time to check the slot. Bookings must start at least 12 hours from now. <a onclick="openLeadModal()" style="font-weight:600;cursor:pointer;white-space:nowrap">Why?</a></div>
+    <aside class="bk-aside">
+      <div class="bk-panel">
+        <span class="bk-eyebrow">Book this room</span>
+        <div style="font-size:20px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px">Reserve this room</div>
+        <div style="font-size:12.5px;line-height:1.55;color:#e9d0cd;margin-bottom:18px">Pick your dates &amp; time to check the slot. Bookings must start at least 12 hours from now. <a onclick="openLeadModal()" style="font-weight:600;cursor:pointer;white-space:nowrap">Why?</a></div>
         ${maintDisclosure(R)}
 
         <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
-          <span style="font-size:12px;font-weight:600;color:#5c584f">Event name</span>
-          <input id="bk-eventName" type="text" value="${esc(b.eventName)}" oninput="setBooking('eventName',this.value)" placeholder="e.g. CIC Research Colloquium" style="height:42px;padding:0 11px;border:1px solid rgba(0,0,0,.12);border-radius:10px;font-size:14px">
+          <span style="${LBL}">Event name</span>
+          <input id="bk-eventName" type="text" value="${esc(b.eventName)}" oninput="setBooking('eventName',this.value)" placeholder="e.g. CIC Research Colloquium" style="height:42px;padding:0 11px;border:1px solid transparent;border-radius:10px;font-size:14px;color:#1c1b19">
         </label>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
           <div style="display:flex;flex-direction:column;gap:5px;position:relative">
-            <span style="font-size:12px;font-weight:600;color:#5c584f">Start date</span>
-            <button id="bk-date" type="button" onclick="openCal('date')" style="display:flex;align-items:center;gap:7px;height:42px;padding:0 10px;border:1px solid rgba(0,0,0,.12);border-radius:10px;font-size:13.5px;background:#fff;cursor:pointer;color:#1c1b19">${svgCalendar(15)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.date?calDateLabel(b.date):''}</span>${svgCaret(11)}</button>
+            <span style="${LBL}">Start date</span>
+            <button id="bk-date" type="button" onclick="openCal('date')" style="display:flex;align-items:center;gap:7px;height:42px;padding:0 10px;border:1px solid transparent;border-radius:10px;font-size:13.5px;background:#fff;cursor:pointer;color:#1c1b19">${svgCalendar(15)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.date?calDateLabel(b.date):''}</span>${svgCaret(11)}</button>
             ${calHtml('date')}
           </div>
           <div style="display:flex;flex-direction:column;gap:5px;position:relative">
-            <span style="font-size:12px;font-weight:600;color:#5c584f">End date</span>
-            <button id="bk-dateEnd" type="button" onclick="openCal('dateEnd')" style="display:flex;align-items:center;gap:7px;height:42px;padding:0 10px;border:1px solid rgba(0,0,0,.12);border-radius:10px;font-size:13.5px;background:#fff;cursor:pointer;color:#1c1b19">${svgCalendar(15)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.dateEnd?calDateLabel(b.dateEnd):''}</span>${svgCaret(11)}</button>
+            <span style="${LBL}">End date</span>
+            <button id="bk-dateEnd" type="button" onclick="openCal('dateEnd')" style="display:flex;align-items:center;gap:7px;height:42px;padding:0 10px;border:1px solid transparent;border-radius:10px;font-size:13.5px;background:#fff;cursor:pointer;color:#1c1b19">${svgCalendar(15)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.dateEnd?calDateLabel(b.dateEnd):''}</span>${svgCaret(11)}</button>
             ${calHtml('dateEnd')}
           </div>
         </div>
-        <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">${rangeNote}</div>
+        <div style="font-size:12.5px;color:#d5b8b5;margin-bottom:12px">${rangeNote}</div>
 
         ${timeSection}
 
         ${slot}
 
         <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">
-          <span style="font-size:12px;font-weight:600;color:#5c584f">Number of attendees</span>
-          <input id="bk-attendees" type="text" inputmode="numeric" value="${esc(b.attendees)}" oninput="setBooking('attendees',this.value.replace(/\D/g,''))" placeholder="e.g. 50" style="height:42px;padding:0 11px;border:1px solid ${d.over?'#e6c48a':'rgba(0,0,0,.12)'};border-radius:10px;font-size:14px">
+          <span style="${LBL}">Number of attendees</span>
+          <input id="bk-attendees" type="text" inputmode="numeric" value="${esc(b.attendees)}" oninput="setBooking('attendees',this.value.replace(/\D/g,''))" placeholder="e.g. 50" style="height:42px;padding:0 11px;border:1px solid ${d.over?'#ffd166':'transparent'};border-radius:10px;font-size:14px;color:#1c1b19">
         </label>
         ${capacityWarn}
         <div style="height:6px"></div>
 
-        <div style="border-top:1px solid rgba(0,0,0,.09);padding-top:14px;margin-bottom:12px">
-          <div style="font-size:12px;font-weight:600;color:#5c584f;margin-bottom:8px">Booking under</div>
+        <div style="border-top:1px solid rgba(255,255,255,.16);padding-top:14px;margin-bottom:12px">
+          <div style="${LBL};margin-bottom:8px">Booking under</div>
           <div style="display:flex;align-items:center;gap:10px;padding:2px 0">
-            <div style="width:34px;height:34px;border-radius:999px;background:#a11626;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:650;color:#fff">${esc(initials(ACCOUNT.name))}</div>
-            <div style="line-height:1.3">
-              <div style="font-size:13.5px;font-weight:640">${esc(ACCOUNT.name)}</div>
-              <div style="font-size:12px;color:#8a857d">${esc(ACCOUNT.email)}</div>
+            <div style="width:34px;height:34px;flex:none;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#8a1222">${esc(initials(ACCOUNT.name))}</div>
+            <div style="line-height:1.3;min-width:0">
+              <div style="font-size:13.5px;font-weight:640;color:#fff">${esc(ACCOUNT.name)}</div>
+              <div style="font-size:12px;color:#d5b8b5;overflow-wrap:anywhere">${esc(ACCOUNT.email)}</div>
             </div>
           </div>
         </div>
 
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
-          <span style="font-size:13px;color:#7a766f">Reservation fee${feeNote}</span>
-          <span style="font-size:17px;font-weight:700">${peso(d.roomPrice)}</span>
+          <span style="font-size:13px;color:#e9d0cd">Reservation fee${feeNote}</span>
+          <span style="font-size:20px;font-weight:750;color:#fff">${peso(d.roomPrice)}</span>
         </div>
         ${d.discountAmount>0?`
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:8px">
-          <span style="font-size:13px;color:#1c7a4f">USeP discount &minus;${d.discountPercent}%<span style="display:block;font-size:12px;color:#a5a19a;margin-top:1px">applied once staff check your USeP ID</span></span>
-          <span style="font-size:17px;font-weight:700;color:#1c7a4f">&minus;${peso(d.discountAmount)}</span>
+          <span style="font-size:13px;color:#8ee6b8">USeP discount &minus;${d.discountPercent}%<span style="display:block;font-size:12px;color:#d5b8b5;margin-top:1px">applied once staff check your USeP ID</span></span>
+          <span style="font-size:17px;font-weight:700;color:#8ee6b8">&minus;${peso(d.discountAmount)}</span>
         </div>
-        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:9px;margin-top:8px;border-top:1px solid rgba(0,0,0,.08)">
-          <span style="font-size:13px;font-weight:640;color:#4a463f">Total to pay</span>
-          <span style="font-size:19px;font-weight:750">${peso(d.totalFee)}</span>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:9px;margin-top:8px;margin-bottom:12px;border-top:1px solid rgba(255,255,255,.16)">
+          <span style="font-size:13px;font-weight:640;color:#f2d0cb">Total to pay</span>
+          <span style="font-size:21px;font-weight:750;color:#fff">${peso(d.totalFee)}</span>
         </div>`:''}
 
-        <button onclick="goReview()" ${d.ready?'':'disabled'} style="width:100%;height:48px;border:none;border-radius:11px;font-size:15px;font-weight:680;cursor:${d.ready?'pointer':'not-allowed'};background:${d.ready?'#a11626':'#b7b3ab'};color:#fff;opacity:${d.ready?'1':'.85'}">Continue — review &amp; submit request</button>
-        ${(!d.ready && d.hint)?`<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">${d.hint}</div>`:`<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">You'll attach a valid ID next · payment opens after staff approval</div>`}
+        <button class="bk-go ${d.ready?'on':'off'}" onclick="goReview()" ${d.ready?'':'disabled'}>Continue — review &amp; submit request</button>
+        ${(!d.ready && d.hint)?`<div style="font-size:12.5px;color:#d5b8b5;text-align:center;margin-top:10px">${d.hint}</div>`:`<div style="font-size:12.5px;color:#d5b8b5;text-align:center;margin-top:10px">You'll attach a valid ID next · payment opens after staff approval</div>`}
       </div>
     </aside>
     </div>
@@ -1963,7 +2035,7 @@ function render(){
     }
   }
 
-  mountHeroPano();   // keep the inline hero panorama alive across re-renders
+  mountGallery();   // put the photo strip back where the swipe left it
 }
 
 render();

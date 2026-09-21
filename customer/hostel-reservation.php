@@ -106,9 +106,7 @@ require_once __DIR__ . '/../includes/room-photos.php';
   /* the footer — crimson to black; the page is a column so it stays at the bottom on short screens */
   body{display:flex;flex-direction:column;min-height:100vh}
   #app{flex:1 0 auto}
-  /* 360 viewer: the expand button + the scaled-down lightbox (not real fullscreen) */
-  .pnlm-expand{position:absolute;left:4px;top:98px;z-index:3;width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:3px;background:rgba(200,200,200,.8);color:#000;cursor:pointer;box-shadow:0 0 3px rgba(0,0,0,.5)}
-  .pnlm-expand:hover{background:#fff}
+  /* 360 viewer: the scaled-down lightbox (not real fullscreen) */
   #panoLightbox{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(10,4,5,.82);opacity:0;transition:opacity 220ms ease}
   #panoLightbox.open{opacity:1}
   #panoLightbox .pl-box{position:relative;width:min(1100px,92vw);aspect-ratio:16/9;max-height:82vh;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 30px 90px rgba(0,0,0,.6);transform:scale(.96);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
@@ -162,15 +160,75 @@ require_once __DIR__ . '/../includes/room-photos.php';
   .bk-more-meta span,.bk-more-price span{color:#f2d0cb!important}
   .bk-more-meta span,.bk-more-price span{font-size:12px!important}   /* type floor: the 11px note from pricing.php */
   #app span[style*="ui-monospace"]{font-size:12px!important}          /* type floor: the "room photo" placeholder labels */
-  /* phone: the 604px photo grid (400 + 196) becomes two columns; the 360 tile spans both */
-  @media (max-width:720px){
-    #app div:has(> #heroPanoSlot){grid-template-columns:1fr 1fr!important;grid-template-rows:220px 120px!important;width:100%!important}
-    #heroPanoSlot{grid-column:1 / span 2!important;grid-row:1!important}
-    /* the photos + the 379px booking form stack instead of sitting side by side */
-    #app main > div[style*="379px"]{grid-template-columns:1fr!important;gap:22px!important}
-    #app aside[style*="sticky"]{position:static!important}
-    #app main{padding-left:16px!important;padding-right:16px!important}
+  /* ---- room page layout: photo strip on top, then details + booking panel side by side ---- */
+  .bk-cols{display:grid;grid-template-columns:minmax(0,1fr) 379px;gap:34px;align-items:start}
+  .bk-aside{position:sticky;top:88px}
+  /* ---- photo strip: swipe / drag only (no arrows, no thumbnails, no click-to-open) ---- */
+  .bk-gal{position:relative;margin:0 0 22px}
+  .bk-gal-track{display:flex;gap:10px;height:400px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;cursor:grab;-webkit-tap-highlight-color:transparent}
+  .bk-gal-track::-webkit-scrollbar{display:none}
+  .bk-gal-track:focus-visible{outline:2px solid rgba(161,22,38,.5);outline-offset:3px;border-radius:20px}
+  .bk-gal-track.drag{scroll-snap-type:none;cursor:grabbing;user-select:none}
+  .bk-gal-slide{position:relative;flex:0 0 auto;height:100%;aspect-ratio:3/2;border-radius:20px;overflow:hidden;background-color:#e9e7e2;background-size:cover;background-position:center;scroll-snap-align:start}
+  .bk-gal-slide::after{content:"";position:absolute;inset:auto 0 0 0;height:38%;background:linear-gradient(180deg,transparent,rgba(14,5,6,.5));pointer-events:none}
+  .bk-gal-slide.solo{flex-basis:100%;aspect-ratio:auto}
+  .bk-gal-slide.ph{display:flex;align-items:center;justify-content:center;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px)}
+  .bk-gal-slide.ph span{font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c}
+  .bk-gal-slide.ph::after{display:none}
+  .bk-gal-pill{position:absolute;top:14px;z-index:3;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;border:1px solid rgba(255,255,255,.28);background:rgba(20,8,10,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;font:600 12.5px/1 'Inter',system-ui,sans-serif;letter-spacing:.01em}
+  /* first slide: the 360° tour — the panorama as a still, tap to look around (a live viewer here would swallow the swipe) */
+  .bk-gal-360s{appearance:none;border:0;padding:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-family:inherit;text-align:center;user-select:none;-webkit-user-select:none}
+  .bk-gal-360s::before{content:"";position:absolute;inset:0;background:rgba(20,8,10,.34);transition:background 200ms ease}
+  .bk-gal-360s:hover::before{background:rgba(138,18,34,.42)}
+  .bk-gal-360s>*{position:relative;z-index:1}
+  .bk-360-ico{display:grid;place-items:center;width:58px;height:58px;margin-bottom:6px;border-radius:50%;border:1.5px solid rgba(255,255,255,.7);background:rgba(20,8,10,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .bk-gal-360s strong{font-size:20px;font-weight:750;letter-spacing:-.01em}
+  .bk-gal-360s small{font-size:13px;font-weight:500;color:#f2d0cb}
+  .bk-gal-count{right:14px;pointer-events:none}
+  .bk-gal-dots{position:absolute;left:0;right:0;bottom:14px;z-index:2;display:flex;justify-content:center;gap:6px;pointer-events:none}
+  .bk-gal-dots i{display:block;width:7px;height:7px;border-radius:999px;background:rgba(255,255,255,.6);box-shadow:0 1px 3px rgba(0,0,0,.35);transition:width 220ms ease,background 220ms ease}
+  .bk-gal-dots i.on{width:22px;background:#fff}
+  /* ---- booking panel: the landing page's crimson-to-black card ---- */
+  .bk-panel{position:relative;padding:22px 20px 22px;border-radius:24px;color:#fff;background:linear-gradient(162deg,#7d1120 0%,#3c0c14 48%,#17080a 100%);box-shadow:0 26px 64px rgba(138,18,34,.3)}
+  .bk-panel::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(420px 300px at 92% 0%,rgba(232,62,74,.3),transparent 62%),radial-gradient(360px 300px at 4% 100%,rgba(10,4,5,.6),transparent 66%)}
+  .bk-panel>*{position:relative}
+  .bk-panel a{color:#fff;text-decoration:underline;text-underline-offset:2px}
+  .bk-panel a:hover{color:#f2d0cb}
+  .bk-panel input{border-color:transparent!important;background:#fff}
+  .bk-panel input:focus,.bk-panel button:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:1px}
+  .bk-panel ::placeholder{color:#a5a19a}
+  .bk-eyebrow{display:block;margin-bottom:8px;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#f2d0cb}
+  .bk-go{width:100%;height:50px;border:none;border-radius:14px;font-size:15px;font-weight:700;transition:transform 160ms ease,background 160ms ease}
+  .bk-go.on{background:#fff;color:#8a1222;cursor:pointer}
+  .bk-go.on:hover{background:#fbeceb}
+  .bk-go.on:active{transform:scale(.98)}
+  .bk-go.off{background:rgba(255,255,255,.16);color:rgba(255,255,255,.62);cursor:not-allowed}
+  /* tablet + phone: everything stacks — photos, title, details, then the booking panel */
+  @media (max-width:900px){
+    .bk-cols{grid-template-columns:1fr;gap:26px}
+    .bk-aside{position:static}
   }
+  @media (max-width:720px){
+    #app main{padding-left:16px!important;padding-right:16px!important}
+    .bk-gal{margin-bottom:18px}
+    .bk-gal-track{height:min(66vw,320px);gap:8px}
+    .bk-gal-slide{flex-basis:88%;aspect-ratio:auto;border-radius:16px}
+    .bk-gal-slide.solo{flex-basis:100%}
+    .bk-gal-pill{top:10px;height:32px;padding:0 11px}
+    .bk-360-ico{width:48px;height:48px}
+    .bk-gal-360s strong{font-size:17px}
+    .bk-gal-count{right:10px}
+    .bk-gal-dots{bottom:11px}
+    .bk-panel{padding:20px 16px;border-radius:20px}
+    /* 16px stops iOS Safari zooming the page when a field is focused; taller fields are easier to hit */
+    .bk-panel input{font-size:16px!important;height:46px!important}
+    .bk-panel .g-seg{height:46px}
+  }
+  /* hostel roster on the crimson card */
+  .bk-panel .bed-row{border-top-color:rgba(255,255,255,.16)}
+  .bk-panel .bed-no{color:#d5b8b5}
+  .bk-panel .bed-name{height:42px}
+  .bk-panel .g-seg{height:42px;border-color:transparent}
   .bk-more-free{margin-top:13px;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,209,102,.16);border:1px solid rgba(255,209,102,.42);color:#ffd166}
   .bk-more-free i{width:6px;height:6px;border-radius:50%;background:#ffd166;display:block}
   .bk-more-free.is-none{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.17);color:#bda4a2}
@@ -184,10 +242,12 @@ require_once __DIR__ . '/../includes/room-photos.php';
   @media (max-width:720px){.bk-more-wrap{padding:40px 18px 36px}.bk-more-head{flex-direction:column;align-items:flex-start}.bk-more-grid{grid-template-columns:1fr;gap:10px}.bk-more h2{font-size:26px}
     /* phone: compact "More rooms" cards — photo left, text right (same as the landing page) */
     .bk-more-card{display:grid;grid-template-columns:112px minmax(0,1fr);border-radius:16px}
-    .bk-more-ph{aspect-ratio:auto;height:100%;min-height:104px}
+    .bk-more-ph{aspect-ratio:auto;height:100%;min-height:118px}
     .bk-more-tag{display:none}
-    .bk-more-body{padding:12px 14px;min-width:0}
-    .bk-more-body h3{font-size:15px}
+    .bk-more-body{padding:14px 16px;min-width:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:3px}
+    .bk-more-body h3{font-size:15px;line-height:1.3}
+    .bk-more-meta{margin:0}
+    .bk-more-free{margin-top:6px;padding:5px 11px;line-height:1.35}
     /* phone: a sticky bar so the booking form (below the description) is one tap away */
     .bk-cta{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
       background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.1);box-shadow:0 -8px 24px rgba(0,0,0,.08);transform:translateY(110%);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
@@ -548,7 +608,7 @@ function setOccupant(i,key,val){
 function updateReady(){
   const d=derive();
   const btn=document.getElementById('hbGo'); const hint=document.getElementById('hbHint');
-  if(btn){ btn.disabled=!d.ready; btn.style.opacity=d.ready?'1':'.45'; btn.style.cursor=d.ready?'pointer':'not-allowed'; }
+  if(btn){ btn.disabled=!d.ready; btn.className='bk-go '+(d.ready?'on':'off'); }
   if(hint) hint.textContent=d.hint;
 }
 function setTab(k){ state.tab=k; render(); }
@@ -596,7 +656,7 @@ function calHtml(field){
   }
   const label=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
   return `
-  <div class="cal-pop" onclick="event.stopPropagation()">
+  <div class="cal-pop" style="${field==='checkOut'?'right:0':'left:0'}" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <button class="cal-nav" onclick="calNav(-1)">‹</button>
       <span style="font-size:13px;font-weight:650">${label}</span>
@@ -798,12 +858,7 @@ function heroTile(R,i,extraStyle,inner){
 function svgBed(s,c){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c||'currentColor'}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6"/><path d="M2 18h20M2 18v2M22 18v2"/><path d="M6 10V8a2 2 0 0 1 2-2h3v4"/></svg>`; }
 function svgUsers(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`; }
 
-/* ---------- 360 panorama + photo gallery (room detail hero) ----------
-   Identical treatment to the venue page. One persistent viewer node is MOVED
-   into the hero slot on each render — appendChild relocates the live node
-   without destroying it, so the constant re-renders from typing guest names
-   never reload the panorama. Rebuilt only when the room changes. */
-var HERO = { node:null, viewer:null, roomId:null };
+/* ---------- 360 panorama (opened from the photo strip's first slide) + photo gallery lightbox ---------- */
 /* One calibrated viewer for any box. CALIBRATION: the viewer assumes a full
    sphere (360 x 180, a 2:1 image). Our panoramas are iPhone sweeps — much
    wider than tall — so shown as a sphere they get squeezed into a narrow
@@ -847,26 +902,54 @@ function openPanoLightbox(src){
   requestAnimationFrame(function(){ wrap.classList.add('open'); panoViewer(wrap.querySelector('.pl-view'), src, function(){ return wrap.isConnected; }, function(viewer){ v=viewer; }); });
 }
 
-function mountHeroPano(){
-  if(state.screen!=='detail') return;
-  const slot=document.getElementById('heroPanoSlot');
-  if(!slot || typeof pannellum==='undefined') return;   // offline → leave placeholder
-  const R=getRoom(); if(!R) return;
-  if(!HERO.node){ HERO.node=document.createElement('div'); HERO.node.style.cssText='position:absolute;inset:0'; }
-  if(HERO.node.parentNode!==slot){ slot.innerHTML=''; slot.appendChild(HERO.node); }
-  if(HERO.viewer && HERO.roomId===state.roomId) return;  // already live for this room
-  if(HERO.viewer){ try{ HERO.viewer.destroy(); }catch(e){} HERO.viewer=null; }
-  HERO.node.innerHTML='';
-  HERO.roomId=state.roomId;
-  const src=R.panorama||SAMPLE_PANO, wanted=state.roomId;
-  panoViewer(HERO.node, src, function(){ return HERO.roomId===wanted && HERO.node.isConnected; }, function(v){
-    HERO.viewer=v;
-    /* the expand button, styled like the viewer's own controls */
-    const btn=document.createElement('button'); btn.type='button'; btn.className='pnlm-expand'; btn.title='View larger'; btn.setAttribute('aria-label','View larger');
-    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
-    btn.addEventListener('click', function(e){ e.stopPropagation(); openPanoLightbox(src); });
-    HERO.node.appendChild(btn);
+/* "360° tour" — opens the panorama in the lightbox above. */
+function openRoomPano(){ const R=getRoom(); if(R) openPanoLightbox(R.panorama||SAMPLE_PANO); }
+
+/* Photo strip: native scroll-snap does the swiping on touch screens. render()
+   redraws #app on every keystroke, which would snap the strip back to photo 1
+   while someone types — so the position is remembered and put back here. Mouse
+   users get click-and-drag (touch and trackpads already scroll it natively). */
+var GALPOS={ room:null, left:0 };
+function mountGallery(){
+  const t=document.querySelector('#app .bk-gal-track'); if(!t) return;
+  if(GALPOS.room!==state.roomId) GALPOS={ room:state.roomId, left:0 };
+  const slides=Array.from(t.children), dots=Array.from(document.querySelectorAll('#app .bk-gal-dots i')), idxEl=document.querySelector('#app .bk-gal-idx');
+  const pos=function(i){ return slides[i].offsetLeft-slides[0].offsetLeft; };
+  const maxLeft=function(){ return Math.max(0,t.scrollWidth-t.clientWidth); };
+  const nearest=function(){
+    if(t.scrollLeft>=maxLeft()-2) return slides.length-1;
+    let best=0; for(let i=1;i<slides.length;i++) if(Math.abs(pos(i)-t.scrollLeft)<Math.abs(pos(best)-t.scrollLeft)) best=i;
+    return best;
+  };
+  const paint=function(){
+    GALPOS.left=t.scrollLeft;
+    const i=nearest();
+    dots.forEach(function(d,k){ d.classList.toggle('on',k===i); });
+    if(idxEl) idxEl.textContent=i+1;
+  };
+  t.scrollLeft=GALPOS.left;
+  paint();
+  t.addEventListener('scroll',paint,{passive:true});
+
+  let drag=null, moved=false;
+  const onMove=function(e){ if(!drag) return; const dx=e.clientX-drag.x; if(Math.abs(dx)>5) moved=true; t.scrollLeft=drag.left-dx; };
+  const onUp=function(e){
+    window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); window.removeEventListener('pointercancel',onUp);
+    if(!drag) return;
+    const dx=e.clientX-drag.x; let i=drag.from;
+    if(Math.abs(dx)>40) i=Math.max(0,Math.min(slides.length-1,i+(dx<0?1:-1)));
+    drag=null; t.classList.remove('drag');
+    t.style.scrollBehavior='smooth'; t.scrollLeft=Math.min(pos(i),maxLeft());
+    setTimeout(function(){ t.style.scrollBehavior=''; moved=false; },450);
+  };
+  t.addEventListener('pointerdown',function(e){
+    if(e.pointerType!=='mouse' || e.button!==0 || slides.length<2) return;
+    drag={ x:e.clientX, left:t.scrollLeft, from:nearest() }; moved=false;
+    t.classList.add('drag');
+    window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp); window.addEventListener('pointercancel',onUp);
   });
+  /* a drag that ends over the 360° tile must not count as a tap on it */
+  t.addEventListener('click',function(e){ if(moved){ e.preventDefault(); e.stopPropagation(); } },true);
 }
 
 /* Photo gallery lightbox — view-only, mounted outside #app. Shows the
@@ -1042,8 +1125,8 @@ function detailScreen(){
   /* --- booking panel --- */
   const dateField=(field,label,val)=>`
     <div style="position:relative;flex:1;min-width:0">
-      <div style="font-size:12px;font-weight:600;color:#5c584f;margin-bottom:5px">${label}</div>
-      <button onclick="event.stopPropagation();openCal('${field}')" style="width:100%;height:42px;border:1px solid rgba(0,0,0,.14);border-radius:10px;background:#fff;padding:0 11px;font-size:13.5px;color:${val?'#1c1b19':'#a5a19a'};text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <div style="font-size:12px;font-weight:600;color:#f2d0cb;margin-bottom:5px">${label}</div>
+      <button onclick="event.stopPropagation();openCal('${field}')" style="width:100%;height:42px;border:1px solid transparent;border-radius:10px;background:#fff;padding:0 11px;font-size:13.5px;color:${val?'#1c1b19':'#a5a19a'};text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px">
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${val?esc(fmtShort(val)):'Select'}</span>
       </button>
       ${calHtml(field)}
@@ -1074,50 +1157,51 @@ function detailScreen(){
       </div>
     </div>` : '';
 
+  /* photo strip — the 360° tour first, then the room's photos; swipe / drag only */
+  const photos=(R.photoUrls||[]).filter(Boolean);
+  const total=photos.length+1;
+  const solo=total===1?' solo':'';
+  const tour=`<button type="button" class="bk-gal-slide bk-gal-360s${solo}" onclick="openRoomPano()" aria-label="Open the 360° tour of ${esc(R.name)}" style="background-image:url('${esc(R.panorama||SAMPLE_PANO)}')">
+      <span class="bk-360-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>
+      <strong>360° tour</strong><small>Tap to look around</small></button>`;
+  const slides = tour + photos.map((u,i)=>`<div class="bk-gal-slide" role="img" aria-label="${esc(R.name)} — photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></div>`).join('');
+  const gallery = `
+      <div class="bk-gal">
+        <div class="bk-gal-track" tabindex="0" aria-label="${esc(R.name)} — 360° tour and photos, swipe to browse">${slides}</div>
+        ${total>1?`<span class="bk-gal-pill bk-gal-count"><span class="bk-gal-idx">1</span>&nbsp;/&nbsp;${total}</span><div class="bk-gal-dots">${Array.from({length:total},(_,i)=>`<i${i?'':' class="on"'}></i>`).join('')}</div>`:''}
+      </div>`;
+
   return `
   ${pageHeader()}
   <main onclick="closeCal()" style="max-width:1180px;margin:0 auto;padding:20px 24px 72px">
     <a onclick="goHome()" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:16px">← All rooms</a>
 
-    <div style="display:grid;grid-template-columns:minmax(0,1fr) 379px;gap:34px;align-items:start">
+    ${gallery}
+
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;margin:0 2px 26px">
+      <div style="flex:1;min-width:240px">
+        <h1 style="margin:0 0 6px;font-size:27px;font-weight:700;letter-spacing:-.015em">${esc(R.name)}</h1>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;font-size:14px;color:#4a463f">
+          <span>${esc(HOSTEL)}</span>
+          <span style="display:inline-flex;align-items:center;gap:6px" title="${esc(CR_LABEL[R.cr_type])}">${amenityIcon(R.cr_type==='private'?'private bathroom':'shared bathroom')}${esc(CR_LABEL[R.cr_type])}</span>
+          <span style="display:inline-flex;align-items:center;gap:6px" title="${R.beds} beds in this room">${svgBed(17,'currentColor')}${R.beds} beds</span>
+          ${maintChip(R)}
+        </div>
+      </div>
+    </div>
+
+    <div class="bk-cols">
     <!-- LEFT -->
     <div style="min-width:0">
-      <!-- same hero as the venue page: the 360 panorama as the big main shot,
-           two stacked photos beside it, thumbnail strip underneath -->
-      <div style="display:grid;grid-template-columns:400px 196px;grid-template-rows:196px 196px;gap:8px;border-radius:14px;overflow:hidden">
-        <div id="heroPanoSlot" style="grid-row:1 / span 2;position:relative;${PHOTO_TILE}">
-          <span style="font:500 13px/1 ui-monospace,Menlo,monospace;color:#9a958c">360° panorama</span>
-        </div>
-        ${heroTile(R,0)}
-        ${heroTile(R,1)}
-      </div>
-      <!-- 2 side shots above + 3 thumbs here = 5 tiles total, matching the
-           5-photo cap (ROOM_PHOTO_MAX_COUNT) — never more empty slots than
-           a room could actually have photos for. -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;width:604px;max-width:100%">
-        ${[2,3,4].map(i=>heroTile(R,i,'aspect-ratio:1/1;border-radius:10px;overflow:hidden')).join('')}
-      </div>
-
-      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;margin:22px 2px 4px">
-        <div style="flex:1;min-width:240px">
-          <h1 style="margin:0 0 6px;font-size:27px;font-weight:700;letter-spacing:-.015em">${esc(R.name)}</h1>
-          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px;font-size:14px;color:#4a463f">
-            <span>${esc(HOSTEL)}</span>
-            <span style="display:inline-flex;align-items:center;gap:6px" title="${esc(CR_LABEL[R.cr_type])}">${amenityIcon(R.cr_type==='private'?'private bathroom':'shared bathroom')}${esc(CR_LABEL[R.cr_type])}</span>
-            <span style="display:inline-flex;align-items:center;gap:6px" title="${R.beds} beds in this room">${svgBed(17,'currentColor')}${R.beds} beds</span>
-            ${maintChip(R)}
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:4px;border-bottom:1px solid rgba(0,0,0,.1);margin-top:18px">${tabs}</div>
+      <div style="display:flex;gap:4px;border-bottom:1px solid rgba(0,0,0,.1);overflow-x:auto;scrollbar-width:none">${tabs}</div>
       <div style="margin-top:24px">${content}</div>
     </div>
 
-      <aside style="position:sticky;top:88px">
-        <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05);padding:18px 18px 20px">
-          <div style="font-size:16px;font-weight:680;margin-bottom:2px">Reserve a bed</div>
-          <div style="font-size:12.5px;color:#8a857d;margin-bottom:16px">You book <strong>beds</strong>, not the room. Book all ${cap} and the room is yours.</div>
+      <aside class="bk-aside">
+        <div class="bk-panel">
+          <span class="bk-eyebrow">Book a bed</span>
+          <div style="font-size:20px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px">Reserve a bed</div>
+          <div style="font-size:12.5px;line-height:1.55;color:#e9d0cd;margin-bottom:18px">You book <strong>beds</strong>, not the room. Book all ${cap} and the room is yours.</div>
           ${maintDisclosure(R)}
 
           <div style="display:flex;gap:9px;margin-bottom:14px">
@@ -1127,10 +1211,10 @@ function detailScreen(){
 
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px">
             <div>
-              <div style="font-size:12px;font-weight:600;color:#5c584f">Beds</div>
-              <div style="font-size:12.5px;color:#a5a19a">${d.nights.length?d.maxFree+' free for your dates':'up to '+cap}</div>
+              <div style="font-size:12px;font-weight:600;color:#f2d0cb">Beds</div>
+              <div style="font-size:12.5px;color:#d5b8b5">${d.nights.length?d.maxFree+' free for your dates':'up to '+cap}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:0;border:1px solid rgba(0,0,0,.14);border-radius:10px;overflow:hidden;height:38px;background:#fff">
+            <div style="display:flex;align-items:center;gap:0;border:1px solid transparent;border-radius:10px;overflow:hidden;height:38px;background:#fff">
               <button onclick="setBeds(${beds-1})" ${beds<=1?'disabled':''} style="width:36px;height:100%;border:none;background:none;font-size:17px;color:${beds<=1?'#c6c2ba':'#4a463f'};cursor:${beds<=1?'default':'pointer'}">−</button>
               <span style="min-width:26px;text-align:center;font-size:14px;font-weight:680">${beds}</span>
               <button onclick="setBeds(${beds+1})" ${beds>=cap?'disabled':''} style="width:36px;height:100%;border:none;background:none;font-size:17px;color:${beds>=cap?'#c6c2ba':'#4a463f'};cursor:${beds>=cap?'default':'pointer'}">+</button>
@@ -1138,29 +1222,29 @@ function detailScreen(){
           </div>
 
           <div style="margin:10px 0 14px">
-            <div style="font-size:12px;font-weight:600;color:#5c584f;margin-bottom:2px">Who is sleeping in each bed?</div>
+            <div style="font-size:12px;font-weight:600;color:#f2d0cb;margin-bottom:2px">Who is sleeping in each bed?</div>
             ${roster}
-            ${beds===cap?`<div style="font-size:12.5px;color:#7a766f;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.06)">Booking all ${cap} beds gives you the whole room to yourselves.</div>`:''}
+            ${beds===cap?`<div style="font-size:12.5px;color:#e9d0cd;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.16)">Booking all ${cap} beds gives you the whole room to yourselves.</div>`:''}
           </div>
 
           ${firstNight&&takenNow?`
-          <div style="font-size:12px;color:#8a857d;margin-bottom:12px;padding:9px 11px;border:1px solid rgba(0,0,0,.08);border-radius:10px">
-            Already in this room on ${esc(fmtShort(firstNight))}: <strong style="font-weight:640;color:#4a463f">${esc(mixLabel(mixNow))}</strong>
-            <div style="font-size:12px;color:#a5a19a;margin-top:2px">Shown so you know the room's mix — beds are not reserved by gender.</div>
+          <div style="font-size:12px;color:#e9d0cd;margin-bottom:12px;padding:9px 11px;border:1px solid rgba(255,255,255,.22);border-radius:10px">
+            Already in this room on ${esc(fmtShort(firstNight))}: <strong style="font-weight:640;color:#fff">${esc(mixLabel(mixNow))}</strong>
+            <div style="font-size:12px;color:#d5b8b5;margin-top:2px">Shown so you know the room's mix — beds are not reserved by gender.</div>
           </div>`:''}
 
           ${slot}
 
-          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-top:12px;border-top:1px solid rgba(255,255,255,.16)">
             <div>
-              <div style="font-size:12.5px;color:#8a857d">${d.nights.length?`${beds} bed${beds>1?'s':''} × ${peso(rate)} × ${d.nights.length} night${d.nights.length>1?'s':''}`:'Total'}</div>
-              <div style="font-size:22px;font-weight:720;letter-spacing:-.01em">${peso(d.total)}</div>
+              <div style="font-size:12.5px;color:#d5b8b5">${d.nights.length?`${beds} bed${beds>1?'s':''} × ${peso(rate)} × ${d.nights.length} night${d.nights.length>1?'s':''}`:'Total'}</div>
+              <div style="font-size:24px;font-weight:750;letter-spacing:-.01em;color:#fff">${peso(d.total)}</div>
             </div>
           </div>
-          <div style="font-size:12.5px;color:#a5a19a;margin-top:4px">Paid in full after the staff get your POS from ${esc(CEDU.name)}.</div>
+          <div style="font-size:12.5px;color:#d5b8b5;margin-top:4px">Paid in full after the staff get your POS from ${esc(CEDU.name)}.</div>
 
-          <button id="hbGo" onclick="goReview()" ${d.ready?'':'disabled'} style="width:100%;height:46px;margin-top:12px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14px;font-weight:650;cursor:${d.ready?'pointer':'not-allowed'};opacity:${d.ready?1:.45}">Continue</button>
-          <div id="hbHint" style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px;min-height:16px">${esc(d.hint)}</div>
+          <button id="hbGo" class="bk-go ${d.ready?'on':'off'}" onclick="goReview()" ${d.ready?'':'disabled'} style="margin-top:14px">Continue</button>
+          <div id="hbHint" style="font-size:12.5px;color:#d5b8b5;text-align:center;margin-top:10px;min-height:16px">${esc(d.hint)}</div>
         </div>
       </aside>
     </div>
@@ -1592,7 +1676,7 @@ function render(){
   document.getElementById('app').innerHTML=`<div style="min-height:100vh;background:#fff">${currentScreen()}</div>`;
   /* re-attach the live 360 node after the innerHTML swap — it is moved, not
      rebuilt, so typing a guest name never reloads the panorama */
-  mountHeroPano();
+  mountGallery();   /* put the photo strip back where the swipe left it */
   if(cls>-1){
     const back=document.querySelectorAll('.bed-name')[cls];
     if(back){ back.focus(); try{ back.setSelectionRange(pos,pos); }catch(e){} }

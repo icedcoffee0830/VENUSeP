@@ -86,7 +86,6 @@ echo demo_banner_html();
     </ul>
     <ul class="hd-nav">
       <li><a class="hd-quick<?php echo $hdHere === 'faq.php' ? ' is-here' : ''; ?>" href="faq.php?in=app"><i class="bi bi-question-circle"></i><span>FAQ</span></a></li>
-      <li><a class="hd-quick<?php echo $hdHere === 'customer-profile.php' ? ' is-here' : ''; ?>" href="customer-profile.php"><i class="bi bi-person"></i><span>Profile</span></a></li>
       <li><span class="hd-sep" aria-hidden="true"></span></li>
       <li><a class="hd-user" href="customer-profile.php" title="Your profile"><span class="hd-avatar" aria-hidden="true"><?php echo htmlspecialchars($hdAvatar); ?></span><span class="hd-username"><?php echo htmlspecialchars($hdName); ?></span></a></li>
     </ul>

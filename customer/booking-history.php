@@ -4,8 +4,8 @@
    BOOKING HISTORY — VENUSeP merged system (customer portal)
    ==================================================================
    Ported from the teammate's booking-history.php onto OUR shared shell
-   ($portal='customer'). Page-local vanilla JS (search / sort / paginate
-   / CSV-JSON export / print) — no third-party table library.
+   ($portal='customer'). Page-local vanilla JS (search / sort / paginate)
+   — no third-party table library.
 
    The bookings themselves are NOT defined here any more: they come from
    includes/customer-bookings.php, the ONE source, shared with
@@ -26,7 +26,7 @@ $emptyBookingMessage = 'No booking history found.';
 <!-- ==================================================================
   MAP: [0] SHELL CSS · [1] PAGE CSS · [2] HEADER · [3] SIDEBAR ·
        [4] CONTENT (status tabs, filters, table, pagination) ·
-       [6] SCRIPT (search/sort/paginate/export/print)
+       [6] SCRIPT (search/sort/paginate)
   Bookings come from includes/bookings.php, scoped to the session customer.
   ================================================================== -->
 <html lang="en">
@@ -174,17 +174,17 @@ $emptyBookingMessage = 'No booking history found.';
       }
       /* type floor (readability): nothing on the page below 12px */
       .booking-badge, .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }
-      /* ---- phone: white page, cards edge to edge — the details get the width.
-         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      /* ---- white page (desktop + phone): the cards sit on white, no crimson wash ---- */
+      body { background: #fff !important; }
+      .app-main { background: #fff !important; }
+      .booking-history-header h1 { color: #1f1e1e; }
+      .booking-history-header p { color: #6e6a64; }
+      .booking-filter-field label { color: #6e6a64; }
+      .booking-history-panel { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      /* phone: cards edge to edge — the details get the width */
       @media (max-width: 767.98px) {
-        body { background: #fff !important; }
-        .app-main { background: #fff !important; }
         .container-fluid { padding-inline: 12px; }
         .app-content-header { padding-top: 16px; }
-        .booking-history-header h1 { color: #1f1e1e; }
-        .booking-history-header p { color: #6e6a64; }
-        .booking-filter-field label { color: #6e6a64; }
-        .booking-history-panel { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
         .booking-history-table tbody tr { padding: 14px 12px; }
       }
     </style>
@@ -243,11 +243,6 @@ $emptyBookingMessage = 'No booking history found.';
               <section class="booking-history-panel" aria-labelledby="previousBookingsTitle">
                 <div class="booking-history-panel-header">
                   <h2 id="previousBookingsTitle">Previous Bookings</h2>
-                  <div class="booking-history-toolbar" aria-label="Export booking history">
-                    <button id="booking-export-csv" class="booking-toolbar-button" type="button"><i class="bi bi-filetype-csv" aria-hidden="true"></i>Export CSV</button>
-                    <button id="booking-export-json" class="booking-toolbar-button" type="button"><i class="bi bi-filetype-json" aria-hidden="true"></i>Export JSON</button>
-                    <button id="booking-print" class="booking-toolbar-button" type="button"><i class="bi bi-printer" aria-hidden="true"></i>Print</button>
-                  </div>
                 </div>
                 <div class="booking-table-scroll">
                   <table id="bookingHistoryTable" class="booking-history-table">
@@ -335,7 +330,7 @@ $emptyBookingMessage = 'No booking history found.';
       </main>
     </div>
 
-    <!-- [6] PAGE SCRIPT — page-local table logic (search/sort/paginate/export/print) -->
+    <!-- [6] PAGE SCRIPT — page-local table logic (search/sort/paginate) -->
     <script>
       document.addEventListener('DOMContentLoaded', function () {
         const table = document.getElementById('bookingHistoryTable');
@@ -445,41 +440,6 @@ $emptyBookingMessage = 'No booking history found.';
             tab.setAttribute('aria-selected', selected ? 'true' : 'false');
           });
           render();
-        });
-
-        const exportFields = ['Booking ID', 'Venue', 'Event Name', 'Event Date', 'Booking Date', 'Amount', 'Payment Status', 'Booking Status'];
-        const rowValues = function (row) { return Array.from(row.querySelectorAll('td')).slice(0, 8).map(function (cell) { return cell.textContent.trim(); }); };
-        const download = function (content, type, filename) {
-          const url = URL.createObjectURL(new Blob([content], { type: type }));
-          const link = document.createElement('a');
-          link.href = url; link.download = filename;
-          document.body.appendChild(link); link.click(); link.remove();
-          URL.revokeObjectURL(url);
-        };
-        const csvCell = function (value) { return '"' + String(value).replace(/"/g, '""') + '"'; };
-        document.getElementById('booking-export-csv').addEventListener('click', function () {
-          const csv = [exportFields].concat(filteredRows.map(rowValues)).map(function (values) { return values.map(csvCell).join(','); }).join('\r\n');
-          download('﻿' + csv, 'text/csv;charset=utf-8', 'booking-history.csv');
-        });
-        document.getElementById('booking-export-json').addEventListener('click', function () {
-          const data = filteredRows.map(function (row) {
-            const values = rowValues(row);
-            return exportFields.reduce(function (record, field, index) { record[field] = values[index]; return record; }, {});
-          });
-          download(JSON.stringify(data, null, 2), 'application/json;charset=utf-8', 'booking-history.json');
-        });
-        document.getElementById('booking-print').addEventListener('click', function () {
-          const printWindow = window.open('', '_blank');
-          if (!printWindow) return;
-          printWindow.opener = null;
-          const rowsHtml = filteredRows.map(function (row) {
-            return '<tr>' + rowValues(row).map(function (value) { return '<td>' + value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</td>'; }).join('') + '</tr>';
-          }).join('');
-          const printStyle = 'body{font-family:Inter,Arial,sans-serif;padding:24px;color:#1f1e1e}h1{font-size:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px 8px;font-size:12px;text-align:left}';
-          printWindow.document.write('<!doctype html><html><head><title>Booking History</title><style>' + printStyle + '</style></head><body><h1>Previous Bookings</h1><table><thead><tr>' + exportFields.map(function (field) { return '<th>' + field + '</th>'; }).join('') + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></body></html>');
-          printWindow.document.close();
-          printWindow.focus();
-          printWindow.print();
         });
 
         updateSortIndicators();

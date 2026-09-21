@@ -501,19 +501,26 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
         --calendar-button-active-bg: #a11626;
         --calendar-button-active-text: #ffffff;
       }
-          /* phone: the 7-column month grid scrolls inside its card, not the whole page */
-      @media (max-width: 767.98px) { .calendar-shell { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
-          /* ---- phone: white page, cards edge to edge — the details get the width.
-         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      /* phone: the toolbar stays put and wraps; only the grid scrolls sideways, at a width that
+         shows all 7 days (Sun-Sat), so nothing is cut off at the card's edge */
       @media (max-width: 767.98px) {
-        body { background: #fff !important; }
-        .app-main { background: #fff !important; }
+        #calendar .fc-toolbar.fc-header-toolbar { flex-wrap: wrap; row-gap: 0.65rem; }
+        #calendar .fc-toolbar-chunk { min-width: 0; }
+        #calendar .fc-toolbar-chunk:last-child { width: 100%; }
+        #calendar .fc-view-harness { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+        #calendar .fc-daygrid, #calendar .fc-timegrid { min-width: 700px; }
+        #calendar .fc-list { min-width: 0; }
+      }
+      /* ---- white page (desktop + phone): the card sits on white, no crimson wash ---- */
+      body { background: #fff !important; }
+      .app-main { background: #fff !important; }
+      .calendar-heading h1 { color: #1f1e1e; }
+      .calendar-heading p { color: #6e6a64; }
+      .calendar-shell { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      .calendar-page { --calendar-page-bg: #fff; }
+      @media (max-width: 767.98px) {
         .container-fluid { padding-inline: 12px; }
         .app-content-header { padding-top: 16px; }
-        .calendar-heading h1 { color: #1f1e1e; }
-        .calendar-heading p { color: #6e6a64; }
-        .calendar-shell { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
-        .calendar-page { --calendar-page-bg: #fff; }
       }
     </style>
   </head>

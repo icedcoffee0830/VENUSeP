@@ -166,6 +166,77 @@ function customer_session_heal()
     }
 }
 
+/* =====================================================================
+   COUNTER MODE — the booking pages, driven by staff, for a walk-in.
+
+   The same two pages a customer books on, shown on the counter-facing
+   monitor while a staff member is signed in on the other one. That is
+   deliberate: the walk-in screen IS the customer screen, so the two can
+   never drift apart.
+
+   THE PRIVILEGE COMES FROM THE SESSION, NEVER FROM THE URL. Counter mode
+   drops the valid-ID upload (staff inspect the physical ID instead) and
+   lets a hostel guest book for tonight. Both would be holes if a
+   customer could switch them on, so `?counter=1` only expresses intent:
+   it is ignored unless a STAFF session is actually present.
+
+   No customer session is ever started here. This app keeps one user_id
+   and one account_type per session, so a customer logging in on the
+   counter screen would sign the staff member out of the window beside
+   it. A walk-in with an account proves who they are by typing their
+   password (verified, then discarded — admin/customer-verify.php); the
+   session that does the booking stays the staff member's throughout.
+   ===================================================================== */
+function counter_mode()
+{
+    venusep_session_start();
+    if (empty($_GET['counter'])) {
+        return false;
+    }
+    $type = isset($_SESSION['account_type']) ? $_SESSION['account_type'] : null;
+    return isset($_SESSION['user_id']) && in_array($type, ['admin', 'staff'], true);
+}
+
+/* Who is running the counter. Shown on the counter screen and written into
+   the booking's timeline, so a walk-in is never an anonymous booking —
+   someone's name is against the ID check and the discount decision. */
+function counter_staff_name()
+{
+    if (!counter_mode()) {
+        return '';
+    }
+    require_once __DIR__ . '/db.php';
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return 'Staff';
+    }
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT COALESCE(s.full_name, u.username, u.email) AS who
+               FROM users u LEFT JOIN staff s ON s.user_id = u.id
+              WHERE u.id = :u LIMIT 1'
+        );
+        $stmt->execute([':u' => (int) $_SESSION['user_id']]);
+        $who = $stmt->fetchColumn();
+        return $who === false ? 'Staff' : (string) $who;
+    } catch (PDOException $e) {
+        return 'Staff';
+    }
+}
+
+/* The booking pages' gate: a customer booking for themselves, or staff
+   booking for someone standing at the counter. Anyone else goes to the
+   customer login page, exactly as before. */
+function booking_page_require_access()
+{
+    if (counter_mode()) {
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        return;
+    }
+    customer_require_login();
+}
+
 /* Not logged in as a customer -> the customer login page. Always the login
    page, never back to the requested URL (decided 2026-09-17: no ?next= hop). */
 function customer_require_login()

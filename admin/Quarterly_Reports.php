@@ -703,6 +703,18 @@ foreach ($rpQuarters as $rpQ) {
         let eventsByVenueChart = null;
         let discountedBookingsChart = null;
 
+        /* ApexCharts 3.37.1 cannot animate a rounded vertical bar whose value
+           is zero: its path has no first point, so the morph reads [0] from
+           undefined and emits NaN coordinates. Zero-value venues still belong
+           in the table; charts omit only points that have no drawable value.
+           An entirely empty metric then uses ApexCharts' real no-data state. */
+        function venueChartRows(metric) {
+            return venueReport.map((item) => ({
+                venue: item.venue,
+                value: Number(item[metric]),
+            })).filter((item) => Number.isFinite(item.value) && item.value > 0);
+        }
+
         function renderPeriod() {
             const period = venueByQuarter[periodIndex] || null;
             venueReport = period ? period.venues : allTimeVenues;
@@ -739,24 +751,26 @@ foreach ($rpQuarters as $rpQ) {
                 </tr>
             `).join('');
 
-            const venueNames = venueReport.map((item) => item.venue);
+            const revenueRows = venueChartRows('revenue');
+            const eventRows = venueChartRows('events');
+            const discountedRows = venueChartRows('discounted');
 
             if (venueRevenueChart) {
                 venueRevenueChart.updateOptions({
-                    series: venueReport.map((item) => item.revenue),
-                    labels: venueNames,
+                    series: revenueRows.map((item) => item.value),
+                    labels: revenueRows.map((item) => item.venue),
                 });
             }
             if (eventsByVenueChart) {
                 eventsByVenueChart.updateOptions({
-                    series: [{ name: 'Events Held', data: venueReport.map((item) => item.events) }],
-                    xaxis: { categories: venueNames },
+                    series: [{ name: 'Events Held', data: eventRows.map((item) => item.value) }],
+                    xaxis: { categories: eventRows.map((item) => item.venue) },
                 });
             }
             if (discountedBookingsChart) {
                 discountedBookingsChart.updateOptions({
-                    series: [{ name: 'Discounted Bookings', data: venueReport.map((item) => item.discounted) }],
-                    xaxis: { categories: venueNames },
+                    series: [{ name: 'Discounted Bookings', data: discountedRows.map((item) => item.value) }],
+                    xaxis: { categories: discountedRows.map((item) => item.venue) },
                 });
             }
         }
@@ -787,6 +801,10 @@ foreach ($rpQuarters as $rpQ) {
                 show: false,
             },
         };
+
+        const initialRevenueRows = venueChartRows('revenue');
+        const initialEventRows = venueChartRows('events');
+        const initialDiscountedRows = venueChartRows('discounted');
 
         new ApexCharts(document.querySelector('#revenueGrowthChart'), {
             series: [
@@ -854,7 +872,7 @@ foreach ($rpQuarters as $rpQ) {
         }).render();
 
         venueRevenueChart = new ApexCharts(document.querySelector('#venueRevenueChart'), {
-            series: venueReport.map((item) => item.revenue),
+            series: initialRevenueRows.map((item) => item.value),
             chart: {
                 height: 320,
                 type: 'donut',
@@ -863,12 +881,15 @@ foreach ($rpQuarters as $rpQ) {
             dataLabels: {
                 enabled: false,
             },
-            labels: venueReport.map((item) => item.venue),
+            labels: initialRevenueRows.map((item) => item.venue),
             legend: {
                 position: 'bottom',
                 labels: {
                     colors: chartTextColor,
                 },
+            },
+            noData: {
+                text: 'No revenue for this period',
             },
             tooltip: {
                 y: {
@@ -884,7 +905,7 @@ foreach ($rpQuarters as $rpQ) {
             series: [
                 {
                     name: 'Events Held',
-                    data: venueReport.map((item) => item.events),
+                    data: initialEventRows.map((item) => item.value),
                 },
             ],
             chart: {
@@ -899,6 +920,9 @@ foreach ($rpQuarters as $rpQ) {
             grid: {
                 borderColor: gridColor,
             },
+            noData: {
+                text: 'No events for this period',
+            },
             plotOptions: {
                 bar: {
                     borderRadius: 4,
@@ -906,7 +930,7 @@ foreach ($rpQuarters as $rpQ) {
                 },
             },
             xaxis: {
-                categories: venueReport.map((item) => item.venue),
+                categories: initialEventRows.map((item) => item.venue),
                 labels: {
                     style: {
                         colors: chartTextColor,
@@ -927,7 +951,7 @@ foreach ($rpQuarters as $rpQ) {
             series: [
                 {
                     name: 'Discounted Bookings',
-                    data: venueReport.map((item) => item.discounted),
+                    data: initialDiscountedRows.map((item) => item.value),
                 },
             ],
             chart: {
@@ -942,6 +966,9 @@ foreach ($rpQuarters as $rpQ) {
             grid: {
                 borderColor: gridColor,
             },
+            noData: {
+                text: 'No discounted bookings for this period',
+            },
             plotOptions: {
                 bar: {
                     borderRadius: 4,
@@ -949,7 +976,7 @@ foreach ($rpQuarters as $rpQ) {
                 },
             },
             xaxis: {
-                categories: venueReport.map((item) => item.venue),
+                categories: initialDiscountedRows.map((item) => item.venue),
                 labels: {
                     rotate: -35,
                     style: {

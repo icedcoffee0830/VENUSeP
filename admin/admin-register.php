@@ -1,4 +1,5 @@
 <?php require_once __DIR__ . '/../includes/auth.php'; admin_require_login(['admin']);   /* admin only: staff cannot create accounts */ ?>
+<?php require_once __DIR__ . '/../includes/venues.php'; ?>
 <?php ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -6,7 +7,7 @@
   ==================================================================
   Ported from the teammate's admin-register.php. Standalone AUTH page:
   NO sidebar/header. Restyled to the team palette; fields + validation
-  preserved (department, full name, email, contact, password + confirm,
+  preserved (venue, full name, email, contact, password + confirm,
   terms).
 
   WIRED: posts to register-submit.php, which creates the users + staff rows,
@@ -76,7 +77,7 @@
       .input-group:focus-within { border-color: var(--crimson); box-shadow: 0 0 0 4px rgba(161,22,38,.1); }
       .input-group.is-invalid { border-color: var(--danger); }
       .input-group-text { display: inline-flex; align-items: center; justify-content: center; width: 46px; align-self: stretch; color: var(--crimson); font-size: 1rem; }
-      .input-group input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14.5px; font-weight: 600; padding: 13px 16px 13px 0; color: var(--ink); }
+      .input-group input, .input-group select { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14.5px; font-weight: 600; padding: 13px 16px 13px 0; color: var(--ink); }
       .input-group input::placeholder { color: #a9a39b; font-weight: 500; }
       /* Chrome paints an autofilled field light blue, which shows as a box inside the pill — keep it white */
       .input-group input:-webkit-autofill, .input-group input:-webkit-autofill:hover, .input-group input:-webkit-autofill:focus {
@@ -125,20 +126,6 @@
         .auth-brand { display: none; }
         .auth-card { max-width: 480px; margin: 0 auto; }
       }
-      /* ---- admin only: the department picker (two radio cards) ---- */
-      .department-label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px 4px; }
-      .department-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-      .department-card { display: block; cursor: pointer; margin: 0; }
-      .department-card-header { position: relative; display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1.5px solid var(--border); border-radius: 16px; background: #fff; transition: border-color .18s, box-shadow .18s; }
-      .department-card input { position: absolute; opacity: 0; pointer-events: none; }
-      .department-icon { font-size: 1.15rem; color: var(--crimson); flex: none; }
-      .department-copy { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
-      .department-copy strong { font-size: 13px; color: var(--ink); }
-      .department-copy span { font-size: 12px; color: var(--muted); }
-      .department-card:hover .department-card-header { border-color: #bdb7ac; }
-      .department-card-header:has(input:checked) { border-color: var(--crimson); box-shadow: 0 0 0 3px rgba(161,22,38,.12); }
-      .department-options.is-invalid .department-card-header { border-color: var(--danger); }
-      @media (max-width: 420px) { .department-options { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body class="admin-register-page">
@@ -159,30 +146,23 @@
           <a class="auth-brand" href="admin-login.php" title="VENUSeP staff"><img src="../logo/Logo Header 3.png" alt="VENUSeP" /></a>
           <div class="auth-heading">
             <h1 class="auth-title" id="adminRegisterTitle">Create a staff account</h1>
-            <p class="auth-subtitle">For USeP Venues, Bahay Alumni or the hostel office.</p>
+            <p class="auth-subtitle">Choose the venue this staff account belongs to.</p>
           </div>
 
-          <!-- the form below is unchanged: same names, same POST, same PHP -->
+          <!-- Venue options come from the venues table through includes/venues.php. -->
           <form id="adminRegisterForm" action="" method="post" novalidate data-auth-form="register" data-redirect="admin-login.php" data-success-target="registrationSuccessMessage" data-success-message="Account created successfully. Redirecting to login...">
             <div class="form-group">
-              <span class="department-label">Department</span>
-              <div class="department-options" role="radiogroup" aria-describedby="departmentValidation">
-                <label class="department-card" for="registerDepartmentUsep">
-                  <span class="department-card-header">
-                    <span class="department-icon"><i class="bi bi-building" aria-hidden="true"></i></span>
-                    <span class="department-copy"><strong>USeP Venues</strong><span>University Venue Management</span></span>
-                    <input type="radio" name="department" id="registerDepartmentUsep" value="usep-venues" checked required />
-                  </span>
-                </label>
-                <label class="department-card" for="registerDepartmentAlumni">
-                  <span class="department-card-header">
-                    <span class="department-icon"><i class="bi bi-house" aria-hidden="true"></i></span>
-                    <span class="department-copy"><strong>Bahay Alumni</strong><span>Alumni House Management</span></span>
-                    <input type="radio" name="department" id="registerDepartmentAlumni" value="bahay-alumni" required />
-                  </span>
-                </label>
+              <label for="staffVenue" class="form-label">Venue</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-building" aria-hidden="true"></i></span>
+                <select id="staffVenue" name="venue_id" aria-describedby="venueValidation">
+                  <option value="">Unassigned</option>
+                  <?php foreach ($venuesById as $venueId => $venueName): ?>
+                    <option value="<?php echo (int) $venueId; ?>"><?php echo htmlspecialchars($venueName, ENT_QUOTES, 'UTF-8'); ?></option>
+                  <?php endforeach; ?>
+                </select>
               </div>
-              <small class="validation-message" id="departmentValidation" aria-live="polite"></small>
+              <small class="validation-message" id="venueValidation" aria-live="polite"></small>
             </div>
 
             <div class="form-group">
@@ -235,8 +215,7 @@
         const setFieldState = function (field, messageId, message) {
           if (!field) return;
           let target = field;
-          if (field.matches('[type="radio"]')) target = field.closest('.department-options');
-          else if (field.type !== 'checkbox') target = field.closest('.input-group');
+          if (field.type !== 'checkbox') target = field.closest('.input-group');
           if (target) target.classList.toggle('is-invalid', Boolean(message));
           field.setAttribute('aria-invalid', message ? 'true' : 'false');
           setMessage(messageId, message);
@@ -257,8 +236,8 @@
 
         const CSRF = <?php echo json_encode(csrf_token()); ?>;
         document.querySelectorAll('[data-auth-form]').forEach(function (form) {
-          form.querySelectorAll('input').forEach(function (field) {
-            field.addEventListener(field.type === 'checkbox' || field.type === 'radio' ? 'change' : 'input', function () {
+          form.querySelectorAll('input, select').forEach(function (field) {
+            field.addEventListener(field.type === 'checkbox' || field.tagName === 'SELECT' ? 'change' : 'input', function () {
               setFieldState(field, field.getAttribute('aria-describedby'), '');
             });
           });
@@ -267,16 +246,8 @@
             event.preventDefault();
             const email = form.querySelector('[name="email"]');
             const password = form.querySelector('[name="password"]');
-            const department = form.querySelector('[name="department"]');
             let hasError = false;
             setMessage(form.dataset.successTarget, '');
-
-            if (department) {
-              const selected = form.querySelector('[name="department"]:checked');
-              const message = selected ? '' : 'Please select a department.';
-              setFieldState(department, 'departmentValidation', message);
-              hasError = hasError || Boolean(message);
-            }
 
             const fullName = form.querySelector('[name="full_name"]');
             const contactNumber = form.querySelector('[name="contact_number"]');
@@ -325,7 +296,7 @@
                   const map = { full_name: 'fullNameValidation', email: 'emailValidation',
                                 contact_number: 'contactNumberValidation', password: 'passwordValidation',
                                 confirm_password: 'confirmPasswordValidation', terms: 'termsValidation',
-                                department: 'departmentValidation' };
+                                venue_id: 'venueValidation' };
                   const target = out.field && form.querySelector('[name="' + out.field + '"]');
                   if (target) { setFieldState(target, map[out.field], out.message); target.focus(); }
                   else { setMessage(form.dataset.successTarget, out.message || 'The account was not created.'); }

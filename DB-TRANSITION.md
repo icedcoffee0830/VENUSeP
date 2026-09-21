@@ -391,5 +391,5 @@ and the payout-account editor), logged to `system_settings_history`, and a
 banner on every page including the public ones.
 
 ### Still open
-Disruption flow, notifications, a scheduler for overdue release, staff-to-venue
-assignment, and a server-side OCR port. See the PROJECT-HANDOFF update.
+Disruption flow, notifications, a scheduler for overdue release, and a
+server-side OCR port. See the PROJECT-HANDOFF update.

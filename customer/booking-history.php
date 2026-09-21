@@ -12,8 +12,8 @@
    customer/refund-request.php. Moving them out is what stops the two
    pages drifting apart (see the note in that file).
 
-   [SIM] View Details / Rebook are still stubs — their target pages don't
-   exist yet. "Request Refund" is real and opens refund-request.php.
+   [SIM] View Details is still a stub — its target page doesn't exist yet.
+   "Request Refund" is real and opens refund-request.php.
    ================================================================== */
 require_once __DIR__ . '/../includes/customer-bookings.php';
 
@@ -292,9 +292,8 @@ $emptyBookingMessage = 'No booking history found.';
                           <td data-label="Status"><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span></td>
                           <td data-label="Actions" class="booking-actions-cell">
                             <div class="booking-actions">
-                              <!-- [SIM] booking-details.php / rebook.php don't exist yet -->
+                              <!-- [SIM] booking-details.php doesn't exist yet -->
                               <a class="booking-action" href="#"><i class="bi bi-eye" aria-hidden="true"></i>View</a>
-                              <a class="booking-action" href="#"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>Rebook</a>
                               <?php if ($booking['refundable']): ?>
                                 <a class="booking-action booking-action-refund" href="refund-request.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
                                   <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Request Refund
@@ -455,7 +454,6 @@ $emptyBookingMessage = 'No booking history found.';
          the date is released only when the refund is actually COMPLETED. So the
          reservation badge is left alone for every state EXCEPT 'refunded', which
          is the one moment the booking closes. -->
-    <script>
     <?php
       /* The refund state of this customer's bookings, from the `refunds` table.
          The PAYMENT BADGE already reads correctly without any of this — it comes

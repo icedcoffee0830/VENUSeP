@@ -6,9 +6,9 @@
    POST  csrf, venue_id, name, description
    Replies with JSON.
 
-   Assigned Staff on this form is still [SIM] — no staff-to-venue table
-   exists in the schema yet, so wiring it would mean inventing one, out
-   of scope for "make the photo upload work".
+   Assigned Staff on venue-form.php is still [SIM]. Real venue assignments
+   are managed in Staff Management through staff.venue_id; this endpoint
+   only saves the venue itself.
    ===================================================================== */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';

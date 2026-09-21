@@ -27,6 +27,7 @@
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/refund-policy.php';   /* payment_policy_for(), $REFUNDS_ENABLED */
+require_once __DIR__ . '/documents.php';       /* doc_path() — only advertise files that exist */
 
 /* The customer-facing reference for a booking. Shared by both portals so a
    customer quoting "VB-2026-142" and a staff member searching for it are
@@ -653,9 +654,10 @@ function booking_slots($bookingId) {
     }
 }
 
-/* The documents on a booking, newest of each kind. Returns [kind => id], which
-   is all a page needs: the bytes are fetched from document-view.php, which does
-   its own permission check rather than trusting whoever built this list. */
+/* The usable documents on a booking, newest of each kind. Returns [kind => id],
+   which is all a page needs: the bytes are fetched from document-view.php,
+   which repeats the path and permission checks. A dangling seed/import row is
+   not a document and must not be advertised as a link that can only return 404. */
 function booking_document_ids($bookingId) {
     $pdo = venusep_db();
     if ($pdo === null) {
@@ -663,13 +665,20 @@ function booking_document_ids($bookingId) {
     }
     try {
         $stmt = $pdo->prepare(
-            'SELECT document_type, MAX(id) AS id FROM booking_documents
-              WHERE booking_id = :b GROUP BY document_type'
+            'SELECT d.document_type, d.id, d.file_path
+               FROM booking_documents d
+               JOIN (SELECT document_type, MAX(id) AS id
+                       FROM booking_documents
+                      WHERE booking_id = :b
+                      GROUP BY document_type) latest ON latest.id = d.id'
         );
         $stmt->execute([':b' => (int) $bookingId]);
         $out = [];
         foreach ($stmt->fetchAll() as $r) {
-            $out[$r['document_type']] = (int) $r['id'];
+            $path = doc_path($r['file_path']);
+            if ($path !== null && is_file($path)) {
+                $out[$r['document_type']] = (int) $r['id'];
+            }
         }
         return $out;
     } catch (PDOException $e) {

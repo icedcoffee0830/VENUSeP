@@ -4,7 +4,7 @@
 
    POST  csrf, kind=customer|staff, full_name, email, contact_number,
          password, confirm_password, terms
-         staff also: department, and the CALLER MUST ALREADY BE AN ADMIN
+         staff also: venue_id (optional), and the CALLER MUST ALREADY BE AN ADMIN
    Replies with JSON.
 
    One endpoint for both because the checks are the same and the only
@@ -67,7 +67,7 @@ $email   = strtolower(trim((string) ($_POST['email'] ?? '')));
 $phone   = trim((string) ($_POST['contact_number'] ?? ''));
 $pass    = (string) ($_POST['password'] ?? '');
 $confirm = (string) ($_POST['confirm_password'] ?? '');
-$dept    = trim((string) ($_POST['department'] ?? ''));
+$venueRaw = $_POST['venue_id'] ?? '';
 
 if ($name === '' || mb_strlen($name) > 190) {
     rg_reply(400, ['ok' => false, 'field' => 'full_name', 'message' => 'Enter your full name.']);
@@ -97,6 +97,20 @@ if ($phone !== '' && $phoneNorm === null) {
 $pdo = venusep_db();
 if ($pdo === null) {
     rg_reply(503, ['ok' => false, 'message' => 'The database is unreachable, so the account was not created.']);
+}
+
+$venueId = null;
+if ($kind === 'staff' && $venueRaw !== '') {
+    if (!is_scalar($venueRaw) || !ctype_digit((string) $venueRaw) || (int) $venueRaw < 1) {
+        rg_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue or Unassigned.']);
+    }
+    $venueCheck = $pdo->prepare('SELECT id FROM venues WHERE id = :id');
+    $venueCheck->execute([':id' => (int) $venueRaw]);
+    $venueId = $venueCheck->fetchColumn();
+    if ($venueId === false) {
+        rg_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'That venue does not exist.']);
+    }
+    $venueId = (int) $venueId;
 }
 
 /* A username is required to be unique too, so derive one from the email's local
@@ -132,8 +146,8 @@ try {
 
     if ($kind === 'staff') {
         $pdo->prepare(
-            'INSERT INTO staff (user_id, full_name, position_role, phone) VALUES (:u, :n, :r, :p)'
-        )->execute([':u' => $userId, ':n' => $name, ':r' => $dept !== '' ? mb_substr($dept, 0, 120) : null, ':p' => $phoneNorm]);
+            'INSERT INTO staff (user_id, venue_id, full_name, phone) VALUES (:u, :v, :n, :p)'
+        )->execute([':u' => $userId, ':v' => $venueId, ':n' => $name, ':p' => $phoneNorm]);
     } else {
         $pdo->prepare(
             'INSERT INTO customers (user_id, full_name, phone) VALUES (:u, :n, :p)'
@@ -143,12 +157,17 @@ try {
     $pdo->commit();
 } catch (PDOException $e) {
     if ($pdo->inTransaction()) { $pdo->rollBack(); }
-    /* 23000 here can only be uq_users_email (or, vanishingly, the username
-       race the loop above did not win). Reported as a plain "already
+    /* 23000 here is normally uq_users_email (or, vanishingly, the username
+       race the loop above did not win). A venue could also be deleted between
+       validation and insert, so that FK is reported against the venue field.
+       Email conflicts are reported as a plain "already
        registered" — and deliberately NOT as "that password was wrong" or
        anything that would let someone probe which addresses exist beyond what
        a sign-up form inevitably reveals. */
     if ($e->getCode() === '23000') {
+        if ($kind === 'staff' && strpos($e->getMessage(), 'fk_staff_venue') !== false) {
+            rg_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'That venue no longer exists.']);
+        }
         rg_reply(409, ['ok' => false, 'field' => 'email',
             'message' => 'That email address is already registered. Try logging in instead.']);
     }

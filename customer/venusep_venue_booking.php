@@ -650,7 +650,10 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
             $badge  = '<span class="lp-badge lp-badge-' . $cls . '">' . $word . '<span class="lp-badge-why"> &middot; ' . htmlspecialchars($mt['reason']) . '</span></span>';
             $status = '<p class="lp-card-status lp-card-status-' . $cls . '">' . $word . ' &middot; ' . htmlspecialchars($mt['reason']) . '</p>';
           } ?>
-        <a class="lp-card lp-lift" href="room-reservation.php?room=<?php echo urlencode($room['id']); ?>">
+        <!-- `counter=1` is carried through so staff picking a room for a walk-in
+             stay in counter mode. It grants nothing on its own — the privileges
+             come from the staff session (includes/auth.php). -->
+        <a class="lp-card lp-lift" href="room-reservation.php?room=<?php echo urlencode($room['id']); ?><?php echo counter_mode() ? '&counter=1' : ''; ?>">
           <?php echo lp_photo_block($room['id'], lp_room_kind($room), $badge); ?>
           <div class="lp-card-body">
             <h3><?php echo htmlspecialchars($room['name']); ?></h3>

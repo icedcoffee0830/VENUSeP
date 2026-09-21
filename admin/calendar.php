@@ -568,26 +568,18 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
           // 4) Calendar behavior
           fixedWeekCount: true,
           height: 'auto',
-          editable: true,
+          editable: false,
           dayMaxEvents: 2,
 
-          // [SIM] demo add/delete via prompt/confirm — replace with the
-          // real booking form + delete flow when the database is wired in.
-          dateClick: (info) => {
-            const title = prompt('Event title:');
-            if (title) {
-              calendar.addEvent({
-                title: title,
-                start: info.dateStr,
-                allDay: info.allDay,
-              });
-            }
-          },
-          eventClick: (info) => {
-            if (confirm(`Delete "${info.event.title}"?`)) {
-              info.event.remove();
-            }
-          },
+          /* READ-ONLY, same as the customer calendar. Every event here is a
+             real booking, so dragging one moved a booking's dates on screen
+             and nowhere else — the calendar disagreed with the queue, the
+             ledger and the customer's own copy until the next refresh put it
+             back. The mockup's prompt()-to-add and confirm()-to-delete went
+             with it for the same reason: neither wrote anything, and a
+             "deleted" booking that reappears on reload is worse than no
+             delete at all. Bookings are changed in Booking Management, where
+             the change is recorded and the customer is told. */
 
           /* Every booking in the system, from includes/bookings.php — the same
              rows the queue and the customer calendars read. This array was

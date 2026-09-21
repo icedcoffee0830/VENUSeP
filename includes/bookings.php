@@ -737,10 +737,19 @@ function booking_history_events(array $b) {
                   WHERE t.booking_id = :b ORDER BY t.occurred_at, t.id"
             );
             $stmt->execute([':b' => (int) $b['id']]);
+            /* Most action codes read well enough turned back into words. The
+               counter ones do not — "Counter id checked" is staff evidence
+               about someone's identity and deserves a sentence, not a slug. */
+            $titles = [
+                'counter_created'            => 'Taken at the counter',
+                'counter_id_checked'         => 'ID checked in person',
+                'counter_identity_confirmed' => 'Account confirmed by password',
+            ];
             foreach ($stmt->fetchAll() as $t) {
+                $code = (string) $t['action_code'];
                 $events[] = [
                     'w' => date('M j · g:i A', strtotime($t['occurred_at'])) . ' — ' . $t['actor'],
-                    'x' => ucfirst(str_replace('_', ' ', $t['action_code'])),
+                    'x' => isset($titles[$code]) ? $titles[$code] : ucfirst(str_replace('_', ' ', $code)),
                     'm' => (string) $t['note'],
                 ];
             }

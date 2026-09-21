@@ -1,4 +1,4 @@
-<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
+<?php require_once __DIR__ . '/../includes/auth.php'; booking_page_require_access(); /* a customer booking for themselves, or staff booking for a walk-in at the counter */ ?>
 <!DOCTYPE html>
 <!-- ==================================================================
   USeP ROOM RESERVATION — customer booking UI (self-contained mockup)
@@ -446,6 +446,22 @@ const CSRF = <?php echo json_encode(csrf_token()); ?>;
    — but a customer reading "Simulate staff approval" has no way to know that. */
 const DEMO_MODE = <?php echo demo_mode_on() ? 'true' : 'false'; ?>;
 
+/* ---------------------------------------------------------------------
+   COUNTER MODE — this same page, driven by staff, for a walk-in.
+
+   Deliberately not a separate admin screen: the walk-in screen IS the
+   customer screen, so the two can never drift apart. What changes is
+   only what has to:
+     · a "who is this for" step, because the booker is not the session
+     · no valid-ID upload — staff inspect the physical ID instead
+     · submits to admin/booking-create.php, which approves it outright
+
+   counter_mode() takes the privilege from the STAFF SESSION, never from
+   the URL, so a customer adding ?counter=1 gets nothing (includes/auth.php).
+   --------------------------------------------------------------------- */
+const COUNTER = <?php echo counter_mode() ? 'true' : 'false'; ?>;
+const COUNTER_STAFF = <?php echo json_encode(counter_staff_name(), JSON_UNESCAPED_UNICODE); ?>;
+
 /* ROOMS is defined at the top of the page from includes/venue-rooms.php — the ONE
    shared source, so the booking page, the landing page and admin Venue Management
    cannot disagree about what exists. Rooms have NO `status` field:
@@ -460,8 +476,30 @@ const ROOM_PARAM = new URLSearchParams(location.search).get('room');
 const ROOM_OK = ROOMS.some(r=>r.id===ROOM_PARAM);
 if(!ROOM_OK) location.replace('venusep_venue_booking.php');
 
+/* COUNTER MODE: who the booking is FOR. In the customer flow this is simply
+   whoever is signed in; at the counter it is a person standing there, who may
+   or may not already have an account, so it has to be asked and — when they
+   claim an account — proved. `verified` only goes true after the server has
+   checked their password (admin/customer-verify.php); the page cannot set it
+   on its own, and booking-create.php re-checks the session before trusting it. */
+const booker0 = {
+  mode: 'account',        // 'account' = has a login | 'walkin' = no account at all
+  query: '',              // what staff typed into the search box
+  results: [],            // matches, with the phone already masked by the server
+  searching: false,
+  customerId: 0,          // the chosen account
+  name: '', phone: '',    // the chosen account's details, or the walk-in's
+  address: '',            // walk-ins only, optional
+  password: '',           // typed by the CUSTOMER, sent once, never stored
+  verified: false,        // the server confirmed that password
+  error: '',
+  idChecked: false,       // staff confirm they have seen a valid ID in person
+  usepId: false,          // ...and that it is a USeP ID -> the discount applies
+};
+
 let state = {
-  screen: 'detail',                                                   // detail | review | pending | payment | done
+  screen: 'detail',                                                   // detail | who | review | pending | payment | done
+  booker: Object.assign({}, booker0),
   roomId: ROOM_OK ? ROOM_PARAM : ROOMS[0].id,   // fallback only renders while the redirect above happens
   tab: 'overview',                                                    // overview | details | availability | policies
   // start/end are the default hours (used for single-day and as the seed for new
@@ -996,7 +1034,83 @@ function applyTimeToAll(){
 /* header logo + "← All rooms" go back to the landing page (room browsing lives there now) */
 function goHome(){ location.href='venusep_venue_booking.php'; }
 function setTab(k){ state.tab=k; render(); }
-function goReview(){ if(derive().ready){ state.screen='review'; render(); } }
+/* At the counter the room and dates are settled with the customer first, then
+   we ask who it is for — so the "who" step sits between detail and review. */
+function goReview(){ if(derive().ready){ state.screen = COUNTER ? 'who' : 'review'; render(); } }
+
+/* ---------- counter: who is this booking for ---------- */
+function setBookerMode(m){
+  /* Switching mode clears everything chosen under the other one. A customer id
+     left behind from a search would otherwise ride along invisibly and book
+     under someone who walked away. */
+  state.booker = Object.assign({}, booker0, { mode:m, idChecked:state.booker.idChecked, usepId:state.booker.usepId });
+  render();
+}
+function setBookerField(f, v){ state.booker[f] = v; state.booker.error=''; render(); }
+function toggleBookerFlag(f, el){ state.booker[f] = !!el.checked; if(f==='idChecked' && !el.checked) state.booker.usepId=false; render(); }
+
+let searchTimer = null;
+function searchCustomers(v){
+  state.booker.query = v;
+  state.booker.customerId = 0; state.booker.verified = false;
+  clearTimeout(searchTimer);
+  if(v.trim().length < 3){ state.booker.results = []; render(); return; }
+  state.booker.searching = true; render();
+  searchTimer = setTimeout(async function(){
+    try{
+      const res = await fetch('../admin/customer-search.php?q=' + encodeURIComponent(v.trim()), { credentials:'same-origin' });
+      const out = await res.json().catch(function(){ return { ok:false, results:[] }; });
+      state.booker.results = out.ok ? out.results : [];
+    }catch(e){ state.booker.results = []; }
+    state.booker.searching = false; render();
+  }, 250);
+}
+function pickCustomer(id, name, phone){
+  state.booker.customerId = id; state.booker.name = name; state.booker.phone = phone;
+  state.booker.results = []; state.booker.password=''; state.booker.verified = false; state.booker.error='';
+  render();
+}
+/* The customer types their own password on the counter-facing screen. It is
+   checked and discarded — no session is started, so the staff member beside
+   them stays signed in. Required: without it there is nothing but a name to
+   say this is the right account, and a wrong match hands one customer
+   another's booking. */
+async function verifyBooker(){
+  const pw = (document.getElementById('bkPassword')||{}).value || '';
+  if(!pw){ state.booker.error='Ask the customer to type their password.'; render(); return; }
+  state.booker.error=''; render();
+  try{
+    const body = new URLSearchParams({ csrf: CSRF, customer_id: state.booker.customerId, password: pw });
+    const res = await fetch('../admin/customer-verify.php', { method:'POST', body:body, credentials:'same-origin' });
+    const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
+    state.booker.verified = !!out.ok;
+    state.booker.error = out.ok ? '' : (out.message || 'That password did not match.');
+  }catch(e){ state.booker.verified=false; state.booker.error='Could not reach the server.'; }
+  render();
+}
+function counterBookerReady(){
+  const b = state.booker;
+  if(!b.idChecked) return false;                       // staff must confirm they saw an ID
+  if(b.mode==='account') return b.customerId>0 && b.verified;
+  return b.name.trim()!=='' && cleanPhone(b.phone)!==null;
+}
+/* 11 digits starting 09 — the same shape cb_normalise_mobile() accepts server
+   side, so the counter cannot store a number the rest of the system rejects. */
+function cleanPhone(raw){
+  let d = String(raw||'').replace(/\D+/g,'');
+  if(d.length===12 && d.slice(0,2)==='63') d = '0'+d.slice(2);
+  if(d.length===10 && d[0]==='9') d = '0'+d;
+  return (d.length===11 && d.slice(0,2)==='09') ? d : null;
+}
+function goFromWho(){
+  if(!counterBookerReady()) return;
+  /* At the counter the affiliation question has already been answered — by the
+     ID the staff member just looked at. Feeding it into the same `affiliated`
+     field the customer flow uses means the price panel, the review card and the
+     submitted value all keep working untouched. */
+  state.affiliated = !!state.booker.usepId;
+  state.screen='review'; render();
+}
 function backToDetail(){ state.screen='detail'; render(); }
 function backToPending(){ state.screen='pending'; render(); }
 
@@ -1024,7 +1138,14 @@ function removeId(){
 }
 /* While refunds are OFF, the customer must acknowledge the booking is final
    before it is made — the policy is agreed at booking time, not at payment. */
-function canSubmitRequest(){ return !!state.idFile && state.affiliated !== null && (REFUNDS_ENABLED || state.agreeNoRefund); }
+/* COUNTER: no ID file is uploaded, and affiliation was answered on the "who"
+   step — so what has to be true is that the booker is settled. The
+   non-refundable acknowledgement still applies: the customer is standing
+   there and can agree to it. */
+function canSubmitRequest(){
+  if(COUNTER) return counterBookerReady() && (REFUNDS_ENABLED || state.agreeNoRefund);
+  return !!state.idFile && state.affiliated !== null && (REFUNDS_ENABLED || state.agreeNoRefund);
+}
 function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
 /* Submit the booking FOR REAL. The screen no longer advances on its own: it
    advances when the server has a row, so a customer is never shown a reference
@@ -1057,11 +1178,26 @@ async function submitRequest(){
   fd.append('affiliated', state.affiliated ? '1' : '0');
   fd.append('method', state.payMethod);
   fd.append('agree_no_refund', state.agreeNoRefund ? '1' : '0');
-  fd.append('id_document', state.idFile.file, state.idFile.name);
+
+  /* COUNTER: who it is for travels with the booking, and no ID file does. The
+     server re-checks every one of these — that the customer id exists, that
+     its password was proved in THIS staff session, that the phone is a real
+     mobile — because a page is never the thing that decides who a booking
+     belongs to. */
+  if(COUNTER){
+    const b = state.booker;
+    fd.append('booker_mode', b.mode);
+    if(b.mode==='account') fd.append('customer_id', b.customerId);
+    else { fd.append('walkin_name', b.name.trim()); fd.append('walkin_phone', cleanPhone(b.phone) || ''); fd.append('walkin_address', b.address.trim()); }
+    fd.append('id_checked', b.idChecked ? '1' : '0');
+    fd.append('usep_id', b.usepId ? '1' : '0');
+  } else {
+    fd.append('id_document', state.idFile.file, state.idFile.name);
+  }
 
   submitting = true; render();
   try{
-    const res = await fetch('booking-submit.php', { method:'POST', body:fd, credentials:'same-origin' });
+    const res = await fetch(COUNTER ? '../admin/booking-create.php' : 'booking-submit.php', { method:'POST', body:fd, credentials:'same-origin' });
     const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
     if(!out.ok){
       submitting = false;
@@ -1075,7 +1211,11 @@ async function submitRequest(){
     state.bookingDbId = out.bookingId;
     state.submitError = null;
     state.submitted = true;                  // the form is gone for good — browser Back now leaves the flow
-    state.screen = 'pending';
+    /* COUNTER: there is nothing to wait for. Staff ARE the approver, so the
+       booking came back already approved and the next thing anyone needs is
+       the reference and the booking itself. */
+    state.screen = COUNTER ? 'done' : 'pending';
+    if(COUNTER) state.counterResult = out;
   }catch(e){
     state.submitError = 'Could not reach the server, so your booking was not submitted.';
   }
@@ -1541,6 +1681,123 @@ function scheduleHtml(x){
     </div>`;
 }
 
+/* A bar nobody can miss. This screen looks exactly like the customer site —
+   which is the point — so it has to say out loud that it is not one, or a staff
+   member will eventually take a booking on it thinking they are signed in as
+   somebody. It names the staff member for the same reason. */
+function counterBar(){
+  return `<div style="position:sticky;top:0;z-index:60;background:#1f1e1e;color:#fff;padding:9px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px">
+    <strong style="letter-spacing:.06em;font-size:11.5px;text-transform:uppercase;background:#a11626;padding:3px 8px;border-radius:999px">Counter booking</strong>
+    <span style="opacity:.85">Booking on behalf of a walk-in &middot; staff: <strong>${esc(COUNTER_STAFF)}</strong></span>
+    <a href="../admin/Admin_Dashboard.php" style="margin-left:auto;color:#ffd166;font-weight:600;text-decoration:none">Leave counter mode</a>
+  </div>`;
+}
+
+/* ---------- screen: WHO IS THIS FOR (counter mode only) ----------
+   The step the customer flow has no need of: online, the booker is whoever is
+   signed in. Here a person is standing at the desk, and three things have to be
+   settled before a booking can exist in their name — which account it belongs
+   to (or that it belongs to none), that they are really that person, and what
+   the staff member saw on their ID. All three end up in the booking's timeline,
+   because each one is someone's judgement rather than a fact the system knows. */
+function whoScreen(){
+  const b = state.booker;
+  const card = (inner, pad) => `<div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:${pad||'16px'};box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05);margin-top:14px">${inner}</div>`;
+  const label = t => `<div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:6px">${t}</div>`;
+  const inputStyle = 'width:100%;height:42px;border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:0 12px;font-size:14px;font-family:inherit;background:#fff';
+
+  const modeBtn = (m, title, sub) => {
+    const on = b.mode === m;
+    return `<button type="button" onclick="setBookerMode('${m}')" style="flex:1;min-width:200px;text-align:left;border:1.5px solid ${on?'#a11626':'rgba(0,0,0,.14)'};background:${on?'#fdf4f5':'#fff'};border-radius:12px;padding:12px 14px;cursor:pointer;font-family:inherit">
+      <div style="font-size:13.5px;font-weight:680;color:#1c1b19">${title}</div>
+      <div style="font-size:12.5px;color:#8a857d;margin-top:2px">${sub}</div>
+    </button>`;
+  };
+
+  /* ---- with an account: search, then prove it ---- */
+  let accountBlock = '';
+  if(b.mode === 'account'){
+    const results = b.results.map(r => `
+      <button type="button" onclick="pickCustomer(${r.id}, ${JSON.stringify(r.name).replace(/"/g,'&quot;')}, ${JSON.stringify(r.phone).replace(/"/g,'&quot;')})"
+              style="display:block;width:100%;text-align:left;border:none;border-bottom:1px solid #f0efec;background:#fff;padding:10px 12px;cursor:pointer;font-family:inherit">
+        <div style="font-size:13.5px;font-weight:640;color:#1c1b19">${esc(r.name)}</div>
+        <div style="font-size:12.5px;color:#8a857d">${esc(r.email)} &middot; ${esc(r.phone)}</div>
+      </button>`).join('');
+
+    accountBlock = card(`
+      ${label('Find the account')}
+      <input id="bkSearch" type="text" value="${esc(b.query)}" oninput="searchCustomers(this.value)" placeholder="Full name or email address" style="${inputStyle}" autocomplete="off">
+      <div style="font-size:12px;color:#a5a19a;margin-top:6px">Type at least three characters. Phone numbers are shown partly hidden &mdash; enough to confirm, not enough to copy down.</div>
+      ${b.searching ? `<div style="font-size:12.5px;color:#8a857d;margin-top:10px">Searching&hellip;</div>` : ''}
+      ${results ? `<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden;margin-top:10px">${results}</div>` : ''}
+      ${(!b.searching && b.query.trim().length>=3 && !b.results.length && !b.customerId)
+        ? `<div style="font-size:12.5px;color:#8a5a12;margin-top:10px">No account matches that. If they have never registered, switch to <strong>No account</strong>.</div>` : ''}
+
+      ${b.customerId ? `
+        <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:14px">
+          <div style="font-size:13.5px;font-weight:680;color:#1c1b19">${esc(b.name)}</div>
+          <div style="font-size:12.5px;color:#8a857d;margin-bottom:10px">${esc(b.phone)}</div>
+          ${b.verified ? `
+            <div style="display:flex;align-items:center;gap:8px;background:#eaf6ef;border:1px solid #d4ebdd;border-radius:10px;padding:10px 12px">
+              <span style="color:#1c7a4f;font-size:15px">&check;</span>
+              <div style="font-size:13px;color:#1c7a4f">Identity confirmed &mdash; the customer entered their password.</div>
+            </div>` : `
+            ${label('Hand the screen to the customer')}
+            <div style="font-size:12.5px;color:#8a857d;margin-bottom:8px;line-height:1.5">They type their own password to confirm this is their account. It is checked and discarded &mdash; they are not signed in, and you stay signed in.</div>
+            <input id="bkPassword" type="password" placeholder="Customer's password" style="${inputStyle}" autocomplete="off">
+            ${b.error ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">${esc(b.error)}</div>` : ''}
+            <button type="button" onclick="verifyBooker()" style="margin-top:10px;height:40px;padding:0 16px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer;font-family:inherit">Confirm identity</button>`}
+        </div>` : ''}
+    `);
+  } else {
+    /* ---- no account: the walk-in shape the database already has ----
+       No email is collected: there is nowhere to put one. Email lives on
+       `users`, and having a users row is exactly what would make this person
+       not a walk-in (DB-DECISIONS #4). */
+    accountBlock = card(`
+      ${label('Guest details')}
+      <input id="bkName" type="text" value="${esc(b.name)}" oninput="setBookerField('name', this.value)" placeholder="Full name" style="${inputStyle}" autocomplete="off">
+      <div style="height:10px"></div>
+      <input id="bkPhone" type="tel" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Contact number (09XXXXXXXXX)" style="${inputStyle}" autocomplete="off">
+      <div style="height:10px"></div>
+      <input id="bkAddress" type="text" value="${esc(b.address)}" oninput="setBookerField('address', this.value)" placeholder="Address (optional)" style="${inputStyle}" autocomplete="off">
+      <div style="font-size:12px;color:#a5a19a;margin-top:8px;line-height:1.5">No account means this booking will not appear in anyone's <strong>My Bookings</strong>, cannot be paid online, and can only be refunded by staff. Payment must be taken at the counter.</div>
+      ${(b.phone.trim()!=='' && cleanPhone(b.phone)===null) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That is not an 11-digit mobile number starting 09.</div>` : ''}
+    `);
+  }
+
+  /* ---- what the staff member saw ---- */
+  const idBlock = card(`
+    ${label('The ID you were shown')}
+    <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+      <input type="checkbox" id="bkIdChecked" ${b.idChecked?'checked':''} onchange="toggleBookerFlag('idChecked', this)" style="width:15px;height:15px;margin-top:2px;flex:none;accent-color:#a11626">
+      <span style="font-size:13.5px;line-height:1.5;color:#1c1b19">I have seen a <strong>valid ID</strong> for this person in person.</span>
+    </label>
+    ${b.idChecked ? `
+      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;margin-top:12px;padding-top:12px;border-top:1px solid #f0efec">
+        <input type="checkbox" id="bkUsepId" ${b.usepId?'checked':''} onchange="toggleBookerFlag('usepId', this)" style="width:15px;height:15px;margin-top:2px;flex:none;accent-color:#a11626">
+        <span style="font-size:13.5px;line-height:1.5;color:#1c1b19">It was a <strong>USeP ID</strong> &mdash; apply the ${DISCOUNT_PERCENT}% affiliate discount.</span>
+      </label>` : ''}
+    <div style="font-size:12px;color:#a5a19a;margin-top:12px;line-height:1.5">Recorded against your name, <strong>${esc(COUNTER_STAFF)}</strong>, on this booking's history. The discount is a decision, not a claim &mdash; online it needs an uploaded ID that staff verify; here it needs you to have looked at one.</div>
+  `);
+
+  const ready = counterBookerReady();
+  return `
+  <main style="max-width:680px;margin:0 auto;padding:26px 18px 80px">
+    <button onclick="state.screen='detail';render()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">&larr; Back to the room</button>
+    <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px">Who is this booking for?</h1>
+    <p style="font-size:14px;color:#6b675f;margin:0 0 4px;line-height:1.6">The room and dates are set. Now the person at the counter.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+      ${modeBtn('account','Has an account','They have registered before')}
+      ${modeBtn('walkin','No account','A pure walk-in')}
+    </div>
+    ${accountBlock}
+    ${idBlock}
+    <button onclick="goFromWho()" ${ready?'':'disabled'} style="width:100%;height:48px;margin-top:18px;border:none;border-radius:12px;background:${ready?'#a11626':'#e7e4de'};color:${ready?'#fff':'#a5a19a'};font-size:14.5px;font-weight:680;cursor:${ready?'pointer':'not-allowed'};font-family:inherit">Continue &mdash; review the booking</button>
+    ${!ready ? `<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">${b.idChecked ? (b.mode==='account' ? 'Find the account and have the customer confirm their password.' : 'Enter the guest’s name and contact number.') : 'Confirm you have seen a valid ID.'}</div>` : ''}
+  </main>`;
+}
+
 /* ---------- screen: REVIEW ---------- */
 function reviewScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
@@ -1596,7 +1853,11 @@ function reviewScreen(){
          before payment unlocks, so the discount below is shown as provisional.
          The account's email is displayed as SUPPORTING EVIDENCE only — nothing
          verifies it at registration, so it can never decide a price on its own
-         (see includes/pricing.php). -->
+         (see includes/pricing.php).
+         COUNTER: hidden. The question was already answered on the "who is this
+         for" step, by a staff member holding the actual ID — asking it twice
+         would invite two different answers on one booking. -->
+    ${COUNTER?'':`
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
       <div style="font-size:14px;font-weight:660;margin-bottom:3px">USeP affiliation <span style="color:#b23a3a">*</span></div>
       <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px">USeP students, faculty and employees get <strong>${DISCOUNT_PERCENT}% off</strong>. Staff confirm this from your ID before you pay.</div>
@@ -1616,8 +1877,21 @@ function reviewScreen(){
       <div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#4f7a63;background:#f2faf5;border:1px solid #d4ebdd;border-radius:9px;padding:9px 11px">
         <span>&#10003;</span><span>You are signed in with a USeP address (<strong>${esc(ACCOUNT.email)}</strong>). Staff see this, but they still check your ID &mdash; it is the ID that decides the discount.</span>
       </div>`:''}
-    </div>
+    </div>`}
 
+    ${COUNTER?`
+    <!-- COUNTER: there is no upload. The staff member looked at the ID, and
+         that is what is recorded — with their name against it, on the booking's
+         own history. Nothing about a walk-in's identity is stored as a file. -->
+    <div style="background:#fff;border:1px solid #d4ebdd;border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+      <div style="font-size:14px;font-weight:660;margin-bottom:3px">Identity</div>
+      <div style="font-size:13px;color:#1c7a4f;line-height:1.6">
+        &check; Valid ID checked in person by <strong>${esc(COUNTER_STAFF)}</strong>${state.booker.usepId?' &middot; <strong>USeP ID</strong>, discount applied':''}<br>
+        ${state.booker.mode==='account'
+          ? '&check; Account confirmed by the customer&rsquo;s password &mdash; <strong>'+esc(state.booker.name)+'</strong>'
+          : '&middot; Walk-in with no account &mdash; <strong>'+esc(state.booker.name)+'</strong> &middot; '+esc(state.booker.phone)}
+      </div>
+    </div>`:`
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
       <div style="font-size:14px;font-weight:660;margin-bottom:3px">Valid ID <span style="color:#b23a3a">*</span></div>
       <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px">Staff verify your identity before approving the reservation. USeP ID or any government-issued ID.</div>
@@ -1635,7 +1909,7 @@ function reviewScreen(){
         <div style="font-size:13.5px;font-weight:600;color:#4a463f">Upload a photo of your valid ID</div>
         <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · make sure the name and photo are readable</div>
       </div>`}
-    </div>
+    </div>`}
 
     ${REFUNDS_ENABLED?'':`
     <div style="background:#fff;border:1px solid ${state.agreeNoRefund?'#d4ebdd':'#f0d9b8'};border-radius:16px;padding:16px;margin-top:14px">
@@ -1649,13 +1923,17 @@ function reviewScreen(){
 
     <div style="display:flex;gap:12px;margin-top:20px">
       <button onclick="backToDetail()" style="flex:none;height:48px;padding:0 20px;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;font-size:14px;font-weight:640;cursor:pointer">Edit details</button>
-      <button onclick="submitRequest()" ${canSubmitRequest()?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${canSubmitRequest()?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${canSubmitRequest()?'pointer':'not-allowed'};opacity:${canSubmitRequest()?'1':'.85'}">Submit booking request</button>
+      <button onclick="submitRequest()" ${canSubmitRequest()?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${canSubmitRequest()?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${canSubmitRequest()?'pointer':'not-allowed'};opacity:${canSubmitRequest()?'1':'.85'}">${COUNTER?'Create booking &mdash; approved':'Submit booking request'}</button>
     </div>
-    ${!state.idFile?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'
+    ${(!COUNTER && !state.idFile)?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'
       :!canSubmitRequest()?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Tick that you understand the booking is non-refundable to submit your request</div>':''}
-    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">${PAY_POLICY.prepay
-      ? 'Payment opens after staff approve your ID and reservation — pay via GCash or cash, at least 1 day before your event.'
-      : 'Staff approve your ID and reservation first. Payment opens only <strong>after your event</strong> — pay via GCash or cash within '+PAY_POLICY.graceDays+' days of your last day.'}</div>
+    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">${COUNTER
+      ? 'You are the approver, so this is created already approved and payment opens immediately. '+(PAY_POLICY.prepay
+          ? 'Take the payment at the counter, or leave it for the customer to pay.'
+          : 'Payment opens <strong>after the event</strong> and is due within '+PAY_POLICY.graceDays+' days of the last day.')
+      : PAY_POLICY.prepay
+        ? 'Payment opens after staff approve your ID and reservation — pay via GCash or cash, at least 1 day before your event.'
+        : 'Staff approve your ID and reservation first. Payment opens only <strong>after your event</strong> — pay via GCash or cash within '+PAY_POLICY.graceDays+' days of your last day.'}</div>
   </main>`;
 }
 
@@ -1911,8 +2189,49 @@ function paymentScreen(){
 }
 
 /* ---------- screen: CONFIRMATION ---------- */
+/* ---------- screen: DONE (counter mode) ----------
+   What staff need next, in order: the reference to read out, what the customer
+   owes and when, and a way into the booking itself to take the payment. */
+function counterDoneScreen(x){
+  const r = state.counterResult || {};
+  const blk=(label,value)=>`<div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+  return `
+  <main style="max-width:620px;margin:0 auto;padding:40px 18px 80px;text-align:center">
+    <div style="width:54px;height:54px;border-radius:999px;background:#eaf6ef;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#1c7a4f">&check;</div>
+    <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px">Booking created and approved</h1>
+    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">Read the reference out to the customer. ${r.demo?'<strong>Demo mode &mdash; nothing was saved.</strong>':'The slot is held in their name.'}</p>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:22px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
+        ${blk('Reference', esc(state.reference))}
+        ${blk('Booked for', esc(state.booker.name))}
+        ${blk('Room', esc(x.R.name))}
+        ${blk(x.d.days>1?'Dates':'Date', esc(x.rangeLabel))}
+        ${blk('Total', peso(x.d.total))}
+        ${blk('Pay by', esc(r.payBy || '—'))}
+      </div>
+      <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:12px;font-size:12.5px;color:#8a857d;line-height:1.6">
+        ${state.booker.mode==='walkin'
+          ? 'No account, so this can only be paid <strong>at the counter</strong> and refunded by staff. It will not appear in anyone&rsquo;s My Bookings.'
+          : 'Linked to <strong>'+esc(state.booker.name)+'</strong>&rsquo;s account &mdash; they can also pay online from My Bookings.'}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap">
+      <a href="../admin/booking-request.php?id=${encodeURIComponent(state.reference)}" style="flex:1;min-width:180px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:680;text-decoration:none">Open the booking &mdash; take payment</a>
+      <a href="room-reservation.php?room=${encodeURIComponent(state.roomId)}&counter=1" style="flex:none;height:48px;padding:0 20px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;color:#1c1b19;font-size:14px;font-weight:640;text-decoration:none">Another booking</a>
+    </div>
+    <a href="../admin/Admin_Dashboard.php" style="display:inline-block;margin-top:16px;color:#8a857d;font-size:13px;font-weight:600">Back to the dashboard</a>
+  </main>`;
+}
+
 function doneScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
+  /* COUNTER: a different ending. The customer flow arrives here having PAID;
+     a counter booking arrives here having been APPROVED, with payment still to
+     come. Showing them the customer's "thank you, you have paid" screen would
+     be a lie told to the person who just made the booking. */
+  if(COUNTER) return counterDoneScreen(x);
   const cash=state.payMethod==='cash';
   const rec=!cash && state.ocr && state.ocr.rec;
   const review=!!(rec&&rec.status==='manual_review');
@@ -2031,6 +2350,7 @@ function clashModalHtml(){
 function currentScreen(){
   switch(state.screen){
     case 'detail':  return detailScreen();
+    case 'who':     return whoScreen();
     case 'review':  return reviewScreen();
     case 'pending': return pendingScreen();
     case 'payment': return paymentScreen();
@@ -2046,7 +2366,7 @@ function render(){
   const selEnd=active && active.selectionEnd;
 
   document.getElementById('app').innerHTML =
-    `<div style="min-height:100vh;background:#fff">${header()}${currentScreen()}</div>${modalHtml()}`;
+    `<div style="min-height:100vh;background:#fff">${COUNTER?counterBar():''}${header()}${currentScreen()}</div>${modalHtml()}`;
 
   // don't pull focus back to an input while the modal is open
   if(id && !state.modal){

@@ -28,7 +28,8 @@ include_once __DIR__ . '/hostel-rooms.php';                            /* $HOSTE
 $navMode = isset($navMode) ? $navMode : 'solid';
 $navHere = isset($navHere) ? $navHere : '';
 $navSelf = isset($navSelf) ? $navSelf : basename($_SERVER['SCRIPT_NAME']);   /* the page including this bar */
-$navAuthed = customer_logged_in();
+$navAuthed  = customer_logged_in();
+$navCounter = counter_mode();     /* staff booking for a walk-in — see the block below */
 /* The chip shows WHO LOGGED IN (the session, written by customer-login.php).
    Every customer page reads this same session row now. This chip was once the
    ONLY part that did: the rest showed a hard-coded demo customer, so one screen
@@ -120,7 +121,14 @@ echo demo_banner_html();
 <?php endforeach; ?>
     </nav>
     <div style="display:flex;align-items:center;gap:10px">
-<?php if ($navAuthed): ?>
+<?php if ($navCounter): ?>
+      <!-- COUNTER MODE: no Log in / Sign up. This screen runs on the STAFF
+           session, and a customer signing in here would replace it — the app
+           keeps one account_type per session, so the staff member at the next
+           monitor would be signed out mid-booking. The counter bar on the page
+           says whose screen this is. -->
+      <span class="cn-name" style="opacity:.8">Counter</span>
+<?php elseif ($navAuthed): ?>
       <a class="cn-user" href="customer-profile.php" title="Your profile">
         <span class="cn-avatar"><?php echo htmlspecialchars($navInit); ?></span>
         <span class="cn-name"><?php echo htmlspecialchars($navFirst); ?></span>
@@ -141,7 +149,8 @@ echo demo_banner_html();
 <?php foreach ($navLinks as $l): ?>
     <a href="<?php echo htmlspecialchars($l[1]); ?>"<?php echo $l[0] === $navHere ? ' class="is-here"' : ''; ?>><?php echo $l[2]; ?></a>
 <?php endforeach; ?>
-<?php if ($navAuthed): ?>
+<?php if ($navCounter): /* same reason as the bar above: no way to sign a customer in here */ ?>
+<?php elseif ($navAuthed): ?>
     <a href="customer-profile.php">Profile</a>
     <a href="logout.php">Log out</a>
 <?php else: ?>

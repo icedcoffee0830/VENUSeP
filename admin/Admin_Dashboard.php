@@ -942,7 +942,12 @@ tr:hover {
                     <h1>Admin Dashboard</h1>
                     <p>Welcome, Admin | Managing: USeP Venues And Bahay Alumni</p>
                 </div>
-                <button class="btn btn-primary" onclick="openModal('newBookingModal')">+ New Booking</button>
+                <!-- Counter booking. Opens the CUSTOMER booking page in counter
+                     mode (includes/auth.php) rather than a form of its own, so
+                     the walk-in screen and the customer screen can never drift
+                     apart. The stub modal that used to live here booked nothing
+                     and has been removed. -->
+                <a class="btn btn-primary" href="../customer/venusep_venue_booking.php?counter=1">+ New Booking</a>
             </div>
 
             <!-- Overview cards: the FIRST FOUR are the exact same needs-action
@@ -1028,104 +1033,6 @@ tr:hover {
         </main>
     </div>
 
-    <div id="newBookingModal" class="modal-overlay">
-    <div class="modal">
-        <div class="modal-header">
-            <h2>Create New Booking</h2>
-            <button class="close-btn" onclick="closeModal('newBookingModal')">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="newBookingForm">
-                <div class="form-group">
-                    <label>Walk-in Type</label>
-                    <select id="walkinType" onchange="toggleWalkinFields()" class="form-control">
-                        <option value="pure">Pure Walk-in (No Account)</option>
-                        <option value="acc">Walk-in (With Account)</option>
-                    </select>
-                </div>
-
-               <div class="form-group" id="accountSearchField" style="display: none;">
-    <label>Search User (Email or Full Name)</label>
-    <div class="search-container"> <input type="text" id="userSearch" class="form-control" placeholder="Start typing name or email..." onkeyup="searchAccounts(this.value)" autocomplete="off">
-        <div id="searchResults" class="search-dropdown"></div> </div>
-    <input type="hidden" id="selectedUserId" name="user_id">
-</div>
-
-                <div id="pureWalkinFields">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Full Name</label>
-                            <input type="text" id="wName" class="form-control" placeholder="Guest Name" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Contact Number</label>
-                            <input type="tel" id="wContact" class="form-control" placeholder="09XXXXXXXXX" required>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Email Address</label>
-                        <input type="email" id="wEmail" class="form-control" placeholder="guest@example.com" required>
-                    </div>
-                    
-
-                </div>
-                
-
-                <div class="form-grid">
-
-                                    <div class="form-group">
-                            <label>Applied Discount</label>
-    <select id="discountSelect" class="form-control">
-            <option value="">
-                
-                (%)
-            </option>
-        
-    </select>
-</div>
-
-                    <div class="form-group">
-                        <label>Venue</label>
-                        <select id="venueSelect" class="form-control" onchange="fetchRooms(this.value)" required>
-                            <option value="">Select Venue</option>
-                            
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Room</label>
-                        <select id="roomSelect" class="form-control" required>
-                            <option value="">Select Room</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Event Name</label>
-                    <input type="text" id="eventName" class="form-control" required>
-                </div>
-
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Date</label>
-                        <input type="date" id="bookingDate" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Start Time</label>
-                        <input type="time" id="startTime" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label>End Time</label>
-                        <input type="time" id="endTime" class="form-control" required>
-                    </div>
-                </div>
-            </form>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-primary" onclick="submitWalkin()">Confirm Booking</button>
-        </div>
-        <div id="toast" class="toast"></div>
-    </div>
-</div>
 
 <script>
 /* ============================================================
@@ -1216,26 +1123,11 @@ document.getElementById('adRows').innerHTML = BR.slice()
     </a>`;
   }).join('');
 
-/* ---- "+ New Booking" modal (demo wiring so nothing throws) ---- */
-function openModal(id) { document.getElementById(id).classList.add('show'); }
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
-document.getElementById('newBookingModal').addEventListener('click', function (e) {
-  if (e.target === this) closeModal('newBookingModal');
-});
-function toggleWalkinFields() {
-  const withAccount = document.getElementById('walkinType').value === 'acc';
-  document.getElementById('accountSearchField').style.display = withAccount ? '' : 'none';
-  document.getElementById('pureWalkinFields').style.display = withAccount ? 'none' : '';
-}
-/* [SIM] stubs — the real versions query the database (user accounts, rooms per
-   venue) and must apply the booking rules: booked date = unavailable, 12-hour
-   lead time, and a new walk-in starts as "Awaiting payment · Cash". */
-function searchAccounts() {}
-function fetchRooms() {}
-function submitWalkin() {
-  alert('Demo only — the walk-in form is not wired to the database yet.');
-  closeModal('newBookingModal');
-}
+/* The "+ New Booking" modal that used to sit here is gone. It was a flat form
+   that booked nothing — searchAccounts(), fetchRooms() and submitWalkin() were
+   empty stubs and an alert. Walk-ins now go through the real booking page in
+   counter mode (includes/auth.php), so the counter screen and the customer
+   screen are the same screen and cannot drift apart. */
 </script>
 </body>
 </html>

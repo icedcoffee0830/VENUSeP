@@ -997,7 +997,7 @@ tr:hover {
             <div class="content-grid">
                 <div class="panel">
                     <div class="panel-header">
-                        <h3>Booking Requests — most urgent first</h3>
+                        <h3>Booking Requests — latest first</h3>
                         <a href="booking-requests.php" class="btn btn-small btn-outline">View All Requests</a>
                     </div>
                     <!-- Preview only, NO action buttons on purpose: approving needs
@@ -1091,19 +1091,13 @@ document.getElementById('statConfirm').textContent = countOf('confirm');
 document.getElementById('statReview').textContent = countOf('review');
 document.getElementById('statOverdue').textContent = countOf('overdue');
 
-/* urgent-first preview: overdue > manual review > receipts to confirm >
-   pending ID > rejected-resubmit > everything else; top 5 shown */
-function rank(r) {
-  if (r.cat === 'overdue') return 0;
-  if (r.cat === 'review') return 1;
-  if (r.cat === 'confirm') return 2;
-  if (r.cat === 'id') return 3;
-  if (r.pay === 'rejected') return 4;
-  if (r.pay === 'refund_req') return 5;
-  return 9;
-}
+/* latest-first preview: newest request at the top, by submission order (`seq`
+   is the booking's own auto-increment id, so it never needs date parsing and
+   never ties). The full queue (booking-requests.php) keeps its own
+   urgency-first sort — this panel is a "what just came in" preview, not the
+   work queue, so it reads chronologically instead. Top 5 shown. */
 document.getElementById('adRows').innerHTML = BR.slice()
-  .sort((a, b) => rank(a) - rank(b))
+  .sort((a, b) => b.seq - a.seq)
   .slice(0, 5)
   .map((r) => {
     const res = RES[r.res] || { t: r.res || 'Unknown reservation status', c: 'b-gray' };

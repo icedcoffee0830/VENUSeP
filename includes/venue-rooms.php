@@ -45,15 +45,22 @@ require_once __DIR__ . '/amenities.php';
 
 $vrPdo = venusep_db_or_fail();
 
+/* Customer-facing pages never set this: they get active rooms only, same as
+   always. admin/venue-management.php sets it to true first, because staff
+   have to be able to see (and re-enable) a room they disabled — a room that
+   vanished from its own management screen the moment it was turned off would
+   be a one-way trip. */
+$vrIncludeInactive = isset($vrIncludeInactive) ? (bool) $vrIncludeInactive : false;
+
 /* ---- 1. the rooms themselves ---- */
 $vrRoomRows = $vrPdo->query(
-  "SELECT r.id, r.room_code, r.name, r.description, r.amenities,
+  "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
           v.name AS venue_name,
           d.attendee_capacity, d.fee_per_day
      FROM rooms r
      JOIN venues v                  ON v.id = r.venue_id
      LEFT JOIN event_room_details d ON d.room_id = r.id
-    WHERE r.room_type = 'event' AND r.is_active = 1
+    WHERE r.room_type = 'event'" . ($vrIncludeInactive ? '' : ' AND r.is_active = 1') . "
     ORDER BY r.id"
 )->fetchAll();
 
@@ -115,6 +122,7 @@ foreach ($vrRoomRows as $r) {
     'id'          => $r['room_code'],
     'name'        => $r['name'],
     'venue'       => $r['venue_name'],
+    'active'      => (bool) $r['is_active'],     // catalog visibility — admin only reads this; customer pages never see a false row
     'capacity'    => (int) $r['attendee_capacity'],
     'maintenance' => isset($vrMaint[$r['id']]) ? $vrMaint[$r['id']] : null,
     'fee'         => (int) $r['fee_per_day'],

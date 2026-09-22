@@ -614,7 +614,7 @@ function updateReady(){
 function setTab(k){ state.tab=k; render(); }
 function goHome(){ location.href='venusep_venue_booking.php'; }
 function goReview(){ if(derive().ready){ state.screen='review'; window.scrollTo(0,0); render(); } }
-function backToDetail(){ state.screen='detail'; render(); }
+function backToDetail(){ state.screen='detail'; window.scrollTo(0,0); render(); }
 function setPayMethod(m){ state.payMethod=m; render(); }
 function toggleAgreeExact(el){ state.agreeExact=!!el.checked; render(); }
 function closeModal(){ state.modal=null; render(); }
@@ -1361,7 +1361,7 @@ function reviewScreen(){
       </label>
     </div>`}
 
-    <button onclick="submitRequest()" ${canSubmitRequest()?'':'disabled'} style="width:100%;height:48px;margin-top:16px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14.5px;font-weight:650;cursor:${canSubmitRequest()?'pointer':'not-allowed'};opacity:${canSubmitRequest()?1:.45}">Submit booking request</button>
+    <button onclick="submitRequest()" ${(canSubmitRequest()&&!submitting)?'':'disabled'} style="width:100%;height:48px;margin-top:16px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14.5px;font-weight:650;cursor:${(canSubmitRequest()&&!submitting)?'pointer':'not-allowed'};opacity:${canSubmitRequest()?1:.45}">${submitting?'Submitting&hellip;':'Submit booking request'}</button>
     <div style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px">${!idOk?'Attach a valid ID to continue':!canSubmitRequest()?'Tick that you understand the booking is non-refundable to continue':(PAY_POLICY.prepay?'You cannot pay yet — the POS has to come from '+esc(CEDU.name)+' first.':'Nothing to pay now — payment opens after your stay, once the POS is in from '+esc(CEDU.name)+'.')}</div>
   </main>`;
 }

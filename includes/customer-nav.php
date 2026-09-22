@@ -30,6 +30,10 @@ $navHere = isset($navHere) ? $navHere : '';
 $navSelf = isset($navSelf) ? $navSelf : basename($_SERVER['SCRIPT_NAME']);   /* the page including this bar */
 $navAuthed  = customer_logged_in();
 $navCounter = counter_mode();     /* staff booking for a walk-in — see the block below */
+/* room-reservation.php renders its own counter bar (staff name + this same
+   link) right below this nav — set by the including page so this one doesn't
+   repeat it. */
+$navCounterHasOwnBar = isset($navCounterHasOwnBar) ? $navCounterHasOwnBar : false;
 /* The chip shows WHO LOGGED IN (the session, written by customer-login.php).
    Every customer page reads this same session row now. This chip was once the
    ONLY part that did: the rest showed a hard-coded demo customer, so one screen
@@ -84,6 +88,13 @@ if (!$navAuthed) {                                                      /* a gue
   .cn-signup:hover { background: #ffd166; color: #120809; }
   .cn-logout { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.75); text-decoration: none; }
   .cn-logout:hover { color: #ffd166; }
+  /* the counter-mode "back to admin" pill — a real button, not text crammed
+     next to the "Counter" chip, so it reads clearly against the busy hero/demo-
+     banner background */
+  .cn-leave { display: inline-flex; align-items: center; min-height: 38px; padding: 0 16px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.12); color: #fff; font-size: 13px; font-weight: 700;
+    text-decoration: none; white-space: nowrap; transition: background 200ms, color 200ms; }
+  .cn-leave:hover { background: #ffd166; color: #120809; border-color: #ffd166; }
   .cn-burger { display: none; width: 44px; height: 44px; place-items: center; border-radius: 12px;
     border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); cursor: pointer; }
   .cn-menu { display: none; }
@@ -126,8 +137,13 @@ echo demo_banner_html();
            session, and a customer signing in here would replace it — the app
            keeps one account_type per session, so the staff member at the next
            monitor would be signed out mid-booking. The counter bar on the page
-           says whose screen this is. -->
-      <span class="cn-name" style="opacity:.8">Counter</span>
+           says whose screen this is; this link is the way back to the admin
+           dashboard on the pages that have no counter bar of their own
+           (the landing page, FAQ). -->
+      <span class="cn-name" style="color:#fff">Counter</span>
+<?php if (!$navCounterHasOwnBar): ?>
+      <a class="cn-leave" href="../admin/Admin_Dashboard.php">Leave counter mode</a>
+<?php endif; ?>
 <?php elseif ($navAuthed): ?>
       <a class="cn-user" href="customer-profile.php" title="Your profile">
         <span class="cn-avatar"><?php echo htmlspecialchars($navInit); ?></span>
@@ -150,6 +166,9 @@ echo demo_banner_html();
     <a href="<?php echo htmlspecialchars($l[1]); ?>"<?php echo $l[0] === $navHere ? ' class="is-here"' : ''; ?>><?php echo $l[2]; ?></a>
 <?php endforeach; ?>
 <?php if ($navCounter): /* same reason as the bar above: no way to sign a customer in here */ ?>
+<?php if (!$navCounterHasOwnBar): ?>
+    <a href="../admin/Admin_Dashboard.php">Leave counter mode</a>
+<?php endif; ?>
 <?php elseif ($navAuthed): ?>
     <a href="customer-profile.php">Profile</a>
     <a href="logout.php">Log out</a>

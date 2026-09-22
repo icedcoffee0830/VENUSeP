@@ -24,6 +24,11 @@ $TODAY = date('Y-m-d');
    exists. The venue rooms used to be three hand-written cards here that no
    customer could actually book — the exact drift the shared includes end. */
 include __DIR__ . '/../includes/venues.php';       // the venue list — one source, data-driven
+/* Staff have to be able to see a disabled room here to turn it back on, so
+   this page (and only this page) asks the shared includes for every room,
+   not just the ones customers can currently see. */
+$vrIncludeInactive = true;
+$hrIncludeInactive = true;
 include __DIR__ . '/../includes/venue-rooms.php';
 include __DIR__ . '/../includes/hostel-rooms.php';
 require_once __DIR__ . '/../includes/room-photos.php';   // real uploaded room cover photos, if any
@@ -627,8 +632,10 @@ function vmMaint($m, $today) {
       .vm-card-foot {
         border-top: 1px solid var(--vm-border);
         display: flex;
+        flex-wrap: wrap;                 /* three actions + a price no longer fit one line at the narrow grid width */
         justify-content: space-between;
         align-items: center;
+        gap: 0.5rem 0.9rem;
         padding: 0.75rem 1.1rem;
       }
 
@@ -640,6 +647,7 @@ function vmMaint($m, $today) {
         font-weight: 700;
         gap: 0.4rem;
         text-decoration: none;
+        white-space: nowrap;
       }
 
       .vm-edit-link:hover {
@@ -670,6 +678,45 @@ function vmMaint($m, $today) {
 
       .vm-delete-link:disabled {
         cursor: wait;
+        opacity: 0.55;
+      }
+
+      /* Disable/Enable — reversible, so it gets its own look rather than
+         borrowing the delete link's red. Admin AND staff can use this one. */
+      .vm-toggle-link {
+        background: transparent;
+        border: 0;
+        color: var(--vm-warn);
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 700;
+        padding: 0;
+      }
+
+      .vm-toggle-link:hover {
+        color: #cc5300;
+        text-decoration: underline;
+      }
+
+      .vm-toggle-link:disabled {
+        cursor: wait;
+        opacity: 0.55;
+      }
+
+      .vm-toggle-link.is-off {
+        color: #2f9e63;
+      }
+
+      .vm-toggle-link.is-off:hover {
+        color: #1c7a4f;
+      }
+
+      /* A disabled room is still fully visible here (staff have to be able to
+         find it to turn it back on) — just visibly muted, the same way the
+         rest of this page never invents a status pill for the normal case. */
+      .vm-card.is-inactive .vm-thumb {
+        filter: grayscale(0.35);
         opacity: 0.55;
       }
 
@@ -785,9 +832,12 @@ function vmMaint($m, $today) {
         background: var(--vm-dark);
         border-radius: 999px;
         color: #ffffff;
+        flex: none;                      /* never shrink onto the action links */
         font-size: 0.8rem;
         font-weight: 700;
+        margin-left: auto;               /* stays right-aligned even when it wraps to its own line */
         padding: 0.3rem 0.75rem;
+        white-space: nowrap;
       }
 
       /* 9) Carousel dots */
@@ -1017,7 +1067,7 @@ function vmMaint($m, $today) {
 <?php $rn = 0; foreach ($rooms as $room): $rn++;
         /* the ONE place a room's maintenance line is worked out */
         $mt = vmMaint($room['maintenance'], $TODAY); ?>
-        <div class="vm-card">
+        <div class="vm-card<?php echo $room['active'] ? '' : ' is-inactive'; ?>">
           <div class="vm-thumb" data-room="<?php echo $rn; ?>">
 <?php /* One read of the gallery feeds BOTH the cover and the nav dots, so the
            dots can never claim more photos than the room actually has (they
@@ -1044,6 +1094,9 @@ function vmMaint($m, $today) {
           <div class="vm-room-body">
             <span class="vm-room-loc"><?php echo htmlspecialchars($room['venue']); ?></span>
             <span class="vm-room-meta">Capacity: <?php echo (int) $room['capacity']; ?> persons</span>
+<?php if (!$room['active']): ?>
+            <span class="vm-status"><span class="vm-dot vm-dot-off"></span> Hidden from customers</span>
+<?php endif; ?>
 <?php if ($mt): ?>
             <span class="vm-status" title="<?php echo htmlspecialchars($mt['reason']); ?>"><span class="vm-dot <?php echo $mt['dot']; ?>"></span> <?php echo htmlspecialchars($mt['label']); ?></span>
 <?php if ($mt['review']): ?>
@@ -1060,6 +1113,7 @@ function vmMaint($m, $today) {
           <div class="vm-card-foot">
             <div class="vm-card-actions">
               <a class="vm-edit-link" href="room-form.php?id=<?php echo urlencode($room['id']); ?>"><span class="plus">✎</span> Edit Room</a>
+              <button type="button" class="vm-toggle-link<?php echo $room['active'] ? '' : ' is-off'; ?>" data-toggle-id="<?php echo htmlspecialchars($room['id']); ?>" data-toggle-name="<?php echo htmlspecialchars($room['name']); ?>"><?php echo $room['active'] ? 'Disable' : 'Enable'; ?></button>
 <?php if (admin_is_admin()): ?>
               <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="<?php echo htmlspecialchars($room['id']); ?>" data-delete-name="<?php echo htmlspecialchars($room['name']); ?>">Delete</button>
 <?php endif; ?>
@@ -1087,7 +1141,7 @@ function vmMaint($m, $today) {
         $taken   = hostelBedsTaken($room, $TODAY);
         $mix     = hostelGenderMix($room, $TODAY);
         $closedNow = $room['maintenance'] && $room['maintenance']['blocks'] && hostelMaintCovers($room['maintenance'], $TODAY); ?>
-        <div class="vm-card">
+        <div class="vm-card<?php echo $room['active'] ? '' : ' is-inactive'; ?>">
           <div class="vm-thumb" data-room="<?php echo 100 + $hn; ?>">
 <?php /* One read of the gallery feeds BOTH the cover and the nav dots, so the
            dots can never claim more photos than the room actually has (they
@@ -1114,6 +1168,9 @@ function vmMaint($m, $today) {
           <div class="vm-room-body">
             <span class="vm-room-loc"><?php echo htmlspecialchars($HOSTEL_VENUE); ?></span>
             <span class="vm-room-meta"><?php echo (int) $room['beds']; ?> beds · <?php echo htmlspecialchars($HOSTEL_CR_LABEL[$room['cr_type']]); ?></span>
+<?php if (!$room['active']): ?>
+            <span class="vm-status"><span class="vm-dot vm-dot-off"></span> Hidden from customers</span>
+<?php endif; ?>
 <?php if (!$closedNow): ?>
             <span class="vm-beds" title="Counted from the guest roster — never a stored number">
               <?php echo vmBedStrip($taken, $room['beds']); ?>
@@ -1132,6 +1189,7 @@ function vmMaint($m, $today) {
           <div class="vm-card-foot">
             <div class="vm-card-actions">
               <a class="vm-edit-link" href="hostel-room-form.php?id=<?php echo urlencode($room['id']); ?>"><span class="plus">✎</span> Edit Room</a>
+              <button type="button" class="vm-toggle-link<?php echo $room['active'] ? '' : ' is-off'; ?>" data-toggle-id="<?php echo htmlspecialchars($room['id']); ?>" data-toggle-name="<?php echo htmlspecialchars($room['name']); ?>"><?php echo $room['active'] ? 'Disable' : 'Enable'; ?></button>
 <?php if (admin_is_admin()): ?>
               <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="<?php echo htmlspecialchars($room['id']); ?>" data-delete-name="<?php echo htmlspecialchars($room['name']); ?>">Delete</button>
 <?php endif; ?>
@@ -1241,6 +1299,30 @@ function vmMaint($m, $today) {
               location.reload();
             })
             .catch(() => alert('Could not reach the server, so nothing was deleted.'))
+            .finally(() => { button.disabled = false; });
+        });
+      });
+
+      // Enable/Disable — reversible, so no confirm dialog; just flips the
+      // room and reloads so the card, its "Hidden" line and every count on
+      // this page come back from the database rather than being patched by hand.
+      document.querySelectorAll('[data-toggle-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const body = new URLSearchParams({
+            csrf: <?php echo json_encode($dcCsrf); ?>,
+            room_id: button.dataset.toggleId,
+          });
+          button.disabled = true;
+          fetch('room-toggle-active.php', { method: 'POST', body: body, credentials: 'same-origin' })
+            .then((response) => response.json().catch(() => ({ ok: false, message: 'The server sent an unreadable reply.' })))
+            .then((result) => {
+              if (!result.ok) {
+                alert(result.message || 'Nothing changed.');
+                return;
+              }
+              location.reload();
+            })
+            .catch(() => alert('Could not reach the server, so nothing changed.'))
             .finally(() => { button.disabled = false; });
         });
       });

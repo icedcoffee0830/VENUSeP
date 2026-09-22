@@ -252,7 +252,11 @@
 include_once __DIR__ . '/../includes/venue-rooms.php';
 $navHere = '';
 foreach ($venueRooms as $navRoom) if (isset($_GET['room']) && $navRoom['id'] === $_GET['room']) { $navHere = 'venue-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($navRoom['venue'])); break; }
-$navMode = 'solid'; include __DIR__ . '/../includes/customer-nav.php'; ?>
+$navMode = 'solid';
+/* this page renders its own counter bar (with the same link + more context —
+   the staff name) below #app, so the shared nav's link would just duplicate it */
+$navCounterHasOwnBar = true;
+include __DIR__ . '/../includes/customer-nav.php'; ?>
 <div id="app"></div>
 
 <?php
@@ -1036,7 +1040,7 @@ function goHome(){ location.href='venusep_venue_booking.php'; }
 function setTab(k){ state.tab=k; render(); }
 /* At the counter the room and dates are settled with the customer first, then
    we ask who it is for — so the "who" step sits between detail and review. */
-function goReview(){ if(derive().ready){ state.screen = COUNTER ? 'who' : 'review'; render(); } }
+function goReview(){ if(derive().ready){ state.screen = COUNTER ? 'who' : 'review'; window.scrollTo(0,0); render(); } }
 
 /* ---------- counter: who is this booking for ---------- */
 function setBookerMode(m){
@@ -1109,10 +1113,10 @@ function goFromWho(){
      field the customer flow uses means the price panel, the review card and the
      submitted value all keep working untouched. */
   state.affiliated = !!state.booker.usepId;
-  state.screen='review'; render();
+  state.screen='review'; window.scrollTo(0,0); render();
 }
-function backToDetail(){ state.screen='detail'; render(); }
-function backToPending(){ state.screen='pending'; render(); }
+function backToDetail(){ state.screen='detail'; window.scrollTo(0,0); render(); }
+function backToPending(){ state.screen='pending'; window.scrollTo(0,0); render(); }
 
 /* ---------- approve-first flow ----------
    The request is submitted WITH a valid ID. Staff approve the ID and the
@@ -1216,6 +1220,7 @@ async function submitRequest(){
        the reference and the booking itself. */
     state.screen = COUNTER ? 'done' : 'pending';
     if(COUNTER) state.counterResult = out;
+    window.scrollTo(0,0);
   }catch(e){
     state.submitError = 'Could not reach the server, so your booking was not submitted.';
   }
@@ -1230,11 +1235,12 @@ function demoApprove(){
   /* pre-pay: approval unlocks payment. post-pay: approval only confirms the
      slot — payment stays locked until the event is over. */
   state.screen = PAY_POLICY.prepay ? 'payment' : 'pending';
+  window.scrollTo(0,0);
   render();
 }
 /* [SIM] post-pay only — stands in for the calendar rolling past the last day
    (the DB does this in sp_expire_due_bookings). */
-function demoEventOver(){ if(!DEMO_MODE) return; state.eventOver=true; state.screen='payment'; render(); }
+function demoEventOver(){ if(!DEMO_MODE) return; state.eventOver=true; state.screen='payment'; window.scrollTo(0,0); render(); }
 
 /* This booking's payment timing — the shared rule (payPolicyFor, from
    includes/refund-policy.php) applied to the dates being typed. */
@@ -1318,6 +1324,7 @@ async function confirmBooking(){
     state.payError = null;
     state.paymentVerdict = out.verdict || null;
     state.screen = 'done';
+    window.scrollTo(0,0);
   }catch(e){
     state.payError = 'Could not reach the server, so your payment was not recorded.';
   }
@@ -1784,7 +1791,7 @@ function whoScreen(){
   const ready = counterBookerReady();
   return `
   <main style="max-width:680px;margin:0 auto;padding:26px 18px 80px">
-    <button onclick="state.screen='detail';render()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">&larr; Back to the room</button>
+    <button onclick="state.screen='detail';window.scrollTo(0,0);render()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">&larr; Back to the room</button>
     <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px">Who is this booking for?</h1>
     <p style="font-size:14px;color:#6b675f;margin:0 0 4px;line-height:1.6">The room and dates are set. Now the person at the counter.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
@@ -1922,8 +1929,8 @@ function reviewScreen(){
     </div>`}
 
     <div style="display:flex;gap:12px;margin-top:20px">
-      <button onclick="backToDetail()" style="flex:none;height:48px;padding:0 20px;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;font-size:14px;font-weight:640;cursor:pointer">Edit details</button>
-      <button onclick="submitRequest()" ${canSubmitRequest()?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${canSubmitRequest()?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${canSubmitRequest()?'pointer':'not-allowed'};opacity:${canSubmitRequest()?'1':'.85'}">${COUNTER?'Create booking &mdash; approved':'Submit booking request'}</button>
+      <button onclick="backToDetail()" ${submitting?'disabled':''} style="flex:none;height:48px;padding:0 20px;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;font-size:14px;font-weight:640;cursor:${submitting?'not-allowed':'pointer'};opacity:${submitting?'.6':'1'}">Edit details</button>
+      <button onclick="submitRequest()" ${(canSubmitRequest()&&!submitting)?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${(canSubmitRequest()&&!submitting)?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${(canSubmitRequest()&&!submitting)?'pointer':'not-allowed'};opacity:${canSubmitRequest()?'1':'.85'}">${submitting?'Submitting&hellip;':(COUNTER?'Create booking &mdash; approved':'Submit booking request')}</button>
     </div>
     ${(!COUNTER && !state.idFile)?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'
       :!canSubmitRequest()?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Tick that you understand the booking is non-refundable to submit your request</div>':''}

@@ -42,6 +42,11 @@ require_once __DIR__ . '/amenities.php';
 
 $hrPdo = venusep_db_or_fail();
 
+/* Same opt-in flag as venue-rooms.php — customer pages never set it (active
+   rooms only); admin/venue-management.php sets it so a disabled room stays
+   visible on its own management screen. */
+$hrIncludeInactive = isset($hrIncludeInactive) ? (bool) $hrIncludeInactive : false;
+
 /* The hostel venue's name, from the venue that actually holds the hostel
    rooms rather than a constant that could drift away from it. */
 $HOSTEL_VENUE = (string) $hrPdo->query(
@@ -50,14 +55,14 @@ $HOSTEL_VENUE = (string) $hrPdo->query(
 
 /* ---- 1. the rooms ---- */
 $hrRoomRows = $hrPdo->query(
-  "SELECT r.id, r.room_code, r.name, r.description, r.amenities,
+  "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
           v.name AS venue_name,
           d.cr_type, d.rate_per_head_per_night,
           (SELECT COUNT(*) FROM hostel_beds b WHERE b.room_id = r.id AND b.is_active = 1) AS bed_count
      FROM rooms r
      JOIN venues v                   ON v.id = r.venue_id
      LEFT JOIN hostel_room_details d  ON d.room_id = r.id
-    WHERE r.room_type = 'hostel' AND r.is_active = 1
+    WHERE r.room_type = 'hostel'" . ($hrIncludeInactive ? '' : ' AND r.is_active = 1') . "
     ORDER BY r.id"
 )->fetchAll();
 
@@ -135,6 +140,7 @@ foreach ($hrRoomRows as $r) {
     'id'          => $r['room_code'],
     'name'        => $r['name'],
     'venue'       => $r['venue_name'],
+    'active'      => (bool) $r['is_active'],     // catalog visibility — admin only reads this; customer pages never see a false row
     'cr_type'     => $r['cr_type'],
     'rate'        => (int) $r['rate_per_head_per_night'],
     'beds'        => (int) $r['bed_count'],

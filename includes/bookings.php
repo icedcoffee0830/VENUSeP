@@ -393,6 +393,7 @@ function booking_queue_rows() {
             'cat'      => booking_queue_category($b),
             'since'    => $b['refundFiledIso'],     // how long a refund has waited on staff
             'eventIso' => $b['eventDateIso'],
+            'seq'      => $b['id'],                 // raw auto-increment id — strictly submission order, for callers that want latest-first instead of urgency-first
         ];
     }
     return $rows;

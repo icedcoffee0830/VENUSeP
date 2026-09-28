@@ -95,12 +95,15 @@ try {
     ft_check('2. status after enable: codes_left', $status['codes_left'], 10);
 
     // 3. Verify with a fresh TOTP code.
-    $result = tfa_verify($pdo, $id, totp_code($secret, intdiv(time(), 30)));
+    $code = totp_code($secret, intdiv(time(), 30));
+    $result = tfa_verify($pdo, $id, $code);
     ft_check('3. totp verify ok', $result['ok'], true);
     ft_check('3. totp verify used', $result['used'] ?? null, 'totp');
 
-    // 4. Same code again -> replay refused.
-    $result = tfa_verify($pdo, $id, totp_code($secret, intdiv(time(), 30)));
+    // 4. Same code again -> replay refused. Reuses the exact $code from check 3
+    // (not a freshly computed one) so a step rollover between checks can't
+    // hand this a NEW, valid code and make the test pass for the wrong reason.
+    $result = tfa_verify($pdo, $id, $code);
     ft_check('4. replay ok', $result['ok'], false);
     ft_check('4. replay error', $result['error'] ?? null, 'wrong');
     ft_check('4. replay attemptsLeft', $result['attemptsLeft'] ?? null, 4);

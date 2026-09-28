@@ -238,6 +238,34 @@ discount, hostel, gcash, cash, after) and `faqs`.
   schema with the client in UTF-8 (the file's `SET NAMES utf8mb4` handles
   a whole-file import; a piecemeal paste from a Latin-1 terminal does not).
 
+## 20. Two-step verification (TOTP) — decided 2026-09-28
+- **What:** after the password, a 6-digit code from an authenticator app — Google
+  Authenticator (Play Store / App Store) or any TOTP app (RFC 6238: SHA-1, 30 s,
+  6 digits). No Google account, API key or network call is involved.
+- **Admin + staff: required.** An account without it is sent to set-up on its next
+  sign-in; a session that predates it is ended on its next page load.
+- **Customers: optional**, turned on and off from their profile. Turning it off
+  needs a current code.
+- **Recovery codes only.** Ten single-use codes, shown once at set-up, regenerable
+  while signed in. **No in-app reset — not even by an admin.** Keep at least two
+  admin accounts, so one lost phone never locks the admin side.
+- **Lockout on the account:** 5 wrong codes = 10s → 30s → 1m → 5m → 15m (max), the #16
+  ladder in its own `users.totp_*` columns so a sign-in lock never blocks an admin
+  action. Recovery-code attempts count too.
+- **A code works once** (`users.totp_last_step`); one step of clock drift either way is accepted.
+- **Secret stored as plain text** on purpose: encrypting it would put every account one
+  lost key away from permanent lockout, with no reset path to recover.
+- **Counter identity check unchanged** (password only): the customer is present and
+  staff check a physical ID.
+- **Demo seed:** `sp_seed_cast()` turns 2FA off for the whole cast on every reset.
+
+**Runbook — someone lost their phone AND every recovery code** (needs database access):
+
+    SET @u = (SELECT id FROM users WHERE email = 'person@example.com');
+    CALL sp_reset_2fa(@u);
+
+Staff/admin set it up again at their next sign-in; for a customer it is simply off.
+
 ---
 
 ## Open items (not yet decided)

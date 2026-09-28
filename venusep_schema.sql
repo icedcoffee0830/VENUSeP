@@ -58,6 +58,17 @@ CREATE TABLE users (
     reauth_failed_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,   -- wrong entries since the last lock/success
     reauth_lock_level   TINYINT UNSIGNED NOT NULL DEFAULT 0,       -- how many locks so far (picks the duration)
     reauth_locked_until DATETIME NULL,                             -- NULL or past = not locked
+    -- TWO-STEP VERIFICATION (TOTP / Google Authenticator) — DB-DECISIONS #20.
+    -- totp_secret NULL = off. Required for admin + staff, optional for customers.
+    -- totp_last_step = the last 30-second step accepted, so a code works once.
+    -- The totp_* lockout is the reauth ladder's twin, kept separate so a
+    -- sign-in lockout never blocks the refund switch.
+    totp_secret         VARCHAR(64) NULL,                             -- base32; plain text on purpose (#20)
+    totp_enabled_at     DATETIME NULL,
+    totp_last_step      BIGINT UNSIGNED NULL,
+    totp_failed_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    totp_lock_level     TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    totp_locked_until   DATETIME NULL,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uq_users_email UNIQUE (email),
@@ -87,6 +98,21 @@ CREATE TABLE system_settings_history (
     CONSTRAINT fk_settings_history_user
         FOREIGN KEY (changed_by_user_id) REFERENCES users(id)
         ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Single-use recovery codes for two-step verification (DB-DECISIONS #20).
+-- Stored as SHA-256 of the normalised code (10 chars from a 32-letter alphabet,
+-- ~50 bits of randomness, so a plain hash is enough). Shown to the person once.
+CREATE TABLE user_recovery_codes (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id             BIGINT UNSIGNED NOT NULL,
+    code_hash           CHAR(64) NOT NULL,
+    used_at             DATETIME NULL,
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_recovery_codes_user_hash UNIQUE (user_id, code_hash),
+    CONSTRAINT fk_recovery_codes_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE customers (
@@ -1447,6 +1473,19 @@ BEGIN
         VALUES (p_booking_id, v_room_id, p_slot_date, p_start_time, p_end_time);
 
     DO RELEASE_LOCK(v_lock);
+END$$
+
+-- Turns two-step verification OFF for one account and forgets its recovery
+-- codes (DB-DECISIONS #20). The ONLY reset path: there is deliberately no
+-- button for it in the app. Used by the demo seed and by the lost-phone
+-- runbook. A NULL id is a no-op.
+CREATE PROCEDURE sp_reset_2fa (IN p_user_id BIGINT UNSIGNED)
+BEGIN
+    UPDATE users
+       SET totp_secret = NULL, totp_enabled_at = NULL, totp_last_step = NULL,
+           totp_failed_attempts = 0, totp_lock_level = 0, totp_locked_until = NULL
+     WHERE id = p_user_id;
+    DELETE FROM user_recovery_codes WHERE user_id = p_user_id;
 END$$
 
 DELIMITER ;

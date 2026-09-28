@@ -1,0 +1,302 @@
+<?php
+/* =====================================================================
+   Two-step verification — account logic (DB-DECISIONS #20).
+
+   Settled decisions this file implements exactly:
+   1. Admin + staff: required. Customers: optional.
+   2. Lost phone -> recovery codes only. 10 single-use codes, shown once at
+      set-up, regenerable while signed in. No in-app reset, not even by an
+      admin — the only fallback is the stored procedure sp_reset_2fa(user_id),
+      run by someone with direct database access.
+   3. The demo seed turns 2FA off for its whole cast (sp_reset_2fa), because
+      those logins are shared by everyone who demos the system.
+   4. Lockout on the account, not the session: 5 wrong codes = a lock of
+      10s -> 30s -> 1m -> 5m -> 15m (max). Same ladder as the refund-switch
+      password re-entry, but in its own totp_* columns so a sign-in lockout
+      never blocks an admin action. Recovery-code attempts count toward it.
+   5. A code works once: the last accepted 30-second step is stored; a code
+      at or before it is rejected. One step of clock drift either side is
+      accepted.
+   6. Secret stored as plain text (base32). Not encrypted: a lost encryption
+      key would lock out every account, and decision 2 means there is no way
+      back from that.
+   7. The walk-in counter identity check (admin/customer-verify.php) stays
+      password-only — not touched.
+
+   The maths (TOTP itself) is includes/totp.php. This file is the account
+   side: lockout, recovery codes, and the pending-2FA session state that
+   plan 002 wires into the login/profile pages.
+   ===================================================================== */
+
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/totp.php';
+
+const TFA_ATTEMPTS_PER_LOCK   = 5;
+const TFA_LOCK_SECONDS        = [10, 30, 60, 300, 900];   // same ladder as the refund switch
+const TFA_PENDING_TTL         = 600;                      // seconds between password and code
+const TFA_RECOVERY_CODE_COUNT = 10;
+const TFA_RECOVERY_ALPHABET   = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O, 1/I
+const TFA_CODES_LOW           = 3;                        // profile warns at or below this
+
+/* Required for admin and staff; optional for customers (decision 1). */
+function tfa_required_for(string $accountType): bool
+{
+    return $accountType === 'admin' || $accountType === 'staff';
+}
+
+/* Whether 2FA is on for this account, and how many recovery codes remain. */
+function tfa_status(PDO $pdo, int $userId): array
+{
+    $stmt = $pdo->prepare(
+        'SELECT u.totp_secret IS NOT NULL AS enabled, u.totp_enabled_at,
+                (SELECT COUNT(*) FROM user_recovery_codes r
+                  WHERE r.user_id = u.id AND r.used_at IS NULL) AS codes_left
+           FROM users u WHERE u.id = :u'
+    );
+    $stmt->execute([':u' => $userId]);
+    $row = $stmt->fetch();
+    $stmt->closeCursor();
+
+    if ($row === false) {
+        return ['enabled' => false, 'enabled_at' => null, 'codes_left' => 0];
+    }
+    return [
+        'enabled'    => (bool) $row['enabled'],
+        'enabled_at' => $row['totp_enabled_at'],
+        'codes_left' => (int) $row['codes_left'],
+    ];
+}
+
+/* Upper-cases and strips everything but letters/digits, so "abcde-fghij",
+   "ABCDE FGHIJ" and "abcdefghij" all normalise the same way. */
+function tfa_normalise_recovery(string $input): string
+{
+    return (string) preg_replace('/[^A-Z0-9]/', '', strtoupper($input));
+}
+
+/* Deletes the user's existing recovery codes and generates 10 new ones.
+   Caller holds the transaction. Returns the 10 display forms (shown once —
+   only the SHA-256 hash is stored). */
+function tfa_replace_recovery_codes(PDO $pdo, int $userId): array
+{
+    $del = $pdo->prepare('DELETE FROM user_recovery_codes WHERE user_id = :u');
+    $del->execute([':u' => $userId]);
+
+    $alphabetLen = strlen(TFA_RECOVERY_ALPHABET);
+    $insert = $pdo->prepare(
+        'INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (:u, :h)'
+    );
+
+    $codes = [];
+    while (count($codes) < TFA_RECOVERY_CODE_COUNT) {
+        $raw = '';
+        for ($i = 0; $i < 10; $i++) {
+            $raw .= TFA_RECOVERY_ALPHABET[random_int(0, $alphabetLen - 1)];
+        }
+        if (in_array($raw, $codes, true)) {
+            continue;   // extremely unlikely, but keep the 10 distinct
+        }
+        $codes[] = $raw;
+        $insert->execute([':u' => $userId, ':h' => hash('sha256', $raw)]);
+    }
+
+    return array_map(
+        static fn (string $raw) => substr($raw, 0, 5) . '-' . substr($raw, 5, 5),
+        $codes
+    );
+}
+
+/* Turns 2FA on (or replaces the secret, e.g. moving to a new phone) and
+   issues a fresh set of recovery codes. $confirmedStep is the step of the
+   code typed to confirm set-up, stored as totp_last_step so it cannot be
+   replayed as a sign-in code. */
+function tfa_enable(PDO $pdo, int $userId, string $secret, int $confirmedStep): array
+{
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare(
+            'UPDATE users
+                SET totp_secret = :s, totp_enabled_at = NOW(), totp_last_step = :st,
+                    totp_failed_attempts = 0, totp_lock_level = 0, totp_locked_until = NULL
+              WHERE id = :u'
+        );
+        $stmt->execute([':s' => $secret, ':st' => $confirmedStep, ':u' => $userId]);
+
+        $codes = tfa_replace_recovery_codes($pdo, $userId);
+
+        $pdo->commit();
+        return $codes;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/* Regenerates the 10 recovery codes for an account that already has 2FA on. */
+function tfa_regenerate_codes(PDO $pdo, int $userId): array
+{
+    $pdo->beginTransaction();
+    try {
+        $codes = tfa_replace_recovery_codes($pdo, $userId);
+        $pdo->commit();
+        return $codes;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/* Turns 2FA off and forgets its recovery codes via the stored procedure —
+   the only reset path (decision 2). Never duplicate the procedure's column
+   list here. */
+function tfa_reset(PDO $pdo, int $userId): void
+{
+    $stmt = $pdo->prepare('CALL sp_reset_2fa(:u)');
+    $stmt->execute([':u' => $userId]);
+    $stmt->closeCursor();
+}
+
+/* The only way a 2FA code (TOTP or recovery) is checked. Mirrors the
+   refund-switch lockout ladder (admin/refund-switch.php:72-125), but in the
+   totp_* columns so a sign-in lockout never blocks an admin action. */
+function tfa_verify(PDO $pdo, int $userId, string $input): array
+{
+    $trimmed = trim($input);
+    if ($trimmed === '') {
+        return ['ok' => false, 'error' => 'empty'];
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare(
+            'SELECT totp_secret, totp_last_step, totp_failed_attempts, totp_lock_level,
+                    CASE WHEN totp_locked_until > NOW()
+                         THEN TIMESTAMPDIFF(SECOND, NOW(), totp_locked_until)
+                         ELSE 0 END AS lock_seconds
+               FROM users WHERE id = :u FOR UPDATE'
+        );
+        $stmt->execute([':u' => $userId]);
+        $row = $stmt->fetch();
+        $stmt->closeCursor();
+
+        if ($row === false || $row['totp_secret'] === null) {
+            $pdo->rollBack();
+            return ['ok' => false, 'error' => 'not_enabled'];
+        }
+
+        $lockSeconds = (int) $row['lock_seconds'];
+        if ($lockSeconds > 0) {
+            $pdo->rollBack();
+            return ['ok' => false, 'error' => 'locked', 'seconds' => $lockSeconds];
+        }
+
+        $secret = (string) $row['totp_secret'];
+        $lastStep = $row['totp_last_step'] !== null ? (int) $row['totp_last_step'] : null;
+
+        $matchedStep = totp_match_step($secret, $trimmed, time(), $lastStep);
+        $usedAs = null;
+
+        if ($matchedStep !== null) {
+            $upd = $pdo->prepare('UPDATE users SET totp_last_step = :step WHERE id = :u');
+            $upd->execute([':step' => $matchedStep, ':u' => $userId]);
+            $usedAs = 'totp';
+        } else {
+            $normalised = tfa_normalise_recovery($trimmed);
+            if (strlen($normalised) === 10) {
+                $hash = hash('sha256', $normalised);
+                $burn = $pdo->prepare(
+                    'UPDATE user_recovery_codes SET used_at = NOW()
+                      WHERE user_id = :u AND code_hash = :h AND used_at IS NULL'
+                );
+                $burn->execute([':u' => $userId, ':h' => $hash]);
+                if ($burn->rowCount() === 1) {
+                    $usedAs = 'recovery';
+                }
+            }
+        }
+
+        if ($usedAs !== null) {
+            $reset = $pdo->prepare(
+                'UPDATE users SET totp_failed_attempts = 0, totp_lock_level = 0, totp_locked_until = NULL
+                  WHERE id = :u'
+            );
+            $reset->execute([':u' => $userId]);
+            $pdo->commit();
+            return ['ok' => true, 'used' => $usedAs];
+        }
+
+        // Wrong code / wrong recovery code.
+        $attempts = (int) $row['totp_failed_attempts'] + 1;
+
+        if ($attempts >= TFA_ATTEMPTS_PER_LOCK) {
+            $level = min((int) $row['totp_lock_level'] + 1, 255);
+            $idx = min($level, count(TFA_LOCK_SECONDS)) - 1;
+            $seconds = TFA_LOCK_SECONDS[$idx];
+
+            $lock = $pdo->prepare(
+                'UPDATE users
+                    SET totp_failed_attempts = 0, totp_lock_level = :l,
+                        totp_locked_until = DATE_ADD(NOW(), INTERVAL :sec SECOND)
+                  WHERE id = :u'
+            );
+            $lock->execute([':l' => $level, ':sec' => $seconds, ':u' => $userId]);
+            $pdo->commit();
+            return ['ok' => false, 'error' => 'locked', 'seconds' => $seconds];
+        }
+
+        $store = $pdo->prepare('UPDATE users SET totp_failed_attempts = :a WHERE id = :u');
+        $store->execute([':a' => $attempts, ':u' => $userId]);
+        $pdo->commit();
+        return ['ok' => false, 'error' => 'wrong', 'attemptsLeft' => TFA_ATTEMPTS_PER_LOCK - $attempts];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   Session helpers for the "password correct, code pending" state.
+   Plan 002 uses these; the caller has already started the session.
+   The pending state deliberately does NOT set $_SESSION['user_id'], so
+   admin_require_login() / customer_logged_in() treat it as logged out.
+   --------------------------------------------------------------------- */
+
+function tfa_pending_start(int $userId, string $side, string $mode, array $extra = []): void
+{
+    session_regenerate_id(true);
+    $_SESSION = [];
+    $_SESSION['tfa_pending'] = ['user_id' => $userId, 'side' => $side, 'mode' => $mode, 'at' => time()] + $extra;
+}
+
+function tfa_pending(string $side): ?array
+{
+    $pending = $_SESSION['tfa_pending'] ?? null;
+    if (!is_array($pending)) {
+        return null;
+    }
+    if (($pending['side'] ?? null) !== $side) {
+        return null;   // belongs to the other side — leave it alone
+    }
+    if (time() - (int) ($pending['at'] ?? 0) > TFA_PENDING_TTL) {
+        unset($_SESSION['tfa_pending']);
+        return null;
+    }
+    return $pending;
+}
+
+function tfa_pending_update(array $changes): void
+{
+    $_SESSION['tfa_pending'] = $changes + ($_SESSION['tfa_pending'] ?? []);
+}
+
+function tfa_pending_clear(): void
+{
+    unset($_SESSION['tfa_pending']);
+}

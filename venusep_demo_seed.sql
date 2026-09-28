@@ -3,6 +3,7 @@
 --
 --      mysql -u root venusep < venusep_demo_seed.sql     (installs the procs)
 --      CALL sp_seed_demo();                              (builds the showcase)
+--  Needs venusep_migration_02.sql applied first (sp_reset_2fa).
 --
 --  ⚠️ sp_seed_demo() is a RESET. It DELETES every booking, payment, receipt,
 --     refund and document and rebuilds them. It does NOT touch the catalog
@@ -35,6 +36,7 @@
 --    areyes@usep.edu.ph     Ana Reyes             USeP, hostel guest
 --    (no login)             Carmen Uy             walk-in
 --    staff@gmail.com        Marites Robles        staff (staff123, no UI yet)
+--  Every cast account has two-step verification turned OFF by each reset (sp_reset_2fa).
 -- ============================================================================
 
 DROP PROCEDURE IF EXISTS sp_seed_demo;
@@ -121,6 +123,18 @@ BEGIN
     ON DUPLICATE KEY UPDATE
       username = VALUES(username), password_hash = VALUES(password_hash),
       account_type = VALUES(account_type), is_active = 1;
+
+    -- Two-step verification goes back to OFF for the whole cast (DB-DECISIONS #20).
+    -- These logins are shared by everyone who demos; a reset has to hand back
+    -- accounts anyone can sign in to. The first staff/admin sign-in afterwards
+    -- sets it up again, on the presenter's own phone.
+    SET @u = (SELECT id FROM users WHERE email = 'admin@gmail.com');        CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'customer@gmail.com');     CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'jmdelacruz@usep.edu.ph'); CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'msantos@usep.edu.ph');    CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'rafael.lim@gmail.com');   CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'areyes@usep.edu.ph');     CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'staff@gmail.com');        CALL sp_reset_2fa(@u);
 
     INSERT INTO customers (user_id, full_name, phone, address, university_id_no) VALUES
       ((SELECT id FROM users WHERE email='jmdelacruz@usep.edu.ph'),'Juan Miguel Dela Cruz','09175550123','Obrero, Davao City','2023-00412'),

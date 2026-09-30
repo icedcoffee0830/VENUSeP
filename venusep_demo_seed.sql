@@ -126,8 +126,8 @@ BEGIN
 
     -- Two-step verification goes back to OFF for the whole cast (DB-DECISIONS #20).
     -- These logins are shared by everyone who demos; a reset has to hand back
-    -- accounts anyone can sign in to. The first staff/admin sign-in afterwards
-    -- sets it up again, on the presenter's own phone.
+    -- accounts anyone can sign in to. The first admin sign-in afterwards sets it
+    -- up again, on the presenter's own phone.
     SET @u = (SELECT id FROM users WHERE email = 'admin@gmail.com');        CALL sp_reset_2fa(@u);
     SET @u = (SELECT id FROM users WHERE email = 'customer@gmail.com');     CALL sp_reset_2fa(@u);
     SET @u = (SELECT id FROM users WHERE email = 'jmdelacruz@usep.edu.ph'); CALL sp_reset_2fa(@u);

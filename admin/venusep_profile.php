@@ -56,6 +56,23 @@ if ($dmDbOk && $dmIsAdmin) {
 }
 $dmJustSaved = isset($_GET['demo']) && $_GET['demo'] === 'saved';
 function vp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
+
+/* Two-step verification (DB-DECISIONS #20): required for admins, so this card only
+   ever moves it or renews codes; it can never turn it off. Staff do not see it
+   until the staff side exists. null = could not be read; the card then says so
+   instead of offering controls. */
+require_once __DIR__ . '/../includes/two-factor.php';
+require_once __DIR__ . '/../includes/two-factor-views.php';
+$vpTfaShow = tfa_required_for((string) ($_SESSION['account_type'] ?? ''));
+$vpTfa = null;
+if ($vpTfaShow) {
+    try {
+        $vpTfa = tfa_status(venusep_db_or_fail(), (int) $_SESSION['user_id']);
+    } catch (PDOException $e) {
+        $vpTfa = null;
+    }
+}
+$vpTfaLow = $vpTfa !== null && $vpTfa['enabled'] && $vpTfa['codes_left'] <= TFA_CODES_LOW;
 ?>
 <!DOCTYPE html>
 
@@ -77,6 +94,7 @@ function vp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/index.css" media="print" onload="this.media = 'all'" rel="stylesheet"/>
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.11.0/styles/overlayscrollbars.min.css" rel="stylesheet"/>
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../assets/css/two-factor.css" rel="stylesheet"/>
 <style>
       :root {
         --venusep-black: #1f1e1e;
@@ -529,6 +547,42 @@ function vp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
           </script>
         </article>
 
+        <!-- TWO-STEP VERIFICATION (DB-DECISIONS #20). Admins only for now (staff come later).
+             Same shape as the Demo Mode card below. Driven by assets/js/two-factor.js
+             against profile-save.php, which refuses to turn it off for an admin. -->
+        <?php if ($vpTfaShow): ?>
+        <section class="dm-card tfa-panel" aria-labelledby="tfaTitle" data-tfa-panel data-endpoint="../profile-save.php" data-csrf="<?php echo vp_e($vpCsrf); ?>">
+          <div class="dm-top">
+            <div>
+              <div class="dm-title">
+                <h2 id="tfaTitle">Two-step verification</h2>
+                <?php if ($vpTfa !== null && $vpTfa['enabled']): ?><span class="dm-pill tfa-pill-on">ON</span><?php endif; ?>
+              </div>
+              <p class="dm-state">Required for admin accounts. You enter a code from your phone each time you sign in.</p>
+            </div>
+            <?php if ($vpTfa !== null && $vpTfa['enabled']): ?>
+            <div class="tfa-actions" data-tfa-actions>
+              <button class="dm-btn" type="button" data-tfa-action="move" data-tfa-ask="Current code from your phone" data-tfa-go="Continue"><i class="bi bi-phone" aria-hidden="true"></i>Move to a new phone</button>
+              <button class="dm-btn<?php echo $vpTfaLow ? ' tfa-btn-primary' : ''; ?>" type="button" data-tfa-action="codes" data-tfa-ask="Current code from your phone" data-tfa-go="Make new codes"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>New recovery codes</button>
+            </div>
+            <?php endif; ?>
+          </div>
+          <?php if ($vpTfa === null || !$vpTfa['enabled']): ?>
+          <p class="dm-state dm-error">Two-step verification settings cannot be loaded right now. Reload the page to try again.</p>
+          <?php else: ?>
+          <?php if ($vpTfaLow): ?>
+          <p class="tfa-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span><?php echo (int) $vpTfa['codes_left'] === 1 ? 'Only 1 recovery code left.' : 'Only ' . (int) $vpTfa['codes_left'] . ' recovery codes left.'; ?> Make new ones now. If you lose your phone with none left, nobody can reset your account from the app.</span></p>
+          <?php endif; ?>
+
+          <?php tfa_view_panel_steps(true, $vpEmail, ['btn' => 'dm-btn', 'primary' => 'dm-btn tfa-btn-primary', 'input' => 'tfa-code-input']); ?>
+          <div class="dm-meta">
+            <span>Set up <strong><?php echo vp_e(date('j M Y', strtotime((string) $vpTfa['enabled_at']))); ?></strong></span>
+            <span><strong><?php echo (int) $vpTfa['codes_left']; ?></strong> of <?php echo TFA_RECOVERY_CODE_COUNT; ?> recovery codes left</span>
+          </div>
+          <?php endif; ?>
+        </section>
+        <?php endif; ?>
+
 <?php if ($dmIsAdmin): ?>
         <!-- DEMO MODE. Admin only, because turning it ON in production is the
              most damaging single action here: customers would book, receive a
@@ -751,5 +805,7 @@ function vp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
         }
       });
     </script>
+    <script src="../assets/js/vendor/qrcode-generator-1.4.4.js"></script>
+    <script src="../assets/js/two-factor.js"></script>
 </body>
 </html>

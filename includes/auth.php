@@ -88,12 +88,21 @@ function staff_session_heal()
         return;                       // offline: do not log anyone out over a hiccup
     }
     try {
-        $stmt = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :u');
+        $stmt = $pdo->prepare('SELECT account_type, is_active, totp_secret IS NOT NULL AS tfa_on FROM users WHERE id = :u');
         $stmt->execute([':u' => (int) $_SESSION['user_id']]);
         $row = $stmt->fetch();
         if (!$row || !(bool) $row['is_active']) {
             venusep_logout();
             header('Location: ' . admin_base_url() . '/admin-login.php?suspended=1');
+            exit;
+        }
+        /* Two-step verification is required for admins (DB-DECISIONS #20). An admin
+           session from before it was set up ends here, and the sign-in page walks
+           them through setting it up. Who is required lives in tfa_required_for(). */
+        require_once __DIR__ . '/two-factor.php';
+        if (tfa_required_for((string) $row['account_type']) && !(bool) $row['tfa_on']) {
+            venusep_logout();
+            header('Location: ' . admin_base_url() . '/admin-login.php?tfa=required');
             exit;
         }
         $_SESSION['account_type'] = $row['account_type'];

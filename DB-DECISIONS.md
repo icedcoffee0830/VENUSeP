@@ -242,16 +242,26 @@ discount, hostel, gcash, cash, after) and `faqs`.
 - **What:** after the password, a 6-digit code from an authenticator app — Google
   Authenticator (Play Store / App Store) or any TOTP app (RFC 6238: SHA-1, 30 s,
   6 digits). No Google account, API key or network call is involved.
-- **Admin + staff: required.** An account without it is sent to set-up on its next
-  sign-in; a session that predates it is ended on its next page load.
-- **Customers: optional**, turned on and off from their profile. Turning it off
-  needs a current code.
+- **Admin: required.** An account without it is sent to set-up on its next sign-in;
+  a session that predates it is ended on its next page load.
+- **Staff: not included yet** (decided 2026-09-30). There is no staff side yet; it will
+  be a copy of the admin side with some features restricted. Until then staff sign in
+  with the password alone, see no 2FA screens or settings, and cannot turn it on.
+  Bringing them in later is `tfa_required_for()` in `includes/two-factor.php`.
+- **Customers: optional**, turned on and off from their profile. Turning it **on**
+  needs the account password (a session alone must never add a credential: with no
+  reset path, a stranger's phone on someone's account would lock them out for good);
+  turning it off, moving to a new phone or making new recovery codes needs a current
+  code or a recovery code.
 - **Recovery codes only.** Ten single-use codes, shown once at set-up, regenerable
   while signed in. **No in-app reset — not even by an admin.** Keep at least two
   admin accounts, so one lost phone never locks the admin side.
-- **Lockout on the account:** 5 wrong codes = 10s → 30s → 1m → 5m → 15m (max), the #16
-  ladder in its own `users.totp_*` columns so a sign-in lock never blocks an admin
-  action. Recovery-code attempts count too.
+- **Lockout on the account:** 5 wrong codes = 10s → 30s → 1m → 5m → 15m → 1h → 4h (max),
+  in its own `users.totp_*` columns so a sign-in lock never blocks an admin action.
+  Recovery-code attempts count too. The first five steps are the #16 ladder; the 1h and
+  4h steps were added 2026-09-30: a real person never reaches them (any right code resets
+  the ladder), while someone who already has the password drops from ~480 guesses a day
+  to ~30. Locks always end on their own, so no reset is ever needed.
 - **A code works once** (`users.totp_last_step`); one step of clock drift either way is accepted.
 - **Secret stored as plain text** on purpose: encrypting it would put every account one
   lost key away from permanent lockout, with no reset path to recover.
@@ -264,7 +274,7 @@ discount, hostel, gcash, cash, after) and `faqs`.
     SET @u = (SELECT id FROM users WHERE email = 'person@example.com');
     CALL sp_reset_2fa(@u);
 
-Staff/admin set it up again at their next sign-in; for a customer it is simply off.
+An admin sets it up again at their next sign-in; for a customer it is simply off.
 
 ---
 

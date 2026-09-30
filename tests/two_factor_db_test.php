@@ -175,6 +175,24 @@ try {
     $result = tfa_verify($pdo, $id, $new[0]);
     ft_check('12. new code works', $result['ok'], true);
 
+    // 12b. The long steps and the cap: level 5 -> 6 is 1 h, 6 -> 7 is 4 h, and it stays at 4 h.
+    foreach ([5 => 3600, 6 => 14400, 20 => 14400] as $fromLevel => $wantSeconds) {
+        $pdo->prepare('UPDATE users SET totp_lock_level = :l, totp_failed_attempts = 0, totp_locked_until = NULL WHERE id = :u')
+            ->execute([':l' => $fromLevel, ':u' => $id]);
+        for ($i = 0; $i < 5; $i++) {
+            $result = tfa_verify($pdo, $id, 'ZZZZZ-ZZZZZ');
+        }
+        ft_check("12b. lock after level {$fromLevel}", $result['seconds'] ?? null, $wantSeconds);
+    }
+    ft_unlock($pdo, $id);
+    $result = tfa_verify($pdo, $id, $new[1]);
+    ft_check('12b. a right code after the long locks resets the ladder', [$result['ok'], (int) ft_column($pdo, $id, 'totp_lock_level')], [true, 0]);
+    ft_check('12b. wait text: seconds', tfa_wait_text(45), '45 seconds');
+    ft_check('12b. wait text: one second', tfa_wait_text(1), '1 second');
+    ft_check('12b. wait text: minutes', tfa_wait_text(899), '14 min 59 s');
+    ft_check('12b. wait text: hours', tfa_wait_text(14399), '3 h 59 min');
+    ft_check('12b. lock message', tfa_error_message(['error' => 'locked', 'seconds' => 3600]), 'Too many wrong codes. Try again in 1 h 0 min.');
+
     // 13. Reset turns 2FA off and forgets recovery codes.
     tfa_reset($pdo, $id);
     $status = tfa_status($pdo, $id);

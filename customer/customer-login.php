@@ -8,6 +8,8 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/two-factor.php';
+require_once __DIR__ . '/../includes/two-factor-views.php';
 
 venusep_session_start();
 
@@ -19,7 +21,55 @@ if ($pdo === null) {
 
 $loginError = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+/* The only place a customer session is created. Re-reads the account because
+   a code step may sit between the password and this. */
+function cl_finish_login(PDO $pdo, int $userId): void
+{
+    $stmt = $pdo->prepare(
+        'SELECT u.id AS user_id, u.email, u.is_active, c.id AS customer_id, c.full_name
+           FROM users u
+           INNER JOIN customers c ON c.user_id = u.id
+          WHERE u.id = :id AND u.account_type = :account_type
+          LIMIT 1'
+    );
+    $stmt->execute([':id' => $userId, ':account_type' => 'customer']);
+    $customer = $stmt->fetch();
+    if (!$customer || !$customer['is_active']) {
+        tfa_pending_clear();
+        header('Location: customer-login.php');
+        exit;
+    }
+
+    // Prevent session fixation after successful authentication.
+    session_regenerate_id(true);
+
+    // Start from an empty session so nothing from a previous login
+    // (e.g. an admin on the same browser) survives into this one.
+    $_SESSION = [];
+    $_SESSION['user_id'] = (int)$customer['user_id'];
+    $_SESSION['customer_id'] = (int)$customer['customer_id'];
+    $_SESSION['account_type'] = 'customer';
+    $_SESSION['customer_name'] = $customer['full_name'];
+    $_SESSION['customer_email'] = $customer['email'];
+
+    $update = $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id');
+    $update->execute([':id' => $customer['user_id']]);
+
+    // Remember Me is intentionally not implemented with a permanent
+    // cookie here; the session remains the safer default.
+    header('Location: venusep_venue_booking.php');
+    exit;
+}
+
+/* A two-step sign-in step, only for customers who turned it on in their
+   profile (DB-DECISIONS #20); the flow itself is tfa_login_step(). */
+$tfaError = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
+    [$loginError, $tfaError] = tfa_login_step($pdo, 'customer', 'customer-login.php',
+        function (array $pending) use ($pdo) {
+            cl_finish_login($pdo, (int)$pending['user_id']);
+        });
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim((string)($_POST['email'] ?? ''));
     $password = (string)($_POST['password'] ?? '');
     $rememberMe = isset($_POST['remember_me']);
@@ -62,28 +112,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Use one generic message so the page does not reveal whether an email exists.
             $loginError = 'Invalid email or password.';
         } else {
-            // Prevent session fixation after successful authentication.
-            session_regenerate_id(true);
-
-            // Start from an empty session so nothing from a previous login
-            // (e.g. an admin on the same browser) survives into this one.
-            $_SESSION = [];
-            $_SESSION['user_id'] = (int)$customer['user_id'];
-            $_SESSION['customer_id'] = (int)$customer['customer_id'];
-            $_SESSION['account_type'] = 'customer';
-            $_SESSION['customer_name'] = $customer['full_name'];
-            $_SESSION['customer_email'] = $customer['email'];
-
-            $update = $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id');
-            $update->execute([':id' => $customer['user_id']]);
-
-            // Remember Me is intentionally not implemented with a permanent
-            // cookie here; the session remains the safer default.
-            header('Location: venusep_venue_booking.php');
-            exit;
+            tfa_after_password($pdo, (int)$customer['user_id'], 'customer', 'customer', $customer['email'],
+                [], 'customer-login.php',
+                function () use ($pdo, $customer) {
+                    cl_finish_login($pdo, (int)$customer['user_id']);
+                });
         }
     }
 }
+
+/* Password correct, code pending: not logged in yet (customer_logged_in() needs user_id). */
+$pending = tfa_pending('customer');
+$tfaView = $pending === null ? 'password' : 'verify';
+if ($tfaView !== 'password') {
+    header('Cache-Control: no-store');
+}
+$tfaCsrf = $tfaView !== 'password' ? csrf_token() : '';
+$tfaLock = $tfaView === 'verify' ? tfa_lock_seconds($pdo, (int)$pending['user_id']) : 0;   // resume a running lock's countdown
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -106,6 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/two-factor.css" />
     <style>
       /* ==================================================================
          AUTH UI — split layout (customer-login + customer-register share it)
@@ -221,15 +267,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <svg class="auth-hero-arcs" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g transform="translate(560 300)"><circle r="120"/><circle r="200"/><circle r="280"/><circle r="360"/><circle r="440"/><circle r="520"/></g></svg>
         <img class="auth-hero-logo" src="../logo/Logo Header 3.png" alt="" />
         <div class="auth-hero-copy">
+          <?php if ($tfaView === 'password'): ?>
           <h2 class="auth-hero-title">Welcome to <br />VENUSeP! <span class="auth-wave">&#128075;</span></h2>
           <p class="auth-hero-sub">Reserve campus venues and hostel beds online. Check real availability, book in minutes, and pay by GCash or cash &mdash; no office visits.</p>
+          <?php else: tfa_view_hero('verify'); endif; ?>
         </div>
         <p class="auth-hero-foot">&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</p>
       </aside>
-      <section class="auth-panel" aria-labelledby="customerLoginTitle">
+      <section class="auth-panel" aria-labelledby="<?php echo $tfaView === 'password' ? 'customerLoginTitle' : 'tfaTitle'; ?>">
         <a class="auth-back" href="venusep_venue_booking.php"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Back to home</a>
         <div class="auth-card">
           <a class="auth-brand" href="venusep_venue_booking.php" title="Back to VENUSeP"><img src="../logo/Logo Header 3.png" alt="VENUSeP" /></a>
+          <?php if ($tfaView === 'verify'): tfa_view_code($tfaCsrf, (string)$pending['email'], $tfaError, $tfaLock); ?>
+          <?php else: ?>
           <div class="auth-heading">
             <h1 class="auth-title" id="customerLoginTitle">Welcome back!</h1>
             <p class="auth-subtitle">Sign in to book venues and hostel beds.</p>
@@ -258,9 +308,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <span class="auth-alt-text">Don&rsquo;t have an account yet?</span>
             <a class="btn-auth btn-auth-outline" href="customer-register.php">Create an account</a>
           </div>
+          <?php endif; ?>
         </div>
       </section>
     </main>
+    <?php if ($tfaView !== 'password'): ?>
+    <script src="../assets/js/two-factor.js"></script>
+    <?php endif; ?>
 
     <!-- Client-side validation; authentication is performed server-side by PHP. -->
     <script>

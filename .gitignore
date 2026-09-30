@@ -1,0 +1,5 @@
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+
+# Installed JavaScript packages — reinstall with `npm install`, never commit
+node_modules/

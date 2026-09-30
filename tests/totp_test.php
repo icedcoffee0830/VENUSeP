@@ -89,6 +89,10 @@ tt_check(
     $step
 );
 
+tt_check('is_used: a used step is recognised', totp_is_used($secret, totp_code($secret, $step), $now, $step), true);
+tt_check('is_used: an unused step is not', totp_is_used($secret, totp_code($secret, $step), $now, $step - 1), false);
+tt_check('is_used: a wrong code is not', totp_is_used($secret, '000000' === totp_code($secret, $step) ? '111111' : '000000', $now, $step + 1), false);
+tt_check('is_used: nothing used yet', totp_is_used($secret, totp_code($secret, $step), $now, null), false);
 tt_check('match_step rejects "abcdef"', totp_match_step($secret, 'abcdef', $now, null), null);
 tt_check('match_step rejects "12345"', totp_match_step($secret, '12345', $now, null), null);
 tt_check('match_step rejects "1234567"', totp_match_step($secret, '1234567', $now, null), null);

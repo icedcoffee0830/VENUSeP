@@ -78,7 +78,7 @@ try {
     // 2. Enable.
     $secret = totp_new_secret();
     $step = intdiv(time(), 30);
-    $codes = tfa_enable($pdo, $id, $secret, $step - 2);
+    $codes = tfa_enable($pdo, $id, $secret, $step - 2, null);
 
     ft_check('2. tfa_enable returns 10 codes', count($codes), 10);
     $allMatch = true;
@@ -94,6 +94,11 @@ try {
     ft_check('2. status after enable: enabled', $status['enabled'], true);
     ft_check('2. status after enable: codes_left', $status['codes_left'], 10);
 
+    // 2b. A second set-up begun while 2FA was still off must not overwrite the one just made.
+    ft_check('2b. stale set-up refused', tfa_enable($pdo, $id, totp_new_secret(), $step - 2, null), null);
+    ft_check('2b. the first key is kept', ft_column($pdo, $id, 'totp_secret'), $secret);
+    ft_check('2b. its codes are kept', tfa_status($pdo, $id)['codes_left'], 10);
+
     // 3. Verify with a fresh TOTP code.
     $code = totp_code($secret, intdiv(time(), 30));
     $result = tfa_verify($pdo, $id, $code);
@@ -103,10 +108,11 @@ try {
     // 4. Same code again -> replay refused. Reuses the exact $code from check 3
     // (not a freshly computed one) so a step rollover between checks can't
     // hand this a NEW, valid code and make the test pass for the wrong reason.
+    // A replay is refused as 'used' and does NOT spend a lockout attempt.
     $result = tfa_verify($pdo, $id, $code);
     ft_check('4. replay ok', $result['ok'], false);
-    ft_check('4. replay error', $result['error'] ?? null, 'wrong');
-    ft_check('4. replay attemptsLeft', $result['attemptsLeft'] ?? null, 4);
+    ft_check('4. replay error', $result['error'] ?? null, 'used');
+    ft_check('4. replay spends no attempt', (int) ft_column($pdo, $id, 'totp_failed_attempts'), 0);
 
     // 5. Recovery code.
     $result = tfa_verify($pdo, $id, $codes[0]);
@@ -206,7 +212,7 @@ try {
     $countStmt->closeCursor();
 
     // 14. Cascade: re-enable, then delete the account -> recovery rows cascade away.
-    tfa_enable($pdo, $id, totp_new_secret(), intdiv(time(), 30) - 2);
+    tfa_enable($pdo, $id, totp_new_secret(), intdiv(time(), 30) - 2, null);
     $deletedId = $id;
     $delUser = $pdo->prepare('DELETE FROM users WHERE id = :u');
     $delUser->execute([':u' => $deletedId]);

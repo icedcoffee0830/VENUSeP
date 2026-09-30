@@ -32,7 +32,9 @@
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/totp.php';
-require_once __DIR__ . '/auth.php';   /* csrf_valid() for the sign-in steps */
+/* includes/auth.php loads THIS file (for tfa_required_for()); the dependency runs one
+   way only. tfa_login_step() uses auth.php's csrf_valid(), so its callers — the two
+   sign-in pages — load auth.php, as every page already does. */
 
 const TFA_ATTEMPTS_PER_LOCK   = 5;
 /* The refund switch's ladder, then two longer steps (decided 2026-09-30, #20): a real
@@ -123,8 +125,13 @@ function tfa_replace_recovery_codes(PDO $pdo, int $userId): array
 /* Turns 2FA on (or replaces the secret, e.g. moving to a new phone) and
    issues a fresh set of recovery codes. $confirmedStep is the step of the
    code typed to confirm set-up, stored as totp_last_step so it cannot be
-   replayed as a sign-in code. */
-function tfa_enable(PDO $pdo, int $userId, string $secret, int $confirmedStep): array
+   replayed as a sign-in code.
+   $expectedEnabledAt is the account's totp_enabled_at when this set-up began
+   (null = 2FA was off). If it has changed since — 2FA set up or moved in
+   another browser — nothing is written and null comes back: a slower second
+   set-up must never overwrite a phone that was just registered. Checked in the
+   UPDATE itself, so two set-ups racing cannot both win. */
+function tfa_enable(PDO $pdo, int $userId, string $secret, int $confirmedStep, ?string $expectedEnabledAt): ?array
 {
     $pdo->beginTransaction();
     try {
@@ -132,9 +139,13 @@ function tfa_enable(PDO $pdo, int $userId, string $secret, int $confirmedStep): 
             'UPDATE users
                 SET totp_secret = :s, totp_enabled_at = NOW(), totp_last_step = :st,
                     totp_failed_attempts = 0, totp_lock_level = 0, totp_locked_until = NULL
-              WHERE id = :u'
+              WHERE id = :u AND totp_enabled_at <=> :prev'
         );
-        $stmt->execute([':s' => $secret, ':st' => $confirmedStep, ':u' => $userId]);
+        $stmt->execute([':s' => $secret, ':st' => $confirmedStep, ':u' => $userId, ':prev' => $expectedEnabledAt]);
+        if ($stmt->rowCount() !== 1) {
+            $pdo->rollBack();
+            return null;
+        }
 
         $codes = tfa_replace_recovery_codes($pdo, $userId);
 
@@ -213,6 +224,12 @@ function tfa_verify(PDO $pdo, int $userId, string $input): array
         $lastStep = $row['totp_last_step'] !== null ? (int) $row['totp_last_step'] : null;
 
         $matchedStep = totp_match_step($secret, $trimmed, time(), $lastStep);
+        if ($matchedStep === null && totp_is_used($secret, $trimmed, time(), $lastStep)) {
+            /* The right code, typed a second time (e.g. signed in, then straight into
+               the profile): refused, but not a wrong guess — no attempt is spent. */
+            $pdo->rollBack();
+            return ['ok' => false, 'error' => 'used'];
+        }
         $usedAs = null;
 
         if ($matchedStep !== null) {
@@ -434,7 +451,12 @@ function tfa_login_step(PDO $pdo, string $side, string $self, callable $finish):
         if ($matched === null) {
             return ['', tfa_mismatch_message((string) $pending['email'])];
         }
-        $codes = tfa_enable($pdo, $uid, $secret, $matched);
+        $codes = tfa_enable($pdo, $uid, $secret, $matched, null);   // sign-in set-up: only while 2FA is still off
+        if ($codes === null) {
+            tfa_setup_clear();
+            tfa_pending_clear();
+            return ['Two-step verification was just set up for this account somewhere else. Sign in again and use a code from that phone.', ''];
+        }
         tfa_setup_clear();
         /* 'at' restarts: saving the codes gets its own TFA_PENDING_TTL, rather than
            whatever was left after installing the app and scanning. */
@@ -483,6 +505,8 @@ function tfa_error_message(array $r): string
     switch ($r['error'] ?? '') {
         case 'empty':
             return 'Enter the 6-digit code from your authenticator app.';
+        case 'used':
+            return 'That code was already used. Wait for the next code in your app, then try again.';
         case 'locked':
             return 'Too many wrong codes. Try again in ' . tfa_wait_text((int) $r['seconds']) . '.';
         case 'wrong':

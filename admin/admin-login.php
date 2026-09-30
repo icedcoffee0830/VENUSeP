@@ -25,8 +25,11 @@ $loginError = '';
 if (isset($_GET['suspended'])) {
     $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
 }
-/* Sent here by staff_session_heal(): the session predates two-step verification. */
-if (isset($_GET['tfa']) && $_GET['tfa'] === 'required') {
+/* Sent here because the session had not passed two-step verification: by
+   staff_session_heal() (?tfa=required) or by venusep_session_start(), which
+   leaves this one-time notice in the session it just emptied. */
+if ((isset($_GET['tfa']) && $_GET['tfa'] === 'required') || !empty($_SESSION['tfa_required_notice'])) {
+    unset($_SESSION['tfa_required_notice']);
     $loginError = 'Admin accounts now need two-step verification. Sign in to set it up. It takes about a minute.';
 }
 
@@ -39,7 +42,7 @@ if ($pdo === null) {
 /* The last step of every staff sign-in, and the only place a staff session is
    created: after the code, never before it. Re-reads the account because the
    password step may have been minutes ago and it could have been suspended since. */
-function al_finish_login(PDO $pdo, int $userId, string $department): void
+function al_finish_login(PDO $pdo, int $userId, string $department, bool $passedCode): void
 {
     $stmt = $pdo->prepare('SELECT id, email, username, account_type, is_active FROM users WHERE id = :id LIMIT 1');
     $stmt->execute(['id' => $userId]);
@@ -62,6 +65,10 @@ function al_finish_login(PDO $pdo, int $userId, string $department): void
     $_SESSION['username'] = $user['username'];
     $_SESSION['account_type'] = $user['account_type'];
     $_SESSION['department'] = $department;
+    /* Only a sign-in that went through the code sets this; venusep_session_start()
+       ends any admin session without it. Never set on the password-only path, so
+       adding staff to 2FA later cannot grandfather in their older sessions. */
+    $_SESSION['tfa_passed'] = $passedCode;
 
     header('Location: Admin_Dashboard.php');
     exit;
@@ -73,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
     if ($pdo !== null) {   // otherwise $loginError already says the database is down
         [$stepError, $tfaError] = tfa_login_step($pdo, 'admin', 'admin-login.php',
             function (array $pending) use ($pdo) {
-                al_finish_login($pdo, (int)$pending['user_id'], (string)($pending['department'] ?? ''));
+                al_finish_login($pdo, (int)$pending['user_id'], (string)($pending['department'] ?? ''), true);
             });
         $loginError = $stepError !== '' ? $stepError : $loginError;
     }
@@ -130,7 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
                 tfa_after_password($pdo, (int)$user['id'], 'admin', $user['account_type'], $user['email'],
                     ['department' => $selectedDepartment], 'admin-login.php',
                     function () use ($pdo, $user, $selectedDepartment) {
-                        al_finish_login($pdo, (int)$user['id'], $selectedDepartment);
+                        al_finish_login($pdo, (int)$user['id'], $selectedDepartment, false);   // no code on this path
                     });
             }
         }

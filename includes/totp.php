@@ -90,6 +90,23 @@ function totp_match_step(string $secretB32, string $code, int $now, ?int $lastSt
     return null;
 }
 
+/* True when $code is a genuine code whose step was already used (at or before
+   $lastStep): the person typed a code twice, which is not the same as a wrong one. */
+function totp_is_used(string $secretB32, string $code, int $now, ?int $lastStep): bool
+{
+    $code = (string) preg_replace('/\s+/', '', $code);
+    if ($lastStep === null || !preg_match('/^\d{' . TOTP_DIGITS . '}$/', $code)) {
+        return false;
+    }
+    $current = intdiv($now, TOTP_PERIOD);
+    foreach ([$current - 1, $current, $current + 1] as $step) {
+        if ($step <= $lastStep && hash_equals(totp_code($secretB32, $step), $code)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* What the QR code holds (Google's "Key Uri Format"). */
 function totp_uri(string $secretB32, string $account): string
 {

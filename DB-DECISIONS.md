@@ -238,6 +238,51 @@ discount, hostel, gcash, cash, after) and `faqs`.
   schema with the client in UTF-8 (the file's `SET NAMES utf8mb4` handles
   a whole-file import; a piecemeal paste from a Latin-1 terminal does not).
 
+## 20. Two-step verification (TOTP) — decided 2026-09-28
+- **What:** after the password, a 6-digit code from an authenticator app — Google
+  Authenticator (Play Store / App Store) or any TOTP app (RFC 6238: SHA-1, 30 s,
+  6 digits). No Google account, API key or network call is involved.
+- **Admin: required.** An account without it is sent to set-up on its next sign-in.
+  An admin session only counts once it has passed the code (`tfa_passed`, set by the
+  sign-in page); one without it is ended on its next request of any kind, pages and
+  JSON endpoints alike (`venusep_session_start()`).
+- **Staff: not included yet** (decided 2026-09-30). There is no staff side yet; it will
+  be a copy of the admin side with some features restricted. Until then staff sign in
+  with the password alone, see no 2FA screens or settings, and cannot turn it on.
+  Bringing them in later is `tfa_required_for()` in `includes/two-factor.php`.
+- **Customers: optional**, turned on and off from their profile. Turning it **on**
+  needs the account password (a session alone must never add a credential: with no
+  reset path, a stranger's phone on someone's account would lock them out for good);
+  turning it off, moving to a new phone or making new recovery codes needs a current
+  code or a recovery code.
+- **Recovery codes only.** Ten single-use codes, shown once at set-up, regenerable
+  while signed in. **No in-app reset — not even by an admin.** Keep at least two
+  admin accounts, so one lost phone never locks the admin side.
+- **Lockout on the account:** 5 wrong codes = 10s → 30s → 1m → 5m → 15m → 1h → 4h (max),
+  in its own `users.totp_*` columns so a sign-in lock never blocks an admin action.
+  Recovery-code attempts count too. The first five steps are the #16 ladder; the 1h and
+  4h steps were added 2026-09-30: a real person never reaches them (any right code resets
+  the ladder), while someone who already has the password drops from ~480 guesses a day
+  to ~30. Locks always end on their own, so no reset is ever needed.
+- **A code works once** (`users.totp_last_step`); one step of clock drift either way is accepted.
+- **Secret stored as plain text** on purpose: encrypting it would put every account one
+  lost key away from permanent lockout, with no reset path to recover.
+- **Counter identity check unchanged** (password only): the customer is present and
+  staff check a physical ID.
+- **Demo seed:** `sp_seed_cast()` turns 2FA off for the demo customers on every reset.
+  The admin keeps theirs (changed 2026-09-30): it is the presenter's own account, and
+  resetting it would sign them out mid-demo.
+- **A setup never overwrites another:** confirming a phone only succeeds if the
+  account's 2FA is unchanged since that setup began (checked in the UPDATE), so a
+  second browser can never replace a phone that was just registered.
+
+**Runbook — someone lost their phone AND every recovery code** (needs database access):
+
+    SET @u = (SELECT id FROM users WHERE email = 'person@example.com');
+    CALL sp_reset_2fa(@u);
+
+An admin sets it up again at their next sign-in; for a customer it is simply off.
+
 ---
 
 ## Open items (not yet decided)

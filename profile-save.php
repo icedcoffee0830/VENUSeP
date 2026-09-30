@@ -2,10 +2,12 @@
 /* =====================================================================
    PROFILE SAVE — a person editing their OWN account. Both portals.
 
-   POST  csrf, action=details|password|photo
+   POST  csrf, action=details|password|photo|tfa_begin|tfa_confirm|tfa_codes|tfa_disable
      details:  full_name, email, contact_number, address, university_id_no
      password: current_password, new_password, confirm_new_password
      photo:    FILES[photo]        (or remove=1 to clear it)
+     tfa_*:    password (tfa_begin while off) or code (every other change) —
+               two-step verification, DB-DECISIONS #20
    Replies with JSON.
 
    ALWAYS THE SESSION'S OWN ACCOUNT. There is no id parameter, anywhere.
@@ -31,6 +33,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/room-photos.php';   /* rp_validate_image() — same image rules as room photos */
 require_once __DIR__ . '/includes/bookings.php';      /* cb_normalise_mobile() */
+require_once __DIR__ . '/includes/two-factor.php';    /* tfa_*() — two-step verification */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -222,6 +225,95 @@ if ($action === 'photo') {
         ->execute([':p' => $path, ':u' => $userId]);
 
     pf_reply(200, ['ok' => true, 'photo' => $path, 'message' => 'Photo updated.']);
+}
+
+/* ---------------------------------------------------------------------
+   TWO-STEP VERIFICATION (DB-DECISIONS #20)
+
+   PROVING IT IS YOU, before anything changes:
+     turning it ON   -> the account password. Same principle as the password
+                        change above: a session alone must never be enough to
+                        add a credential, and with no reset path a stranger's
+                        phone on someone's account would lock them out for good.
+     anything else   -> a current code or a recovery code, through tfa_verify()
+                        (the lockout ladder).
+   The new key waits in the session (tfa_setup_secret(): this account only,
+   the same key again on a second "Turn on" so a scanned entry keeps working)
+   and only reaches the database once a code from it is confirmed.
+   --------------------------------------------------------------------- */
+if (in_array($action, ['tfa_begin', 'tfa_confirm', 'tfa_codes', 'tfa_disable'], true)) {
+    $code = (string) ($_POST['code'] ?? '');
+    try {
+        $tfa = tfa_status($pdo, $userId);
+
+        /* Checked before any code is tried, so a refused request spends no attempt. */
+        if (!tfa_available_for((string) $type)) {   // staff: not part of 2FA until the staff side exists
+            pf_reply(403, ['ok' => false, 'message' => 'Two-step verification is not available for this account.']);
+        }
+        if ($action === 'tfa_disable' && tfa_required_for((string) $type)) {
+            pf_reply(403, ['ok' => false, 'message' => 'Admin accounts must keep two-step verification on.']);
+        }
+        if (($action === 'tfa_codes' || $action === 'tfa_disable') && !$tfa['enabled']) {
+            pf_reply(409, ['ok' => false, 'message' => 'Two-step verification is off for this account.']);
+        }
+
+        if ($action === 'tfa_begin' && !$tfa['enabled']) {
+            $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = :u');
+            $stmt->execute([':u' => $userId]);
+            $hash = $stmt->fetchColumn();
+            if ($hash === false || !password_verify((string) ($_POST['password'] ?? ''), $hash)) {
+                pf_reply(401, ['ok' => false, 'field' => 'password', 'message' => 'That is not your current password.']);
+            }
+        } elseif ($action !== 'tfa_confirm') {
+            $check = tfa_verify($pdo, $userId, $code);
+            if (!$check['ok']) {
+                pf_reply($check['error'] === 'locked' ? 423 : 401,
+                    ['ok' => false, 'field' => 'code', 'message' => tfa_error_message($check),
+                     'seconds' => (int) ($check['seconds'] ?? 0)]);   // the panel counts a lock down
+            }
+        }
+
+        $stmt = $pdo->prepare('SELECT email FROM users WHERE id = :u');
+        $stmt->execute([':u' => $userId]);
+        $email = (string) $stmt->fetchColumn();
+
+        if ($action === 'tfa_begin') {
+            $secret = tfa_setup_secret($userId, $tfa['enabled_at']);
+            pf_reply(200, ['ok' => true, 'uri' => totp_uri($secret, $email), 'secret' => $secret]);
+        }
+
+        if ($action === 'tfa_confirm') {
+            $secret = tfa_setup_current($userId, $tfa['enabled_at']);
+            if ($secret === null) {
+                pf_reply(400, ['ok' => false, 'message' => 'That set-up has expired. Start it again.']);
+            }
+            $matched = totp_match_step($secret, $code, time(), null);
+            if ($matched === null) {
+                pf_reply(400, ['ok' => false, 'field' => 'code', 'message' => tfa_mismatch_message($email)]);
+            }
+            $codes = tfa_enable($pdo, $userId, $secret, $matched, $tfa['enabled_at']);
+            if ($codes === null) {   // 2FA changed in another window since this set-up began
+                tfa_setup_clear();
+                pf_reply(409, ['ok' => false, 'message' => 'Two-step verification was just changed somewhere else. Reload the page and start again.']);
+            }
+            tfa_setup_clear();
+            pf_reply(200, ['ok' => true, 'codes' => $codes, 'message' => $tfa['enabled']
+                ? 'Your new phone is set up. The old phone and the old recovery codes no longer work.'
+                : 'Two-step verification is on.']);
+        }
+
+        if ($action === 'tfa_codes') {
+            $codes = tfa_regenerate_codes($pdo, $userId);
+            pf_reply(200, ['ok' => true, 'codes' => $codes, 'message' => 'New recovery codes made. The old ones no longer work.']);
+        }
+
+        tfa_reset($pdo, $userId);   // tfa_disable: customers only, checked above
+        tfa_setup_clear();
+        pf_reply(200, ['ok' => true, 'message' => 'Two-step verification is off.']);
+    } catch (PDOException $e) {
+        error_log('VENUSeP profile-save (2fa): ' . $e->getMessage());
+        pf_reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
+    }
 }
 
 pf_reply(400, ['ok' => false, 'message' => 'Unknown action.']);

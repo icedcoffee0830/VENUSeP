@@ -4,6 +4,8 @@ declare(strict_types=1);
 /* The connection + credentials live in ONE place: includes/db.php. */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/two-factor.php';
+require_once __DIR__ . '/../includes/two-factor-views.php';
 
 venusep_session_start();
 
@@ -23,6 +25,13 @@ $loginError = '';
 if (isset($_GET['suspended'])) {
     $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
 }
+/* Sent here because the session had not passed two-step verification: by
+   staff_session_heal() (?tfa=required) or by venusep_session_start(), which
+   leaves this one-time notice in the session it just emptied. */
+if ((isset($_GET['tfa']) && $_GET['tfa'] === 'required') || !empty($_SESSION['tfa_required_notice'])) {
+    unset($_SESSION['tfa_required_notice']);
+    $loginError = 'Admin accounts now need two-step verification. Sign in to set it up. It takes about a minute.';
+}
 
 $pdo = venusep_db();
 if ($pdo === null) {
@@ -30,7 +39,52 @@ if ($pdo === null) {
     $loginError = 'Unable to connect to the database. Please contact the system administrator.';
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+/* The last step of every staff sign-in, and the only place a staff session is
+   created: after the code, never before it. Re-reads the account because the
+   password step may have been minutes ago and it could have been suspended since. */
+function al_finish_login(PDO $pdo, int $userId, string $department, bool $passedCode): void
+{
+    $stmt = $pdo->prepare('SELECT id, email, username, account_type, is_active FROM users WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => $userId]);
+    $user = $stmt->fetch();
+    if (!$user || !(bool)$user['is_active'] || !in_array($user['account_type'], ['admin', 'staff'], true)) {
+        tfa_pending_clear();
+        header('Location: admin-login.php');
+        exit;
+    }
+
+    // Record the successful login using the schema's last_login_at.
+    $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id')->execute(['id' => $userId]);
+
+    // Start from an empty session so nothing from a previous login
+    // (e.g. a customer on the same browser) survives into this one.
+    session_regenerate_id(true);
+    $_SESSION = [];
+    $_SESSION['user_id'] = (int)$user['id'];
+    $_SESSION['user_email'] = $user['email'];
+    $_SESSION['username'] = $user['username'];
+    $_SESSION['account_type'] = $user['account_type'];
+    $_SESSION['department'] = $department;
+    /* Only a sign-in that went through the code sets this; venusep_session_start()
+       ends any admin session without it. Never set on the password-only path, so
+       adding staff to 2FA later cannot grandfather in their older sessions. */
+    $_SESSION['tfa_passed'] = $passedCode;
+
+    header('Location: Admin_Dashboard.php');
+    exit;
+}
+
+/* A two-step sign-in step (DB-DECISIONS #20); the flow itself is tfa_login_step(). */
+$tfaError = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
+    if ($pdo !== null) {   // otherwise $loginError already says the database is down
+        [$stepError, $tfaError] = tfa_login_step($pdo, 'admin', 'admin-login.php',
+            function (array $pending) use ($pdo) {
+                al_finish_login($pdo, (int)$pending['user_id'], (string)($pending['department'] ?? ''), true);
+            });
+        $loginError = $stepError !== '' ? $stepError : $loginError;
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim((string)($_POST['email'] ?? ''));
     $password = (string)($_POST['password'] ?? '');
     $selectedDepartment = (string)($_POST['department'] ?? '');
@@ -78,30 +132,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
 
-                // Record the successful login using the schema's last_login_at.
-                $updateLogin = $pdo->prepare(
-                    'UPDATE users SET last_login_at = NOW() WHERE id = :id'
-                );
-                $updateLogin->execute(['id' => $user['id']]);
-
-                // Secure PHP session instead of browser sessionStorage.
-                // Start from an empty session so nothing from a previous login
-                // (e.g. a customer on the same browser) survives into this one.
-                session_regenerate_id(true);
-                $_SESSION = [];
-                $_SESSION['user_id'] = (int)$user['id'];
-                $_SESSION['user_email'] = $user['email'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['account_type'] = $user['account_type'];
-                $_SESSION['department'] = $selectedDepartment;
-
-                // Redirect only after server-side authentication succeeds.
-                header('Location: Admin_Dashboard.php');
-                exit;
+                /* The password alone never signs an admin in (DB-DECISIONS #20): next is
+                   the code, or setting up a phone if this account has none yet. */
+                tfa_after_password($pdo, (int)$user['id'], 'admin', $user['account_type'], $user['email'],
+                    ['department' => $selectedDepartment], 'admin-login.php',
+                    function () use ($pdo, $user, $selectedDepartment) {
+                        al_finish_login($pdo, (int)$user['id'], $selectedDepartment, false);   // no code on this path
+                    });
             }
         }
     }
 }
+
+/* Password correct, code pending: this state never sets user_id, so
+   admin_require_login() still treats the visitor as logged out. */
+$pending = $pdo !== null ? tfa_pending('admin') : null;
+$tfaView = $pending === null ? 'password' : (string)$pending['mode'];   // password | verify | enroll | codes
+if ($tfaView !== 'password') {
+    header('Cache-Control: no-store');   // the secret and the recovery codes must never be cached
+}
+$tfaCsrf = $tfaView !== 'password' ? csrf_token() : '';
+$tfaLock = $tfaView === 'verify' ? tfa_lock_seconds($pdo, (int)$pending['user_id']) : 0;   // resume a running lock's countdown
+$tfaSecret = $tfaView === 'enroll' ? tfa_setup_secret((int)$pending['user_id']) : '';     // the same key on every visit until confirmed
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -128,6 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/two-factor.css" />
     <style>
       /* ==================================================================
          AUTH UI — split layout (customer-login + customer-register share it)
@@ -251,14 +304,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <svg class="auth-hero-arcs" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g transform="translate(560 300)"><circle r="120"/><circle r="200"/><circle r="280"/><circle r="360"/><circle r="440"/><circle r="520"/></g></svg>
         <img class="auth-hero-logo" src="../logo/Logo Header 3.png" alt="" />
         <div class="auth-hero-copy">
+          <?php if ($tfaView === 'password'): ?>
           <h2 class="auth-hero-title">Welcome to <br />VENUSeP! <span class="auth-wave">&#128075;</span></h2>
           <p class="auth-hero-sub">The staff side: review booking requests, confirm payments, and keep the venues and hostel beds up to date.</p>
+          <?php else: tfa_view_hero($tfaView); endif; ?>
         </div>
         <p class="auth-hero-foot">&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</p>
       </aside>
-      <section class="auth-panel" aria-labelledby="adminLoginTitle">
+      <section class="auth-panel" aria-labelledby="<?php echo $tfaView === 'password' ? 'adminLoginTitle' : 'tfaTitle'; ?>">
         <div class="auth-card">
+          <?php if ($tfaView === 'password' || $tfaView === 'verify'): ?>
           <a class="auth-brand" href="admin-login.php" title="VENUSeP staff"><img src="../logo/Logo Header 3.png" alt="VENUSeP" /></a>
+          <?php endif; ?>
+          <?php if ($tfaView === 'verify'): tfa_view_code($tfaCsrf, (string)$pending['email'], $tfaError, $tfaLock); ?>
+          <?php elseif ($tfaView === 'enroll'): tfa_view_enroll($tfaCsrf, (string)$pending['email'], $tfaSecret, $tfaError); ?>
+          <?php elseif ($tfaView === 'codes'): tfa_view_codes($tfaCsrf, (array)$pending['codes'], (string)$pending['email'], $tfaError); ?>
+          <?php else: ?>
           <div class="auth-heading">
             <h1 class="auth-title" id="adminLoginTitle">Staff sign in</h1>
             <p class="auth-subtitle">Sign in to manage venue bookings.</p>
@@ -311,9 +372,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <span class="auth-alt-text">Don&rsquo;t have an admin account yet?</span>
             <a class="btn-auth btn-auth-outline" href="admin-register.php">Register</a>
           </div>
+          <?php endif; ?>
         </div>
       </section>
     </main>
+    <?php if ($tfaView !== 'password'): ?>
+    <script src="../assets/js/vendor/qrcode-generator-1.4.4.js"></script>
+    <script src="../assets/js/two-factor.js"></script>
+    <?php endif; ?>
 
     <script>
       document.addEventListener('DOMContentLoaded', function () {

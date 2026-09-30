@@ -3,6 +3,7 @@
 --
 --      mysql -u root venusep < venusep_demo_seed.sql     (installs the procs)
 --      CALL sp_seed_demo();                              (builds the showcase)
+--  Needs venusep_migration_02.sql applied first (sp_reset_2fa).
 --
 --  ⚠️ sp_seed_demo() is a RESET. It DELETES every booking, payment, receipt,
 --     refund and document and rebuilds them. It does NOT touch the catalog
@@ -35,6 +36,8 @@
 --    areyes@usep.edu.ph     Ana Reyes             USeP, hostel guest
 --    (no login)             Carmen Uy             walk-in
 --    staff@gmail.com        Marites Robles        staff (staff123, no UI yet)
+--  Each reset turns two-step verification OFF for the demo customers (sp_reset_2fa);
+--  the admin keeps theirs, so a presenter is never signed out mid-demo.
 -- ============================================================================
 
 DROP PROCEDURE IF EXISTS sp_seed_demo;
@@ -121,6 +124,19 @@ BEGIN
     ON DUPLICATE KEY UPDATE
       username = VALUES(username), password_hash = VALUES(password_hash),
       account_type = VALUES(account_type), is_active = 1;
+
+    -- Two-step verification goes back to OFF for the demo customers (DB-DECISIONS #20):
+    -- those logins are shared by everyone who demos, so a reset hands back accounts
+    -- anyone can sign in to. The ADMIN keeps theirs: it is the presenter's own
+    -- account, and resetting it would end their session mid-demo and make them set
+    -- up the phone again in front of the audience. (staff@gmail.com is cleared only
+    -- so no old test key lingers; staff are not part of 2FA yet.)
+    SET @u = (SELECT id FROM users WHERE email = 'customer@gmail.com');     CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'jmdelacruz@usep.edu.ph'); CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'msantos@usep.edu.ph');    CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'rafael.lim@gmail.com');   CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'areyes@usep.edu.ph');     CALL sp_reset_2fa(@u);
+    SET @u = (SELECT id FROM users WHERE email = 'staff@gmail.com');        CALL sp_reset_2fa(@u);
 
     INSERT INTO customers (user_id, full_name, phone, address, university_id_no) VALUES
       ((SELECT id FROM users WHERE email='jmdelacruz@usep.edu.ph'),'Juan Miguel Dela Cruz','09175550123','Obrero, Davao City','2023-00412'),

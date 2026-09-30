@@ -46,6 +46,16 @@ $customerProfile = [
 ];
 $cpCsrf = csrf_token();
 function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
+
+/* Two-step verification (DB-DECISIONS #20): optional for customers.
+   null = could not be read; the section then says so instead of offering controls. */
+require_once __DIR__ . '/../includes/two-factor.php';
+require_once __DIR__ . '/../includes/two-factor-views.php';
+try {
+    $cpTfa = tfa_status(venusep_db_or_fail(), (int) $_SESSION['user_id']);
+} catch (PDOException $e) {
+    $cpTfa = null;
+}
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -64,6 +74,7 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
     <title>VENUSeP | My Profile</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/two-factor.css" />
 
     <!-- [0] SHELL CSS — shared layout (right of sidebar, below header) -->
     <style>
@@ -274,6 +285,47 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
                       <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-shield-check" aria-hidden="true"></i>Update Password</button></div>
                       <small class="profile-success" id="passwordSuccessMessage" aria-live="polite"></small>
                     </form>
+                  </section>
+
+                  <!-- TWO-STEP VERIFICATION (DB-DECISIONS #20). Optional for customers. Driven by
+                       assets/js/two-factor.js against profile-save.php; every step is re-checked there. -->
+                  <?php $cpTfaOn = $cpTfa !== null && $cpTfa['enabled']; $cpTfaLow = $cpTfaOn && $cpTfa['codes_left'] <= TFA_CODES_LOW; ?>
+                  <section class="profile-section tfa-panel" aria-labelledby="twoStepTitle" data-tfa-panel data-endpoint="../profile-save.php" data-csrf="<?php echo cp_e($cpCsrf); ?>">
+                    <div class="profile-section-header">
+                      <div class="tfa-head">
+                        <h2 id="twoStepTitle">Two-step verification</h2>
+                        <?php if ($cpTfa !== null): ?>
+                        <span class="tfa-chip <?php echo $cpTfaOn ? 'tfa-chip-on' : 'tfa-chip-off'; ?>"><?php echo $cpTfaOn ? '<i class="bi bi-check2" aria-hidden="true"></i>On' : 'Off'; ?></span>
+                        <?php endif; ?>
+                      </div>
+                      <p><?php echo $cpTfaOn
+                          ? 'You enter a code from your phone each time you sign in.'
+                          : 'Ask for a 6-digit code from your phone after your password, so a stolen password alone cannot open your account.'; ?></p>
+                    </div>
+                    <?php if ($cpTfa === null): ?>
+                    <p class="tfa-message is-bad">Two-step verification settings cannot be loaded right now. Reload the page to try again.</p>
+                    <?php else: ?>
+                    <?php if ($cpTfaOn): ?>
+                    <ul class="tfa-facts">
+                      <li><i class="bi bi-calendar-check" aria-hidden="true"></i>Turned on <?php echo cp_e(date('j M Y', strtotime((string) $cpTfa['enabled_at']))); ?></li>
+                      <li><i class="bi bi-life-preserver" aria-hidden="true"></i><span><strong><?php echo (int) $cpTfa['codes_left']; ?></strong> of <?php echo TFA_RECOVERY_CODE_COUNT; ?> recovery codes left</span></li>
+                    </ul>
+                    <?php if ($cpTfaLow): ?>
+                    <p class="tfa-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span><?php echo (int) $cpTfa['codes_left'] === 1 ? 'Only 1 recovery code left.' : 'Only ' . (int) $cpTfa['codes_left'] . ' recovery codes left.'; ?> Make new ones now, so losing your phone does not lock you out.</span></p>
+                    <?php endif; ?>
+                    <?php endif; ?>
+                    <div class="profile-actions"<?php echo $cpTfaOn ? '' : ' style="margin-top:0"'; ?> data-tfa-actions>
+                      <?php if ($cpTfaOn): ?>
+                      <button class="btn-profile" type="button" data-tfa-action="move" data-tfa-ask="Current code or recovery code" data-tfa-go="Continue"><i class="bi bi-phone" aria-hidden="true"></i>Move to a new phone</button>
+                      <button class="btn-profile<?php echo $cpTfaLow ? ' btn-profile-primary' : ''; ?>" type="button" data-tfa-action="codes" data-tfa-ask="Current code or recovery code" data-tfa-go="Make new codes"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>New recovery codes</button>
+                      <button class="btn-profile btn-profile-danger" type="button" data-tfa-action="disable" data-tfa-ask="Current code or recovery code" data-tfa-go="Turn off">Turn off</button>
+                      <?php else: ?>
+                      <button class="btn-profile btn-profile-primary" type="button" data-tfa-action="begin" data-tfa-ask="Your password" data-tfa-go="Continue"><i class="bi bi-shield-lock" aria-hidden="true"></i>Turn on</button>
+                      <?php endif; ?>
+                    </div>
+
+                    <?php tfa_view_panel_steps($cpTfaOn, $customerProfile['email'], ['btn' => 'btn-profile', 'primary' => 'btn-profile btn-profile-primary', 'input' => 'form-control tfa-code-input']); ?>
+                    <?php endif; ?>
                   </section>
 
                   <section class="profile-section" aria-labelledby="preferencesTitle">
@@ -493,5 +545,7 @@ function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
         }
       });
     </script>
+    <script src="../assets/js/vendor/qrcode-generator-1.4.4.js"></script>
+    <script src="../assets/js/two-factor.js"></script>
   </body>
 </html>

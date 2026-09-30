@@ -242,8 +242,10 @@ discount, hostel, gcash, cash, after) and `faqs`.
 - **What:** after the password, a 6-digit code from an authenticator app — Google
   Authenticator (Play Store / App Store) or any TOTP app (RFC 6238: SHA-1, 30 s,
   6 digits). No Google account, API key or network call is involved.
-- **Admin: required.** An account without it is sent to set-up on its next sign-in;
-  a session that predates it is ended on its next page load.
+- **Admin: required.** An account without it is sent to set-up on its next sign-in.
+  An admin session only counts once it has passed the code (`tfa_passed`, set by the
+  sign-in page); one without it is ended on its next request of any kind, pages and
+  JSON endpoints alike (`venusep_session_start()`).
 - **Staff: not included yet** (decided 2026-09-30). There is no staff side yet; it will
   be a copy of the admin side with some features restricted. Until then staff sign in
   with the password alone, see no 2FA screens or settings, and cannot turn it on.
@@ -267,7 +269,12 @@ discount, hostel, gcash, cash, after) and `faqs`.
   lost key away from permanent lockout, with no reset path to recover.
 - **Counter identity check unchanged** (password only): the customer is present and
   staff check a physical ID.
-- **Demo seed:** `sp_seed_cast()` turns 2FA off for the whole cast on every reset.
+- **Demo seed:** `sp_seed_cast()` turns 2FA off for the demo customers on every reset.
+  The admin keeps theirs (changed 2026-09-30): it is the presenter's own account, and
+  resetting it would sign them out mid-demo.
+- **A setup never overwrites another:** confirming a phone only succeeds if the
+  account's 2FA is unchanged since that setup began (checked in the UPDATE), so a
+  second browser can never replace a phone that was just registered.
 
 **Runbook — someone lost their phone AND every recovery code** (needs database access):
 

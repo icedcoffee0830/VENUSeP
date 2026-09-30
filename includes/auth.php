@@ -18,6 +18,8 @@
    and re-checks the password — it never trusts the session alone.
    ===================================================================== */
 
+require_once __DIR__ . '/two-factor.php';   /* tfa_required_for(), used below */
+
 function venusep_session_start()
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -27,6 +29,18 @@ function venusep_session_start()
             'samesite' => 'Lax',    // not sent on cross-site POSTs
         ]);
         session_start();
+
+        /* An account that must use two-step verification (DB-DECISIONS #20) only
+           counts as signed in if the session passed the code — al_finish_login()
+           marks it. Checked here, on EVERY request, so a session from before 2FA
+           existed is ended on pages, JSON endpoints and the counter pages alike,
+           not just on the next page load. admin-login.php shows why. */
+        if (isset($_SESSION['user_id'], $_SESSION['account_type'])
+            && empty($_SESSION['tfa_passed'])
+            && tfa_required_for((string) $_SESSION['account_type'])) {
+            session_regenerate_id(true);
+            $_SESSION = ['tfa_required_notice' => true];
+        }
     }
 }
 
@@ -88,7 +102,7 @@ function staff_session_heal()
         return;                       // offline: do not log anyone out over a hiccup
     }
     try {
-        $stmt = $pdo->prepare('SELECT account_type, is_active, totp_secret IS NOT NULL AS tfa_on FROM users WHERE id = :u');
+        $stmt = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :u');
         $stmt->execute([':u' => (int) $_SESSION['user_id']]);
         $row = $stmt->fetch();
         if (!$row || !(bool) $row['is_active']) {
@@ -96,18 +110,26 @@ function staff_session_heal()
             header('Location: ' . admin_base_url() . '/admin-login.php?suspended=1');
             exit;
         }
-        /* Two-step verification is required for admins (DB-DECISIONS #20). An admin
-           session from before it was set up ends here, and the sign-in page walks
-           them through setting it up. Who is required lives in tfa_required_for(). */
-        require_once __DIR__ . '/two-factor.php';
-        if (tfa_required_for((string) $row['account_type']) && !(bool) $row['tfa_on']) {
+        $_SESSION['account_type'] = $row['account_type'];
+    } catch (PDOException $e) {
+        // leave the session alone; the page's own error handling takes over
+    }
+
+    /* Two-step verification switched off in the database while signed in
+       (sp_reset_2fa after a lost phone) ends the session too; the sign-in page
+       then walks them through setting it up again. Its own query, so a database
+       without migration 02 can never silently disable the suspension check above. */
+    if (tfa_required_for((string) $_SESSION['account_type'])) {
+        try {
+            $on = tfa_status($pdo, (int) $_SESSION['user_id'])['enabled'];
+        } catch (PDOException $e) {
+            $on = true;   // cannot tell (e.g. migration 02 missing): leave it to the sign-in page
+        }
+        if (!$on) {
             venusep_logout();
             header('Location: ' . admin_base_url() . '/admin-login.php?tfa=required');
             exit;
         }
-        $_SESSION['account_type'] = $row['account_type'];
-    } catch (PDOException $e) {
-        // leave the session alone; the page's own error handling takes over
     }
 }
 

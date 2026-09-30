@@ -36,7 +36,8 @@
 --    areyes@usep.edu.ph     Ana Reyes             USeP, hostel guest
 --    (no login)             Carmen Uy             walk-in
 --    staff@gmail.com        Marites Robles        staff (staff123, no UI yet)
---  Every cast account has two-step verification turned OFF by each reset (sp_reset_2fa).
+--  Each reset turns two-step verification OFF for the demo customers (sp_reset_2fa);
+--  the admin keeps theirs, so a presenter is never signed out mid-demo.
 -- ============================================================================
 
 DROP PROCEDURE IF EXISTS sp_seed_demo;
@@ -124,11 +125,12 @@ BEGIN
       username = VALUES(username), password_hash = VALUES(password_hash),
       account_type = VALUES(account_type), is_active = 1;
 
-    -- Two-step verification goes back to OFF for the whole cast (DB-DECISIONS #20).
-    -- These logins are shared by everyone who demos; a reset has to hand back
-    -- accounts anyone can sign in to. The first admin sign-in afterwards sets it
-    -- up again, on the presenter's own phone.
-    SET @u = (SELECT id FROM users WHERE email = 'admin@gmail.com');        CALL sp_reset_2fa(@u);
+    -- Two-step verification goes back to OFF for the demo customers (DB-DECISIONS #20):
+    -- those logins are shared by everyone who demos, so a reset hands back accounts
+    -- anyone can sign in to. The ADMIN keeps theirs: it is the presenter's own
+    -- account, and resetting it would end their session mid-demo and make them set
+    -- up the phone again in front of the audience. (staff@gmail.com is cleared only
+    -- so no old test key lingers; staff are not part of 2FA yet.)
     SET @u = (SELECT id FROM users WHERE email = 'customer@gmail.com');     CALL sp_reset_2fa(@u);
     SET @u = (SELECT id FROM users WHERE email = 'jmdelacruz@usep.edu.ph'); CALL sp_reset_2fa(@u);
     SET @u = (SELECT id FROM users WHERE email = 'msantos@usep.edu.ph');    CALL sp_reset_2fa(@u);

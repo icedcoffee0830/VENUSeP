@@ -567,8 +567,10 @@ $vpTfaLow = $vpTfa !== null && $vpTfa['enabled'] && $vpTfa['codes_left'] <= TFA_
             </div>
             <?php endif; ?>
           </div>
-          <?php if ($vpTfa === null || !$vpTfa['enabled']): ?>
+          <?php if ($vpTfa === null): ?>
           <p class="dm-state dm-error">Two-step verification settings cannot be loaded right now. Reload the page to try again.</p>
+          <?php elseif (!$vpTfa['enabled']): ?>
+          <p class="dm-state dm-error">Two-step verification is not set up on this account yet. Sign out, then sign in again to set it up.</p>
           <?php else: ?>
           <?php if ($vpTfaLow): ?>
           <p class="tfa-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span><?php echo (int) $vpTfa['codes_left'] === 1 ? 'Only 1 recovery code left.' : 'Only ' . (int) $vpTfa['codes_left'] . ' recovery codes left.'; ?> Make new ones now. If you lose your phone with none left, nobody can reset your account from the app.</span></p>

@@ -59,7 +59,8 @@ CREATE TABLE users (
     reauth_lock_level   TINYINT UNSIGNED NOT NULL DEFAULT 0,       -- how many locks so far (picks the duration)
     reauth_locked_until DATETIME NULL,                             -- NULL or past = not locked
     -- TWO-STEP VERIFICATION (TOTP / Google Authenticator) — DB-DECISIONS #20.
-    -- totp_secret NULL = off. Required for admin + staff, optional for customers.
+    -- totp_secret NULL = off. Required for admins, optional for customers; staff
+    -- are not part of it until the staff side exists (tfa_required_for()).
     -- totp_last_step = the last 30-second step accepted, so a code works once.
     -- The totp_* lockout is the reauth ladder's twin, kept separate so a
     -- sign-in lockout never blocks the refund switch.

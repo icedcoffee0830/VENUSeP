@@ -291,7 +291,11 @@ if (in_array($action, ['tfa_begin', 'tfa_confirm', 'tfa_codes', 'tfa_disable'], 
             if ($matched === null) {
                 pf_reply(400, ['ok' => false, 'field' => 'code', 'message' => tfa_mismatch_message($email)]);
             }
-            $codes = tfa_enable($pdo, $userId, $secret, $matched);
+            $codes = tfa_enable($pdo, $userId, $secret, $matched, $tfa['enabled_at']);
+            if ($codes === null) {   // 2FA changed in another window since this set-up began
+                tfa_setup_clear();
+                pf_reply(409, ['ok' => false, 'message' => 'Two-step verification was just changed somewhere else. Reload the page and start again.']);
+            }
             tfa_setup_clear();
             pf_reply(200, ['ok' => true, 'codes' => $codes, 'message' => $tfa['enabled']
                 ? 'Your new phone is set up. The old phone and the old recovery codes no longer work.'

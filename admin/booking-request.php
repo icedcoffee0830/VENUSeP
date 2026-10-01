@@ -74,7 +74,7 @@ foreach ($brqAll as $b) {
             'filed'     => date('M j, Y', strtotime($rf['requested_at'])),
             'docs'      => $rf['refund_status'] === 'returned_for_correction'
                             ? 'Returned to the customer: ' . ($rf['notes'] ?: 'correction requested')
-                            : 'Transaction receipt + proof of payment submitted · '
+                            : 'VENUSeP System Receipt + proof of payment submitted · '
                               . ($rf['official_receipt_pending'] ? 'Official Receipt NOT yet provided' : 'Official Receipt provided'),
         ];
     }
@@ -335,6 +335,21 @@ foreach ($brqAll as $b) {
       .br-fld label { color: var(--vm-label); display: block; font-size: 0.64rem; font-weight: 600; letter-spacing: 0.05em; margin-bottom: 0.25rem; text-transform: uppercase; }
       .br-preview { background: #faf9f7; border: 1px solid var(--vm-hairline); border-radius: 8px; color: var(--vm-muted); font-size: 0.76rem; line-height: 1.5; margin-bottom: 0.65rem; padding: 0.5rem 0.62rem; }
       .br-preview b { color: var(--vm-text); font-weight: 600; }
+
+      /* RECEIPT & EMAILS card (DB-DECISIONS #22) — what was emailed, Resend, the receipt PDF */
+      .br-mail-to { color: var(--vm-muted); font-size: 0.76rem; font-weight: 500; letter-spacing: 0; text-transform: none; float: right; }
+      .br-mail { align-items: center; border-top: 1px solid var(--vm-hairline); display: grid; gap: 0.2rem 0.9rem; grid-template-columns: 1fr auto; padding: 0.75rem 0; }
+      .br-mail:first-of-type { border-top: 0; padding-top: 0; }
+      .br-mail .what { font-size: 0.86rem; font-weight: 600; }
+      .br-mail .what .soft { color: var(--vm-muted); font-weight: 400; }
+      .br-mail .meta { color: var(--vm-muted); font-size: 0.75rem; grid-column: 1; }
+      .br-mail .err { color: #b23a3a; font-size: 0.75rem; grid-column: 1 / -1; }
+      .br-mail .side { align-items: center; display: inline-flex; gap: 0.5rem; grid-column: 2; grid-row: 1 / span 2; }
+      .br-mail-note { color: #4a4440; display: flex; font-size: 0.8rem; gap: 0.55rem; line-height: 1.5; margin-bottom: 0.75rem; }
+      .br-mail-note i { color: var(--vm-muted); }
+      .br-rcpt { align-items: center; background: #faf9f7; border: 1px solid var(--vm-hairline); border-radius: 10px; display: flex; flex-wrap: wrap; font-size: 0.82rem; font-weight: 600; gap: 0.6rem; justify-content: space-between; margin-top: 0.85rem; padding: 0.6rem 0.75rem; }
+      .br-rcpt a { text-decoration: none; }
+      .br-mail-flash { color: var(--vm-muted); font-size: 0.76rem; margin-top: 0.6rem; }
     </style>
   </head>
   <body>
@@ -653,7 +668,7 @@ foreach ($brqAll as $b) {
         'Other — see the note below',
       ];
       function fixDocOptions() {
-        const docs = ['System Transaction Receipt'];
+        const docs = ['VENUSeP System Receipt'];
         if (cur.method === 'gcash') docs.push('GCash Payment Receipt');
         docs.push('Official Receipt (OR)');
         return docs;
@@ -1095,6 +1110,8 @@ foreach ($brqAll as $b) {
                 </div>
               </div>
 
+              ${mailCard()}
+
               <div class="br-card">
                 <div class="br-sec">
                   <h2 class="br-h2">Timeline</h2>
@@ -1105,6 +1122,82 @@ foreach ($brqAll as $b) {
               </div>
             </div>
           </div>`;
+      }
+
+      /* ============================================================
+         RECEIPT & EMAILS (DB-DECISIONS #22). Read from booking-emails.php
+         when the page opens and again after a payment is confirmed (that is
+         when a receipt is issued and a walk-in's receipt email goes out).
+         Walk-ins are emailed if they gave an address at the counter;
+         account holders get nothing automatic — they use My Bookings.
+         ============================================================ */
+      const MAIL_KIND = { walkin_booking: 'Booking confirmation', walkin_receipt: 'System Receipt', receipt_copy: 'System Receipt' };
+      let mail = { loaded: false, data: null, error: null, busy: 0, flash: '' };
+
+      async function loadMail() {
+        try {
+          const res = await fetch('booking-emails.php?booking=' + encodeURIComponent(cur.id), { credentials: 'same-origin' });
+          const out = await res.json();
+          mail = Object.assign(mail, { loaded: true, data: out.ok ? out : null, error: out.ok ? null : (out.message || 'Could not load the emails.'), busy: 0 });
+        } catch (e) {
+          mail = Object.assign(mail, { loaded: true, data: null, error: 'Could not reach the server.', busy: 0 });
+        }
+        render();
+      }
+
+      async function resendMail(id) {
+        if (mail.busy) return;
+        mail.busy = id; mail.flash = ''; render();
+        try {
+          const body = new URLSearchParams({ csrf: CSRF, booking: cur.id, action: 'resend', id: String(id) });
+          const res = await fetch('booking-emails.php', { method: 'POST', body: body, credentials: 'same-origin' });
+          const out = await res.json().catch(function () { return { message: 'The server sent an unreadable reply.' }; });
+          mail.flash = out.message || '';
+        } catch (e) {
+          mail.flash = 'Could not reach the server.';
+        }
+        loadMail();
+      }
+
+      function mailRow(m) {
+        const rc = mail.data.receipt;
+        const what = MAIL_KIND[m.kind] + (m.receiptId && rc ? ' ' + rc.number : '')
+          + (m.kind === 'receipt_copy' ? ' <span class="soft">· requested by the customer</span>' : (m.receiptId ? ' <span class="soft">· PDF</span>' : ''));
+        const chip = m.status === 'sent' ? '<span class="br-badge b-green">Sent</span>'
+                   : m.status === 'failed' ? '<span class="br-badge b-red">Failed</span>'
+                   : '<span class="br-badge b-amber">Sending</span>';
+        const meta = m.status === 'sent' ? 'Sent ' + esc(m.sent)
+                   : 'Tried ' + esc(m.created) + ' · ' + m.attempts + ' attempt' + (m.attempts === 1 ? '' : 's');
+        const btn = m.status === 'failed'
+          ? `<button class="br-btn br-btn-primary" type="button" onclick="resendMail(${m.id})" ${mail.busy ? 'disabled' : ''}>${mail.busy === m.id ? 'Sending…' : 'Resend'}</button>` : '';
+        const err = m.status === 'failed'
+          ? `<div class="err" title="${esc(m.error || '')}">Couldn&rsquo;t send it. The booking and payment are still recorded; only the email is waiting.</div>` : '';
+        return `<div class="br-mail"><div class="what">${what}</div><div class="meta">${meta}</div><div class="side">${chip}${btn}</div>${err}</div>`;
+      }
+
+      function mailCard() {
+        if (!mail.loaded) return '';
+        if (!mail.data) return `<div class="br-card"><div class="br-sec"><h2 class="br-h2">Receipt &amp; emails</h2><div class="br-mail-note">${esc(mail.error)}</div></div></div>`;
+        const d = mail.data;
+        const to = d.to ? 'to ' + esc(d.to) : (d.isWalkIn ? 'no email given' : '');
+        let note = '';
+        if (d.isWalkIn && !d.to) {
+          note = d.receipt ? 'The guest didn&rsquo;t give an email at the counter. Print the receipt and hand it over.'
+                           : 'The guest didn&rsquo;t give an email at the counter, so nothing is emailed.';
+        } else if (!d.isWalkIn) {
+          note = 'No automatic emails for account holders. They download the receipt or email it to themselves from My Bookings.';
+        }
+        const rcpt = d.receipt
+          ? `<div class="br-rcpt"><span>System Receipt ${esc(d.receipt.number)}</span><a class="br-btn" href="../receipt-pdf.php?booking=${encodeURIComponent(cur.id)}">Download PDF</a></div>`
+          : '';
+        return `<div class="br-card"><div class="br-sec">
+            <h2 class="br-h2">Receipt &amp; emails <span class="br-mail-to">${to}</span></h2>
+            ${note ? `<div class="br-mail-note">${note}</div>` : ''}
+            ${d.emails.map(mailRow).join('')}
+            ${(!note && !d.emails.length) ? '<div class="br-mail-note">Nothing emailed yet.</div>' : ''}
+            ${rcpt}
+            ${mail.flash ? `<div class="br-mail-flash" role="status">${mail.flash}</div>` : ''}
+          </div></div>`;
       }
 
       /* demo actions — update statuses + timeline in-page (no persistence) */
@@ -1175,6 +1268,7 @@ foreach ($brqAll as $b) {
       function confirmPay() {
         const cash = cur.method === 'cash';
         staffAction('confirm_payment', {}, function () {
+          loadMail();                      /* a receipt was just issued (and maybe emailed) */
           cur.confirmedBy = 'You · just now';
           cur.tl.push({ w: now(), x: cash ? 'Cash payment recorded' : 'Payment confirmed',
             m: cash ? 'Recorded at the cashier.' : 'Reference matched in GCash Transaction History. Reference locked.' });
@@ -1320,7 +1414,7 @@ foreach ($brqAll as $b) {
             <p class="br-subtitle">There is no refund request for <strong>${esc(qid)}</strong>. It may have been withdrawn by the customer, or already decided.</p>
           </div>`;
       }
-      if (!cur) { showMissing(); } else { render(); }
+      if (!cur) { showMissing(); } else { render(); loadMail(); }
     </script>
   </body>
 </html>

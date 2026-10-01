@@ -310,6 +310,16 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
 - **System Receipt** (`system_receipts`): one per confirmed payment, contents frozen in
   `snapshot_json`; the number `VSR-<year>-<id>` is derived, never stored. It is **not** the
   Official Receipt from the University Cashier, which stays out of scope for now.
+- **Issued for every confirmed payment**, emailed or not, inside the same transaction as
+  the confirmation (`admin/booking-action.php`): if the receipt row cannot be written the
+  confirmation rolls back, so a paid booking never lacks its receipt. A mail problem never
+  rolls anything back.
+- **One picture, three drawings:** the receipt page (`customer/receipt.php`), the emails and
+  the PDF (`receipt-pdf.php`, FPDF — no `gd` needed) all draw from `receipt_view()`, so they
+  cannot disagree. Phone, ID number and address are never on a receipt.
+- **"Email me this receipt"** sends only to the account's own `users.email` (read from the
+  database, never the request), after an on-page confirm, at most once per receipt every
+  5 minutes. Someone else's receipt is a 404, like `document-view.php`.
 
 ---
 

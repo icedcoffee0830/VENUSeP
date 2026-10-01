@@ -3,3 +3,6 @@
 
 # Installed JavaScript packages — reinstall with `npm install`, never commit
 node_modules/
+
+# Local mail settings (may hold an App Password) — copy from includes/mail-config.example.php
+includes/mail-config.php

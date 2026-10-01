@@ -18,6 +18,19 @@
 require_once __DIR__ . '/../includes/customer-bookings.php';
 
 $bookingHistory = $customerBookings;
+
+/* Which bookings have a VENUSeP System Receipt (DB-DECISIONS #22): ONE query
+   for the whole list, so the "Receipt" button never costs a query per row. */
+$bhReceipts = [];
+$bhIds = array_filter(array_map(function ($b) { return (int) ($b['id'] ?? 0); }, $bookingHistory));
+if ($bhIds && ($bhPdo = venusep_db()) !== null) {
+    try {
+        $bhStmt = $bhPdo->query('SELECT DISTINCT booking_id FROM system_receipts WHERE booking_id IN (' . implode(',', $bhIds) . ')');
+        $bhReceipts = array_flip(array_map('intval', $bhStmt->fetchAll(PDO::FETCH_COLUMN)));
+    } catch (PDOException $e) {
+        // no Receipt buttons rather than a broken page
+    }
+}
 $bookingHistoryVenues = array_values(array_unique(array_column($bookingHistory, 'venue')));
 sort($bookingHistoryVenues, SORT_NATURAL | SORT_FLAG_CASE);
 $emptyBookingMessage = 'No booking history found.';
@@ -124,6 +137,8 @@ $emptyBookingMessage = 'No booking history found.';
       .booking-action { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
       .booking-action:hover { background: #f4f2ee; border-color: #c9c2b6; }
       .booking-action[disabled] { opacity: .5; cursor: not-allowed; }
+      .booking-action-receipt { border-color: rgba(161,22,38,.35); color: #a11626; }
+      .booking-action-receipt:hover { background: #fcf6f4; border-color: #a11626; }
 
       /* footer / pagination */
       .booking-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; }
@@ -294,6 +309,11 @@ $emptyBookingMessage = 'No booking history found.';
                             <div class="booking-actions">
                               <!-- [SIM] booking-details.php doesn't exist yet -->
                               <a class="booking-action" href="#"><i class="bi bi-eye" aria-hidden="true"></i>View</a>
+                              <?php if (isset($bhReceipts[(int) ($booking['id'] ?? 0)])): ?>
+                                <a class="booking-action booking-action-receipt" href="receipt.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
+                                  <i class="bi bi-file-earmark-text" aria-hidden="true"></i>Receipt
+                                </a>
+                              <?php endif; ?>
                               <?php if ($booking['refundable']): ?>
                                 <a class="booking-action booking-action-refund" href="refund-request.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
                                   <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Request Refund

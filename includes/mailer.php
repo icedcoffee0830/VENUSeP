@@ -96,11 +96,20 @@ function mail_enqueue(PDO $pdo, array $m): int
     return (int) $pdo->lastInsertId();
 }
 
-/* Files to attach to an outbox row. Plan 005 returns the System Receipt PDF
-   when receipt_id is set. Shape: [['bytes' => string, 'name' => string, 'type' => string], ...] */
+/* Files to attach to an outbox row: the System Receipt PDF when the row names
+   a receipt. Drawn fresh from the receipt's frozen snapshot, so a resend
+   carries exactly the same receipt. */
 function mail_attachments_for(array $row): array
 {
-    return [];
+    if (empty($row['receipt_id'])) {
+        return [];
+    }
+    require_once __DIR__ . '/system-receipt.php';
+    $receipt = receipt_load(venusep_db(), (int) $row['receipt_id']);
+    if ($receipt === null) {
+        throw new RuntimeException('Receipt ' . (int) $row['receipt_id'] . ' no longer exists.');
+    }
+    return [['bytes' => receipt_pdf_bytes($receipt), 'name' => $receipt['number'] . '.pdf', 'type' => 'application/pdf']];
 }
 
 /* Send one queued email and record what happened. Returns true when it went
@@ -186,6 +195,11 @@ function mail_build(array $row, array $config): PHPMailer
     $mail->AltBody = (string) $row['body_text'];
     foreach (mail_attachments_for($row) as $a) {
         $mail->addStringAttachment($a['bytes'], $a['name'], PHPMailer::ENCODING_BASE64, $a['type']);
+    }
+    /* The logo travels inside the email: a link to this server would not
+       load for anyone outside it, and most mail apps block remote images. */
+    if (strpos((string) $row['body_html'], 'cid:venusep-logo') !== false) {
+        $mail->addEmbeddedImage(__DIR__ . '/../assets/img/receipt-logo.png', 'venusep-logo', 'venusep.png', PHPMailer::ENCODING_BASE64, 'image/png');
     }
     return $mail;
 }

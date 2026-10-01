@@ -1113,13 +1113,13 @@ function detailScreen(){
         ? 'After you book, hostel staff request a <strong>POS</strong> from '+CEDU.name+'. <strong>You cannot pay until it arrives</strong> — nothing is wrong and nothing is late while you wait.'
         : 'You pay <strong>after your stay</strong>, not before. Once you check out, hostel staff request a <strong>POS</strong> from '+CEDU.name+'; payment opens when it arrives and is due within <strong>'+PAY_POLICY.graceDays+' days of your check-out day</strong>. It cannot be paid earlier, and a stay not paid within the window is marked <strong>overdue</strong>.')+' Once it is in, pay cash to the staff or GCash to the designated staff account (send the <strong>exact amount</strong> — a different amount is not confirmed automatically and has to be reviewed by staff).')}
       ${policy('One full payment','The whole stay is paid at once'+(PAY_POLICY.prepay?', up front':', after check-out')+'. There is no per-night billing and no partial payment.')}
-      ${policy('Your receipts','You get a <strong>Transaction Receipt</strong> straight away, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already confirmed — the booking is not waiting on it.')}
+      ${policy('Your receipts','You get a <strong>VENUSeP System Receipt</strong> once your payment is confirmed, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already confirmed — the booking is not waiting on it.')}
       ${PAY_POLICY.prepay
         ? policy('At check-in','Show the staff your <strong>POS</strong> and your <strong>Official Receipt</strong>, plus the valid ID you submitted. Each guest sleeps in the bed booked under their name.')
         : policy('At check-in','Show the staff the valid ID you submitted. Each guest sleeps in the bed booked under their name. Your POS and Official Receipt come after the stay, once you have paid.')}
       ${!REFUNDS_ENABLED
         ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your dates and guests before you submit and pay. If USeP has to close the room, the hostel office will offer you a <strong>replacement room or new dates</strong> instead; if you cannot accept either, your payment is returned.')
-        : policy('Refunds','A refund requires the system Transaction Receipt, the GCash Payment Receipt (if you paid by GCash), <strong>and</strong> the Official Receipt. Requests missing any of these cannot be processed.')}`;
+        : policy('Refunds','A refund requires the VENUSeP System Receipt, the GCash Payment Receipt (if you paid by GCash), <strong>and</strong> the Official Receipt. Requests missing any of these cannot be processed.')}`;
   }
 
   /* --- booking panel --- */
@@ -1607,7 +1607,7 @@ function doneScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:4px 18px;margin-top:24px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
       ${st('Payment', cash?'Awaiting cash at the front desk':'Confirmed','#'+(cash?'fdf3e6':'e8f2ec'),'#'+(cash?'8a5a12':'1c7a4f'))}
-      ${st('Transaction receipt','Emailed to you','#e8f2ec','#1c7a4f')}
+      ${st('VENUSeP System Receipt','In My Bookings','#e8f2ec','#1c7a4f')}
       ${!cash?st('GCash payment receipt','Yours to keep','#e8f2ec','#1c7a4f'):''}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0">
         <span style="font-size:13.5px;color:#4a463f">Official Receipt (${esc(CASHIER.name)})</span>

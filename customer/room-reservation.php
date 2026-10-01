@@ -494,6 +494,7 @@ const booker0 = {
   customerId: 0,          // the chosen account
   name: '', phone: '',    // the chosen account's details, or the walk-in's
   address: '',            // walk-ins only, optional
+  email: '',              // walk-ins only, optional: where their confirmation + System Receipt go
   password: '',           // typed by the CUSTOMER, sent once, never stored
   verified: false,        // the server confirmed that password
   error: '',
@@ -1096,7 +1097,13 @@ function counterBookerReady(){
   const b = state.booker;
   if(!b.idChecked) return false;                       // staff must confirm they saw an ID
   if(b.mode==='account') return b.customerId>0 && b.verified;
-  return b.name.trim()!=='' && cleanPhone(b.phone)!==null;
+  return b.name.trim()!=='' && cleanPhone(b.phone)!==null && walkinEmailOk(b.email);
+}
+/* Optional, so empty is fine; otherwise it must look like an address. The
+   server re-checks it (booking-create.php) — this only saves a round trip. */
+function walkinEmailOk(v){
+  const e = v.trim();
+  return e==='' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 /* 11 digits starting 09 — the same shape cb_normalise_mobile() accepts server
    side, so the counter cannot store a number the rest of the system rejects. */
@@ -1192,7 +1199,7 @@ async function submitRequest(){
     const b = state.booker;
     fd.append('booker_mode', b.mode);
     if(b.mode==='account') fd.append('customer_id', b.customerId);
-    else { fd.append('walkin_name', b.name.trim()); fd.append('walkin_phone', cleanPhone(b.phone) || ''); fd.append('walkin_address', b.address.trim()); }
+    else { fd.append('walkin_name', b.name.trim()); fd.append('walkin_phone', cleanPhone(b.phone) || ''); fd.append('walkin_address', b.address.trim()); fd.append('walkin_email', b.email.trim()); }
     fd.append('id_checked', b.idChecked ? '1' : '0');
     fd.append('usep_id', b.usepId ? '1' : '0');
   } else {
@@ -1449,7 +1456,7 @@ function detailScreen(){
         : policy('Payment — GCash or cash (after your event)','You pay <strong>after the event</strong>, not before: payment opens the day after your last booked day and is due within <strong>'+PAY_POLICY.graceDays+' days</strong>. Pay online through GCash (send the <strong>exact amount</strong> shown — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment cannot be made earlier. A booking not paid within the window is marked <strong>overdue</strong>; it can still be paid, but overdue accounts may not be able to book again until settled.')}
       ${!REFUNDS_ENABLED
         ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your date, room and details before you submit and pay. If USeP has to close or cancel your venue, the venue office will offer you a <strong>replacement room or a new date</strong> instead; if you cannot accept either, your payment is returned.')
-        : policy('Refunds','A refund needs the system transaction receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
+        : policy('Refunds','A refund needs the VENUSeP System Receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
       ${policy('Confirmation','After you pay, staff verify the payment — the GCash reference in the business account, or the cashier record — and give the final confirmation. You are notified at each step.')}`;
   }
 
@@ -1758,18 +1765,23 @@ function whoScreen(){
     `);
   } else {
     /* ---- no account: the walk-in shape the database already has ----
-       No email is collected: there is nowhere to put one. Email lives on
-       `users`, and having a users row is exactly what would make this person
-       not a walk-in (DB-DECISIONS #4). */
+       A walk-in has no `users` row (DB-DECISIONS #4), so their email — when
+       they give one — goes in customers.contact_email, the single exception
+       (#22): it is where their confirmation and System Receipt are sent.
+       Optional, and unverified: staff read it back to the guest. */
     accountBlock = card(`
       ${label('Guest details')}
       <input id="bkName" type="text" value="${esc(b.name)}" oninput="setBookerField('name', this.value)" placeholder="Full name" style="${inputStyle}" autocomplete="off">
       <div style="height:10px"></div>
       <input id="bkPhone" type="tel" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Contact number (09XXXXXXXXX)" style="${inputStyle}" autocomplete="off">
+      ${(b.phone.trim()!=='' && cleanPhone(b.phone)===null) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That is not an 11-digit mobile number starting 09.</div>` : ''}
+      <div style="height:10px"></div>
+      <input id="bkEmail" type="text" inputmode="email" spellcheck="false" autocapitalize="off" aria-label="Guest email (optional)" value="${esc(b.email)}" oninput="setBookerField('email', this.value)" placeholder="Email (optional) — for their confirmation and receipt" style="${inputStyle}" autocomplete="off" aria-describedby="bkEmailHint">
+      ${!walkinEmailOk(b.email) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That doesn't look like an email address. Check it with the guest, or leave it empty.</div>` : ''}
+      <div id="bkEmailHint" style="font-size:12px;color:#77736c;margin-top:8px;line-height:1.5">Read the address back to the guest. Nothing checks it, so a typo sends their booking to a stranger. Leave it empty if they don't want emails.</div>
       <div style="height:10px"></div>
       <input id="bkAddress" type="text" value="${esc(b.address)}" oninput="setBookerField('address', this.value)" placeholder="Address (optional)" style="${inputStyle}" autocomplete="off">
       <div style="font-size:12px;color:#a5a19a;margin-top:8px;line-height:1.5">No account means this booking will not appear in anyone's <strong>My Bookings</strong>, cannot be paid online, and can only be refunded by staff. Payment must be taken at the counter.</div>
-      ${(b.phone.trim()!=='' && cleanPhone(b.phone)===null) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That is not an 11-digit mobile number starting 09.</div>` : ''}
     `);
   }
 
@@ -2283,8 +2295,8 @@ function doneScreen(){
         ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter as your proof of payment. This booking is non-refundable.'
         : 'Keep your GCash receipt and this reference number as your proof of payment. This booking is non-refundable.')
       : cash
-      ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the system transaction receipt and the Official Receipt.'
-      : 'Keep your GCash receipt and this reference number. A refund request needs the system transaction receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
+      ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the VENUSeP System Receipt and the Official Receipt.'
+      : 'Keep your GCash receipt and this reference number. A refund request needs the VENUSeP System Receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
 
     <button onclick="restart()" style="height:48px;padding:0 26px;border:none;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:660;cursor:pointer;margin-top:24px">Browse more rooms</button>
   </main>`;

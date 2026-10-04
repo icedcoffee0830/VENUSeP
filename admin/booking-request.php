@@ -94,7 +94,8 @@ foreach ($brqAll as $b) {
         'kind'      => $isHostel ? 'hostel' : 'venue',
         'name'      => $b['customerName'],
         'type'      => $b['isWalkIn'] ? 'Walk-in' : ($b['isUsep'] ? 'USeP affiliated' : 'Non-USeP'),
-        'email'     => $b['customerEmail'] !== '' ? $b['customerEmail'] : '—',
+        /* account email; for a walk-in, the address they gave at the counter (#22) */
+        'email'     => $b['customerEmail'] !== '' ? $b['customerEmail'] : (($b['contactEmail'] ?? '') !== '' ? $b['contactEmail'] : '—'),
         'phone'     => $b['customerPhone'],
         'event'     => $b['eventName'],
         'room'      => $b['roomName'],

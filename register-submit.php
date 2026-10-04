@@ -19,7 +19,8 @@
                page guard is not a security boundary: the endpoint is what
                someone would POST to directly.
 
-   PASSWORDS are hashed with password_hash() and never logged, echoed or
+   PASSWORDS are hashed with Argon2id (venusep_password_hash(),
+   includes/passwords.php, DB-DECISIONS #21) and never logged, echoed or
    returned. The plaintext leaves scope the moment the hash is made.
 
    EMAIL UNIQUENESS is enforced by uq_users_email, not by a SELECT before
@@ -36,6 +37,7 @@
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/passwords.php';   /* venusep_password_hash() — Argon2id (#21) */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -130,6 +132,11 @@ try {
     rg_reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
 }
 
+/* Argon2id is required (DB-DECISIONS #21): refuse before touching the database. */
+if (!venusep_password_ready()) {
+    rg_reply(500, ['ok' => false, 'message' => VENUSEP_PASSWORD_SETUP_ERROR]);
+}
+
 try {
     $pdo->beginTransaction();
 
@@ -139,7 +146,7 @@ try {
     )->execute([
         ':e' => $email,
         ':u' => $username,
-        ':p' => password_hash($pass, PASSWORD_DEFAULT),
+        ':p' => venusep_password_hash($pass),
         ':t' => $kind === 'staff' ? 'staff' : 'customer',
     ]);
     $userId = (int) $pdo->lastInsertId();

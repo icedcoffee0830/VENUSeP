@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/two-factor.php';
 require_once __DIR__ . '/../includes/two-factor-views.php';
+require_once __DIR__ . '/../includes/passwords.php';   /* venusep_password_upgrade() — Argon2id (#21) */
 
 venusep_session_start();
 
@@ -120,17 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
             ) {
                 $loginError = 'Invalid email or password.';
             } else {
-                // Upgrade a valid legacy hash automatically when needed.
-                if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
-                    $newHash = password_hash($password, PASSWORD_DEFAULT);
-                    $updateHash = $pdo->prepare(
-                        'UPDATE users SET password_hash = :password_hash WHERE id = :id'
-                    );
-                    $updateHash->execute([
-                        'password_hash' => $newHash,
-                        'id' => $user['id'],
-                    ]);
-                }
+                // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).
+                venusep_password_upgrade($pdo, (int)$user['id'], $password, $user['password_hash']);
 
                 /* The password alone never signs an admin in (DB-DECISIONS #20): next is
                    the code, or setting up a phone if this account has none yet. */

@@ -26,6 +26,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/bookings.php';
+require_once __DIR__ . '/../includes/receipt-emails.php';   /* the System Receipt + the walk-in receipt email (DB-DECISIONS #22) */
 /* pricing.php ends with a <script> block for the booking pages; this endpoint
    answers in JSON, so its output is swallowed and only the functions kept.
    (Same treatment includes/faqs.php gives it.) */
@@ -139,6 +140,7 @@ function ba_clear(PDO $pdo) {
     $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
 }
 
+$queued = null;   /* an email this action queued; sent only after the action is committed */
 try {
     switch ($action) {
 
@@ -244,6 +246,9 @@ try {
             ba_reply(409, ['ok' => false, 'message' => 'This booking is not waiting on a payment.']);
         }
         $paid = $bk['payment_method'] === 'cash' ? 'paid_cash' : 'confirmed';
+        /* ONE transaction: the payment, its ledger row and its System Receipt
+           land together or not at all, so a paid booking never lacks a receipt. */
+        $pdo->beginTransaction();
         ba_actor($pdo, $actor, $note !== '' ? $note : 'Payment confirmed.');
         $pdo->prepare('UPDATE bookings SET payment_status = :s, updated_by_user_id = :u WHERE id = :b')
             ->execute([':s' => $paid, ':u' => $actor, ':b' => $bookingId]);
@@ -271,6 +276,22 @@ try {
                    FROM bookings WHERE id = :b"
             )->execute([':u' => $actor, ':b' => $bookingId]);
         }
+        /* The VENUSeP System Receipt. A walk-in who gave an email at the counter
+           is sent it; account holders find it in My Bookings (nothing automatic). */
+        $receiptId = receipt_issue($pdo, $bookingId, $actor);
+        if ($receiptId !== null) {
+            /* A database error here undoes the confirmation like any other; a
+               problem building the EMAIL must not — the payment is real. */
+            try {
+                $queued = queue_walkin_receipt($pdo, $bookingId, $receiptId, $actor);
+            } catch (\Throwable $mailErr) {
+                if ($mailErr instanceof PDOException) {
+                    throw $mailErr;
+                }
+                error_log('VENUSeP walk-in receipt email for booking ' . $bookingId . ': ' . $mailErr->getMessage());
+            }
+        }
+        $pdo->commit();
         break;
 
     /* ---- The receipt was wrong. The booking stays live so the customer can
@@ -384,14 +405,24 @@ try {
     default:
         ba_reply(400, ['ok' => false, 'message' => 'Unknown action.']);
     }
-} catch (PDOException $e) {
+} catch (\Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     ba_clear($pdo);
     /* 45000 is a procedure refusing on a real rule — a booking in the wrong
        state, a closed room. Those are worth showing staff verbatim. */
-    if ($e->getCode() === '45000') {
+    if ($e instanceof PDOException && $e->getCode() === '45000') {
         ba_reply(409, ['ok' => false, 'message' => $e->getMessage()]);
     }
+    error_log('VENUSeP booking-action ' . $action . ': ' . $e->getMessage());
     ba_reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
+}
+
+/* Committed. Now, and only now, the email goes out — a mail server being down
+   leaves a 'failed' outbox row for Resend and never touches the action. */
+if ($queued !== null) {
+    mail_send($pdo, $queued);
 }
 
 /* Hand back the booking's new state so the page can redraw from the truth

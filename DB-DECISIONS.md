@@ -285,6 +285,50 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
 
 ---
 
+## 22. Email, System Receipts and walk-in contact email — decided 2026-10-01
+*(#21 is reserved for the Argon2id password change, planned before this one.)*
+- **Account holders get no automatic email.** Their **VENUSeP System Receipt** is on a
+  receipt page reached from My Bookings, with **Download PDF** and **Email me this
+  receipt** (sent to the account's own address, shown before sending).
+- **Walk-ins (no account, venue counter only)** must give an email at the counter (made
+  required 2026-10-04; it was optional at first). They
+  are emailed a booking confirmation and, once staff confirm the payment, their
+  System Receipt with the PDF attached.
+- **Exception: "Guest has no email"** (counter checkbox, 2026-10-04). Staff tick it for a guest
+  without an address: nothing is emailed, the receipt is printed from **Download PDF**, and the
+  booking history records "No email, receipt printed" (`counter_no_email`), so a missing email
+  reads as a decision, not an omission.
+- **`customers.contact_email`** holds that address. It is the one deliberate exception to
+  #4's "email lives on `users`": a walk-in has no account yet still needs their paperwork.
+  It stays NULL for account holders (and for walk-ins booked before it was required) and is
+  not verified — staff read it back to the guest.
+- **No email-confirmation step** (considered and dropped): account holders only get email
+  when they ask, to an address they see first.
+- **Outbox (`email_outbox`):** an email is queued inside the staff action's transaction
+  and sent after commit, so a mail server being down never fails or undoes the action;
+  the row stays `failed` and staff press Resend. The body is stored when queued, so a
+  resend is the identical email. `includes/mailer.php` is the only file that talks to
+  the mail library.
+- **Sending:** settings in `includes/mail-config.php`, git-ignored (template:
+  `mail-config.example.php`). Laptops send into **Mailpit**, a local test inbox; only the
+  demo machine holds the Gmail App Password. With no settings file nothing is sent: each
+  email is written to a `.eml` file outside the web root.
+- **System Receipt** (`system_receipts`): one per confirmed payment, contents frozen in
+  `snapshot_json`; the number `VSR-<year>-<id>` is derived, never stored. It is **not** the
+  Official Receipt from the University Cashier, which stays out of scope for now.
+- **Issued for every confirmed payment**, emailed or not, inside the same transaction as
+  the confirmation (`admin/booking-action.php`): if the receipt row cannot be written the
+  confirmation rolls back, so a paid booking never lacks its receipt. A mail problem never
+  rolls anything back.
+- **One picture, three drawings:** the receipt page (`customer/receipt.php`), the emails and
+  the PDF (`receipt-pdf.php`, FPDF — no `gd` needed) all draw from `receipt_view()`, so they
+  cannot disagree. Phone, ID number and address are never on a receipt.
+- **"Email me this receipt"** sends only to the account's own `users.email` (read from the
+  database, never the request), after an on-page confirm, at most once per receipt every
+  5 minutes. Someone else's receipt is a 404, like `document-view.php`.
+
+---
+
 ## Open items (not yet decided)
 1. **At-a-glance facts** — hard-coded per room, or editable room columns?
 2. **Where each `system_settings` value is surfaced/edited in the UI** (deferred with the broader system_settings talk).

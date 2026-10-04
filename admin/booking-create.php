@@ -8,7 +8,7 @@
      agree_no_refund=0|1,
      booker_mode=account|walkin,
        account: customer_id
-       walkin : walkin_name, walkin_phone[, walkin_address]
+       walkin : walkin_name, walkin_phone, walkin_email (or walkin_no_email=1)[, walkin_address]
      id_checked=1, usep_id=0|1
    Replies with JSON: { ok, reference, bookingId, payBy }
 
@@ -50,6 +50,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/bookings.php';
 require_once __DIR__ . '/../includes/refund-policy.php';
+require_once __DIR__ . '/../includes/receipt-emails.php';   /* the walk-in's confirmation email (DB-DECISIONS #22) */
 /* pricing.php ends with a <script> block for the booking pages; this endpoint
    answers in JSON, so its output is swallowed and only the functions kept —
    venusep_discount_percent(), the ONE rate. Same treatment booking-action.php
@@ -115,6 +116,8 @@ $bookerMode = ($_POST['booker_mode'] ?? '') === 'walkin' ? 'walkin' : 'account';
 $customerId = 0;
 $bookerName = '';
 $isNewWalkIn = false;
+$contactEmail = '';     /* walk-ins only, required unless the guest has none */
+$walkinNoEmail = false; /* staff ticked "Guest has no email" */
 
 if ($bookerMode === 'account') {
     $customerId = (int) ($_POST['customer_id'] ?? 0);
@@ -153,8 +156,22 @@ if ($bookerMode === 'account') {
     if ($phone === null) {
         bc_reply(400, ['ok' => false, 'message' => 'Enter an 11-digit mobile number starting 09.']);
     }
-    /* No account means no receipt upload, no GCash number on file and no email
-       address — so the money has to change hands at the counter. */
+    /* REQUIRED (decided 2026-10-04): where their confirmation and System
+       Receipt are emailed. Not verified — staff read it back to the guest
+       (DB-DECISIONS #22). */
+    /* The one exception: staff tick "Guest has no email" — then nothing is
+       emailed, the receipt is printed at the counter, and the booking's
+       history says so, so a missing email reads as a decision, not an omission. */
+    $walkinNoEmail = ($_POST['walkin_no_email'] ?? '') === '1';
+    $contactEmail = $walkinNoEmail ? '' : strtolower(trim((string) ($_POST['walkin_email'] ?? '')));
+    if (!$walkinNoEmail && $contactEmail === '') {
+        bc_reply(400, ['ok' => false, 'message' => 'Enter the guest&rsquo;s email address, or tick &ldquo;Guest has no email&rdquo; and print the receipt.']);
+    }
+    if (!$walkinNoEmail && (mb_strlen($contactEmail) > 190 || !filter_var($contactEmail, FILTER_VALIDATE_EMAIL))) {
+        bc_reply(400, ['ok' => false, 'message' => 'That email address doesn&rsquo;t look right. Check it with the guest.']);
+    }
+    /* No account means no receipt upload and no GCash number on file — so the
+       money has to change hands at the counter. */
     $method = 'cash';
     $isNewWalkIn = true;
 }
@@ -266,16 +283,19 @@ if (demo_mode_on()) {
 }
 
 /* ---- the write ---- */
+$queued = null;   /* the walk-in confirmation email, sent after commit */
 try {
     $pdo->beginTransaction();
 
     /* A walk-in with no account is a customers row with user_id NULL — the
-       shape the database has always had for this (DB-DECISIONS #4). No email
-       is stored because there is nowhere to put one: email lives on `users`,
-       and having a users row is what would make them not a walk-in. */
+       shape the database has always had for this (DB-DECISIONS #4). The email
+       they gave, if any, goes in customers.contact_email: the one place an
+       email lives outside `users`, because a walk-in has no account yet still
+       needs their confirmation and receipt (#22). */
     if ($isNewWalkIn) {
-        $pdo->prepare('INSERT INTO customers (user_id, full_name, phone, address) VALUES (NULL, :n, :p, :a)')
-            ->execute([':n' => $bookerName, ':p' => $phone, ':a' => $address !== '' ? $address : null]);
+        $pdo->prepare('INSERT INTO customers (user_id, full_name, phone, contact_email, address) VALUES (NULL, :n, :p, :e, :a)')
+            ->execute([':n' => $bookerName, ':p' => $phone, ':e' => $contactEmail !== '' ? $contactEmail : null,
+                       ':a' => $address !== '' ? $address : null]);
         $customerId = (int) $pdo->lastInsertId();
     }
 
@@ -326,12 +346,29 @@ try {
         $tl->execute([':b' => $bookingId, ':a' => 'counter_identity_confirmed', ':u' => $actor,
             ':n' => 'Customer confirmed the account by entering their password at the counter.']);
     }
+    if ($walkinNoEmail) {
+        $tl->execute([':b' => $bookingId, ':a' => 'counter_no_email', ':u' => $actor,
+            ':n' => 'Guest has no email: nothing is emailed; the System Receipt is printed at the counter.']);
+    }
 
     /* Approved on the spot, through the one procedure that knows what
        "approved" means for this type and this payment policy. */
     $ap = $pdo->prepare('CALL sp_approve_booking(:b, :u)');
     $ap->execute([':b' => $bookingId, ':u' => $actor]);
     $ap->closeCursor();
+
+    /* The walk-in's confirmation email, queued with the booking and sent after
+       commit. A problem building the email must not cost them the booking. */
+    if ($contactEmail !== '') {
+        try {
+            $queued = queue_walkin_booking($pdo, $bookingId, $actor);
+        } catch (\Throwable $mailErr) {
+            if ($mailErr instanceof PDOException) {
+                throw $mailErr;
+            }
+            error_log('VENUSeP walk-in confirmation email for booking ' . $bookingId . ': ' . $mailErr->getMessage());
+        }
+    }
 
     $pdo->commit();
 } catch (PDOException $e) {
@@ -352,8 +389,14 @@ if ($bookerMode === 'account') {
     unset($_SESSION['counter_proof'][$customerId]);
 }
 
+/* Committed — now the email. If the mail server is down the booking still
+   stands; the outbox row waits for Resend on the booking's admin page. */
+if ($queued !== null) {
+    mail_send($pdo, $queued);
+}
+
 try {
-    $after = $pdo->prepare('SELECT submitted_at, current_deadline_at FROM bookings WHERE id = :b');
+    $after =$pdo->prepare('SELECT submitted_at, current_deadline_at FROM bookings WHERE id = :b');
     $after->execute([':b' => $bookingId]);
     $row = $after->fetch();
 } catch (PDOException $e) {

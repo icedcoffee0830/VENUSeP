@@ -23,7 +23,7 @@
        refunds are reportable, and so venue-fault cases (a maintenance
        closure — DB-DECISIONS #11 'disrupted') stay distinguishable from
        customer-fault ones. Staff SEE the reason on the request.
-     · Documents: the transaction receipt and the proof of payment are
+     · Documents: the VENUSeP System Receipt and the proof of payment are
        required TO FILE. The Official Receipt is required to be PAID but may
        follow later — it needs a trip to the Cashier, and gating submission
        on it would let an honest customer miss the filing deadline through
@@ -98,7 +98,7 @@ if ($booking === null) {
    Official Receipt, and may follow later. */
 $requiredDocs = [];
 if ($booking !== null) {
-    $requiredDocs[] = ['key' => 'txn', 'label' => 'System Transaction Receipt', 'optional' => false,
+    $requiredDocs[] = ['key' => 'txn', 'label' => 'VENUSeP System Receipt', 'optional' => false,
         'hint' => 'Issued by VENUSeP when your booking was confirmed.'];
     if ($booking['method'] === 'GCash') {
         $requiredDocs[] = ['key' => 'gcash', 'label' => 'GCash Payment Receipt', 'optional' => false,

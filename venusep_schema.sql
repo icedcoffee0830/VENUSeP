@@ -121,6 +121,12 @@ CREATE TABLE customers (
     user_id             BIGINT UNSIGNED NULL,          -- NULL = walk-in (no login)
     full_name           VARCHAR(190) NOT NULL,
     phone               VARCHAR(30) NULL,
+    -- WALK-INS ONLY (user_id NULL): the address the guest gave at the counter for
+    -- their booking confirmation and System Receipt. Account holders' email lives
+    -- on `users` and this stays NULL for them — the one deliberate exception to
+    -- "email lives on users" (DB-DECISIONS #4), because a walk-in has no account
+    -- yet still needs their paperwork. Not verified: staff read it back to the guest.
+    contact_email       VARCHAR(190) NULL,
     address             VARCHAR(500) NULL,
     university_id_no    VARCHAR(80) NULL,
     -- PROFILE PICTURE ONLY. Never an ID, a receipt or any other document — those
@@ -570,6 +576,69 @@ CREATE TABLE gcash_receipts (
         ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_gcash_receipts_reviewer
         FOREIGN KEY (reviewed_by_user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- VENUSeP SYSTEM RECEIPT — issued the moment staff confirm a payment, one per
+-- confirmed payment. NOT the Official Receipt (that comes from the University
+-- Cashier and is out of scope). The number shown to people, 'VSR-<year>-<id>',
+-- is DERIVED from id + issued_at and never stored, exactly like the booking
+-- reference. snapshot_json FREEZES what the receipt says (names, amounts,
+-- discount, method, reference) so a later edit to the booking can never change
+-- a receipt already given out — the same reason discounts are snapshotted.
+CREATE TABLE system_receipts (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    booking_id          BIGINT UNSIGNED NOT NULL,
+    payment_id          BIGINT UNSIGNED NOT NULL,
+    snapshot_json       JSON NOT NULL,
+    issued_at           DATETIME NOT NULL,
+    issued_by_user_id   BIGINT UNSIGNED NULL,
+    CONSTRAINT uq_system_receipts_payment UNIQUE (payment_id),
+    KEY ix_system_receipts_booking (booking_id),
+    CONSTRAINT fk_system_receipts_booking
+        FOREIGN KEY (booking_id) REFERENCES bookings(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_system_receipts_payment
+        FOREIGN KEY (payment_id) REFERENCES payments(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_system_receipts_issuer
+        FOREIGN KEY (issued_by_user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- EMAIL OUTBOX — one row per email. A staff action QUEUES its email inside its
+-- own transaction and sends it after commit, so a mail server being down can
+-- never fail or undo the action; the row just stays 'failed' for Resend. The
+-- body is rendered when queued, so a resend is the identical email.
+--   walkin_booking  confirmation to a walk-in, right after the counter booking
+--   walkin_receipt  System Receipt to a walk-in, when staff confirm the payment
+--   receipt_copy    an account holder pressed "Email me this receipt"
+-- Account holders get no automatic email (DB-DECISIONS: email + receipts).
+CREATE TABLE email_outbox (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    kind                ENUM('walkin_booking','walkin_receipt','receipt_copy') NOT NULL,
+    booking_id          BIGINT UNSIGNED NULL,
+    receipt_id          BIGINT UNSIGNED NULL,          -- set = attach that System Receipt as a PDF
+    requested_by_user_id BIGINT UNSIGNED NULL,         -- the staff member or customer who caused it
+    to_email            VARCHAR(190) NOT NULL,
+    subject             VARCHAR(255) NOT NULL,
+    body_html           MEDIUMTEXT NOT NULL,
+    body_text           MEDIUMTEXT NOT NULL,
+    status              ENUM('pending','sent','failed') NOT NULL DEFAULT 'pending',
+    attempts            SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    last_error          VARCHAR(500) NULL,             -- the mailer's message; never the config
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at             DATETIME NULL,
+    KEY ix_outbox_booking (booking_id),
+    KEY ix_outbox_receipt (receipt_id, created_at),
+    CONSTRAINT fk_outbox_booking
+        FOREIGN KEY (booking_id) REFERENCES bookings(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_outbox_receipt
+        FOREIGN KEY (receipt_id) REFERENCES system_receipts(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_outbox_requester
+        FOREIGN KEY (requested_by_user_id) REFERENCES users(id)
         ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

@@ -294,6 +294,10 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
   required 2026-10-04; it was optional at first). They
   are emailed a booking confirmation and, once staff confirm the payment, their
   System Receipt with the PDF attached.
+- **Exception: "Guest has no email"** (counter checkbox, 2026-10-04). Staff tick it for a guest
+  without an address: nothing is emailed, the receipt is printed from **Download PDF**, and the
+  booking history records "No email, receipt printed" (`counter_no_email`), so a missing email
+  reads as a decision, not an omission.
 - **`customers.contact_email`** holds that address. It is the one deliberate exception to
   #4's "email lives on `users`": a walk-in has no account yet still needs their paperwork.
   It stays NULL for account holders (and for walk-ins booked before it was required) and is

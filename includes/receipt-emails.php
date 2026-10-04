@@ -43,8 +43,13 @@ function re_first_name(string $fullName): string
     return $parts[0] !== '' ? $parts[0] : 'there';
 }
 
-/* ---- the shared frame: crimson rule, logo, title, intro, body, footer ---- */
-function re_frame(string $preheader, string $title, string $introHtml, string $bodyHtml, string $footerHtml): string
+/* Every email is automatic, and once the demo machine sends through a real
+   Gmail account a reply would land in an inbox nobody answers — so every
+   email says so, in the HTML and in the plain-text version alike. */
+const RE_NO_REPLY = 'This is an automated email from VENUSeP. Please do not reply to it. For questions about your booking, contact the venue office.';
+
+/* ---- the shared frame: crimson rule, logo, title, greeting, intro, body, footer ---- */
+function re_frame(string $preheader, string $title, string $firstName, string $introHtml, string $bodyHtml, string $footerHtml): string
 {
     $font = 'font-family:Arial,Helvetica,sans-serif;';
     return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
@@ -58,9 +63,11 @@ function re_frame(string $preheader, string $title, string $introHtml, string $b
         . '<tr><td style="padding:28px 32px 6px 32px;"><img src="cid:venusep-logo" width="132" alt="VENUSeP" style="display:block;width:132px;height:auto;border:0;color:#a11626;font:bold 22px Arial,Helvetica,sans-serif;"></td></tr>'
         . '<tr><td style="padding:18px 32px 0 32px;' . $font . '">'
         . '<h1 style="margin:0;font-size:24px;line-height:1.25;font-weight:bold;color:#1d1214;">' . bh_e($title) . '</h1>'
-        . '<p style="margin:8px 0 0 0;font-size:15px;line-height:1.6;color:#4a4440;">' . $introHtml . '</p></td></tr>'
+        . '<p style="margin:14px 0 0 0;font-size:15px;line-height:1.6;color:#1d1214;font-weight:bold;">Good day, ' . bh_e($firstName) . '!</p>'
+        . '<p style="margin:4px 0 0 0;font-size:15px;line-height:1.6;color:#4a4440;">' . $introHtml . '</p></td></tr>'
         . $bodyHtml
         . '<tr><td style="padding:16px 32px 22px 32px;border-top:1px solid #efe0db;' . $font . 'font-size:12px;line-height:1.6;color:#6e6a64;">'
+        . '<strong style="color:#4a4440;">' . bh_e(RE_NO_REPLY) . '</strong><br>'
         . $footerHtml . '<br>Sent by VENUSeP, the University of Southeastern Philippines venue and hostel booking system.</td></tr>'
         . '</table></td></tr></table></body></html>';
 }
@@ -155,16 +162,17 @@ function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
     $html = re_frame(
         $b['roomName'] . ', ' . booking_date_label($b) . '. Amount due ' . $due . '.',
         'Your booking is confirmed',
-        'Hi ' . bh_e(re_first_name($who['name'])) . ', here are the details of the booking we made for you at the counter. Your reference is ' . $ref . '.',
+        re_first_name($who['name']),
+        'Thank you for booking with VENUSeP. Here are the details of the booking we made for you at the counter. Your reference is ' . $ref . '.',
         $details . $amounts . $next
             . re_paragraph('Keep this email. You booked without an account, so this email and the counter are where your booking details live.', '22px 32px 28px 32px', '13px', '#6e6a64'),
         'You&rsquo;re getting this because you gave ' . bh_e($who['email']) . ' at the VENUSeP counter. Not you? Ignore this email.'
     );
     $text = "Your booking is confirmed\n\n"
-          . 'Hi ' . re_first_name($who['name']) . ", here are the details of the booking we made for you at the counter.\n\n"
+          . 'Good day, ' . re_first_name($who['name']) . "!\nThank you for booking with VENUSeP. Here are the details of the booking we made for you at the counter.\n\n"
           . 'Reference: ' . $b['bookingId'] . "\nRoom: " . $b['roomName'] . ', ' . $b['venueName']
           . "\nEvent: " . $b['eventName'] . "\nDate: " . strip_tags(str_replace('<br>', '; ', $when)) . "\nAmount due: " . $due . "\n\n"
-          . strip_tags(html_entity_decode($heading . '. ' . $how, ENT_QUOTES, 'UTF-8')) . "\n\nKeep this email.";
+          . strip_tags(html_entity_decode($heading . '. ' . $how, ENT_QUOTES, 'UTF-8')) . "\n\nKeep this email.\n\n" . RE_NO_REPLY;
 
     return mail_enqueue($pdo, [
         'kind' => 'walkin_booking', 'booking_id' => $bookingId, 'requested_by_user_id' => $actorUserId ?: null,
@@ -213,23 +221,35 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
 
     $title = $isCopy ? 'Your VENUSeP System Receipt' : 'Payment received';
     $intro = $isCopy
-        ? 'Hi ' . bh_e($firstName) . ', here&rsquo;s the copy you asked for from My Bookings: the System Receipt for booking ' . $ref . ', attached as a PDF.'
-        : 'Hi ' . bh_e($firstName) . ', we received your payment for booking ' . $ref . '. Your VENUSeP System Receipt is below and attached as a PDF.';
-    $footer = ($isCopy
+        ? 'Here is the copy of your VENUSeP System Receipt for booking ' . $ref . ' that you asked for from My Bookings.'
+        : 'Thank you for your payment. Here is your VENUSeP System Receipt for booking ' . $ref . '.';
+    $footer = $isCopy
         ? 'Sent because you asked for it from your VENUSeP account (' . bh_e($toEmail) . ').'
-        : 'You&rsquo;re getting this because you gave ' . bh_e($toEmail) . ' at the VENUSeP counter.')
-        . ' Attachment: ' . bh_e($v['number']) . '.pdf';
+        : 'You&rsquo;re getting this because you gave ' . bh_e($toEmail) . ' at the VENUSeP counter.';
+
+    /* The receipt itself is the PDF — say so plainly, before the summary, so
+       nobody mistakes the email body for the thing to keep. */
+    $attached = '<tr><td style="padding:18px 32px 0 32px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        . 'style="font-family:Arial,Helvetica,sans-serif;background:#fcf6f4;border:1px solid #efe0db;"><tr>'
+        . '<td width="52" style="padding:12px 0 12px 14px;vertical-align:middle;">'
+        . '<span style="display:inline-block;padding:4px 7px;border-radius:4px;background:#a11626;color:#ffffff;font-size:11px;font-weight:bold;letter-spacing:.04em;">PDF</span></td>'
+        . '<td style="padding:12px 14px 12px 0;font-size:14px;line-height:1.5;color:#1d1214;">'
+        . '<strong>Your receipt is attached: ' . bh_e($v['number']) . '.pdf</strong><br>'
+        . '<span style="color:#4a4440;font-size:13px;">Download it to keep or print. The summary below is for quick reading.</span></td></tr></table></td></tr>';
 
     $html = re_frame(
-        'Payment of ' . $v['paid'] . ' for ' . $s['room_name'] . ', ' . $s['dates'] . '. PDF attached.',
-        $title, $intro,
-        $numberRow . $details . $amounts . re_paragraph($keep, '20px 32px 28px 32px'),
+        'Payment of ' . $v['paid'] . ' for ' . $s['room_name'] . ', ' . $s['dates'] . '. Your receipt is attached as a PDF.',
+        $title, $firstName, $intro,
+        $attached . $numberRow . $details . $amounts . re_paragraph($keep, '20px 32px 28px 32px'),
         $footer
     );
-    $text = $title . "\n\nSystem Receipt " . $v['number'] . "\nBooking: " . $v['booking_ref']
+    $text = $title . "\n\nGood day, " . $firstName . "!\n"
+          . strip_tags(html_entity_decode($intro, ENT_QUOTES, 'UTF-8'))
+          . "\n\nYour receipt is attached: " . $v['number'] . ".pdf. Download it to keep or print.\n\n"
+          . 'System Receipt ' . $v['number'] . "\nBooking: " . $v['booking_ref']
           . "\nRoom: " . $s['room_name'] . ', ' . $s['venue_name'] . "\nDates: " . $s['dates']
           . "\nPaid by: " . strip_tags(html_entity_decode($paidBy, ENT_QUOTES, 'UTF-8'))
-          . "\nAmount paid: " . $v['paid'] . "\n\nThe receipt is attached as " . $v['number'] . ".pdf.";
+          . "\nAmount paid: " . $v['paid'] . "\n\n" . RE_NO_REPLY;
 
     return [
         'subject' => 'VENUSeP System Receipt ' . $v['number'] . ' — booking ' . $v['booking_ref'],

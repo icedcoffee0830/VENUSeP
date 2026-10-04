@@ -71,7 +71,7 @@ function bookings_query(array $opts = []) {
                b.refunds_allowed, b.current_deadline_at, b.submitted_at, b.approved_at,
                b.completed_at, b.cancelled_at, b.customer_notes, b.staff_notes,
                c.id AS customer_id, c.full_name AS customer_name, c.phone AS customer_phone,
-               c.university_id_no, u.email AS customer_email,
+               c.university_id_no, u.email AS customer_email, c.contact_email,
                r.room_code, r.name AS room_name,
                v.name AS venue_name,
                erd.attendee_capacity, erd.fee_per_day,
@@ -167,6 +167,7 @@ function booking_shape(array $row) {
         'customerId'    => (int) $row['customer_id'],
         'customerName'  => $row['customer_name'],
         'customerEmail' => (string) $row['customer_email'],      // '' = walk-in, no login
+        'contactEmail'  => (string) $row['contact_email'],       // walk-ins only: the address given at the counter (#22)
         'customerPhone' => (string) $row['customer_phone'],
         'isWalkIn'      => $row['customer_email'] === null,
 

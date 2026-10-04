@@ -494,7 +494,7 @@ const booker0 = {
   customerId: 0,          // the chosen account
   name: '', phone: '',    // the chosen account's details, or the walk-in's
   address: '',            // walk-ins only, optional
-  email: '',              // walk-ins only, optional: where their confirmation + System Receipt go
+  email: '',              // walk-ins only, required: where their confirmation + System Receipt go
   password: '',           // typed by the CUSTOMER, sent once, never stored
   verified: false,        // the server confirmed that password
   error: '',
@@ -1099,11 +1099,11 @@ function counterBookerReady(){
   if(b.mode==='account') return b.customerId>0 && b.verified;
   return b.name.trim()!=='' && cleanPhone(b.phone)!==null && walkinEmailOk(b.email);
 }
-/* Optional, so empty is fine; otherwise it must look like an address. The
-   server re-checks it (booking-create.php) — this only saves a round trip. */
+/* REQUIRED (decided 2026-10-04): it is where a walk-in's confirmation and
+   System Receipt are sent. The server re-checks it (booking-create.php) —
+   this only saves a round trip. */
 function walkinEmailOk(v){
-  const e = v.trim();
-  return e==='' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
 /* 11 digits starting 09 — the same shape cb_normalise_mobile() accepts server
    side, so the counter cannot store a number the rest of the system rejects. */
@@ -1768,7 +1768,7 @@ function whoScreen(){
        A walk-in has no `users` row (DB-DECISIONS #4), so their email — when
        they give one — goes in customers.contact_email, the single exception
        (#22): it is where their confirmation and System Receipt are sent.
-       Optional, and unverified: staff read it back to the guest. */
+       Required (2026-10-04) and unverified: staff read it back to the guest. */
     accountBlock = card(`
       ${label('Guest details')}
       <input id="bkName" type="text" value="${esc(b.name)}" oninput="setBookerField('name', this.value)" placeholder="Full name" style="${inputStyle}" autocomplete="off">
@@ -1776,9 +1776,9 @@ function whoScreen(){
       <input id="bkPhone" type="tel" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Contact number (09XXXXXXXXX)" style="${inputStyle}" autocomplete="off">
       ${(b.phone.trim()!=='' && cleanPhone(b.phone)===null) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That is not an 11-digit mobile number starting 09.</div>` : ''}
       <div style="height:10px"></div>
-      <input id="bkEmail" type="text" inputmode="email" spellcheck="false" autocapitalize="off" aria-label="Guest email (optional)" value="${esc(b.email)}" oninput="setBookerField('email', this.value)" placeholder="Email (optional) — for their confirmation and receipt" style="${inputStyle}" autocomplete="off" aria-describedby="bkEmailHint">
-      ${!walkinEmailOk(b.email) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That doesn't look like an email address. Check it with the guest, or leave it empty.</div>` : ''}
-      <div id="bkEmailHint" style="font-size:12px;color:#77736c;margin-top:8px;line-height:1.5">Read the address back to the guest. Nothing checks it, so a typo sends their booking to a stranger. Leave it empty if they don't want emails.</div>
+      <input id="bkEmail" type="text" inputmode="email" spellcheck="false" autocapitalize="off" aria-label="Guest email" value="${esc(b.email)}" oninput="setBookerField('email', this.value)" placeholder="Email — for their confirmation and receipt" style="${inputStyle}" autocomplete="off" aria-describedby="bkEmailHint">
+      ${(b.email.trim()!=='' && !walkinEmailOk(b.email)) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That doesn't look like an email address. Check it with the guest.</div>` : ''}
+      <div id="bkEmailHint" style="font-size:12px;color:#77736c;margin-top:8px;line-height:1.5">Required: their booking confirmation and receipt are emailed here. Read the address back to the guest. Nothing checks it, so a typo sends their booking to a stranger.</div>
       <div style="height:10px"></div>
       <input id="bkAddress" type="text" value="${esc(b.address)}" oninput="setBookerField('address', this.value)" placeholder="Address (optional)" style="${inputStyle}" autocomplete="off">
       <div style="font-size:12px;color:#a5a19a;margin-top:8px;line-height:1.5">No account means this booking will not appear in anyone's <strong>My Bookings</strong>, cannot be paid online, and can only be refunded by staff. Payment must be taken at the counter.</div>

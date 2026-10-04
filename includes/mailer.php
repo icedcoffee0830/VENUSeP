@@ -43,6 +43,7 @@ function mail_config_from(string $path): array
         'from_email' => 'noreply@venusep.test',
         'from_name'  => 'VENUSeP',
         'base_url'   => 'http://localhost/VENUSeP',
+        'redirect_all_to' => '',
     ];
     if (!is_file($path)) {
         return $defaults;
@@ -188,8 +189,18 @@ function mail_build(array $row, array $config): PHPMailer
         }
     }
     $mail->setFrom((string) $config['from_email'], (string) $config['from_name']);
-    $mail->addAddress((string) $row['to_email']);
-    $mail->Subject = (string) $row['subject'];
+    /* TEST SWITCH: while real Gmail is being tried out, every email goes to one
+       inbox the team controls, never to the address on the booking — the demo
+       accounts use real-looking addresses that belong to strangers. The subject
+       shows who it was meant for. Empty = normal delivery (go-live). */
+    $redirect = trim((string) $config['redirect_all_to']);
+    if ($redirect !== '') {
+        $mail->addAddress($redirect);
+        $mail->Subject = '[TEST → ' . $row['to_email'] . '] ' . $row['subject'];
+    } else {
+        $mail->addAddress((string) $row['to_email']);
+        $mail->Subject = (string) $row['subject'];
+    }
     $mail->isHTML(true);
     $mail->Body    = (string) $row['body_html'];
     $mail->AltBody = (string) $row['body_text'];

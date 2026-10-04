@@ -28,6 +28,7 @@ function mt_check(string $name, $got, $want): void
 $missing = mail_config_from(__DIR__ . '/does-not-exist-' . bin2hex(random_bytes(4)) . '.php');
 mt_check('missing settings file -> log transport', $missing['transport'], 'log');
 mt_check('missing settings file -> no password', $missing['password'], '');
+mt_check('test switch is off by default', $missing['redirect_all_to'], '');
 
 /* --- a settings file is merged over the defaults --- */
 $tmp = tempnam(sys_get_temp_dir(), 'vmc');

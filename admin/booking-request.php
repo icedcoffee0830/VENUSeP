@@ -1183,8 +1183,8 @@ foreach ($brqAll as $b) {
         const to = d.to ? 'to ' + esc(d.to) : (d.isWalkIn ? 'no email given' : '');
         let note = '';
         if (d.isWalkIn && !d.to) {
-          note = d.receipt ? 'The guest didn&rsquo;t give an email at the counter. Print the receipt and hand it over.'
-                           : 'The guest didn&rsquo;t give an email at the counter, so nothing is emailed.';
+          note = d.receipt ? 'The guest has no email. Print the receipt and hand it over.'
+                           : 'The guest has no email, so nothing is emailed. Print the receipt once the payment is recorded.';
         } else if (!d.isWalkIn) {
           note = 'No automatic emails for account holders. They download the receipt or email it to themselves from My Bookings.';
         }

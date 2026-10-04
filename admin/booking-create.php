@@ -8,7 +8,7 @@
      agree_no_refund=0|1,
      booker_mode=account|walkin,
        account: customer_id
-       walkin : walkin_name, walkin_phone, walkin_email[, walkin_address]
+       walkin : walkin_name, walkin_phone, walkin_email (or walkin_no_email=1)[, walkin_address]
      id_checked=1, usep_id=0|1
    Replies with JSON: { ok, reference, bookingId, payBy }
 
@@ -116,7 +116,8 @@ $bookerMode = ($_POST['booker_mode'] ?? '') === 'walkin' ? 'walkin' : 'account';
 $customerId = 0;
 $bookerName = '';
 $isNewWalkIn = false;
-$contactEmail = '';     /* walk-ins only, required */
+$contactEmail = '';     /* walk-ins only, required unless the guest has none */
+$walkinNoEmail = false; /* staff ticked "Guest has no email" */
 
 if ($bookerMode === 'account') {
     $customerId = (int) ($_POST['customer_id'] ?? 0);
@@ -158,11 +159,15 @@ if ($bookerMode === 'account') {
     /* REQUIRED (decided 2026-10-04): where their confirmation and System
        Receipt are emailed. Not verified — staff read it back to the guest
        (DB-DECISIONS #22). */
-    $contactEmail = strtolower(trim((string) ($_POST['walkin_email'] ?? '')));
-    if ($contactEmail === '') {
-        bc_reply(400, ['ok' => false, 'message' => 'Enter the guest&rsquo;s email address. Their confirmation and receipt are sent there.']);
+    /* The one exception: staff tick "Guest has no email" — then nothing is
+       emailed, the receipt is printed at the counter, and the booking's
+       history says so, so a missing email reads as a decision, not an omission. */
+    $walkinNoEmail = ($_POST['walkin_no_email'] ?? '') === '1';
+    $contactEmail = $walkinNoEmail ? '' : strtolower(trim((string) ($_POST['walkin_email'] ?? '')));
+    if (!$walkinNoEmail && $contactEmail === '') {
+        bc_reply(400, ['ok' => false, 'message' => 'Enter the guest&rsquo;s email address, or tick &ldquo;Guest has no email&rdquo; and print the receipt.']);
     }
-    if (mb_strlen($contactEmail) > 190 || !filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
+    if (!$walkinNoEmail && (mb_strlen($contactEmail) > 190 || !filter_var($contactEmail, FILTER_VALIDATE_EMAIL))) {
         bc_reply(400, ['ok' => false, 'message' => 'That email address doesn&rsquo;t look right. Check it with the guest.']);
     }
     /* No account means no receipt upload and no GCash number on file — so the
@@ -340,6 +345,10 @@ try {
     if ($bookerMode === 'account') {
         $tl->execute([':b' => $bookingId, ':a' => 'counter_identity_confirmed', ':u' => $actor,
             ':n' => 'Customer confirmed the account by entering their password at the counter.']);
+    }
+    if ($walkinNoEmail) {
+        $tl->execute([':b' => $bookingId, ':a' => 'counter_no_email', ':u' => $actor,
+            ':n' => 'Guest has no email: nothing is emailed; the System Receipt is printed at the counter.']);
     }
 
     /* Approved on the spot, through the one procedure that knows what

@@ -746,6 +746,7 @@ function booking_history_events(array $b) {
                 'counter_created'            => 'Taken at the counter',
                 'counter_id_checked'         => 'ID checked in person',
                 'counter_identity_confirmed' => 'Account confirmed by password',
+                'counter_no_email'           => 'No email, receipt printed',
             ];
             foreach ($stmt->fetchAll() as $t) {
                 $code = (string) $t['action_code'];

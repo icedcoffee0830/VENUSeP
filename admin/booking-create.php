@@ -8,7 +8,7 @@
      agree_no_refund=0|1,
      booker_mode=account|walkin,
        account: customer_id
-       walkin : walkin_name, walkin_phone[, walkin_address][, walkin_email]
+       walkin : walkin_name, walkin_phone, walkin_email[, walkin_address]
      id_checked=1, usep_id=0|1
    Replies with JSON: { ok, reference, bookingId, payBy }
 
@@ -116,7 +116,7 @@ $bookerMode = ($_POST['booker_mode'] ?? '') === 'walkin' ? 'walkin' : 'account';
 $customerId = 0;
 $bookerName = '';
 $isNewWalkIn = false;
-$contactEmail = '';     /* walk-ins only, optional */
+$contactEmail = '';     /* walk-ins only, required */
 
 if ($bookerMode === 'account') {
     $customerId = (int) ($_POST['customer_id'] ?? 0);
@@ -155,11 +155,15 @@ if ($bookerMode === 'account') {
     if ($phone === null) {
         bc_reply(400, ['ok' => false, 'message' => 'Enter an 11-digit mobile number starting 09.']);
     }
-    /* Optional: where their confirmation and System Receipt are emailed. Not
-       verified — staff read it back to the guest (DB-DECISIONS #22). */
+    /* REQUIRED (decided 2026-10-04): where their confirmation and System
+       Receipt are emailed. Not verified — staff read it back to the guest
+       (DB-DECISIONS #22). */
     $contactEmail = strtolower(trim((string) ($_POST['walkin_email'] ?? '')));
-    if ($contactEmail !== '' && (mb_strlen($contactEmail) > 190 || !filter_var($contactEmail, FILTER_VALIDATE_EMAIL))) {
-        bc_reply(400, ['ok' => false, 'message' => 'That email address doesn&rsquo;t look right. Check it with the guest, or leave it empty.']);
+    if ($contactEmail === '') {
+        bc_reply(400, ['ok' => false, 'message' => 'Enter the guest&rsquo;s email address. Their confirmation and receipt are sent there.']);
+    }
+    if (mb_strlen($contactEmail) > 190 || !filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
+        bc_reply(400, ['ok' => false, 'message' => 'That email address doesn&rsquo;t look right. Check it with the guest.']);
     }
     /* No account means no receipt upload and no GCash number on file — so the
        money has to change hands at the counter. */

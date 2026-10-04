@@ -290,12 +290,14 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
 - **Account holders get no automatic email.** Their **VENUSeP System Receipt** is on a
   receipt page reached from My Bookings, with **Download PDF** and **Email me this
   receipt** (sent to the account's own address, shown before sending).
-- **Walk-ins (no account, venue counter only)** may give an email at the counter. If they
-  do, they are emailed a booking confirmation and, once staff confirm the payment, their
+- **Walk-ins (no account, venue counter only)** must give an email at the counter (made
+  required 2026-10-04; it was optional at first). They
+  are emailed a booking confirmation and, once staff confirm the payment, their
   System Receipt with the PDF attached.
 - **`customers.contact_email`** holds that address. It is the one deliberate exception to
   #4's "email lives on `users`": a walk-in has no account yet still needs their paperwork.
-  It stays NULL for account holders and is not verified — staff read it back to the guest.
+  It stays NULL for account holders (and for walk-ins booked before it was required) and is
+  not verified — staff read it back to the guest.
 - **No email-confirmation step** (considered and dropped): account holders only get email
   when they ask, to an address they see first.
 - **Outbox (`email_outbox`):** an email is queued inside the staff action's transaction

@@ -34,6 +34,7 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/room-photos.php';   /* rp_validate_image() — same image rules as room photos */
 require_once __DIR__ . '/includes/bookings.php';      /* cb_normalise_mobile() */
 require_once __DIR__ . '/includes/two-factor.php';    /* tfa_*() — two-step verification */
+require_once __DIR__ . '/includes/passwords.php';     /* venusep_password_hash() — Argon2id (#21) */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -149,6 +150,10 @@ if ($action === 'password') {
        unlocked machine could lock the real owner out of their own account —
        a session alone must never be enough to change the credential that
        created it. Same principle as the refund switch re-asking for it. */
+    /* Argon2id is required (DB-DECISIONS #21): refuse before touching the database. */
+    if (!venusep_password_ready()) {
+        pf_reply(500, ['ok' => false, 'message' => VENUSEP_PASSWORD_SETUP_ERROR]);
+    }
     try {
         $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = :u');
         $stmt->execute([':u' => $userId]);
@@ -157,7 +162,7 @@ if ($action === 'password') {
             pf_reply(401, ['ok' => false, 'field' => 'current_password', 'message' => 'That is not your current password.']);
         }
         $pdo->prepare('UPDATE users SET password_hash = :h WHERE id = :u')
-            ->execute([':h' => password_hash($new, PASSWORD_DEFAULT), ':u' => $userId]);
+            ->execute([':h' => venusep_password_hash($new), ':u' => $userId]);
     } catch (PDOException $e) {
         error_log('VENUSeP profile-save (password): ' . $e->getMessage());
         pf_reply(500, ['ok' => false, 'message' => 'Something went wrong, so your password was not changed.']);

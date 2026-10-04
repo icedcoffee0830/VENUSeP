@@ -285,8 +285,25 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
 
 ---
 
+## 21. Password hashing: Argon2id — decided 2026-10-01, built 2026-10-04
+- Every password hash is **Argon2id**, made only by `venusep_password_hash()`
+  (`includes/passwords.php`), with OWASP's recommended minimum settings:
+  **19 MiB memory, 2 passes, 1 thread**.
+- Not heavier on purpose while the login pages have no password-attempt limit: every
+  attempt costs this much server time and memory. Raise `VENUSEP_PASSWORD_OPTIONS` later;
+  stored hashes upgrade on their owner's next login.
+- **Old bcrypt hashes keep working** and are re-hashed to Argon2id at the next successful
+  login (both login pages). No reset, no bulk job. The upgrade only replaces the exact hash
+  that was checked, so a password changed meanwhile in another window is never overwritten.
+- **Argon2id is required:** on a PHP build without it, registering and changing a password
+  show a setup error and save nothing. Logging in still works.
+- The demo seed keeps bcrypt hashes (plain SQL); they upgrade at first login.
+- Teammates can check their PHP: open http://localhost/dashboard/phpinfo.php and find
+  "Password hashing algorithms" — it must list `argon2id`.
+
+---
+
 ## 22. Email, System Receipts and walk-in contact email — decided 2026-10-01
-*(#21 is reserved for the Argon2id password change, planned before this one.)*
 - **Account holders get no automatic email.** Their **VENUSeP System Receipt** is on a
   receipt page reached from My Bookings, with **Download PDF** and **Email me this
   receipt** (sent to the account's own address, shown before sending).

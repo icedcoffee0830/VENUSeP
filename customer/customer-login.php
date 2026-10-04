@@ -10,6 +10,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/two-factor.php';
 require_once __DIR__ . '/../includes/two-factor-views.php';
+require_once __DIR__ . '/../includes/passwords.php';   /* venusep_password_upgrade() — Argon2id (#21) */
 
 venusep_session_start();
 
@@ -112,6 +113,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
             // Use one generic message so the page does not reveal whether an email exists.
             $loginError = 'Invalid email or password.';
         } else {
+            // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).
+            venusep_password_upgrade($pdo, (int)$customer['user_id'], $password, $customer['password_hash']);
             tfa_after_password($pdo, (int)$customer['user_id'], 'customer', 'customer', $customer['email'],
                 [], 'customer-login.php',
                 function () use ($pdo, $customer) {

@@ -106,7 +106,7 @@ BEGIN
 END$$
 
 -- ---------------------------------------------------------------------------
--- sp_seed_cast — the people. Hashes are real bcrypt for the passwords above.
+-- sp_seed_cast — the people. Hashes are real bcrypt for the passwords above (each is re-hashed to Argon2id at first login, DB-DECISIONS #21).
 -- ---------------------------------------------------------------------------
 CREATE PROCEDURE sp_seed_cast ()
 BEGIN

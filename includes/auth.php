@@ -149,10 +149,24 @@ function customer_logged_in()
     venusep_session_start();
     if (!isset($_SESSION['user_id'], $_SESSION['customer_id'], $_SESSION['account_type'])
         || $_SESSION['account_type'] !== 'customer') {
+        /* "Remember me" (#23): no session, but this device was remembered — open
+           one from the cookie. Never over someone else's session (a staff member
+           at the counter keeps theirs). */
+        if (!isset($_SESSION['user_id']) && !empty($_COOKIE['venusep_remember'])) {
+            require_once __DIR__ . '/remember-me.php';
+            require_once __DIR__ . '/db.php';
+            $pdo = venusep_db();
+            if ($pdo !== null && remember_restore($pdo)) {
+                customer_session_heal();
+                return isset($_SESSION['user_id'], $_SESSION['customer_id']);
+            }
+        }
         return false;
     }
     customer_session_heal();
-    return true;
+    /* The heal may have ENDED the session (account gone, or password changed
+       since it signed in) — then this is not a customer any more. */
+    return isset($_SESSION['user_id'], $_SESSION['customer_id']);
 }
 
 /* =====================================================================
@@ -194,6 +208,26 @@ function customer_session_heal()
         }
     } catch (PDOException $e) {
         // leave the session as it is; the page's own error handling takes over
+    }
+
+    /* A PASSWORD CHANGED SINCE THIS SESSION SIGNED IN ENDS IT (#23). That is the
+       point of "forgot password" when someone else got in: the reset throws
+       them out on their next click. The session that changed it in the profile
+       moves its own auth_at forward, so it alone stays. A session from before
+       this check existed has no auth_at and counts as signed in at 0.
+       Its own query, so a database without migration 04 can never silently
+       disable the customer_id repair above. */
+    if (isset($_SESSION['user_id'])) {
+        try {
+            $stmt = $pdo->prepare('SELECT UNIX_TIMESTAMP(password_changed_at) FROM users WHERE id = :u');
+            $stmt->execute([':u' => (int) $_SESSION['user_id']]);
+            $changed = $stmt->fetchColumn();
+            if ($changed !== false && $changed !== null && (int) $changed > (int) ($_SESSION['auth_at'] ?? 0)) {
+                venusep_logout();
+            }
+        } catch (PDOException $e) {
+            // migration 04 not run yet: nothing to compare against
+        }
     }
 }
 

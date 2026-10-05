@@ -115,19 +115,10 @@ if ($kind === 'staff' && $venueRaw !== '') {
     $venueId = (int) $venueId;
 }
 
-/* A username is required to be unique too, so derive one from the email's local
-   part and add a suffix if it is taken. Never fail a registration over a
-   username the person never chose and will never see. */
-$base = preg_replace('/[^a-z0-9._-]+/', '', explode('@', $email)[0]);
-if ($base === '') { $base = 'user'; }
-$username = mb_substr($base, 0, 70);
+/* A unique username derived from the email — the same rule Google sign-up uses. */
+require_once __DIR__ . '/includes/accounts.php';
 try {
-    $check = $pdo->prepare('SELECT 1 FROM users WHERE username = :u LIMIT 1');
-    for ($i = 0; $i < 50; $i++) {
-        $check->execute([':u' => $username]);
-        if ($check->fetchColumn() === false) { break; }
-        $username = mb_substr($base, 0, 66) . random_int(100, 9999);
-    }
+    $username = venusep_unique_username($pdo, $email);
 } catch (PDOException $e) {
     rg_reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
 }

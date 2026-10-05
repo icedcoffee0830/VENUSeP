@@ -3,8 +3,10 @@
    may sign up — but the token stops another site posting this form on a
    visitor's behalf. */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/google-auth.php';   /* google_enabled() — sign-up with Google (#23) */
 venusep_session_start();
 $crCsrf = csrf_token();
+$crGoogleOn = google_enabled();
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -112,6 +114,13 @@ $crCsrf = csrf_token();
       .btn-auth-outline { background: #fff; color: var(--crimson); border: 1.5px solid var(--crimson); box-shadow: none; text-decoration: none; }
       .btn-auth-outline:hover { background: rgba(161,22,38,.06); color: var(--crimson-lo); border-color: var(--crimson-lo); }
 
+      /* ---- sign up with Google (#23): the same "or" rule and button as the login page ---- */
+      .auth-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 14px; color: var(--muted); font-size: 12.5px; }
+      .auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: #e7e2dc; }
+      .btn-google { background: #fff; color: #1f1f1f; border: 1.5px solid #dadce0; box-shadow: none; text-decoration: none; gap: 10px; }
+      .btn-google:hover { background: #f8f9fa; border-color: #c6c9cd; }
+      .btn-google svg { width: 18px; height: 18px; flex: none; }
+
       /* ---- phone: the crimson panel becomes a short header strip ---- */
       @media (max-width: 860px) {
         html, body { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -191,6 +200,10 @@ $crCsrf = csrf_token();
             <button type="submit" class="btn-auth"><i class="bi bi-person-plus" aria-hidden="true"></i>Create Account</button>
             <small class="success-message" id="registrationSuccessMessage" aria-live="polite"></small>
           </form>
+          <?php if ($crGoogleOn): ?>
+          <div class="auth-divider">or</div>
+          <a class="btn-auth btn-google" href="google-start.php"><?php readfile(__DIR__ . '/../assets/img/google-g.svg'); ?>Sign up with Google</a>
+          <?php endif; ?>
           <div class="auth-alt">
             <span class="auth-alt-text">Already have an account?</span>
             <a class="btn-auth btn-auth-outline" href="customer-login.php">Login</a>

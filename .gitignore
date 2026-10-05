@@ -6,3 +6,6 @@ node_modules/
 
 # Local mail settings (may hold an App Password) — copy from includes/mail-config.example.php
 includes/mail-config.php
+
+# Local Google sign-in settings (hold the OAuth client secret) — copy from includes/google-config.example.php
+includes/google-config.php

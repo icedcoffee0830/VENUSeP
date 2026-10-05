@@ -46,11 +46,21 @@ CREATE TABLE users (
     id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     email               VARCHAR(190) NOT NULL,
     username            VARCHAR(80) NULL,
-    password_hash       VARCHAR(255) NOT NULL,
+    -- NULL = no password: a customer account created through Google sign-in,
+    -- until its owner sets one (DB-DECISIONS #23). Google never gives us theirs.
+    password_hash       VARCHAR(255) NULL,
+    -- The Google account's permanent id ("sub"); NULL = not linked. Sign-in with
+    -- Google matches on THIS, never on email: an email can change, this cannot.
+    -- Customers only — a staff or admin account is never signed in by Google.
+    google_sub          VARCHAR(255) NULL,
     account_type        ENUM('customer','staff','admin') NOT NULL,
     is_active           BOOLEAN NOT NULL DEFAULT TRUE,
     email_verified_at   DATETIME NULL,
     last_login_at       DATETIME NULL,
+    -- When the password last changed (profile change, first password, or a
+    -- reset). A customer session signed in BEFORE this is ended on its next
+    -- request (customer_session_heal()), so a reset throws out whoever was in.
+    password_changed_at DATETIME NULL,
     -- Password RE-ENTRY lockout for sensitive admin actions (the refund switch).
     -- Stored on the account, not the session, so clearing cookies or switching
     -- browsers cannot reset it. 5 wrong in a row = one lock; each lock is longer
@@ -73,7 +83,8 @@ CREATE TABLE users (
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uq_users_email UNIQUE (email),
-    CONSTRAINT uq_users_username UNIQUE (username)
+    CONSTRAINT uq_users_username UNIQUE (username),
+    CONSTRAINT uq_users_google_sub UNIQUE (google_sub)       -- multiple NULLs allowed
 ) ENGINE=InnoDB;
 
 ALTER TABLE system_settings
@@ -112,6 +123,51 @@ CREATE TABLE user_recovery_codes (
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_recovery_codes_user_hash UNIQUE (user_id, code_hash),
     CONSTRAINT fk_recovery_codes_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- "Forgot password" links (DB-DECISIONS #23). Customers only. Stored as the
+-- SHA-256 of the token (32 random bytes, so a plain hash is enough): a leaked
+-- table cannot be turned back into working links. Valid 30 minutes, once;
+-- used_at is set when the link is used OR cancelled by a newer request.
+CREATE TABLE password_resets (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id             BIGINT UNSIGNED NOT NULL,
+    token_hash          CHAR(64) NOT NULL,
+    expires_at          DATETIME NOT NULL,
+    used_at             DATETIME NULL,
+    requested_ip        VARCHAR(45) NULL,                 -- for looking into abuse; never shown
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_password_resets_token UNIQUE (token_hash),
+    KEY ix_password_resets_user (user_id, created_at),
+    CONSTRAINT fk_password_resets_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- "Remember me" (DB-DECISIONS #23). Customers only. One row per remembered
+-- device. The cookie holds selector:validator; only the validator's SHA-256 is
+-- stored, so a copy of this table cannot sign anyone in. The validator is
+-- replaced every time the cookie is used; an OLD validator coming back means
+-- the cookie was copied, and every row for that account is deleted.
+-- prev_validator_hash + rotated_at let two requests that raced with the same
+-- cookie (a second tab loading) pass for a minute without counting as theft.
+-- expires_at is fixed at sign-in (15 days); using the site does not extend it.
+CREATE TABLE remember_tokens (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id             BIGINT UNSIGNED NOT NULL,
+    selector            CHAR(24) NOT NULL,
+    validator_hash      CHAR(64) NOT NULL,
+    prev_validator_hash CHAR(64) NULL,
+    rotated_at          DATETIME NULL,
+    expires_at          DATETIME NOT NULL,
+    last_used_at        DATETIME NULL,
+    user_agent          VARCHAR(255) NULL,                -- which browser, for looking into abuse; never shown
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_remember_tokens_selector UNIQUE (selector),
+    KEY ix_remember_tokens_user (user_id),
+    CONSTRAINT fk_remember_tokens_user
         FOREIGN KEY (user_id) REFERENCES users(id)
         ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -613,10 +669,13 @@ CREATE TABLE system_receipts (
 --   walkin_booking  confirmation to a walk-in, right after the counter booking
 --   walkin_receipt  System Receipt to a walk-in, when staff confirm the payment
 --   receipt_copy    an account holder pressed "Email me this receipt"
+--   password_reset  a customer asked for a "forgot password" link (#23). Its
+--                   link is scrubbed from the stored body once sent, and it is
+--                   never resent: the customer simply asks again.
 -- Account holders get no automatic email (DB-DECISIONS: email + receipts).
 CREATE TABLE email_outbox (
     id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    kind                ENUM('walkin_booking','walkin_receipt','receipt_copy') NOT NULL,
+    kind                ENUM('walkin_booking','walkin_receipt','receipt_copy','password_reset') NOT NULL,
     booking_id          BIGINT UNSIGNED NULL,
     receipt_id          BIGINT UNSIGNED NULL,          -- set = attach that System Receipt as a PDF
     requested_by_user_id BIGINT UNSIGNED NULL,         -- the staff member or customer who caused it

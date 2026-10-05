@@ -25,7 +25,8 @@ $cpRow = [];
 try {
     $cpStmt = venusep_db_or_fail()->prepare(
         "SELECT c.full_name, c.phone, c.address, c.university_id_no, c.photo_path,
-                u.email, DATE_FORMAT(c.created_at, '%M %Y') AS member_since
+                u.email, DATE_FORMAT(c.created_at, '%M %Y') AS member_since,
+                u.password_hash IS NOT NULL AS has_password, u.google_sub IS NOT NULL AS has_google
            FROM customers c LEFT JOIN users u ON u.id = c.user_id
           WHERE c.id = :id"
     );
@@ -46,6 +47,16 @@ $customerProfile = [
 ];
 $cpCsrf = csrf_token();
 function cp_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
+
+/* Ways of signing in (#23). An account made through Google has no password
+   until its owner sets one, after confirming with Google (the reauth proof). */
+require_once __DIR__ . '/../includes/google-auth.php';
+$cpHasPassword = (bool) ($cpRow['has_password'] ?? true);
+$cpHasGoogle   = (bool) ($cpRow['has_google'] ?? false);
+$cpGoogleOn    = google_enabled();
+$cpReauthOk    = !$cpHasPassword && google_proof_valid('google_reauth', (int) $_SESSION['user_id']);
+$cpNotice      = is_string($_SESSION['profile_notice'] ?? null) ? $_SESSION['profile_notice'] : '';
+unset($_SESSION['profile_notice']);
 
 /* Two-step verification (DB-DECISIONS #20): optional for customers.
    null = could not be read; the section then says so instead of offering controls. */
@@ -155,6 +166,21 @@ try {
       .form-check-input { width: 16px; height: 16px; accent-color: var(--black); flex: none; }
 
       .account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+      /* ways of signing in (#23): password + Google, then the controls for each */
+      .signin-notice { margin: 0 0 14px; padding: 10px 13px; border-radius: 10px; background: #fcf6f4; border: 1px solid #efe0db; color: #4a4440; font-size: .84rem; line-height: 1.5; }
+      .signin-methods { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+      .signin-methods li { display: flex; align-items: center; gap: 10px; font-size: .88rem; }
+      .signin-methods li > svg, .signin-methods li > .bi { width: 16px; height: 16px; flex: none; color: var(--muted); }
+      .signin-methods .signin-name { flex: 1; font-weight: 600; }
+      .signin-state { font-size: .76rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #f1efeb; color: var(--muted); }
+      .signin-state.is-on { background: #e7f4ec; color: #1c7a4f; }
+      .signin-note { color: var(--muted); font-size: .84rem; margin: 0 0 4px; line-height: 1.5; }
+      .signin-google { margin-top: 20px; padding-top: 18px; border-top: 1px solid #efebe6; }
+      .signin-google h3 { font-size: .9rem; font-weight: 700; margin: 0 0 4px; }
+      .btn-profile svg { width: 16px; height: 16px; flex: none; }
+      .google-confirm { margin-top: 12px; max-width: 420px; }
+      .google-confirm[hidden], .btn-profile[hidden] { display: none; }   /* .btn-profile's inline-flex would otherwise win over [hidden] */
 
       @media (max-width: 960px) {
         .profile-layout { grid-template-columns: 1fr; }
@@ -275,16 +301,53 @@ try {
                   </section>
 
                   <section class="profile-section" aria-labelledby="accountSecurityTitle">
-                    <div class="profile-section-header"><h2 id="accountSecurityTitle">Account Security</h2><p>Use a strong password that you do not reuse elsewhere.</p></div>
+                    <div class="profile-section-header"><h2 id="accountSecurityTitle">Account Security</h2><p><?php echo $cpHasPassword
+                        ? 'Use a strong password that you do not reuse elsewhere.'
+                        : 'You sign in with Google. Add a password to also sign in with your email.'; ?></p></div>
+                    <?php if ($cpNotice !== ''): ?><p class="signin-notice" role="status"><?php echo cp_e($cpNotice); ?></p><?php endif; ?>
+                    <ul class="signin-methods" aria-label="Ways you can sign in">
+                      <li><i class="bi bi-key" aria-hidden="true"></i><span class="signin-name">Email and password</span><span class="signin-state<?php echo $cpHasPassword ? ' is-on' : ''; ?>"><?php echo $cpHasPassword ? 'Set' : 'Not set'; ?></span></li>
+                      <li><?php readfile(__DIR__ . '/../assets/img/google-g.svg'); ?><span class="signin-name">Google</span><span class="signin-state<?php echo $cpHasGoogle ? ' is-on' : ''; ?>"><?php echo $cpHasGoogle ? 'Connected' : 'Not connected'; ?></span></li>
+                    </ul>
+                    <?php if (!$cpHasPassword && !$cpReauthOk): ?>
+                    <!-- SET A FIRST PASSWORD, step 1: a fresh trip to the linked Google account
+                         is the proof (there is no current password to ask for). -->
+                    <p class="signin-note">To set a password, first confirm it&rsquo;s you with Google. You then have 10 minutes to choose one.</p>
+                    <div class="profile-actions" style="margin-top:10px"><a class="btn-profile btn-profile-primary" href="google-start.php?purpose=reauth"><i class="bi bi-shield-check" aria-hidden="true"></i>Confirm with Google</a></div>
+                    <?php else: ?>
                     <form id="customerPasswordForm" action="" method="post" novalidate>
                       <div class="profile-form-grid">
+                        <?php if ($cpHasPassword): ?>
                         <div class="profile-form-group full-width"><label for="currentPassword">Current Password</label><div class="input-group"><span class="input-group-text"><i class="bi bi-lock" aria-hidden="true"></i></span><input class="form-control" id="currentPassword" name="current_password" type="password" autocomplete="current-password" aria-describedby="currentPasswordValidation"><button class="profile-password-toggle" type="button" data-profile-password-toggle="currentPassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div><small class="profile-validation" id="currentPasswordValidation" aria-live="polite"></small></div>
+                        <?php endif; ?>
                         <div class="profile-form-group"><label for="newPassword">New Password</label><div class="input-group"><span class="input-group-text"><i class="bi bi-lock" aria-hidden="true"></i></span><input class="form-control" id="newPassword" name="new_password" type="password" autocomplete="new-password" minlength="8" aria-describedby="newPasswordValidation"><button class="profile-password-toggle" type="button" data-profile-password-toggle="newPassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div><small class="profile-validation" id="newPasswordValidation" aria-live="polite"></small></div>
                         <div class="profile-form-group"><label for="confirmNewPassword">Confirm New Password</label><div class="input-group"><span class="input-group-text"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><input class="form-control" id="confirmNewPassword" name="confirm_new_password" type="password" autocomplete="new-password" aria-describedby="confirmNewPasswordValidation"><button class="profile-password-toggle" type="button" data-profile-password-toggle="confirmNewPassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div><small class="profile-validation" id="confirmNewPasswordValidation" aria-live="polite"></small></div>
                       </div>
-                      <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-shield-check" aria-hidden="true"></i>Update Password</button></div>
+                      <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-shield-check" aria-hidden="true"></i><?php echo $cpHasPassword ? 'Update Password' : 'Set Password'; ?></button></div>
                       <small class="profile-success" id="passwordSuccessMessage" aria-live="polite"></small>
                     </form>
+                    <?php endif; ?>
+
+                    <?php if ($cpHasGoogle || $cpGoogleOn): ?>
+                    <!-- GOOGLE (#23). Connecting and disconnecting both re-ask the password
+                         (profile-save.php); connecting then goes to Google and back. -->
+                    <div class="signin-google" data-google-panel>
+                      <h3>Sign in with Google</h3>
+                      <?php if ($cpHasGoogle && $cpHasPassword): ?>
+                      <p class="signin-note">Disconnecting leaves you signing in with your email and password only.</p>
+                      <div class="profile-actions" style="margin-top:10px"><button class="btn-profile btn-profile-danger" type="button" data-google-action="google_unlink" data-google-go="Disconnect Google"><?php readfile(__DIR__ . '/../assets/img/google-g.svg'); ?>Disconnect Google</button></div>
+                      <?php elseif ($cpHasGoogle): ?>
+                      <p class="signin-note">Google is your only way to sign in, so it cannot be disconnected until you set a password.</p>
+                      <?php else: ?>
+                      <p class="signin-note">Connect your Google account to sign in with one click. Any Google account you own works; it does not have to use this email.</p>
+                      <div class="profile-actions" style="margin-top:10px"><button class="btn-profile" type="button" data-google-action="google_link_begin" data-google-go="Continue to Google"><?php readfile(__DIR__ . '/../assets/img/google-g.svg'); ?>Connect Google</button></div>
+                      <?php endif; ?>
+                      <div class="google-confirm" hidden>
+                        <div class="profile-form-group"><label for="googlePassword">Confirm with your password</label><div class="input-group"><span class="input-group-text"><i class="bi bi-lock" aria-hidden="true"></i></span><input class="form-control" id="googlePassword" type="password" autocomplete="current-password" aria-describedby="googlePasswordMessage"><button class="profile-password-toggle" type="button" data-profile-password-toggle="googlePassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div><small class="profile-validation" id="googlePasswordMessage" aria-live="polite"></small></div>
+                        <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="button" data-google-go-button>Continue</button><button class="btn-profile" type="button" data-google-cancel>Cancel</button></div>
+                      </div>
+                    </div>
+                    <?php endif; ?>
                   </section>
 
                   <!-- TWO-STEP VERIFICATION (DB-DECISIONS #20). Optional for customers. Driven by
@@ -319,6 +382,9 @@ try {
                       <button class="btn-profile" type="button" data-tfa-action="move" data-tfa-ask="Current code or recovery code" data-tfa-go="Continue"><i class="bi bi-phone" aria-hidden="true"></i>Move to a new phone</button>
                       <button class="btn-profile<?php echo $cpTfaLow ? ' btn-profile-primary' : ''; ?>" type="button" data-tfa-action="codes" data-tfa-ask="Current code or recovery code" data-tfa-go="Make new codes"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>New recovery codes</button>
                       <button class="btn-profile btn-profile-danger" type="button" data-tfa-action="disable" data-tfa-ask="Current code or recovery code" data-tfa-go="Turn off">Turn off</button>
+                      <?php elseif (!$cpHasPassword): ?>
+                      <!-- turning it on confirms with the password, which a Google-only account does not have yet (#23) -->
+                      <p class="signin-note">Set a password first (Account Security, above), then you can turn this on.</p>
                       <?php else: ?>
                       <button class="btn-profile btn-profile-primary" type="button" data-tfa-action="begin" data-tfa-ask="Your password" data-tfa-go="Continue"><i class="bi bi-shield-lock" aria-hidden="true"></i>Turn on</button>
                       <?php endif; ?>
@@ -481,17 +547,18 @@ try {
         }
 
         const passwordForm = document.getElementById('customerPasswordForm');
+        const cur0 = document.getElementById('currentPassword');
         if (passwordForm) {
           passwordForm.addEventListener('submit', function (event) {
             event.preventDefault();
-            const cur = document.getElementById('currentPassword');
+            const cur = document.getElementById('currentPassword');   // absent when SETTING a first password (#23)
             const nw = document.getElementById('newPassword');
             const cf = document.getElementById('confirmNewPassword');
-            const any = Boolean(cur.value || nw.value || cf.value);
-            const curErr = any && !cur.value ? 'Please enter your current password.' : '';
+            const any = Boolean((cur && cur.value) || nw.value || cf.value);
+            const curErr = cur && any && !cur.value ? 'Please enter your current password.' : '';
             const nwErr = any && !nw.value ? 'Please enter a new password.' : (nw.value && nw.value.length < 8 ? 'New password must be at least 8 characters.' : '');
             const cfErr = any && !cf.value ? 'Please confirm your new password.' : (nw.value !== cf.value ? 'New passwords must match.' : '');
-            setFieldError(cur, 'currentPasswordValidation', curErr);
+            if (cur) setFieldError(cur, 'currentPasswordValidation', curErr);
             setFieldError(nw, 'newPasswordValidation', nwErr);
             setFieldError(cf, 'confirmNewPasswordValidation', cfErr);
             if (curErr || nwErr || cfErr || !any) return;
@@ -513,22 +580,76 @@ try {
                                 new_password: [nw, 'newPasswordValidation'],
                                 confirm_new_password: [cf, 'confirmNewPasswordValidation'] };
                   const t = res.field && map[res.field];
-                  if (t) { setFieldError(t[0], t[1], res.message); t[0].focus(); }
+                  if (t && t[0]) { setFieldError(t[0], t[1], res.message); t[0].focus(); }
                   else { out.textContent = res.message || 'Your password was not changed.'; }
+                  /* The Google confirmation ran out: reload, which offers it again. */
+                  if (res.reauth) window.setTimeout(function () { window.location.reload(); }, 2500);
                   return;
                 }
                 out.textContent = res.message;
                 passwordForm.reset();
+                /* A FIRST password changes what this section offers (Change, Disconnect). */
+                if (!cur) window.setTimeout(function () { window.location.reload(); }, 1500);
               })
               .catch(function () { out.textContent = 'Could not reach the server, so your password was not changed.'; });
           });
           ['currentPassword', 'newPassword', 'confirmNewPassword'].forEach(function (id) {
-            document.getElementById(id).addEventListener('input', function () {
-              setFieldError(document.getElementById('currentPassword'), 'currentPasswordValidation', '');
+            const field = document.getElementById(id);
+            if (!field) return;
+            field.addEventListener('input', function () {
+              if (cur0) setFieldError(cur0, 'currentPasswordValidation', '');
               setFieldError(document.getElementById('newPassword'), 'newPasswordValidation', '');
               setFieldError(document.getElementById('confirmNewPassword'), 'confirmNewPasswordValidation', '');
               document.getElementById('passwordSuccessMessage').textContent = '';
             });
+          });
+        }
+
+        /* ---- Google (#23): Connect / Disconnect, each after re-typing the password.
+           The server re-checks everything; connecting then leaves for Google. ---- */
+        const googlePanel = document.querySelector('[data-google-panel]');
+        const googleBox = googlePanel && googlePanel.querySelector('.google-confirm');
+        if (googleBox) {
+          const pw = document.getElementById('googlePassword');
+          const msg = document.getElementById('googlePasswordMessage');
+          const go = googlePanel.querySelector('[data-google-go-button]');
+          const starters = googlePanel.querySelectorAll('[data-google-action]');
+          let action = null;
+          const close = function () {
+            googleBox.hidden = true; pw.value = ''; setFieldError(pw, 'googlePasswordMessage', '');
+            starters.forEach(function (b) { b.hidden = false; });
+          };
+          starters.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              action = btn.dataset.googleAction;
+              go.textContent = btn.dataset.googleGo;
+              btn.hidden = true;
+              googleBox.hidden = false;
+              pw.focus();
+            });
+          });
+          googlePanel.querySelector('[data-google-cancel]').addEventListener('click', close);
+          pw.addEventListener('input', function () { setFieldError(pw, 'googlePasswordMessage', ''); });
+          pw.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go.click(); } });
+          go.addEventListener('click', function () {
+            if (!pw.value) { setFieldError(pw, 'googlePasswordMessage', 'Enter your password.'); pw.focus(); return; }
+            const body = new FormData();
+            body.append('csrf', CSRF);
+            body.append('action', action);
+            body.append('password', pw.value);
+            go.disabled = true;
+            msg.textContent = '';
+            fetch('../profile-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+              .then(function (res) {
+                if (res.ok && res.redirect) { window.location.href = res.redirect; return; }   // off to Google
+                go.disabled = false;
+                if (!res.ok) { setFieldError(pw, 'googlePasswordMessage', res.message || 'Nothing was changed.'); pw.focus(); return; }
+                msg.style.color = 'var(--ok)';
+                msg.textContent = res.message;
+                window.setTimeout(function () { window.location.reload(); }, 1500);
+              })
+              .catch(function () { go.disabled = false; setFieldError(pw, 'googlePasswordMessage', 'Could not reach the server, so nothing was changed.'); });
           });
         }
 

@@ -11,6 +11,8 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/two-factor.php';
 require_once __DIR__ . '/../includes/two-factor-views.php';
 require_once __DIR__ . '/../includes/passwords.php';   /* venusep_password_upgrade() — Argon2id (#21) */
+require_once __DIR__ . '/../includes/accounts.php';    /* cl_finish_login() — the only place a customer session is created */
+require_once __DIR__ . '/../includes/google-auth.php'; /* sign-in with Google (#23) */
 
 venusep_session_start();
 
@@ -22,54 +24,73 @@ if ($pdo === null) {
 
 $loginError = '';
 
-/* The only place a customer session is created. Re-reads the account because
-   a code step may sit between the password and this. */
-function cl_finish_login(PDO $pdo, int $userId): void
-{
-    $stmt = $pdo->prepare(
-        'SELECT u.id AS user_id, u.email, u.is_active, c.id AS customer_id, c.full_name
-           FROM users u
-           INNER JOIN customers c ON c.user_id = u.id
-          WHERE u.id = :id AND u.account_type = :account_type
-          LIMIT 1'
-    );
-    $stmt->execute([':id' => $userId, ':account_type' => 'customer']);
-    $customer = $stmt->fetch();
-    if (!$customer || !$customer['is_active']) {
-        tfa_pending_clear();
-        header('Location: customer-login.php');
-        exit;
-    }
-
-    // Prevent session fixation after successful authentication.
-    session_regenerate_id(true);
-
-    // Start from an empty session so nothing from a previous login
-    // (e.g. an admin on the same browser) survives into this one.
-    $_SESSION = [];
-    $_SESSION['user_id'] = (int)$customer['user_id'];
-    $_SESSION['customer_id'] = (int)$customer['customer_id'];
-    $_SESSION['account_type'] = 'customer';
-    $_SESSION['customer_name'] = $customer['full_name'];
-    $_SESSION['customer_email'] = $customer['email'];
-
-    $update = $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id');
-    $update->execute([':id' => $customer['user_id']]);
-
-    // Remember Me is intentionally not implemented with a permanent
-    // cookie here; the session remains the safer default.
+/* Already signed in — including a device remembered by "Remember me" (#23),
+   which customer_logged_in() signs back in here — straight to the booking page. */
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && customer_logged_in()) {
     header('Location: venusep_venue_booking.php');
     exit;
 }
 
+/* One sentence left by another page (the Google callback, mostly), shown once. */
+$loginNotice = is_string($_SESSION['login_notice'] ?? null) ? $_SESSION['login_notice'] : '';
+unset($_SESSION['login_notice']);
+
 /* A two-step sign-in step, only for customers who turned it on in their
    profile (DB-DECISIONS #20); the flow itself is tfa_login_step(). */
 $tfaError = '';
+$googleErrors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
     [$loginError, $tfaError] = tfa_login_step($pdo, 'customer', 'customer-login.php',
         function (array $pending) use ($pdo) {
-            cl_finish_login($pdo, (int)$pending['user_id']);
+            cl_finish_login($pdo, (int)$pending['user_id'], !empty($pending['remember']));
         });
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['google_step'])) {
+    /* The one-time "finish your account" screen for a brand-new Google identity
+       (google-callback.php put it in the session). The name, email and Google id
+       come from the SESSION, never from this form, except the name they may edit. */
+    $signup = google_signup_pending();
+    if ($signup === null) {
+        $loginNotice = 'That sign-up timed out. Choose Continue with Google again.';
+    } elseif (!csrf_valid($_POST['csrf'] ?? null)) {
+        $googleErrors['form'] = 'This page expired. Try again.';
+    } elseif ($_POST['google_step'] === 'cancel') {
+        unset($_SESSION['google_signup']);
+        header('Location: customer-login.php');
+        exit;
+    } else {
+        require_once __DIR__ . '/../includes/bookings.php';   /* cb_normalise_mobile() — the same rule as registration */
+        $gName  = trim((string)($_POST['full_name'] ?? ''));
+        $gPhone = trim((string)($_POST['contact_number'] ?? ''));
+        $gPhoneNorm = $gPhone === '' ? null : cb_normalise_mobile($gPhone);
+        if ($gName === '' || mb_strlen($gName) > 190) {
+            $googleErrors['full_name'] = 'Enter your full name.';
+        }
+        if ($gPhone !== '' && $gPhoneNorm === null) {
+            $googleErrors['contact_number'] = 'Enter a mobile number in the form 09XX XXX XXXX.';
+        }
+        if (empty($_POST['terms'])) {
+            $googleErrors['terms'] = 'You must agree to the Terms and Conditions.';
+        }
+        if (!$googleErrors) {
+            try {
+                $newUserId = google_create_customer($pdo, (string)$signup['sub'], (string)$signup['email'], $gName, $gPhoneNorm);
+            } catch (PDOException $e) {
+                unset($_SESSION['google_signup']);
+                if ($e->getCode() === '23000') {
+                    /* The email (or this Google account) was registered between
+                       Google's reply and this click. Same rule as the callback. */
+                    $loginNotice = 'This email is already registered. Log in with your email and password. You can connect Google from your profile afterwards.';
+                } else {
+                    error_log('VENUSeP Google sign-up: ' . $e->getMessage());
+                    $loginNotice = 'Something went wrong, so the account was not created. Please try again.';
+                }
+                $newUserId = null;
+            }
+            if ($newUserId !== null) {
+                cl_finish_login($pdo, $newUserId, !empty($signup['remember']));   // never returns
+            }
+        }
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim((string)($_POST['email'] ?? ''));
     $password = (string)($_POST['password'] ?? '');
@@ -109,16 +130,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
 
         $customer = $stmt->fetch();
 
-        if (!$customer || !$customer['is_active'] || !password_verify($password, $customer['password_hash'])) {
+        if ($customer && $customer['is_active'] && $customer['password_hash'] === null) {
+            /* Created through Google, no password set yet. Saying so reveals only
+               that the email is registered, which the sign-up form already does,
+               and spares them guessing at a password that does not exist. */
+            $loginError = google_enabled()
+                ? 'This account uses Google sign-in. Use Continue with Google below.'
+                : 'This account uses Google sign-in, which is not set up on this server yet.';
+        } elseif (!$customer || !$customer['is_active'] || !password_verify($password, $customer['password_hash'])) {
             // Use one generic message so the page does not reveal whether an email exists.
             $loginError = 'Invalid email or password.';
         } else {
             // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).
             venusep_password_upgrade($pdo, (int)$customer['user_id'], $password, $customer['password_hash']);
+            /* "Remember me" rides along through the code step (it is in the pending
+               state), so the device is only remembered once the code is passed too. */
             tfa_after_password($pdo, (int)$customer['user_id'], 'customer', 'customer', $customer['email'],
-                [], 'customer-login.php',
-                function () use ($pdo, $customer) {
-                    cl_finish_login($pdo, (int)$customer['user_id']);
+                ['remember' => $rememberMe], 'customer-login.php',
+                function () use ($pdo, $customer, $rememberMe) {
+                    cl_finish_login($pdo, (int)$customer['user_id'], $rememberMe);
                 });
         }
     }
@@ -127,10 +157,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
 /* Password correct, code pending: not logged in yet (customer_logged_in() needs user_id). */
 $pending = tfa_pending('customer');
 $tfaView = $pending === null ? 'password' : 'verify';
+/* A brand-new Google identity waiting for its one-time "finish your account" screen. */
+$googleSignup = $tfaView === 'password' ? google_signup_pending() : null;
+if ($googleSignup !== null) {
+    $tfaView = 'google_signup';
+}
 if ($tfaView !== 'password') {
     header('Cache-Control: no-store');
 }
 $tfaCsrf = $tfaView !== 'password' ? csrf_token() : '';
+$googleOn = google_enabled();
 $tfaLock = $tfaView === 'verify' ? tfa_lock_seconds($pdo, (int)$pending['user_id']) : 0;   // resume a running lock's countdown
 ?>
 <!DOCTYPE html>
@@ -155,112 +191,7 @@ $tfaLock = $tfaView === 'verify' ? tfa_lock_seconds($pdo, (int)$pending['user_id
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="../assets/css/two-factor.css" />
-    <style>
-      /* ==================================================================
-         AUTH UI — split layout (customer-login + customer-register share it)
-         Left: the crimson panel from the landing hero (gradient, grain, arcs,
-         greeting). Right: the form on white with underline fields.
-         Only the look changed; the form's classes (.input-group, .is-invalid,
-         .validation-message …) are the same names the validation script uses.
-         ================================================================== */
-      :root { --black: #1f1e1e; --ink: #120809; --crimson: #a11626; --crimson-lo: #7d0f1e; --yellow: #ffd166;
-              --border: #d9d4cc; --muted: #6e6a64; --danger: #b23a3a; --font-display: Archivo, Inter, system-ui, sans-serif; }
-      * { box-sizing: border-box; }
-      html, body { margin: 0; min-height: 100%; }
-      body { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--black); background: #fff; min-height: 100vh; }
-
-      /* ---- the split ---- */
-      .auth-split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 100vh; min-height: 100svh; }
-
-      /* ---- left: crimson panel ---- */
-      .auth-hero { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; padding: 48px 56px 36px;
-        color: #fff; background: linear-gradient(162deg, #7d1120 0%, #3c0c14 48%, #120809 100%); }
-      .auth-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none;
-        background: radial-gradient(900px 560px at 86% 2%, rgba(232,62,74,.32), transparent 62%), radial-gradient(800px 560px at 6% 100%, rgba(217,147,13,.16), transparent 60%); }
-      .auth-hero-grain { position: absolute; inset: 0; pointer-events: none; opacity: .07; mix-blend-mode: overlay; background-size: 180px 180px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-      .auth-hero-arcs { position: absolute; right: -22%; top: -18%; width: 120%; height: 120%; pointer-events: none; opacity: .95; }
-      .auth-hero-arcs circle { fill: none; stroke: rgba(255,255,255,.11); stroke-width: 1.2; }
-      .auth-hero-logo { position: relative; align-self: flex-start; height: 34px; width: auto; filter: invert(1); }   /* align-self: a flex column would stretch it wide */
-      .auth-hero-copy { position: relative; max-width: 30rem; }
-      .auth-hero-title { font-family: var(--font-display); font-weight: 800; font-size: clamp(42px, 5.2vw, 66px); line-height: 1.02; letter-spacing: -.02em; margin: 0 0 22px; }
-      .auth-wave { display: inline-block; transform-origin: 70% 70%; animation: auth-wave 2.4s ease-in-out 1.2s 2; }
-      @keyframes auth-wave { 0%,100% { transform: rotate(0); } 15% { transform: rotate(16deg); } 30% { transform: rotate(-8deg); } 45% { transform: rotate(14deg); } 60% { transform: rotate(-4deg); } 75% { transform: rotate(8deg); } }
-      .auth-hero-sub { font-size: 17px; line-height: 1.6; color: rgba(255,255,255,.86); margin: 0; }
-      .auth-hero-foot { position: relative; margin: 0; font-size: 13px; color: rgba(255,255,255,.6); }
-
-      /* ---- right: the form panel ---- */
-      .auth-panel { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 48px clamp(24px, 6vw, 88px); }   /* the card sits centred in the panel */
-      /* "Back to home" — pinned to the panel's top-left corner; a static row above the card on phones */
-      .auth-back { position: absolute; top: 24px; left: 28px; display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px 0 10px; border-radius: 999px;
-        border: 1px solid #e5e5e5; background: #fff; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: none; transition: color 160ms, border-color 160ms, background 160ms; }
-      .auth-back svg { width: 16px; height: 16px; flex: none; }
-      .auth-back:hover { color: #a11626; border-color: #a11626; background: #fff6f6; }
-      .auth-card { width: 100%; max-width: 420px; }
-      .auth-brand { display: block; margin-bottom: clamp(36px, 8vh, 84px); }
-      .auth-brand img { height: 30px; width: auto; display: block; margin: 0 auto; }
-      .auth-heading { margin-bottom: 26px; text-align: center; }
-      .auth-title { font-family: var(--font-display); font-size: 30px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 8px; }
-      .auth-subtitle { color: var(--muted); font-size: 14px; line-height: 1.55; margin: 0; }
-
-/* fields: pill inputs with a leading icon; the label stays for screen readers */
-      .form-group { margin-bottom: 14px; }
-      .form-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-      .input-group { display: flex; align-items: center; border: 1.5px solid var(--border); border-radius: 999px; background: #fff; transition: border-color .18s, box-shadow .18s; }
-      .input-group:focus-within { border-color: var(--crimson); box-shadow: 0 0 0 4px rgba(161,22,38,.1); }
-      .input-group.is-invalid { border-color: var(--danger); }
-      .input-group-text { display: inline-flex; align-items: center; justify-content: center; width: 46px; align-self: stretch; color: var(--crimson); font-size: 1rem; }
-      .input-group input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14.5px; font-weight: 600; padding: 13px 16px 13px 0; color: var(--ink); }
-      .input-group input::placeholder { color: #a9a39b; font-weight: 500; }
-      /* Chrome paints an autofilled field light blue, which shows as a box inside the pill — keep it white */
-      .input-group input:-webkit-autofill, .input-group input:-webkit-autofill:hover, .input-group input:-webkit-autofill:focus {
-        -webkit-box-shadow: 0 0 0 1000px #fff inset; -webkit-text-fill-color: var(--ink); caret-color: var(--ink); border-radius: 999px; transition: background-color 9999s ease-out; }
-      .password-toggle { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 16px 0 10px; align-self: stretch; }
-      .password-toggle:hover { color: var(--ink); }
-      .auth-options { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 4px 22px; font-size: 13px; }
-      .form-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-      .form-check-input { width: 15px; height: 15px; accent-color: var(--crimson); }
-      .form-check-label { color: var(--muted); }
-      form > .form-check { margin: 4px 0 4px; }                 /* the register page's terms box stands alone */
-      .auth-link { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
-      .auth-link:hover { color: var(--crimson); }
-      .btn-auth { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border: 0; border-radius: 999px;
-        background: var(--crimson); color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; transition: background .18s, transform .18s; box-shadow: 0 10px 24px rgba(161,22,38,.22); }
-      .btn-auth:hover { background: var(--crimson-lo); }
-      .btn-auth:active { transform: translateY(1px); }
-      .btn-auth .bi { display: none; }
-      .validation-message { display: block; min-height: 1em; margin-top: 5px; color: var(--danger); font-size: 12px; }
-      .success-message { display: block; text-align: center; margin-top: 12px; color: #1c7a4f; font-size: 13px; font-weight: 600; }
-      .auth-footer-link { text-align: center; margin: 22px 0 0; font-size: 13.5px; color: var(--muted); }
-      /* the other action: a small prompt, then an outlined pill (white, crimson text + stroke) */
-      .auth-alt { margin-top: 22px; text-align: center; }
-      .auth-alt-text { display: block; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
-      .btn-auth-outline { background: #fff; color: var(--crimson); border: 1.5px solid var(--crimson); box-shadow: none; text-decoration: none; }
-      .btn-auth-outline:hover { background: rgba(161,22,38,.06); color: var(--crimson-lo); border-color: var(--crimson-lo); }
-
-      /* ---- phone: the crimson panel becomes a short header strip ---- */
-      @media (max-width: 860px) {
-        .auth-split { grid-template-columns: 1fr; min-height: 0; }
-        /* a short strip, not a tall panel: the form must start high enough that the
-           password box stays above the keyboard (in-app browsers do not scroll for it) */
-        .auth-hero { padding: 16px 20px 18px; flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; }
-        .auth-hero-logo { height: 22px; }
-        .auth-hero-copy { max-width: none; }
-        .auth-hero-title { font-size: 20px; margin: 0; line-height: 1.15; }
-        .auth-hero-title br { display: none; }
-        .auth-hero-sub { display: none; }
-        .auth-hero-foot { display: none; }
-        .auth-hero-arcs { right: -40%; top: -60%; width: 160%; height: 220%; }
-        .auth-panel { padding: 16px 20px 40px; }
-        .auth-back { position: static; align-self: flex-start; margin-bottom: 14px; min-height: 32px; }
-        .auth-heading { margin-bottom: 18px; }
-        .auth-brand { display: none; }
-        .auth-title { font-size: 26px; }
-        .form-group { scroll-margin-bottom: 120px; }
-        .auth-brand { display: none; }
-        .auth-card { max-width: 480px; margin: 0 auto; }
-      }
-    </style>
+    <link rel="stylesheet" href="../assets/css/customer-auth.css" />   <!-- the auth page look, shared with forgot/reset password -->
   </head>
   <body class="customer-login-page">
     <main class="auth-split">
@@ -270,23 +201,64 @@ $tfaLock = $tfaView === 'verify' ? tfa_lock_seconds($pdo, (int)$pending['user_id
         <svg class="auth-hero-arcs" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g transform="translate(560 300)"><circle r="120"/><circle r="200"/><circle r="280"/><circle r="360"/><circle r="440"/><circle r="520"/></g></svg>
         <img class="auth-hero-logo" src="../logo/Logo Header 3.png" alt="" />
         <div class="auth-hero-copy">
-          <?php if ($tfaView === 'password'): ?>
+          <?php if ($tfaView !== 'verify'): ?>
           <h2 class="auth-hero-title">Welcome to <br />VENUSeP! <span class="auth-wave">&#128075;</span></h2>
           <p class="auth-hero-sub">Reserve campus venues and hostel beds online. Check real availability, book in minutes, and pay by GCash or cash &mdash; no office visits.</p>
           <?php else: tfa_view_hero('verify'); endif; ?>
         </div>
         <p class="auth-hero-foot">&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</p>
       </aside>
-      <section class="auth-panel" aria-labelledby="<?php echo $tfaView === 'password' ? 'customerLoginTitle' : 'tfaTitle'; ?>">
+      <section class="auth-panel" aria-labelledby="<?php echo $tfaView === 'password' ? 'customerLoginTitle' : ($tfaView === 'google_signup' ? 'googleSignupTitle' : 'tfaTitle'); ?>">
         <a class="auth-back" href="venusep_venue_booking.php"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Back to home</a>
         <div class="auth-card">
           <a class="auth-brand" href="venusep_venue_booking.php" title="Back to VENUSeP"><img src="../logo/Logo Header 3.png" alt="VENUSeP" /></a>
           <?php if ($tfaView === 'verify'): tfa_view_code($tfaCsrf, (string)$pending['email'], $tfaError, $tfaLock); ?>
+          <?php elseif ($tfaView === 'google_signup'):
+            /* The one-time "finish your account" screen (#23). The email is Google's
+               and cannot be changed here; the name is pre-filled and editable. */
+            $gsName  = isset($_POST['full_name']) ? (string)$_POST['full_name'] : (string)$googleSignup['name'];
+            $gsPhone = isset($_POST['contact_number']) ? (string)$_POST['contact_number'] : '';
+            $gsErr   = function (string $field) use ($googleErrors): string {
+                return htmlspecialchars($googleErrors[$field] ?? '', ENT_QUOTES, 'UTF-8');
+            };
+          ?>
+          <div class="auth-heading">
+            <h1 class="auth-title" id="googleSignupTitle">Finish creating your account</h1>
+            <p class="auth-subtitle">Google confirmed your email. One last step before you can book.</p>
+          </div>
+          <?php if (!empty($googleErrors['form'])): ?><p class="auth-notice" role="alert"><?= $gsErr('form') ?></p><?php endif; ?>
+          <form id="googleSignupForm" action="customer-login.php" method="post">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($tfaCsrf, ENT_QUOTES, 'UTF-8') ?>" />
+            <div class="form-group">
+              <div class="auth-readonly"><i class="bi bi-google" aria-hidden="true"></i><span><span class="form-label">Email address: </span><?= htmlspecialchars((string)$googleSignup['email'], ENT_QUOTES, 'UTF-8') ?></span></div>
+              <small class="auth-hint">From your Google account. You&rsquo;ll sign in with Google, so you don&rsquo;t need a VENUSeP password.</small>
+            </div>
+            <div class="form-group">
+              <label for="gsFullName" class="form-label">Full name</label>
+              <div class="input-group<?= !empty($googleErrors['full_name']) ? ' is-invalid' : '' ?>"><span class="input-group-text"><i class="bi bi-person" aria-hidden="true"></i></span><input id="gsFullName" name="full_name" type="text" autocomplete="name" placeholder="Full name" maxlength="190" value="<?= htmlspecialchars($gsName, ENT_QUOTES, 'UTF-8') ?>" aria-describedby="gsFullNameMsg" required /></div>
+              <small class="validation-message" id="gsFullNameMsg" aria-live="polite"><?= $gsErr('full_name') ?></small>
+            </div>
+            <div class="form-group">
+              <label for="gsPhone" class="form-label">Mobile number (optional)</label>
+              <div class="input-group<?= !empty($googleErrors['contact_number']) ? ' is-invalid' : '' ?>"><span class="input-group-text"><i class="bi bi-phone" aria-hidden="true"></i></span><input id="gsPhone" name="contact_number" type="tel" autocomplete="tel" inputmode="tel" placeholder="Mobile number (optional)" maxlength="20" value="<?= htmlspecialchars($gsPhone, ENT_QUOTES, 'UTF-8') ?>" aria-describedby="gsPhoneMsg gsPhoneHint" /></div>
+              <small class="auth-hint" id="gsPhoneHint">09XX XXX XXXX. Used only if a GCash refund ever has to be sent to you.</small>
+              <small class="validation-message" id="gsPhoneMsg" aria-live="polite"><?= $gsErr('contact_number') ?></small>
+            </div>
+            <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="gsTerms" name="terms" aria-describedby="gsTermsMsg" required <?= !empty($_POST['terms']) ? 'checked' : '' ?> /><span class="form-check-label">I agree to the Terms and Conditions</span></label>
+            <small class="validation-message" id="gsTermsMsg" aria-live="polite"><?= $gsErr('terms') ?></small>
+            <button type="submit" name="google_step" value="create" class="btn-auth">Create my account</button>
+          </form>
+          <form class="auth-alt" action="customer-login.php" method="post">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($tfaCsrf, ENT_QUOTES, 'UTF-8') ?>" />
+            <span class="auth-alt-text">Not you, or changed your mind?</span>
+            <button type="submit" name="google_step" value="cancel" class="btn-auth btn-auth-outline" formnovalidate>Cancel</button>
+          </form>
           <?php else: ?>
           <div class="auth-heading">
             <h1 class="auth-title" id="customerLoginTitle">Welcome back!</h1>
             <p class="auth-subtitle">Sign in to book venues and hostel beds.</p>
           </div>
+          <?php if ($loginNotice !== ''): ?><p class="auth-notice" role="status"><?= htmlspecialchars($loginNotice, ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
 
           <!-- the form below is unchanged: same names, same POST, same PHP error output -->
           <form id="customerLoginForm" action="" method="post" novalidate data-auth-form="login">
@@ -301,12 +273,16 @@ $tfaLock = $tfaView === 'verify' ? tfa_lock_seconds($pdo, (int)$pending['user_id
               <small class="validation-message" id="passwordValidation" aria-live="polite"></small>
             </div>
             <div class="auth-options">
-              <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="rememberCustomer" name="remember_me" /><span class="form-check-label">Remember Me</span></label>
-              <a href="#" class="auth-link">Forgot Password?</a>
+              <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="rememberCustomer" name="remember_me" /><span class="form-check-label" title="Stay signed in on this device for 15 days. Don't tick it on a shared computer.">Remember me</span></label>
+              <a href="forgot-password.php" class="auth-link">Forgot Password?</a>
             </div>
             <button type="submit" class="btn-auth"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>Login</button>
             <?php if ($loginError !== ''): ?><small class="validation-message" id="loginServerError" aria-live="assertive"><?= htmlspecialchars($loginError, ENT_QUOTES, 'UTF-8') ?></small><?php endif; ?>
           </form>
+          <?php if ($googleOn): ?>
+          <div class="auth-divider">or</div>
+          <a class="btn-auth btn-google" href="google-start.php" id="googleSignIn"><?php readfile(__DIR__ . '/../assets/img/google-g.svg'); ?>Continue with Google</a>
+          <?php endif; ?>
           <div class="auth-alt">
             <span class="auth-alt-text">Don&rsquo;t have an account yet?</span>
             <a class="btn-auth btn-auth-outline" href="customer-register.php">Create an account</a>
@@ -353,6 +329,16 @@ $tfaLock = $tfaView === 'verify' ? tfa_lock_seconds($pdo, (int)$pending['user_id
             }
           });
         });
+
+        /* "Remember me" applies to Google sign-in too: the box sits in the password
+           form, so carry its state onto the Google link when it is clicked. */
+        const googleSignIn = document.getElementById('googleSignIn');
+        const rememberBox = document.getElementById('rememberCustomer');
+        if (googleSignIn && rememberBox) {
+          googleSignIn.addEventListener('click', function () {
+            googleSignIn.href = 'google-start.php' + (rememberBox.checked ? '?remember=1' : '');
+          });
+        }
 
         const form = document.getElementById('customerLoginForm');
         if (!form) return;

@@ -91,6 +91,11 @@ if (!(bool) $user['is_active']) {
     cv_reply(403, ['ok' => false, 'message' => 'That account is suspended and cannot be booked for.']);
 }
 
+/* Created through Google (#23): there is no password to type at the counter. */
+if ($user['password_hash'] === null) {
+    cv_reply(409, ['ok' => false, 'message' => 'This account signs in with Google, so it has no password to type. Ask the customer to set a password in their profile, or book them as a walk-in with no account.']);
+}
+
 /* A wrong password here is the customer mistyping their own, not an attacker
    working through a list — so it does not feed the staff lockout ladder, which
    guards ADMIN actions. It is still checked with password_verify and the reply

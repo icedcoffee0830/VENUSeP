@@ -572,7 +572,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
         <div class="lp-step">
           <span class="lp-step-n">1</span>
           <h3>Pick a space and time</h3>
-          <p>Live availability, so you never request a slot that is already taken. Reservations must start at least 12 hours ahead.</p>
+          <p>Live availability, so you never request a slot that is already taken. Bahay Alumni reservations must start at least 12 hours ahead; USeP Venues can be booked the same day, if there&rsquo;s time left.</p>
         </div>
         <div class="lp-step">
           <span class="lp-step-n">2</span>

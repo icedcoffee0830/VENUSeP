@@ -417,6 +417,22 @@ function transaction_rows($customerId = null) {
         ? bookings_for_customer($customerId)
         : bookings_all();
 
+    /* Which of these bookings have a VENUSeP System Receipt (DB-DECISIONS
+       #22): ONE query for the whole list — mirrors customer/booking-history.php
+       — so the Receipt button in Transaction History never costs a query per
+       row, and never claims a receipt exists before sp_approve/payment
+       confirmation has actually written one. */
+    $hasReceipt = [];
+    $ids = array_filter(array_map(function ($b) { return (int) ($b['id'] ?? 0); }, $bookings));
+    if ($ids && ($pdo = venusep_db()) !== null) {
+        try {
+            $stmt = $pdo->query('SELECT DISTINCT booking_id FROM system_receipts WHERE booking_id IN (' . implode(',', $ids) . ')');
+            $hasReceipt = array_flip(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
+        } catch (PDOException $e) {
+            // no Receipt buttons rather than a broken page
+        }
+    }
+
     $rows = [];
     foreach ($bookings as $b) {
         $rows[] = [
@@ -437,6 +453,15 @@ function transaction_rows($customerId = null) {
             'paymentMethod'   => $b['method'],
             'paymentStatus'   => $b['paymentStatus'],
             'bookingStatus'   => $b['bookingStatus'],
+            /* View Receipt (customer: the styled receipt page; staff: the PDF,
+               same as admin/booking-request.php's "Download PDF") — only once
+               a System Receipt actually exists for this booking. */
+            'hasReceipt'      => isset($hasReceipt[(int) $b['id']]),
+            /* Rebook — the same room, a fresh booking. 'type' picks the page
+               (room-reservation.php vs hostel-reservation.php); roomCode is
+               never empty, every booking has a room. */
+            'type'            => $b['type'],
+            'roomCode'        => $b['roomCode'],
         ];
     }
     return $rows;

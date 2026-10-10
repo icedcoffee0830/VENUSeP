@@ -152,22 +152,34 @@ function customer_logged_in()
         return false;
     }
     customer_session_heal();
-    return true;
+    // heal() may have just ended the session (account gone, or disabled by
+    // staff) — re-check rather than report "logged in" on a session that no
+    // longer exists.
+    return isset($_SESSION['user_id'], $_SESSION['customer_id'], $_SESSION['account_type'])
+        && $_SESSION['account_type'] === 'customer';
 }
 
 /* =====================================================================
-   The session's customer_id must still point at a real row.
+   The session's customer_id must still point at a real, ACTIVE row.
 
-   It can stop pointing at one: re-running sp_seed_demo() rebuilds the
-   demo cast, so their `customers` rows get NEW ids while every open
-   session still carries the old ones. The symptom is brutal and
-   misleading — the customer looks logged in, their pages render, and
-   then every booking fails on a foreign key with "something went wrong".
+   Two ways a once-valid session stops being good:
+     · the customer row is gone — re-running sp_seed_demo() rebuilds the
+       demo cast, so their `customers` rows get NEW ids while every open
+       session still carries the old ones. The symptom is brutal and
+       misleading — the customer looks logged in, their pages render, and
+       then every booking fails on a foreign key with "something went wrong".
+     · the account was just DISABLED (admin/customer-save.php, set_active).
+       is_active is checked at login, same as staff — but without this, a
+       customer already signed in would keep booking straight through a
+       disable, same gap staff_session_heal() closes for the staff side.
 
    user_id is the durable identity (customers.user_id is UNIQUE), so the
-   row can always be found again. Checked once per request; a session
-   whose ACCOUNT is genuinely gone is ended rather than left half-valid.
-   ===================================================================== */
+   row can always be found again. Checked once per request; a session that
+   fails either check is ended rather than left half-valid. No redirect
+   here (unlike staff_session_heal()) — customer_logged_in() is called from
+   both customer/ pages and root-level ones (document-view.php,
+   receipt-pdf.php) with different relative paths, so each caller decides
+   what to do with a now-false result. */
 function customer_session_heal()
 {
     static $checked = false;
@@ -182,14 +194,17 @@ function customer_session_heal()
         return;                       // offline: leave the session alone rather than log anyone out
     }
     try {
-        $stmt = $pdo->prepare('SELECT id FROM customers WHERE user_id = :u LIMIT 1');
+        $stmt = $pdo->prepare(
+            'SELECT c.id, u.is_active FROM customers c JOIN users u ON u.id = c.user_id WHERE c.user_id = :u LIMIT 1'
+        );
         $stmt->execute([':u' => (int) $_SESSION['user_id']]);
-        $id = $stmt->fetchColumn();
-        if ($id !== false) {
-            $_SESSION['customer_id'] = (int) $id;
+        $row = $stmt->fetch();
+        if ($row !== false && (bool) $row['is_active']) {
+            $_SESSION['customer_id'] = (int) $row['id'];
         } else {
-            /* The account itself no longer exists. Ending the session is the
-               honest outcome: nothing this person does could succeed. */
+            /* The account is gone, or a staff member just disabled it.
+               Ending the session is the honest outcome either way: nothing
+               this person does from here could succeed. */
             venusep_logout();
         }
     } catch (PDOException $e) {

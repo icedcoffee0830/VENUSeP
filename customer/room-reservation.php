@@ -405,6 +405,13 @@ const NOW = new Date();
 const LEAD_MS = 12 * 60 * 60 * 1000;              // bookings must start ≥ 12 h from now
 const TODAY = isoOf(NOW);
 
+/* USeP Venues (the main campus location) can be booked same-day — there is no
+   Official Receipt lead time to wait on the way Bahay Alumni needs, so staff
+   there just need the room to still be free later today. Walk-ins at the
+   counter keep the full 12-hour rule regardless of venue (mirrors
+   admin/booking-create.php, which enforces it for every COUNTER booking). */
+function leadMsFor(room){ return (!COUNTER && room && room.venue==='USeP Venues') ? 0 : LEAD_MS; }
+
 /* [SIM] Sample equirectangular panorama (swap for real per-room images later). */
 const SAMPLE_PANO = 'https://pannellum.org/images/alma.jpg';
 
@@ -643,9 +650,11 @@ function earliestStart(){
   const dt=new Date(dates[0]+'T'+t.start+':00');
   return isNaN(dt.getTime()) ? null : dt;
 }
-/* the 12-hour advance rule: earliest start must be at least 12 h from now */
-function isTooSoon(){ const dt=earliestStart(); return dt!=null && (dt-NOW) < LEAD_MS; }
-function earliestAllowed(){ return new Date(NOW.getTime()+LEAD_MS); }
+/* the advance-booking rule: earliest start must be at least `leadMsFor()` from
+   now. Zero for USeP Venues (see leadMsFor) — same-day is fine as long as the
+   slot is still in the future. */
+function isTooSoon(){ const dt=earliestStart(); return dt!=null && (dt-NOW) < leadMsFor(getRoom()); }
+function earliestAllowed(){ return new Date(NOW.getTime()+leadMsFor(getRoom())); }
 
 /* true when every day in the range shares the same start/end hours */
 function sameHoursEveryDay(dates){
@@ -737,9 +746,12 @@ function derive(){
     badFix = sr.badReason==='missing' ? 'add both a start and end time' : 'set the end time later than the start time';
   }
 
-  /* 12-hour advance rule (mirrors Booking_Refined): the earliest reservation
-     start — the first day at its start time — must be at least 12 h from now. */
+  /* Advance-booking rule (mirrors Booking_Refined): the earliest reservation
+     start — the first day at its start time — must be at least leadMsFor(R)
+     from now. USeP Venues has none of this (same-day is fine), so its wording
+     below just says "book a time that hasn't passed yet". */
   const tooSoon = sr.show && !sr.badRange && !sr.invalid && isTooSoon();
+  const sameDayOk = R && leadMsFor(R)===0;
 
   /* status card: neutral surface + a small colored dot (amber = fix something,
      green = good to go) — calmer than the old solid red/green boxes */
@@ -759,7 +771,9 @@ function derive(){
         title,
         detail: 'Please '+badFix+' for '+(multi?badDayLabel:'this booking')+'.'};
     } else if(tooSoon){
-      slot={show:true,dot:'#d9930d',title:'Too soon — book at least 12 hours ahead',detail:'Reservations must start at least 12 hours from now. Pick a later date or start time.'};
+      slot = sameDayOk
+        ? {show:true,dot:'#d9930d',title:'That time has already passed today',detail:'Pick a start time later today, or a future date.'}
+        : {show:true,dot:'#d9930d',title:'Too soon — book at least 12 hours ahead',detail:'Reservations must start at least 12 hours from now. Pick a later date or start time.'};
     } else if(sr.ok){
       let timeLbl;
       if(sr.dates.length<2){ const t=dayTime(sr.dates[0]); timeLbl=fmtTime(t.start)+' – '+fmtTime(t.end); }
@@ -785,7 +799,7 @@ function derive(){
   else if(sr.show && sr.allBlocked) hint = sr.why==='maintenance' ? 'Closed for maintenance — pick different dates' : 'These dates are already booked — pick different ones';
   else if(sr.show && sr.invalid) hint= (multi?badDayLabel+': ':'')+badFix;
   else if(!sr.show) hint='Set the hours to check availability';
-  else if(tooSoon) hint='Bookings must be made at least 12 hours in advance';
+  else if(tooSoon) hint = sameDayOk ? 'Pick a start time that hasn\'t passed yet today' : 'Bookings must be made at least 12 hours in advance';
   else if(isNaN(ba)||ba<=0) hint='Enter the number of attendees';
 
   return { R, b, days, multi, excluded, allDates, dates:sr.dates||actDates, totalFee, roomPrice, discountPercent, discountAmount, slot, over, ready, hint };
@@ -1450,7 +1464,9 @@ function detailScreen(){
     const policy=(title,body)=>`<div style="padding:18px 0;border-top:1px solid rgba(0,0,0,.08)"><div style="font-weight:640;font-size:14px;margin-bottom:5px">${title}</div><p style="margin:0;font-size:13.5px;line-height:1.6;color:#4a463f;max-width:70ch">${body}</p></div>`;
     content=`
       <h3 style="margin:0 0 4px;font-size:16px;font-weight:660">Reservation policies</h3>
-      ${policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')}
+      ${leadMsFor(R)===0
+        ? policy('Booking window','This USeP Venues room can be booked <strong>the same day</strong> — your start time just has to be later than right now. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')
+        : policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')}
       ${policy('Valid ID & approval','Every booking request must include a photo of a <strong>valid ID</strong> (USeP or government-issued). Your reservation stays <strong>pending</strong> — and payment stays locked — until staff approve both the ID and the reservation.')}
       ${PAY_POLICY.prepay
         ? policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')
@@ -1591,7 +1607,9 @@ function detailScreen(){
       <div class="bk-panel">
         <span class="bk-eyebrow">Book this room</span>
         <div style="font-size:20px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px">Reserve this room</div>
-        <div style="font-size:12.5px;line-height:1.55;color:#e9d0cd;margin-bottom:18px">Pick your dates &amp; time to check the slot. Bookings must start at least 12 hours from now. <a onclick="openLeadModal()" style="font-weight:600;cursor:pointer;white-space:nowrap">Why?</a></div>
+        <div style="font-size:12.5px;line-height:1.55;color:#e9d0cd;margin-bottom:18px">${leadMsFor(R)===0
+          ? 'Pick your dates &amp; time to check the slot. This room can be booked the same day, as long as the time hasn&rsquo;t passed yet.'
+          : 'Pick your dates &amp; time to check the slot. Bookings must start at least 12 hours from now. <a onclick="openLeadModal()" style="font-weight:600;cursor:pointer;white-space:nowrap">Why?</a>'}</div>
         ${maintDisclosure(R)}
 
         <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
@@ -2312,6 +2330,8 @@ function doneScreen(){
 function modalHtml(){
   if(state.modal && state.modal.type==='clash') return clashModalHtml();
   if(state.modal!=='lead') return '';
+  const R=getRoom();
+  const sameDayOk = R && leadMsFor(R)===0;
   const e=earliestAllowed();
   const hhmm=String(e.getHours()).padStart(2,'0')+':'+String(e.getMinutes()).padStart(2,'0');
   const when=e.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})+' · '+fmtTime(hhmm);
@@ -2321,8 +2341,10 @@ function modalHtml(){
       <div style="width:46px;height:46px;border-radius:999px;background:#eef0f5;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a11626" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       </div>
-      <div style="font-size:17px;font-weight:720;letter-spacing:-.01em;margin-bottom:6px">Book at least 12 hours ahead</div>
-      <p style="margin:0 auto 16px;font-size:13.5px;line-height:1.6;color:#7a766f;max-width:32ch">Venue staff need time to prepare — reservations must start at least <strong style="color:#4a463f">12 hours from now</strong>. The time you picked is too soon.</p>
+      <div style="font-size:17px;font-weight:720;letter-spacing:-.01em;margin-bottom:6px">${sameDayOk ? 'Pick a time that hasn&rsquo;t passed yet' : 'Book at least 12 hours ahead'}</div>
+      <p style="margin:0 auto 16px;font-size:13.5px;line-height:1.6;color:#7a766f;max-width:32ch">${sameDayOk
+        ? 'This room can be booked the same day — but the time you picked is already behind the current time.'
+        : 'Venue staff need time to prepare — reservations must start at least <strong style="color:#4a463f">12 hours from now</strong>. The time you picked is too soon.'}</p>
       <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px 14px;margin-bottom:18px">
         <div style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">Earliest start</div>
         <div style="font-size:15px;font-weight:680;color:#a11626">${when}</div>

@@ -284,13 +284,18 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         };
 
         const actionButtons = (cell) => {
-          const id = encodeURIComponent(cell.getRow().getData().transactionId);
-          // [SIM] View + Download Receipt are stubs — wire to transaction-details.php
-          //       and receipt generation when the backend exists.
+          const row = cell.getRow().getData();
+          const id = encodeURIComponent(row.transactionId);
+          // [SIM] View is still a stub — wire to transaction-details.php when it exists.
+          // Receipt is real: receipt-pdf.php (project root) already lets staff open ANY
+          // booking's System Receipt — the same link admin/booking-request.php uses.
+          const receiptBtn = row.hasReceipt
+            ? `<a class="th-act" href="../receipt-pdf.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i>Receipt</a>`
+            : `<span class="th-act is-disabled" title="No System Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
           return `
             <div class="th-actions">
               <a class="th-act" href="#" data-txn="${id}"><i class="bi bi-eye"></i>View</a>
-              <span class="th-act is-disabled" title="Receipt download coming soon"><i class="bi bi-download"></i>Receipt</span>
+              ${receiptBtn}
             </div>`;
         };
 

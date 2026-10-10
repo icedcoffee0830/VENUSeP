@@ -74,10 +74,11 @@ if ($pdo === null) {
 
 /* ---- the room, and the rate THIS server believes in ---- */
 $roomStmt = $pdo->prepare(
-    "SELECT r.id, r.room_type, r.is_active,
+    "SELECT r.id, r.room_type, r.is_active, v.name AS venue_name,
             erd.attendee_capacity, erd.fee_per_day,
             hrd.rate_per_head_per_night
        FROM rooms r
+       JOIN venues v                     ON v.id = r.venue_id
        LEFT JOIN event_room_details erd  ON erd.room_id = r.id
        LEFT JOIN hostel_room_details hrd ON hrd.room_id = r.id
       WHERE r.room_code = :c"
@@ -166,7 +167,10 @@ if (!$refundsAllowed && empty($_POST['agree_no_refund'])) {
     bs_reply(400, ['ok' => false, 'message' => 'Please confirm you understand this booking is non-refundable.']);
 }
 
-$LEAD_HOURS = 12;   // mirrors LEAD_MS in the booking pages
+/* USeP Venues has no advance-notice requirement — same-day is fine as long as
+   the slot hasn't passed yet. Bahay Alumni keeps the 12-hour rule. Mirrors
+   leadMsFor() in customer/room-reservation.php, which draws the same line. */
+$LEAD_HOURS = ($type === 'venue' && $room['venue_name'] === 'USeP Venues') ? 0 : 12;
 
 /* ============================ VENUE ============================ */
 if ($type === 'venue') {

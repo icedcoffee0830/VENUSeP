@@ -3,12 +3,24 @@
 --
 --      mysql -u root venusep < venusep_demo_seed.sql     (installs the procs)
 --      CALL sp_seed_demo();                              (builds the showcase)
+--      php tests/backfill_system_receipts.php            (issues receipts for it)
 --  Needs venusep_migration_02.sql applied first (sp_reset_2fa).
 --
 --  ⚠️ sp_seed_demo() is a RESET. It DELETES every booking, payment, receipt,
 --     refund and document and rebuilds them. It does NOT touch the catalog
 --     (venues, rooms, rates, photos, FAQs) and it does NOT delete the two
 --     original accounts. Never run it on a database holding real bookings.
+--
+--  ⚠️ IT DOES NOT ISSUE SYSTEM RECEIPTS. The `payments` rows below are
+--     inserted directly as already 'confirmed', bypassing the live app's
+--     admin/booking-action.php (confirm_payment), which is the only place
+--     that calls receipt_issue() (includes/system-receipt.php). Run the
+--     backfill script above once after every CALL sp_seed_demo() — it uses
+--     that same function, so the receipts it produces are not a second,
+--     hand-rolled copy of what a receipt contains. Skipping it means every
+--     "paid" demo booking looks paid in the UI but has no receipt, so the
+--     Receipt button in Transaction / Booking History stays disabled for
+--     all of them.
 --
 --  WHY DATES ARE RELATIVE
 --  ----------------------
@@ -80,6 +92,13 @@ BEGIN
     DELETE FROM booking_timeline;
     DELETE FROM refunds;
     DELETE FROM gcash_receipts;
+    -- system_receipts BEFORE payments: fk_system_receipts_payment is ON
+    -- DELETE RESTRICT, so a receipt issued by the live app (admin/
+    -- booking-action.php's confirm_payment, via receipt_issue()) would
+    -- otherwise make `DELETE FROM payments` below fail outright. This was
+    -- missing even though the header above has always promised a reset
+    -- deletes "every booking, payment, receipt, refund and document".
+    DELETE FROM system_receipts;
     DELETE FROM payments;
     DELETE FROM booking_documents;
     DELETE FROM bed_reservation_nights;

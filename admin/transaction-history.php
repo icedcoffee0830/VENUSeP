@@ -287,10 +287,15 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
           const row = cell.getRow().getData();
           const id = encodeURIComponent(row.transactionId);
           // [SIM] View is still a stub — wire to transaction-details.php when it exists.
-          // Receipt is real: receipt-pdf.php (project root) already lets staff open ANY
-          // booking's System Receipt — the same link admin/booking-request.php uses.
+          // Receipt opens admin/receipt.php — the same styled "paper slip" view
+          // customer/receipt.php shows, just gated for staff instead of the
+          // booking's own customer (see that file's header for why it's separate).
+          // Its own "Download PDF" link goes to receipt-pdf.php when an actual
+          // file is wanted — receipt-pdf.php itself always forces a download
+          // (Content-Disposition: attachment), so linking the button straight to
+          // it here would never let staff just LOOK at the receipt in the tab.
           const receiptBtn = row.hasReceipt
-            ? `<a class="th-act" href="../receipt-pdf.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i>Receipt</a>`
+            ? `<a class="th-act" href="receipt.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i>Receipt</a>`
             : `<span class="th-act is-disabled" title="No System Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
           return `
             <div class="th-actions">

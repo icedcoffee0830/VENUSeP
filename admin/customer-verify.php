@@ -95,7 +95,7 @@ if (!(bool) $user['is_active']) {
    working through a list — so it does not feed the staff lockout ladder, which
    guards ADMIN actions. It is still checked with password_verify and the reply
    says nothing about which part was wrong. */
-if (!password_verify($password, $user['password_hash'])) {
+if (!password_verify($password, (string) $user['password_hash'])) {
     cv_reply(401, ['ok' => false, 'message' => 'That password did not match. Try again, or book them as a walk-in with no account.']);
 }
 

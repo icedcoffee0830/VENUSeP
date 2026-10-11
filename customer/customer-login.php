@@ -109,7 +109,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
 
         $customer = $stmt->fetch();
 
-        if (!$customer || !$customer['is_active'] || !password_verify($password, $customer['password_hash'])) {
+        /* (string) cast: password_hash is NOT NULL in the schema, but this
+           still must not be the thing that finds out the hard way (a
+           Fatal TypeError, not a login error) if that ever drifts — e.g. a
+           row inserted by hand while testing. A null cast to '' just fails
+           password_verify() normally, same as any other wrong password. */
+        if (!$customer || !$customer['is_active'] || !password_verify($password, (string) $customer['password_hash'])) {
             // Use one generic message so the page does not reveal whether an email exists.
             $loginError = 'Invalid email or password.';
         } else {

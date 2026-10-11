@@ -94,7 +94,7 @@ try {
             'message' => 'Too many wrong passwords.']);
     }
 
-    if (!password_verify($password, $user['password_hash'])) {
+    if (!password_verify($password, (string) $user['password_hash'])) {
         $attempts = (int) $user['reauth_failed_attempts'] + 1;
 
         if ($attempts >= RS_ATTEMPTS_PER_LOCK) {

@@ -1465,7 +1465,7 @@ function detailScreen(){
     content=`
       <h3 style="margin:0 0 4px;font-size:16px;font-weight:660">Reservation policies</h3>
       ${leadMsFor(R)===0
-        ? policy('Booking window','This USeP Venues room can be booked <strong>the same day</strong> — your start time just has to be later than right now. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')
+        ? policy('Booking window','This USeP Venues room can be booked <strong>the same day</strong> — your start time just has to be later than right now, with enough of the day left before the <strong>10:00 PM</strong> closing time for your event. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')
         : policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')}
       ${policy('Valid ID & approval','Every booking request must include a photo of a <strong>valid ID</strong> (USeP or government-issued). Your reservation stays <strong>pending</strong> — and payment stays locked — until staff approve both the ID and the reservation.')}
       ${PAY_POLICY.prepay
@@ -1608,7 +1608,7 @@ function detailScreen(){
         <span class="bk-eyebrow">Book this room</span>
         <div style="font-size:20px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px">Reserve this room</div>
         <div style="font-size:12.5px;line-height:1.55;color:#e9d0cd;margin-bottom:18px">${leadMsFor(R)===0
-          ? 'Pick your dates &amp; time to check the slot. This room can be booked the same day, as long as the time hasn&rsquo;t passed yet.'
+          ? 'Pick your dates &amp; time to check the slot. This room can be booked the same day, as long as the time hasn&rsquo;t passed yet and still fits before 10:00 PM.'
           : 'Pick your dates &amp; time to check the slot. Bookings must start at least 12 hours from now. <a onclick="openLeadModal()" style="font-weight:600;cursor:pointer;white-space:nowrap">Why?</a>'}</div>
         ${maintDisclosure(R)}
 

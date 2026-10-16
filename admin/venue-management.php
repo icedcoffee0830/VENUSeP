@@ -185,6 +185,7 @@ function vmMaint($m, $today) {
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
 
     <!-- ============================================================
          [0] SHELL CSS — the TEAM header bar + sidebar + layout
@@ -1212,6 +1213,7 @@ function vmMaint($m, $today) {
          · live search filter over the cards
          · "venue" sort/filter dropdown + click-outside to close
          ============================================================ -->
+    <script src="../assets/js/confirm-modal.js"></script>
     <script>
       // UI-only: carousel dots + simple search filter. No backend.
       document.querySelectorAll('.vm-dots').forEach((group) => {
@@ -1277,10 +1279,12 @@ function vmMaint($m, $today) {
       });
 
       document.querySelectorAll('[data-delete-entity]').forEach((button) => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
           const entity = button.dataset.deleteEntity;
           const name = button.dataset.deleteName;
-          if (!window.confirm('Delete ' + name + '? This action cannot be undone.')) return;
+          const ok = await venusepConfirm('Delete ' + name + '? This action cannot be undone.',
+            { title: 'Delete ' + (entity === 'room' ? 'room' : 'venue') + '?', okLabel: 'Delete', danger: true });
+          if (!ok) return;
 
           const body = new URLSearchParams({
             csrf: <?php echo json_encode($dcCsrf); ?>,
@@ -1293,12 +1297,12 @@ function vmMaint($m, $today) {
             .then((response) => response.json().catch(() => ({ ok: false, message: 'The server sent an unreadable reply.' })))
             .then((result) => {
               if (!result.ok) {
-                alert(result.message || 'Nothing was deleted.');
+                venusepAlert(result.message || 'Nothing was deleted.');
                 return;
               }
               location.reload();
             })
-            .catch(() => alert('Could not reach the server, so nothing was deleted.'))
+            .catch(() => venusepAlert('Could not reach the server, so nothing was deleted.'))
             .finally(() => { button.disabled = false; });
         });
       });
@@ -1317,12 +1321,12 @@ function vmMaint($m, $today) {
             .then((response) => response.json().catch(() => ({ ok: false, message: 'The server sent an unreadable reply.' })))
             .then((result) => {
               if (!result.ok) {
-                alert(result.message || 'Nothing changed.');
+                venusepAlert(result.message || 'Nothing changed.');
                 return;
               }
               location.reload();
             })
-            .catch(() => alert('Could not reach the server, so nothing changed.'))
+            .catch(() => venusepAlert('Could not reach the server, so nothing changed.'))
             .finally(() => { button.disabled = false; });
         });
       });

@@ -52,6 +52,7 @@ $emptyBookingMessage = 'No booking history found.';
     <title>VENUSeP | Booking History</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
 
     <!-- [0] SHELL CSS — shared layout -->
     <style>
@@ -349,6 +350,7 @@ $emptyBookingMessage = 'No booking history found.';
       </main>
     </div>
 
+    <script src="../assets/js/confirm-modal.js"></script>
     <!-- [6] PAGE SCRIPT — page-local table logic (search/sort/paginate) -->
     <script>
       document.addEventListener('DOMContentLoaded', function () {
@@ -499,8 +501,10 @@ $emptyBookingMessage = 'No booking history found.';
         const refs = Object.keys(REFUNDS);
         if (!refs.length) return;
 
-        const withdraw = function (ref) {
-          const ok = window.confirm('Withdraw your refund request for ' + ref + '?\n\nYour booking is not affected either way — it stays yours. You can request a refund again later if you change your mind.');
+        const withdraw = async function (ref) {
+          const ok = await venusepConfirm(
+            'Your booking is not affected either way — it stays yours. You can request a refund again later if you change your mind.',
+            { title: 'Withdraw your refund request for ' + ref + '?', okLabel: 'Withdraw', danger: true });
           if (!ok) return;
           fetch('refund-submit.php', {
             method: 'POST', credentials: 'same-origin',
@@ -508,10 +512,10 @@ $emptyBookingMessage = 'No booking history found.';
           })
             .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
             .then(function (out) {
-              if (!out.ok) { window.alert(out.message || 'The request was not withdrawn.'); return; }
+              if (!out.ok) { venusepAlert(out.message || 'The request was not withdrawn.'); return; }
               window.location.reload();
             })
-            .catch(function () { window.alert('Could not reach the server, so nothing was changed.'); });
+            .catch(function () { venusepAlert('Could not reach the server, so nothing was changed.'); });
         };
 
         const action = function (row, cls, icon, text, onClick, href) {

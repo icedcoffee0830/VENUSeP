@@ -285,8 +285,12 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 
         const actionButtons = (cell) => {
           const row = cell.getRow().getData();
-          const id = encodeURIComponent(row.transactionId);
-          // [SIM] View is still a stub — wire to transaction-details.php when it exists.
+          // View — always clickable, never greyed out. receipt-image.php (root)
+          // opens the uploaded GCash screenshot when there is one — staff can
+          // open ANY booking's, the same rule admin/booking-request.php relies
+          // on — or says plainly why there isn't one (cash payment, or nothing
+          // submitted yet) instead of the button going nowhere for those rows.
+          const viewBtn = `<a class="th-act" href="../receipt-image.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
           // Receipt opens admin/receipt.php — the same styled "paper slip" view
           // customer/receipt.php shows, just gated for staff instead of the
           // booking's own customer (see that file's header for why it's separate).
@@ -299,7 +303,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
             : `<span class="th-act is-disabled" title="No System Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
           return `
             <div class="th-actions">
-              <a class="th-act" href="#" data-txn="${id}"><i class="bi bi-eye"></i>View</a>
+              ${viewBtn}
               ${receiptBtn}
             </div>`;
         };

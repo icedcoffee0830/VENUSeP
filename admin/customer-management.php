@@ -64,6 +64,7 @@ $cmCsrf = csrf_token();
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.11.0/styles/overlayscrollbars.min.css" crossorigin="anonymous"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/css/tabulator_bootstrap5.min.css" crossorigin="anonymous"/>
+  <link rel="stylesheet" href="../assets/css/confirm-modal.css"/>
   <style>
 :root {
   --venusep-black: #1f1e1e;
@@ -435,6 +436,7 @@ body {
   <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
+  <script src="../assets/js/confirm-modal.js"></script>
   <script>
     const statusBadge = (cell) => {
       const value = cell.getValue();
@@ -455,19 +457,20 @@ body {
         return fetch('customer-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
           .then(function (res) {
-            if (!res.ok) { window.alert(res.message || 'Nothing was changed.'); return false; }
+            if (!res.ok) { venusepAlert(res.message || 'Nothing was changed.'); return false; }
             if (typeof onOk === 'function') onOk(res);
             return true;
           })
-          .catch(function () { window.alert('Could not reach the server, so nothing was changed.'); return false; });
+          .catch(function () { venusepAlert('Could not reach the server, so nothing was changed.'); return false; });
       };
 
-      const toggleActive = function (row) {
+      const toggleActive = async function (row) {
         const disable = row.status === 'Active';
-        const ok = window.confirm(
+        const ok = await venusepConfirm(
           disable
-            ? 'Disable ' + row.name + '?\n\nThey will be signed out immediately and cannot sign in or book again until re-enabled. Their existing bookings and history are unaffected.'
-            : 'Re-enable ' + row.name + '?\n\nThey will be able to sign in and book again.');
+            ? 'They will be signed out immediately and cannot sign in or book again until re-enabled. Their existing bookings and history are unaffected.'
+            : 'They will be able to sign in and book again.',
+          { title: (disable ? 'Disable ' : 'Re-enable ') + row.name + '?', okLabel: disable ? 'Disable' : 'Re-enable', danger: disable });
         if (!ok) return;
         const body = new FormData();
         body.append('action', 'set_active');

@@ -98,6 +98,11 @@ function bookings_query(array $opts = []) {
                  ORDER BY gr.id DESC LIMIT 1) AS receipt_verdict,
                (SELECT gr.reference_number FROM gcash_receipts gr WHERE gr.booking_id = b.id
                  ORDER BY gr.id DESC LIMIT 1) AS receipt_reference,
+               /* The uploaded GCash screenshot's own row id — document-view.php's
+                  ?receipt= param. Not the System Receipt (#22); this is the proof
+                  of payment the customer sent, which staff review it against. */
+               (SELECT gr.id FROM gcash_receipts gr WHERE gr.booking_id = b.id
+                 ORDER BY gr.id DESC LIMIT 1) AS gcash_receipt_id,
                (SELECT COALESCE(JSON_LENGTH(gr.flags_json), 0) FROM gcash_receipts gr
                  WHERE gr.booking_id = b.id ORDER BY gr.id DESC LIMIT 1) AS receipt_flags
           FROM bookings b
@@ -219,6 +224,7 @@ function booking_shape(array $row) {
         'receiptVerdict'  => $row['receipt_verdict'],       // accepted | manual_review | rejected | null
         'receiptReference'=> (string) $row['receipt_reference'],
         'receiptFlags'    => (int) $row['receipt_flags'],
+        'gcashReceiptId'  => $row['gcash_receipt_id'] !== null ? (int) $row['gcash_receipt_id'] : null,
 
         'pos'           => (string) $row['pos_number'],
         'officialReceipt' => (string) $row['official_receipt_no'],
@@ -453,10 +459,15 @@ function transaction_rows($customerId = null) {
             'paymentMethod'   => $b['method'],
             'paymentStatus'   => $b['paymentStatus'],
             'bookingStatus'   => $b['bookingStatus'],
-            /* View Receipt (customer: the styled receipt page; staff: the PDF,
-               same as admin/booking-request.php's "Download PDF") — only once
-               a System Receipt actually exists for this booking. */
+            /* View Receipt — the VENUSeP System Receipt (#22), the styled page
+               both portals use (customer/receipt.php, admin/receipt.php) — only
+               once one actually exists for this booking. */
             'hasReceipt'      => isset($hasReceipt[(int) $b['id']]),
+            /* View — the uploaded GCash payment screenshot itself (proof of
+               payment, not the System Receipt), via document-view.php?receipt=.
+               null when nothing was ever uploaded (cash payments, or a booking
+               still waiting on its first payment attempt). */
+            'gcashReceiptId'  => $b['gcashReceiptId'],
             /* Rebook — the same room, a fresh booking. 'type' picks the page
                (room-reservation.php vs hostel-reservation.php); roomCode is
                never empty, every booking has a room. */

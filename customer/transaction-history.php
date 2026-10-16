@@ -239,6 +239,11 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         const statusBadge = (cell) => `<span class="t-badge ${badgeClass(cell.getValue())}">${cell.getValue()}</span>`;
         const actionButtons = (cell) => {
           const row = cell.getRow().getData();
+          // View — always clickable, never greyed out. receipt-image.php (root)
+          // opens the uploaded GCash screenshot when there is one, or says
+          // plainly why there isn't (cash payment, or nothing submitted yet)
+          // instead of the button going nowhere for rows that lack one.
+          const viewBtn = `<a class="th-act" href="../receipt-image.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
           const receiptBtn = row.hasReceipt
             ? `<a class="th-act" href="receipt.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i>Receipt</a>`
             : `<span class="th-act is-disabled" title="No System Receipt yet — issued once staff confirm payment"><i class="bi bi-receipt"></i>Receipt</span>`;
@@ -246,7 +251,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
           const rebookBtn = row.roomCode
             ? `<a class="th-act" href="${rebookPage}?room=${encodeURIComponent(row.roomCode)}"><i class="bi bi-arrow-repeat"></i>Rebook</a>`
             : '';
-          return `<div class="th-actions">${receiptBtn}${rebookBtn}</div>`;
+          return `<div class="th-actions">${viewBtn}${receiptBtn}${rebookBtn}</div>`;
         };
 
         const table = new Tabulator('#transaction-history-table', {
@@ -264,7 +269,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
             { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150 },
             { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
             { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 210, width: 210, hozAlign: 'center' },
+            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 290, width: 290, hozAlign: 'center' },
           ],
         });
 

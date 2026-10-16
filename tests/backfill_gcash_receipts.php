@@ -76,10 +76,13 @@ if (!$rows) {
    creates under doc_root(), including the shared 'bookings' parent the
    first booking's folder sits in — widen it too, once, or Apache can never
    even traverse INTO the per-booking folders below, regardless of their
-   own permissions. A real upload never needs this: Apache creates
-   'bookings/' itself and already owns it. */
-@mkdir(doc_root() . '/bookings', 0711, true);
-@chmod(doc_root() . '/bookings', 0711);
+   own permissions. 0777, not 0711: 0711 shuts Apache (daemon, neither the
+   owner nor in this CLI user's group) out of WRITING a new per-booking
+   folder of its own, so the next real upload into a booking this script
+   hasn't touched yet would silently fail to save. */
+@mkdir(doc_root() . '/bookings', 0777, true);
+@chmod(doc_root() . '/bookings', 0777);
+@chmod(doc_root(), 0777);
 
 /* One GCash account per venue (admin Payment Settings) — the receiver a real
    screenshot would show. Falls back to a generic label if a venue somehow

@@ -68,8 +68,15 @@ if (!$rows) {
    including the shared 'bookings' parent the first booking's folder sits
    in — widen it too, once, or Apache can never even traverse INTO the
    per-booking folders below, regardless of their own permissions. */
-@mkdir(doc_root() . '/bookings', 0711, true);
-@chmod(doc_root() . '/bookings', 0711);
+/* 0711 used to be here, which was the bug: it let THIS script traverse and
+   write, but shut Apache (daemon, neither the owner nor in blissy's group)
+   out of writing a NEW per-booking folder on the next real upload — so every
+   real ID silently failed to save and only ever the backfilled placeholder
+   showed through "View". 0777 so whichever side (CLI or Apache) touches this
+   folder next can still create inside it. */
+@mkdir(doc_root() . '/bookings', 0777, true);
+@chmod(doc_root() . '/bookings', 0777);
+@chmod(doc_root(), 0777);
 
 function bfid_placeholder_jpeg($tmpPath, $lines, $bg) {
     $w = 760; $h = 480;   // landscape, like a photographed ID card

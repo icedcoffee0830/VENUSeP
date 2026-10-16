@@ -239,11 +239,11 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         const statusBadge = (cell) => `<span class="t-badge ${badgeClass(cell.getValue())}">${cell.getValue()}</span>`;
         const actionButtons = (cell) => {
           const row = cell.getRow().getData();
-          // View — always clickable, never greyed out. receipt-image.php (root)
-          // opens the uploaded GCash screenshot when there is one, or says
-          // plainly why there isn't (cash payment, or nothing submitted yet)
-          // instead of the button going nowhere for rows that lack one.
-          const viewBtn = `<a class="th-act" href="../receipt-image.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
+          // View — the valid ID submitted with this booking. Always
+          // clickable: an ID is required at every booking (unlike the GCash
+          // receipt, which only exists once payment happens), so there is
+          // always something for valid-id-view.php (root) to show.
+          const viewBtn = `<a class="th-act" href="../valid-id-view.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
           const receiptBtn = row.hasReceipt
             ? `<a class="th-act" href="receipt.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i>Receipt</a>`
             : `<span class="th-act is-disabled" title="No System Receipt yet — issued once staff confirm payment"><i class="bi bi-receipt"></i>Receipt</span>`;

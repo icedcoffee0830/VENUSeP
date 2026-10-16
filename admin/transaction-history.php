@@ -285,12 +285,13 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 
         const actionButtons = (cell) => {
           const row = cell.getRow().getData();
-          // View — always clickable, never greyed out. receipt-image.php (root)
-          // opens the uploaded GCash screenshot when there is one — staff can
-          // open ANY booking's, the same rule admin/booking-request.php relies
-          // on — or says plainly why there isn't one (cash payment, or nothing
-          // submitted yet) instead of the button going nowhere for those rows.
-          const viewBtn = `<a class="th-act" href="../receipt-image.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
+          // View — the valid ID submitted with this booking (staff can open
+          // ANY booking's, the same rule admin/booking-request.php relies
+          // on). Always clickable: an ID is required at every booking
+          // (unlike the GCash receipt, which only exists once payment
+          // happens), so there is always something for valid-id-view.php
+          // (root) to show.
+          const viewBtn = `<a class="th-act" href="../valid-id-view.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
           // Receipt opens admin/receipt.php — the same styled "paper slip" view
           // customer/receipt.php shows, just gated for staff instead of the
           // booking's own customer (see that file's header for why it's separate).

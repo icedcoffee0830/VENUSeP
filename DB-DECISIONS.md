@@ -346,6 +346,75 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
 
 ---
 
+## 23. Customer sign-in with Google — decided 2026-10-05
+- **Customers only.** "Continue with Google" on the login page, "Sign up with Google" on the
+  register page. A staff or admin account is never signed in through Google, matched by
+  Google id or by email.
+- **Identity is the Google id (`users.google_sub`), never the email.** An email can be
+  changed in the profile; the Google id cannot.
+- **A new Google identity gets an account automatically**, after a one-time screen on the
+  login page: name (pre-filled from Google), an optional mobile number (for GCash
+  refunds), and the terms. The email comes from Google and is marked verified.
+- **Google never gives us the person's password**, so such an account has
+  **`users.password_hash` NULL** (migration 04). The login form tells them "This account
+  uses Google sign-in". Changing a password, turning on two-step verification, and the
+  counter identity check refuse plainly instead of failing on the missing hash.
+- **An email already registered is never linked automatically.** VENUSeP does not verify
+  emails at sign-up, so anyone could have registered someone else's address first;
+  linking would let both people into one account. The customer is told to log in with
+  their email and password.
+- **Two-step verification still applies:** a customer who turned it on is asked for the
+  code after Google, exactly as after a password.
+- **The exchange:** one-time `state` (login CSRF), PKCE S256, and a `nonce` checked in the
+  ID token; the token is fetched straight from Google's token endpoint over verified TLS,
+  and its issuer, audience, expiry and `email_verified` are checked.
+- **Settings:** `includes/google-config.php`, git-ignored (template:
+  `google-config.example.php`). Without it the Google buttons are hidden.
+- **Profile → Account Security** shows both ways of signing in. Adding or removing one
+  always needs a fresh proof, never the session alone (built 2026-10-05):
+  - **Set a password** (account made through Google): confirm with the linked Google
+    account first; the form then works for 10 minutes, once.
+  - **Connect Google** (password account): re-type the password, then go to Google. A
+    Google account already linked to another VENUSeP account is refused; any Google
+    account the customer owns may be linked, whatever its email.
+  - **Disconnect Google**: re-type the password. Refused while Google is the only way in.
+  - Two-step verification can only be turned on once the account has a password.
+- **Counter:** a Google-only account has no password to type, so staff are told to have
+  the customer set one, or book them as a walk-in.
+- **Forgot password** (customers only, built 2026-10-05; `includes/password-reset.php`):
+  - The form gives the **same reply** whether or not the email has an account.
+  - The link's token is 32 random bytes; **only its SHA-256 is stored**
+    (`password_resets`). It works **once, for 30 minutes**; a newer request cancels older
+    links; at most **one email per account every 5 minutes**.
+  - It is sent through the outbox (`kind = 'password_reset'`), then the link is
+    **scrubbed from the stored email**. These emails are never resent; the customer asks
+    again. Staff and admin accounts are never sent one.
+  - The reset page moves the token into the session on the first visit and drops it from
+    the URL, and sends no referrer.
+  - It does **not** sign anyone in: the customer logs in afterwards (two-step code still
+    asked). A Google-only account can get its first password this way too.
+- **A password change ends the account's other sessions.** `users.password_changed_at`
+  is set by a reset, a profile change, or a first password; a customer session that
+  signed in before it is ended on its next request. The session that changed it in the
+  profile stays signed in.
+- **Remember me** (customers only, built 2026-10-05; `includes/remember-me.php`):
+  - Ticking it (password or Google) keeps that device signed in for **15 days from
+    sign-in**; using the site does not extend it. A remembered device **skips the
+    two-step code**, because the token is only issued after the code was passed.
+  - Cookie `selector:validator`, `HttpOnly`, `SameSite=Lax`, `Secure` on HTTPS; only the
+    validator's SHA-256 is stored (`remember_tokens`). Every use replaces the validator;
+    an old one coming back after a one-minute grace (for two tabs loading at once) means
+    the cookie was copied, and **every remembered device of that account is forgotten**.
+  - Forgotten: this device on **Log Out**; every device when the password is changed,
+    reset or first set, or two-step verification is turned on or off. Refused (and
+    deleted) for a suspended account or one whose password changed after it was made.
+  - A remembered customer who opens the login page goes straight to the booking page.
+- **Built in four rounds, all done 2026-10-05:** (1) sign-in and sign-up; (2) profile
+  "Set a password", "Connect / Disconnect Google", and the counter message for Google-only
+  accounts; (3) forgot password; (4) remember me (15 days).
+
+---
+
 ## Open items (not yet decided)
 1. **At-a-glance facts** — hard-coded per room, or editable room columns?
 2. **Where each `system_settings` value is surfaced/edited in the UI** (deferred with the broader system_settings talk).

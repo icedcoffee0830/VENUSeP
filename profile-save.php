@@ -3,8 +3,13 @@
    PROFILE SAVE — a person editing their OWN account. Both portals.
 
    POST  csrf, action=details|password|photo|tfa_begin|tfa_confirm|tfa_codes|tfa_disable
+                      |google_link_begin|google_unlink
      details:  full_name, email, contact_number, address, university_id_no
      password: current_password, new_password, confirm_new_password
+               (an account with NO password yet — created through Google —
+               sends no current_password; it needs a fresh Google
+               confirmation instead, #23)
+     google_link_begin, google_unlink: password — customers only (#23)
      photo:    FILES[photo]        (or remove=1 to clear it)
      tfa_*:    password (tfa_begin while off) or code (every other change) —
                two-step verification, DB-DECISIONS #20
@@ -35,6 +40,8 @@ require_once __DIR__ . '/includes/room-photos.php';   /* rp_validate_image() —
 require_once __DIR__ . '/includes/bookings.php';      /* cb_normalise_mobile() */
 require_once __DIR__ . '/includes/two-factor.php';    /* tfa_*() — two-step verification */
 require_once __DIR__ . '/includes/passwords.php';     /* venusep_password_hash() — Argon2id (#21) */
+require_once __DIR__ . '/includes/google-auth.php';   /* google_proof_*() — Google sign-in (#23) */
+require_once __DIR__ . '/includes/remember-me.php';   /* remember_forget_all() — "Remember me" (#23) */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -60,6 +67,11 @@ if (!isset($_SESSION['user_id']) || !in_array($type, ['customer', 'staff', 'admi
 }
 $userId    = (int) $_SESSION['user_id'];
 $isCustomer = $type === 'customer';
+/* A customer session must pass the same checks as every customer page —
+   including "ended because the password was changed elsewhere" (#23). */
+if ($isCustomer && !customer_logged_in()) {
+    pf_reply(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
+}
 
 $pdo = venusep_db();
 if ($pdo === null) {
@@ -158,20 +170,107 @@ if ($action === 'password') {
         $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = :u');
         $stmt->execute([':u' => $userId]);
         $hash = $stmt->fetchColumn();
-        if ($hash === false || !password_verify($current, $hash)) {
-            pf_reply(401, ['ok' => false, 'field' => 'current_password', 'message' => 'That is not your current password.']);
+        $firstPassword = $hash === null;
+        if ($firstPassword) {
+            /* SETTING A FIRST PASSWORD (#23) — an account created through Google
+               has none. There is no current password to ask for, so the proof is
+               a fresh trip to the linked Google account instead (google-start.php
+               ?purpose=reauth): a session alone still cannot add a credential.
+               The proof is spent here, whatever happens next. */
+            $proofOk = $isCustomer && google_proof_valid('google_reauth', $userId);
+            google_proof_clear('google_reauth');
+            if (!$proofOk) {
+                pf_reply(403, ['ok' => false, 'reauth' => true,
+                    'message' => 'Confirm with Google first, then choose your password. The confirmation lasts 10 minutes.']);
+            }
+            $upd = $pdo->prepare('UPDATE users SET password_hash = :h, password_changed_at = NOW() WHERE id = :u AND password_hash IS NULL');
+            $upd->execute([':h' => venusep_password_hash($new), ':u' => $userId]);
+            if ($upd->rowCount() !== 1) {
+                pf_reply(409, ['ok' => false, 'message' => 'A password was set for this account meanwhile. Reload the page.']);
+            }
+        } else {
+            if ($hash === false || !password_verify($current, $hash)) {
+                pf_reply(401, ['ok' => false, 'field' => 'current_password', 'message' => 'That is not your current password.']);
+            }
+            $pdo->prepare('UPDATE users SET password_hash = :h, password_changed_at = NOW() WHERE id = :u')
+                ->execute([':h' => venusep_password_hash($new), ':u' => $userId]);
         }
-        $pdo->prepare('UPDATE users SET password_hash = :h WHERE id = :u')
-            ->execute([':h' => venusep_password_hash($new), ':u' => $userId]);
     } catch (PDOException $e) {
         error_log('VENUSeP profile-save (password): ' . $e->getMessage());
         pf_reply(500, ['ok' => false, 'message' => 'Something went wrong, so your password was not changed.']);
     }
 
     /* A new password means a new session id: if anyone else was riding the old
-       one, changing the password should end their ride too. */
+       one, changing the password should end their ride too. password_changed_at
+       (set above) ends every OTHER session of this account on its next request
+       (customer_session_heal(), #23); this one moves its own sign-in time
+       forward so it is the one that stays. */
     session_regenerate_id(true);
-    pf_reply(200, ['ok' => true, 'message' => 'Your password was changed.']);
+    $_SESSION['auth_at'] = time();
+    /* ...and every REMEMBERED device, this one included, signs in again with the
+       new password (#23). Failing here must not report the change as failed. */
+    try {
+        remember_forget_all($pdo, $userId);
+    } catch (PDOException $e) {
+        error_log('VENUSeP profile-save (forget remembered devices): ' . $e->getMessage());
+    }
+    remember_cookie_clear();
+    pf_reply(200, ['ok' => true, 'message' => $firstPassword
+        ? 'Your password was set. You can now sign in with your email and password, or with Google.'
+        : 'Your password was changed.']);
+}
+
+/* ---------------------------------------------------------------------
+   GOOGLE SIGN-IN (#23) — connect or disconnect, customers only.
+   Both need the password re-typed: a session alone must never add or
+   remove a way of signing in. Connecting only RECORDS that the password
+   was confirmed; google-start.php spends that, and the link itself is made
+   when Google sends the browser back (google-callback.php).
+   --------------------------------------------------------------------- */
+if ($action === 'google_link_begin' || $action === 'google_unlink') {
+    if (!$isCustomer) {
+        pf_reply(403, ['ok' => false, 'message' => 'Google sign-in is for customer accounts only.']);
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT password_hash, google_sub FROM users WHERE id = :u');
+        $stmt->execute([':u' => $userId]);
+        $acct = $stmt->fetch();
+    } catch (PDOException $e) {
+        error_log('VENUSeP profile-save (' . $action . '): ' . $e->getMessage());
+        pf_reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
+    }
+    if (!$acct) {
+        pf_reply(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
+    }
+    if ($acct['password_hash'] === null) {
+        /* Disconnecting would leave no way in at all; connecting is moot (it IS Google). */
+        pf_reply(409, ['ok' => false, 'message' => 'Google is the only way into this account. Set a password first.']);
+    }
+    if ($action === 'google_link_begin' && $acct['google_sub'] !== null) {
+        pf_reply(409, ['ok' => false, 'message' => 'Google is already connected to this account.']);
+    }
+    if ($action === 'google_unlink' && $acct['google_sub'] === null) {
+        pf_reply(409, ['ok' => false, 'message' => 'Google is not connected to this account.']);
+    }
+    if ($action === 'google_link_begin' && !google_enabled()) {
+        pf_reply(409, ['ok' => false, 'message' => 'Google sign-in is not set up on this server yet.']);
+    }
+    if (!password_verify((string) ($_POST['password'] ?? ''), $acct['password_hash'])) {
+        pf_reply(401, ['ok' => false, 'field' => 'password', 'message' => 'That is not your current password.']);
+    }
+
+    if ($action === 'google_link_begin') {
+        google_proof_set('google_link', $userId);
+        pf_reply(200, ['ok' => true, 'redirect' => 'google-start.php?purpose=link']);
+    }
+    try {
+        $pdo->prepare('UPDATE users SET google_sub = NULL WHERE id = :u AND password_hash IS NOT NULL')
+            ->execute([':u' => $userId]);
+    } catch (PDOException $e) {
+        error_log('VENUSeP profile-save (google_unlink): ' . $e->getMessage());
+        pf_reply(500, ['ok' => false, 'message' => 'Something went wrong, so Google is still connected.']);
+    }
+    pf_reply(200, ['ok' => true, 'message' => 'Google was disconnected. Sign in with your email and password from now on.']);
 }
 
 /* ---------------------------------------------------------------------
@@ -266,6 +365,11 @@ if (in_array($action, ['tfa_begin', 'tfa_confirm', 'tfa_codes', 'tfa_disable'], 
             $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = :u');
             $stmt->execute([':u' => $userId]);
             $hash = $stmt->fetchColumn();
+            if ($hash === null) {
+                /* Created through Google (#23): no password to confirm with yet. */
+                pf_reply(409, ['ok' => false, 'field' => 'password',
+                    'message' => 'Set a password first (Account Security, above), then turn this on.']);
+            }
             if ($hash === false || !password_verify((string) ($_POST['password'] ?? ''), $hash)) {
                 pf_reply(401, ['ok' => false, 'field' => 'password', 'message' => 'That is not your current password.']);
             }
@@ -302,6 +406,9 @@ if (in_array($action, ['tfa_begin', 'tfa_confirm', 'tfa_codes', 'tfa_disable'], 
                 pf_reply(409, ['ok' => false, 'message' => 'Two-step verification was just changed somewhere else. Reload the page and start again.']);
             }
             tfa_setup_clear();
+            /* Turned on (or moved to a new phone): a device remembered before skips
+               the code, so forget them all — they sign in once more, code and all (#23). */
+            remember_forget_all($pdo, $userId);
             pf_reply(200, ['ok' => true, 'codes' => $codes, 'message' => $tfa['enabled']
                 ? 'Your new phone is set up. The old phone and the old recovery codes no longer work.'
                 : 'Two-step verification is on.']);
@@ -314,6 +421,7 @@ if (in_array($action, ['tfa_begin', 'tfa_confirm', 'tfa_codes', 'tfa_disable'], 
 
         tfa_reset($pdo, $userId);   // tfa_disable: customers only, checked above
         tfa_setup_clear();
+        remember_forget_all($pdo, $userId);   // a security setting changed: every remembered device signs in again (#23)
         pf_reply(200, ['ok' => true, 'message' => 'Two-step verification is off.']);
     } catch (PDOException $e) {
         error_log('VENUSeP profile-save (2fa): ' . $e->getMessage());

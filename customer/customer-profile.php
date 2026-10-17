@@ -394,47 +394,6 @@ try {
                     <?php endif; ?>
                   </section>
 
-                  <!-- TWO-STEP VERIFICATION (DB-DECISIONS #20). Optional for customers. Driven by
-                       assets/js/two-factor.js against profile-save.php; every step is re-checked there. -->
-                  <?php $cpTfaOn = $cpTfa !== null && $cpTfa['enabled']; $cpTfaLow = $cpTfaOn && $cpTfa['codes_left'] <= TFA_CODES_LOW; ?>
-                  <section class="profile-section tfa-panel" aria-labelledby="twoStepTitle" data-tfa-panel data-endpoint="../profile-save.php" data-csrf="<?php echo cp_e($cpCsrf); ?>">
-                    <div class="profile-section-header">
-                      <div class="tfa-head">
-                        <h2 id="twoStepTitle">Two-step verification</h2>
-                        <?php if ($cpTfa !== null): ?>
-                        <span class="tfa-chip <?php echo $cpTfaOn ? 'tfa-chip-on' : 'tfa-chip-off'; ?>"><?php echo $cpTfaOn ? '<i class="bi bi-check2" aria-hidden="true"></i>On' : 'Off'; ?></span>
-                        <?php endif; ?>
-                      </div>
-                      <p><?php echo $cpTfaOn
-                          ? 'You enter a code from your phone each time you sign in.'
-                          : 'Ask for a 6-digit code from your phone after your password, so a stolen password alone cannot open your account.'; ?></p>
-                    </div>
-                    <?php if ($cpTfa === null): ?>
-                    <p class="tfa-message is-bad">Two-step verification settings cannot be loaded right now. Reload the page to try again.</p>
-                    <?php else: ?>
-                    <?php if ($cpTfaOn): ?>
-                    <ul class="tfa-facts">
-                      <li><i class="bi bi-calendar-check" aria-hidden="true"></i>Turned on <?php echo cp_e(date('j M Y', strtotime((string) $cpTfa['enabled_at']))); ?></li>
-                      <li><i class="bi bi-life-preserver" aria-hidden="true"></i><span><strong><?php echo (int) $cpTfa['codes_left']; ?></strong> of <?php echo TFA_RECOVERY_CODE_COUNT; ?> recovery codes left</span></li>
-                    </ul>
-                    <?php if ($cpTfaLow): ?>
-                    <p class="tfa-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span><?php echo (int) $cpTfa['codes_left'] === 1 ? 'Only 1 recovery code left.' : 'Only ' . (int) $cpTfa['codes_left'] . ' recovery codes left.'; ?> Make new ones now, so losing your phone does not lock you out.</span></p>
-                    <?php endif; ?>
-                    <?php endif; ?>
-                    <div class="profile-actions"<?php echo $cpTfaOn ? '' : ' style="margin-top:0"'; ?> data-tfa-actions>
-                      <?php if ($cpTfaOn): ?>
-                      <button class="btn-profile" type="button" data-tfa-action="move" data-tfa-ask="Current code or recovery code" data-tfa-go="Continue"><i class="bi bi-phone" aria-hidden="true"></i>Move to a new phone</button>
-                      <button class="btn-profile<?php echo $cpTfaLow ? ' btn-profile-primary' : ''; ?>" type="button" data-tfa-action="codes" data-tfa-ask="Current code or recovery code" data-tfa-go="Make new codes"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>New recovery codes</button>
-                      <button class="btn-profile btn-profile-danger" type="button" data-tfa-action="disable" data-tfa-ask="Current code or recovery code" data-tfa-go="Turn off">Turn off</button>
-                      <?php else: ?>
-                      <button class="btn-profile btn-profile-primary" type="button" data-tfa-action="begin" data-tfa-ask="Your password" data-tfa-go="Continue"><i class="bi bi-shield-lock" aria-hidden="true"></i>Turn on</button>
-                      <?php endif; ?>
-                    </div>
-
-                    <?php tfa_view_panel_steps($cpTfaOn, $customerProfile['email'], ['btn' => 'btn-profile', 'primary' => 'btn-profile btn-profile-primary', 'input' => 'form-control tfa-code-input']); ?>
-                    <?php endif; ?>
-                  </section>
-
                   <section class="profile-section" aria-labelledby="preferencesTitle">
                     <div class="profile-section-header"><h2 id="preferencesTitle">Preferences</h2><p>Choose which account updates you receive.</p></div>
                     <form id="customerPreferencesForm" action="" method="post">

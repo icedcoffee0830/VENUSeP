@@ -35,6 +35,7 @@ if ($portal === 'customer') {
     ['Transaction History', 'transaction-history.php',         'bi-receipt'],
     ['Calendar',            'calendar.php',                    'bi-calendar-event'],
     ['Staff Management',    'venusep_staffManagement.php',     'bi-people'],
+    ['Customer Management', 'customer-management.php',         'bi-person-badge'],
     ['Reports',             'Quarterly_Reports.php',           'bi-bar-chart'],
     ['Payment Settings',    'payment-settings.php',            'bi-wallet2'],
     ['FAQ Management',      'faq-management.php',              'bi-question-circle'],   /* admin-added FAQ entries (2026-09-18) */

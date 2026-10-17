@@ -83,9 +83,11 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
     <!--begin::Pannellum 360 panorama viewer-->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.7/build/pannellum.css" />
     <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.7/build/pannellum.js"></script>
+    <script src="../assets/js/confirm-modal.js"></script>
     <!--end::Pannellum 360 panorama viewer-->
 
     <!-- ============================================================
@@ -955,7 +957,7 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
 
       function vmNeedsRoom() {
         if (VM_ROOM_ID) return false;
-        alert('Save this room first — photos are attached to a saved room.');
+        venusepAlert('Save this room first — photos are attached to a saved room.');
         return true;
       }
       /* Parses the response as JSON, but if the server sent something else
@@ -1006,16 +1008,16 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
         var body = new FormData();
         body.append('file', f);
         vmApiPost('upload_pano', body).then(function (res) {
-          if (!res.ok) { alert(res.message || 'Could not save the 360° photo.'); return; }
+          if (!res.ok) { venusepAlert(res.message || 'Could not save the 360° photo.'); return; }
           vmInitPano(res.pano || VM_SAMPLE_PANO);
-        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+        }).catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
       function vmClearPano() {
         if (vmNeedsRoom()) return;
         vmApiPost('delete_pano').then(function (res) {
-          if (!res.ok) { alert(res.message || 'Could not remove the 360° photo.'); return; }
+          if (!res.ok) { venusepAlert(res.message || 'Could not remove the 360° photo.'); return; }
           vmPanoPlaceholder();
-        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+        }).catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
     </script>
     <!-- Photo gallery manager: upload / delete / pick the cover — all saved
@@ -1113,19 +1115,19 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
         if (!files || !files.length) { input.value = ''; return; }
         if (vmNeedsRoom()) { input.value = ''; return; }
         var room = VMPHOTOS.length;
-        if (room >= VM_MAX_PHOTOS) { alert('This room already has the maximum of ' + VM_MAX_PHOTOS + ' photos.'); input.value = ''; return; }
+        if (room >= VM_MAX_PHOTOS) { venusepAlert('This room already has the maximum of ' + VM_MAX_PHOTOS + ' photos.'); input.value = ''; return; }
         if (room + files.length > VM_MAX_PHOTOS) {
-          alert('Only ' + (VM_MAX_PHOTOS - room) + ' more photo(s) fit — a room can have at most ' + VM_MAX_PHOTOS + '. The rest will be skipped.');
+          venusepAlert('Only ' + (VM_MAX_PHOTOS - room) + ' more photo(s) fit — a room can have at most ' + VM_MAX_PHOTOS + '. The rest will be skipped.');
         }
         var body = new FormData();
         for (var i = 0; i < files.length; i++) body.append('files[]', files[i]);
         input.value = '';   // safe now — the File objects are already captured in `body`
         vmApiPost('upload', body).then(function (res) {
-          if (!res.ok) { alert(res.message || 'Could not upload those photos.'); return; }
+          if (!res.ok) { venusepAlert(res.message || 'Could not upload those photos.'); return; }
           VMSEL = (res.photos || []).length - 1;
           vmApplyState(res);
-          if (res.warning) alert(res.warning);
-        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+          if (res.warning) venusepAlert(res.warning);
+        }).catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
       function vmGalSelect(i) {
         VMSEL = i;
@@ -1142,17 +1144,17 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
           vmApplyState(res);
         }).catch(function (err) { console.error('vmGalSelect reorder failed:', err); });
       }
-      function vmGalDelete(i, e) {
+      async function vmGalDelete(i, e) {
         if (e) e.stopPropagation();
         if (vmNeedsRoom()) return;
         var photo = VMPHOTOS[i];
-        if (!photo || !confirm('Remove this photo?')) return;
+        if (!photo || !(await venusepConfirm('This cannot be undone.', { title: 'Remove this photo?', okLabel: 'Remove', danger: true }))) return;
         var body = new FormData();
         body.append('file', photo.file);
         vmApiPost('delete', body).then(function (res) {
-          if (!res.ok) { alert(res.message || 'Could not remove that photo.'); return; }
+          if (!res.ok) { venusepAlert(res.message || 'Could not remove that photo.'); return; }
           vmApplyState(res);
-        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+        }).catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
       function vmGalRender() {
         var big = document.getElementById('vmGalBig');
@@ -1190,8 +1192,8 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
         var name = document.getElementById('roomName').value.trim();
         var venueTrigger = document.querySelector('#roomLoc .vm-dd-trigger');
         var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
-        if (!name) { alert('Enter a room name.'); return; }
-        if (!venue || venue === 'Select a venue') { alert('Choose a location.'); return; }
+        if (!name) { venusepAlert('Enter a room name.'); return; }
+        if (!venue || venue === 'Select a venue') { venusepAlert('Choose a location.'); return; }
 
         var body = new FormData();
         body.append('room_id', VM_ROOM_ID || '');
@@ -1210,15 +1212,15 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
         fetch('room-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (res) {
-            if (!res.ok) { alert(res.message || 'Could not save the room.'); return; }
-            alert(res.message || 'Room saved.');
+            if (!res.ok) { venusepAlert(res.message || 'Could not save the room.'); return; }
+            venusepAlert(res.message || 'Room saved.');
             if (res.created && res.room_id) {
               location.href = 'room-form.php?id=' + encodeURIComponent(res.room_id);
               return;
             }
             location.href = 'venue-management.php';
           })
-          .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+          .catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
 
       vmLoadPhotos();

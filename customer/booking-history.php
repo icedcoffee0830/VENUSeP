@@ -12,8 +12,9 @@
    customer/refund-request.php. Moving them out is what stops the two
    pages drifting apart (see the note in that file).
 
-   [SIM] View Details is still a stub — its target page doesn't exist yet.
-   "Request Refund" is real and opens refund-request.php.
+   "View" opens the valid ID submitted with the booking (valid-id-view.php,
+   same target as Transaction History's View button). "Request Refund" is
+   real and opens refund-request.php.
    ================================================================== */
 require_once __DIR__ . '/../includes/customer-bookings.php';
 
@@ -52,6 +53,7 @@ $emptyBookingMessage = 'No booking history found.';
     <title>VENUSeP | Booking History</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
 
     <!-- [0] SHELL CSS — shared layout -->
     <style>
@@ -307,8 +309,9 @@ $emptyBookingMessage = 'No booking history found.';
                           <td data-label="Status"><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span></td>
                           <td data-label="Actions" class="booking-actions-cell">
                             <div class="booking-actions">
-                              <!-- [SIM] booking-details.php doesn't exist yet -->
-                              <a class="booking-action" href="#"><i class="bi bi-eye" aria-hidden="true"></i>View</a>
+                              <!-- the valid ID submitted with this booking — same target as Transaction
+                                   History's View button, always clickable (an ID is required at every booking). -->
+                              <a class="booking-action" href="../valid-id-view.php?booking=<?php echo urlencode($booking['bookingId']); ?>" target="_blank" rel="noopener"><i class="bi bi-eye" aria-hidden="true"></i>View</a>
                               <?php if (isset($bhReceipts[(int) ($booking['id'] ?? 0)])): ?>
                                 <a class="booking-action booking-action-receipt" href="receipt.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
                                   <i class="bi bi-file-earmark-text" aria-hidden="true"></i>Receipt
@@ -349,6 +352,7 @@ $emptyBookingMessage = 'No booking history found.';
       </main>
     </div>
 
+    <script src="../assets/js/confirm-modal.js"></script>
     <!-- [6] PAGE SCRIPT — page-local table logic (search/sort/paginate) -->
     <script>
       document.addEventListener('DOMContentLoaded', function () {
@@ -499,8 +503,10 @@ $emptyBookingMessage = 'No booking history found.';
         const refs = Object.keys(REFUNDS);
         if (!refs.length) return;
 
-        const withdraw = function (ref) {
-          const ok = window.confirm('Withdraw your refund request for ' + ref + '?\n\nYour booking is not affected either way — it stays yours. You can request a refund again later if you change your mind.');
+        const withdraw = async function (ref) {
+          const ok = await venusepConfirm(
+            'Your booking is not affected either way — it stays yours. You can request a refund again later if you change your mind.',
+            { title: 'Withdraw your refund request for ' + ref + '?', okLabel: 'Withdraw', danger: true });
           if (!ok) return;
           fetch('refund-submit.php', {
             method: 'POST', credentials: 'same-origin',
@@ -508,10 +514,10 @@ $emptyBookingMessage = 'No booking history found.';
           })
             .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
             .then(function (out) {
-              if (!out.ok) { window.alert(out.message || 'The request was not withdrawn.'); return; }
+              if (!out.ok) { venusepAlert(out.message || 'The request was not withdrawn.'); return; }
               window.location.reload();
             })
-            .catch(function () { window.alert('Could not reach the server, so nothing was changed.'); });
+            .catch(function () { venusepAlert('Could not reach the server, so nothing was changed.'); });
         };
 
         const action = function (row, cls, icon, text, onClick, href) {

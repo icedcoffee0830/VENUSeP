@@ -88,7 +88,7 @@ try {
         dm_reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => (int) $user['lock_seconds'],
             'message' => 'Too many wrong passwords.']);
     }
-    if (!password_verify($password, $user['password_hash'])) {
+    if (!password_verify($password, (string) $user['password_hash'])) {
         $attempts = (int) $user['reauth_failed_attempts'] + 1;
         $ladder = [10, 30, 60, 300, 900];
         if ($attempts >= 5) {

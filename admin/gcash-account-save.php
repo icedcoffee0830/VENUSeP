@@ -111,7 +111,7 @@ try {
         gs_reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => (int) $user['lock_seconds'],
             'message' => 'Too many wrong passwords.']);
     }
-    if (!password_verify($password, $user['password_hash'])) {
+    if (!password_verify($password, (string) $user['password_hash'])) {
         /* Same ladder as the refund switch: 5 wrong = a lock, each longer than
            the last. Shared deliberately — it is one "sensitive admin action"
            budget, not one per feature, so an attacker cannot get five fresh

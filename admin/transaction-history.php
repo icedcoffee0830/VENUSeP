@@ -284,13 +284,28 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         };
 
         const actionButtons = (cell) => {
-          const id = encodeURIComponent(cell.getRow().getData().transactionId);
-          // [SIM] View + Download Receipt are stubs — wire to transaction-details.php
-          //       and receipt generation when the backend exists.
+          const row = cell.getRow().getData();
+          // View — the valid ID submitted with this booking (staff can open
+          // ANY booking's, the same rule admin/booking-request.php relies
+          // on). Always clickable: an ID is required at every booking
+          // (unlike the GCash receipt, which only exists once payment
+          // happens), so there is always something for valid-id-view.php
+          // (root) to show.
+          const viewBtn = `<a class="th-act" href="../valid-id-view.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
+          // Receipt opens admin/receipt.php — the same styled "paper slip" view
+          // customer/receipt.php shows, just gated for staff instead of the
+          // booking's own customer (see that file's header for why it's separate).
+          // Its own "Download PDF" link goes to receipt-pdf.php when an actual
+          // file is wanted — receipt-pdf.php itself always forces a download
+          // (Content-Disposition: attachment), so linking the button straight to
+          // it here would never let staff just LOOK at the receipt in the tab.
+          const receiptBtn = row.hasReceipt
+            ? `<a class="th-act" href="receipt.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i>Receipt</a>`
+            : `<span class="th-act is-disabled" title="No System Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
           return `
             <div class="th-actions">
-              <a class="th-act" href="#" data-txn="${id}"><i class="bi bi-eye"></i>View</a>
-              <span class="th-act is-disabled" title="Receipt download coming soon"><i class="bi bi-download"></i>Receipt</span>
+              ${viewBtn}
+              ${receiptBtn}
             </div>`;
         };
 

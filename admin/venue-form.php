@@ -41,6 +41,7 @@ $venueFormCsrf = csrf_token();
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
 
     <!-- ============================================================
          [0] SHELL CSS — the TEAM header bar + sidebar + layout
@@ -516,6 +517,7 @@ $venueFormCsrf = csrf_token();
          stored under assets/img/venues/covers/<venue id>.<ext> and the
          venue's cover_photo column, surviving a reload.
          ============================================================ -->
+    <script src="../assets/js/confirm-modal.js"></script>
     <script>
       var VP_VENUE_ID = document.getElementById('vpVenueId').value;
       var VP_CSRF = document.getElementById('vpCsrf').value;
@@ -523,7 +525,7 @@ $venueFormCsrf = csrf_token();
 
       function vpNeedsVenue() {
         if (VP_VENUE_ID && VP_VENUE_ID !== '0') return false;
-        alert('Save this venue first — a photo is attached to a saved venue.');
+        venusepAlert('Save this venue first — a photo is attached to a saved venue.');
         return true;
       }
       function vpParseApiResponse(r) {
@@ -557,17 +559,17 @@ $venueFormCsrf = csrf_token();
         input.value = '';
         vpSetCover(URL.createObjectURL(f));   // instant local preview
         vpApiPost('upload', body).then(function (res) {
-          if (!res.ok) { alert(res.message || 'Could not save the photo.'); vpSetCover(null); return; }
+          if (!res.ok) { venusepAlert(res.message || 'Could not save the photo.'); vpSetCover(null); return; }
           vpSetCover(res.cover);
-        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); vpSetCover(null); });
+        }).catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); vpSetCover(null); });
       }
-      function vpRemovePhoto() {
+      async function vpRemovePhoto() {
         if (vpNeedsVenue()) return;
-        if (!confirm('Remove this venue\'s photo?')) return;
+        if (!(await venusepConfirm('This cannot be undone.', { title: 'Remove this venue\'s photo?', okLabel: 'Remove', danger: true }))) return;
         vpApiPost('delete').then(function (res) {
-          if (!res.ok) { alert(res.message || 'Could not remove the photo.'); return; }
+          if (!res.ok) { venusepAlert(res.message || 'Could not remove the photo.'); return; }
           vpSetCover(null);
-        }).catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+        }).catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
 
       /* "Save Changes" — the photo already saves itself the moment you
@@ -579,7 +581,7 @@ $venueFormCsrf = csrf_token();
       function vpSaveChanges() {
         var name = document.getElementById('venueName').value.trim();
         var description = document.getElementById('venueDesc').value.trim();
-        if (!name) { alert('Enter a venue name.'); return; }
+        if (!name) { venusepAlert('Enter a venue name.'); return; }
 
         var body = new FormData();
         body.append('venue_id', VP_VENUE_ID);
@@ -589,15 +591,15 @@ $venueFormCsrf = csrf_token();
         fetch('venue-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
           .then(vpParseApiResponse)
           .then(function (res) {
-            if (!res.ok) { alert(res.message || 'Could not save the venue.'); return; }
-            alert('Venue saved.\n\n(Assigned Staff on this form is not connected to storage yet.)');
+            if (!res.ok) { venusepAlert(res.message || 'Could not save the venue.'); return; }
+            venusepAlert('Venue saved.\n\n(Assigned Staff on this form is not connected to storage yet.)');
             if (res.created && res.venue_id) {
               location.href = 'venue-form.php?id=' + encodeURIComponent(res.venue_id);
               return;
             }
             location.href = 'venue-management.php';
           })
-          .catch(function (err) { alert(err && err.message ? err.message : 'Could not reach the server.'); });
+          .catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
     </script>
     <!-- ============================================================

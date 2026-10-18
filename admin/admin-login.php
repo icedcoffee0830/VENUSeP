@@ -117,7 +117,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tfa_step'])) {
                 !$user ||
                 !(bool)$user['is_active'] ||
                 !in_array($user['account_type'], ['admin', 'staff'], true) ||
-                !password_verify($password, $user['password_hash'])
+                /* (string) cast: password_hash is nullable (a Google-only customer
+                   account has none, #23) — admin/staff are never signed in through
+                   Google, so this should never actually be null here, but a null
+                   must fail this check like any other wrong password, not crash
+                   the whole page. */
+                !password_verify($password, (string)$user['password_hash'])
             ) {
                 $loginError = 'Invalid email or password.';
             } else {

@@ -117,6 +117,22 @@ foreach ($brqAll as $b) {
            for the right person. */
         'docs'      => booking_document_ids($b['id']),
         'receiptId' => $rec ? (int) $rec['id'] : null,
+        /* Every GCash upload, rejected ones included, and the 5-attempt rule
+           (DB-DECISIONS #6). Image ids only — document-view.php serves them. */
+        'attempts'  => array_map(function ($a) {
+            return [
+                'id'      => (int) $a['id'],
+                'no'      => (int) $a['attempt_no'],
+                'at'      => date('M j · g:i A', strtotime($a['created_at'])),
+                'verdict' => $a['verdict'],
+                'ref'     => (string) $a['reference_number'],
+                'amount'  => $a['amount_centavos'] !== null ? '₱' . number_format(((int) $a['amount_centavos']) / 100, 2) : '—',
+                'to'      => (string) $a['receiver_number'],
+                'flags'   => $a['flags'],
+                'staffNote' => in_array('rejected_by_staff', $a['flags'], true) ? (string) $a['override_note'] : '',
+            ];
+        }, booking_receipt_attempts($b['id'])),
+        'attemptsAllowed' => $b['receiptAttemptsAllowed'],
         'refund'    => $refund,
         'refundTo'  => $refund ? $refund['refundTo'] : null,
         'tl'        => booking_history_events($b),
@@ -324,6 +340,21 @@ foreach ($brqAll as $b) {
       .br-tl .w { color: var(--vm-muted); font-size: 0.72rem; }
       .br-tl .x { font-size: 0.83rem; font-weight: 600; margin: 0.06rem 0 0.1rem; }
       .br-tl .m { color: var(--vm-muted); font-size: 0.76rem; line-height: 1.45; }
+
+      /* GCash upload history — every attempt, rejected ones too (DB-DECISIONS #6) */
+      .br-att { border-top: 1px solid var(--vm-hairline); margin-top: 0.95rem; padding-top: 0.85rem; }
+      .br-att-head { align-items: baseline; display: flex; gap: 0.6rem; justify-content: space-between; margin-bottom: 0.5rem; }
+      .br-att-count { font-size: 0.76rem; font-weight: 600; }
+      .br-att-row { align-items: flex-start; display: flex; gap: 0.7rem; padding: 0.55rem 0; }
+      .br-att-row + .br-att-row { border-top: 1px solid var(--vm-hairline); }
+      .br-att-row img { background: #f4f4f4; border: 1px solid var(--vm-border); border-radius: 6px; flex: none; height: 52px; object-fit: cover; width: 40px; }
+      .br-att-no { color: var(--vm-muted); flex: none; font-size: 0.72rem; font-weight: 600; min-width: 4.2rem; padding-top: 0.15rem; }
+      .br-att-main { flex: 1; font-size: 0.78rem; line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
+      .br-att-main .f { color: var(--vm-muted); font-size: 0.72rem; }
+      .br-vd { border-radius: 999px; display: inline-block; font-size: 0.68rem; font-weight: 650; margin-right: 0.35rem; padding: 0.08rem 0.5rem; }
+      .br-vd.accepted { background: #e7f4ec; color: #1c7a4f; }
+      .br-vd.manual_review { background: #fbf1dd; color: #8a5a12; }
+      .br-vd.rejected { background: #fbe6e6; color: #b23a3a; }
 
       .br-ovr { border: 1px dashed #d9d7d2; border-radius: 11px; margin-top: 0.95rem; padding: 0.9rem 0.95rem; }
       .br-ovr input, .br-ovr textarea { border: 1px solid var(--vm-border); border-radius: 8px; font-family: inherit; font-size: 0.82rem; padding: 0.5rem 0.62rem; width: 100%; }
@@ -832,7 +863,69 @@ foreach ($brqAll as $b) {
               ${kv('Receipt date', esc(r.date))}${kv('Sent to', esc(r.to))}
             </div>
           </div>
-          <div style="color:var(--vm-muted);font-size:0.74rem;margin-bottom:0.5rem">OCR confidence ${r.conf} &middot; the reference and the file were not seen on any earlier booking</div>`;
+          <div style="color:var(--vm-muted);font-size:0.74rem;margin-bottom:0.5rem">OCR confidence ${r.conf} &middot; ${
+            (r.flags || []).some(f => f === 'duplicate_ref' || f === 'duplicate_file')
+              ? '<strong style="color:#b23a3a">this reference or image was already used on an earlier receipt</strong>'
+              : 'the reference and the file were not seen on any earlier booking'}</div>`;
+      }
+
+      /* ============================================================
+         GCASH UPLOAD HISTORY + THE 5-ATTEMPT RULE (DB-DECISIONS #6).
+         Every upload is on record now, rejected ones included, so staff
+         see what the customer actually tried — not just the last receipt.
+         When the allowance is used up and payment is open again (staff
+         rejected the last one), staff may allow 5 more, with a reason.
+         ============================================================ */
+      const ATT_FLAG_TEXT = {
+        duplicate_ref: 'reference already used', duplicate_file: 'same image as an earlier upload',
+        amount_mismatch: 'wrong amount', receiver_mismatch: 'wrong receiver',
+        amount_unreadable: 'amount unreadable', receiver_unreadable: 'receiver unreadable',
+        low_confidence: 'low OCR confidence', attempt_limit_reached: 'last allowed attempt',
+        rejected_by_staff: 'rejected by staff',
+      };
+      const ATT_VERDICT = { accepted: 'Accepted', manual_review: 'Manual review', rejected: 'Rejected' };
+      function attemptsUsedUp() { return (cur.attempts || []).length >= (cur.attemptsAllowed || 5); }
+      function attemptsBlock() {
+        const list = cur.attempts || [];
+        if (!list.length) return '';
+        const allowed = cur.attemptsAllowed || 5;
+        const open = ['await_gcash', 'await_cash', 'overdue'].includes(cur.pay);
+        let html = `<div class="br-att">
+            <div class="br-att-head"><span class="br-h2" style="margin:0">GCash uploads</span>
+              <span class="br-att-count" style="color:${attemptsUsedUp() ? '#b23a3a' : 'var(--vm-muted)'}">${list.length} of ${allowed} attempts used</span></div>` +
+          list.slice().reverse().map(a => `
+            <div class="br-att-row">
+              <a href="../document-view.php?receipt=${a.id}" target="_blank" rel="noopener" title="Open upload ${a.no} in a new tab"><img src="../document-view.php?receipt=${a.id}" alt="Upload ${a.no}"></a>
+              <div class="br-att-no">Attempt ${a.no}<br><span style="font-weight:400">${esc(a.at)}</span></div>
+              <div class="br-att-main">${a.flags.includes('rejected_by_staff')
+                  /* a person's decision outranks the checker's verdict, which stays on record */
+                  ? `<span class="br-vd rejected">Rejected by staff</span>`
+                  : `<span class="br-vd ${esc(a.verdict)}">${ATT_VERDICT[a.verdict] || esc(a.verdict)}</span>`}Ref ${esc(a.ref)} &middot; ${esc(a.amount)} &middot; to ${esc(a.to || '—')}
+                ${a.flags.length ? `<div class="f">${a.flags.filter(f => f !== 'rejected_by_staff').map(f => esc(ATT_FLAG_TEXT[f] || String(f).replace(/_/g, ' '))).join(' &middot; ')}${a.flags.includes('rejected_by_staff') ? `<div>Checker said: ${esc(ATT_VERDICT[a.verdict] || a.verdict)}${a.staffNote ? ' &middot; Staff: ' + esc(a.staffNote) : ''}</div>` : ''}</div>` : ''}
+              </div>
+            </div>`).join('');
+        if (attemptsUsedUp() && open) {
+          html += `
+            <div class="br-ovr">
+              <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.4rem">All ${allowed} receipt attempts are used</div>
+              <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.5;margin-bottom:0.6rem">The customer cannot upload another GCash receipt. If they should get another chance &mdash; an honest mistake, an unreadable screenshot &mdash; allow 5 more. Your reason goes into the booking's timeline. They can always pay in cash at the office instead.</div>
+              <textarea id="attNote" rows="2" placeholder="Required note — why does this booking get more attempts?">${esc(cur.attNote || '')}</textarea>
+              ${(cur.attErr || cur.actionError) ? `<div style="color:#b23a3a;font-size:0.74rem;margin-top:0.35rem">${esc(cur.attErr || cur.actionError)}</div>` : ''}
+              <div style="margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="allowAttempts()">Allow 5 more attempts</button></div>
+            </div>`;
+        }
+        return html + `</div>`;
+      }
+      function allowAttempts() {
+        cur.attNote = (document.getElementById('attNote') || {}).value || '';
+        if (!cur.attNote.trim()) { cur.attErr = 'Write the reason first — it goes into the booking’s timeline.'; render(); return; }
+        cur.attErr = null;
+        const note = cur.attNote.trim();
+        staffAction('allow_receipt_attempts', { note: note }, function (out) {
+          if (out.booking && out.booking.attemptsAllowed) cur.attemptsAllowed = out.booking.attemptsAllowed;
+          cur.attNote = '';
+          cur.tl.push({ w: now(), x: 'More receipt attempts allowed', m: '5 more GCash receipt attempts: ' + note });
+        });
       }
 
       /* ============================================================
@@ -918,7 +1011,10 @@ foreach ($brqAll as $b) {
              not quietly expire while a receipt sits here: the customer did their
              part, and letting the slot lapse would punish them for our queue. */
           case 'under_review': return banner('bn-amber', 'Needs manual review — the customer is waiting on you',
-              'The auto-check could not verify everything. Compare the fields against the screenshot; the amount required is shown beside the amount read.') + receiptBlock() +
+              'The auto-check could not verify everything. Compare the fields against the screenshot; the amount required is shown beside the amount read.') +
+            (attemptsUsedUp() ? banner('bn-red', 'This was the customer’s last receipt attempt',
+              'All ' + (cur.attemptsAllowed || 5) + ' GCash attempts are used, so this one came to you whatever the checker said. Confirm it if you find the payment in GCash; if you reject it, you can allow 5 more attempts below.') : '') +
+            receiptBlock() +
             flags(cur.receipt.flags, '#c99a3c') +
             `<div class="br-banner bn-gray" style="margin-top:0.7rem"><div>Slot is held while this is with you
               <span class="s">Pay-by deadline: <strong>${esc(cur.payBy)}</strong>. The customer has already paid and cannot act further — clear this before the deadline, or extend it. Do not let it lapse to overdue.</span></div></div>` +
@@ -1107,6 +1203,7 @@ foreach ($brqAll as $b) {
                     ? (cur.method === 'cash' ? 'Cash to staff' : 'GCash · staff account') + ' <span class="soft">via CEDU</span>'
                     : (cur.method === 'cash' ? 'Cash (walk-in)' : 'GCash')}</h2>
                   ${payBody()}
+                  ${attemptsBlock()}
                   ${orBlock()}
                 </div>
               </div>
@@ -1280,7 +1377,10 @@ foreach ($brqAll as $b) {
         const why = 'Rejected by staff after checking GCash — the reference was not found in the Transaction History.';
         staffAction('reject_payment', { note: why }, function () {
           cur.rejectedByStaff = true;      /* a person decided this, not the scanner */
-          cur.rejects = [why + ' (reference freed, record kept for audit)'];
+          /* the server marked the upload under review (the latest) — show it without a reload */
+          const lastUp = (cur.attempts || []).slice(-1)[0];
+          if (lastUp && !lastUp.flags.includes('rejected_by_staff')) { lastUp.flags.push('rejected_by_staff'); lastUp.staffNote = why; }
+          cur.rejects = [why + ' (receipt kept on record; the same receipt cannot be used again)'];
           cur.tl.push({ w: now(), x: 'Receipt rejected', m: 'Payment reopened so the customer can resubmit before the deadline.' });
         });
       }

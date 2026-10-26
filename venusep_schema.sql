@@ -427,6 +427,11 @@ CREATE TABLE bookings (
     -- (fn_payment_deadline / sp_approve_booking read it; nothing else decides).
     refunds_allowed     BOOLEAN NOT NULL DEFAULT FALSE,
     current_deadline_at DATETIME NULL,                     -- the pay-by moment for the booking's policy (see above)
+    -- The 5-attempt rule (DB-DECISIONS #6): how many GCash receipt uploads this
+    -- booking may make, rejected ones included. The 5th goes to staff for manual
+    -- review whatever its verdict; a 6th is refused. Staff can raise it (+5, with
+    -- a written note in the booking's timeline) — the count itself never resets.
+    receipt_attempts_allowed SMALLINT UNSIGNED NOT NULL DEFAULT 5,
     customer_notes      TEXT NULL,
     staff_notes         TEXT NULL,
     submitted_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -597,22 +602,28 @@ CREATE TABLE payments (
         ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- verdict: accepted / rejected / manual_review (DB-DECISIONS #6). reference_number
--- + file hash are UNIQUE across ALL receipts (anti-reuse). attempt_no supports
--- the 5-attempt rule (enforced in the app).
+-- verdict: accepted / rejected / manual_review (DB-DECISIONS #6). EVERY upload is
+-- recorded, rejected ones included (2026-10-26), each with its attempt_no — the
+-- 5-attempt rule counts them (bookings.receipt_attempts_allowed). Reference number
+-- + file hash are UNIQUE across all receipts that were NOT rejected (anti-reuse):
+-- the active_* generated columns are NULL for a rejected row, so a rejected
+-- upload stays on record but blocks nothing. A rejected upload has no payment
+-- (payment_id NULL): no money is claimed.
 CREATE TABLE gcash_receipts (
     id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    payment_id          BIGINT UNSIGNED NOT NULL,
+    payment_id          BIGINT UNSIGNED NULL,
     booking_id          BIGINT UNSIGNED NOT NULL,
     attempt_no          SMALLINT UNSIGNED NOT NULL DEFAULT 1,
     file_path           VARCHAR(500) NOT NULL,
     original_filename   VARCHAR(255) NULL,
     reference_number    VARCHAR(100) NOT NULL,
+    active_reference    VARCHAR(100) GENERATED ALWAYS AS (IF(verdict = 'rejected', NULL, reference_number)) STORED,
     receiver_name       VARCHAR(150) NULL,
     receiver_number     VARCHAR(30) NULL,
     amount_centavos     BIGINT UNSIGNED NULL,
     receipt_datetime    DATETIME NULL,
     sha256_hash         CHAR(64) NOT NULL,
+    active_sha256       CHAR(64) GENERATED ALWAYS AS (IF(verdict = 'rejected', NULL, sha256_hash)) STORED,
     ocr_confidence      DECIMAL(5,2) NULL,
     ocr_text            LONGTEXT NULL,
     verdict             ENUM('accepted','rejected','manual_review') NOT NULL,
@@ -621,8 +632,8 @@ CREATE TABLE gcash_receipts (
     reviewed_at         DATETIME NULL,
     override_note       TEXT NULL,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_gcash_reference UNIQUE (reference_number),
-    CONSTRAINT uq_gcash_file_hash UNIQUE (sha256_hash),
+    CONSTRAINT uq_gcash_active_reference UNIQUE (active_reference),   -- NULLs (rejected rows) never collide
+    CONSTRAINT uq_gcash_active_file UNIQUE (active_sha256),
     CONSTRAINT uq_gcash_payment_attempt UNIQUE (payment_id, attempt_no),
     CONSTRAINT fk_gcash_receipts_payment
         FOREIGN KEY (payment_id) REFERENCES payments(id)

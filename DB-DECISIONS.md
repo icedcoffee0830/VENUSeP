@@ -57,6 +57,30 @@ bookings.payment_status     -> FK payment_statuses.code
 - Amount AND account correct, reference clean → **accepted**.
 - **5-attempt rule (minutes):** after 5 receipt submissions, staff force manual review and note it rejected.
 - ⚠️ Consequence for the app (not the DB): the built client checker currently auto-rejects on a *single* mismatch — its verdict logic needs realigning to the above. That's a UI/app change, done later.
+- **Built 2026-10-26** (migration 05, `customer/payment-submit.php`):
+  - **Every upload is recorded**, rejected ones included, with its image and attempt number.
+    Staff see the whole upload history on the booking. A rejected upload has no payment row.
+  - **Duplicates** are judged against receipts that were **not** rejected (generated
+    `active_reference` / `active_sha256` columns, each UNIQUE). A rejected upload stays on
+    record but blocks nothing, so one misread never burns a genuine receipt's reference.
+  - **5 attempts per booking** (`bookings.receipt_attempts_allowed`); every upload counts.
+    An upload whose reference number cannot be read at all is **not** counted.
+  - The **5th** goes to staff for manual review **whatever its verdict** (flag
+    `attempt_limit_reached`, noted in the timeline). A **6th** is refused and not recorded.
+  - The count **never resets** on its own. Staff may **"Allow 5 more attempts"**, only once
+    all are used and payment is open again, with a **required note** written to the timeline.
+  - **Staff rejection keeps the receipt blocked** (decided 2026-10-26). "Reject payment" leaves
+    the checker's verdict as it was, so the reference and image stay taken everywhere. It
+    records who decided, when and why on the receipt (`reviewed_by_user_id`, `reviewed_at`,
+    `override_note`, flag `rejected_by_staff`).
+  - **Re-sending this booking's own earlier receipt** (same image, or same reference number)
+    is refused **without counting an attempt** and without being recorded. The customer is
+    told which attempt it was and what became of it. `customer/pay.php` warns before sending.
+    A receipt from **another** booking still counts as a rejected duplicate.
+- **"Pay now"** (`customer/pay.php`, built 2026-10-26): Booking History links every booking
+  awaiting payment to its own payment page. Before it, the booking pages reached payment only
+  through demo mode's simulate buttons, so a real customer could never upload a receipt.
+  While demo mode is on, payments on **real** bookings are refused (nothing is written).
 
 ## 7. Hostel beds — exact-bed model
 - **Customer picks which specific bed** (UI catches up later). Keep `hostel_beds` + `bed_reservations` + `bed_reservation_nights`.

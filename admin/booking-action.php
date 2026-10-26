@@ -96,7 +96,8 @@ if (demo_mode_on()) {
         case 'refund_deny':      $pay = 'refund_denied'; break;
         case 'refund_complete':  $res = 'cancelled'; $pay = 'refunded'; break;
         case 'record_or':
-        case 'check_in':         break;      // documents and arrival change no status
+        case 'check_in':
+        case 'allow_receipt_attempts': break;   // documents, arrival and the attempt allowance change no status
         default:
             ba_reply(400, ['ok' => false, 'message' => 'Unknown action.']);
     }
@@ -300,6 +301,23 @@ try {
         if ($note === '') {
             ba_reply(400, ['ok' => false, 'message' => 'A reason is required — the customer reads it.']);
         }
+        $pdo->beginTransaction();
+        /* The receipt staff just looked at keeps the CHECKER's verdict, so its
+           reference and image stay taken on every booking (the active_* UNIQUEs)
+           — a receipt a person found no payment for must not come back. What it
+           gains is who decided, when and why; customer/pay.php reads that to
+           warn before the same receipt is uploaded again (DB-DECISIONS #6).
+           Under review, the latest upload is always the one being reviewed:
+           nothing can be uploaded while a receipt is with staff. */
+        if ($bk['payment_status'] === 'under_review') {
+            $pdo->prepare(
+                "UPDATE gcash_receipts
+                    SET reviewed_by_user_id = :u, reviewed_at = NOW(), override_note = :n,
+                        flags_json = JSON_ARRAY_APPEND(COALESCE(flags_json, JSON_ARRAY()), '$', 'rejected_by_staff')
+                  WHERE booking_id = :b AND reviewed_at IS NULL
+                  ORDER BY id DESC LIMIT 1"
+            )->execute([':u' => $actor, ':n' => $note, ':b' => $bookingId]);
+        }
         ba_actor($pdo, $actor, 'Payment rejected: ' . $note);
         $pdo->prepare(
             "UPDATE bookings SET payment_status = IF(payment_method = 'cash', 'await_cash', 'await_gcash'),
@@ -308,7 +326,43 @@ try {
         ba_clear($pdo);
         $pdo->prepare("UPDATE payments SET payment_record_status = 'rejected' WHERE booking_id = :b AND payment_record_status IN ('submitted','under_review')")
             ->execute([':b' => $bookingId]);
+        $pdo->commit();
         break;
+
+    /* ---- The 5-attempt rule (DB-DECISIONS #6): this booking used all its GCash
+            receipt attempts, and a person decides it may have five more. The
+            count itself never resets — the allowance grows, with a written
+            reason in the booking's timeline, so it can never happen silently. ---- */
+    case 'allow_receipt_attempts': {
+        if ($note === '') {
+            ba_reply(400, ['ok' => false, 'message' => 'A note is required — say why this booking gets more attempts.']);
+        }
+        $att = $pdo->prepare(
+            'SELECT b.receipt_attempts_allowed, (SELECT COUNT(*) FROM gcash_receipts g WHERE g.booking_id = b.id) AS used
+               FROM bookings b WHERE b.id = :b'
+        );
+        $att->execute([':b' => $bookingId]);
+        $a = $att->fetch();
+        if ((int) $a['used'] < (int) $a['receipt_attempts_allowed']) {
+            ba_reply(409, ['ok' => false, 'message' => 'This booking still has receipt attempts left.']);
+        }
+        if (!in_array($bk['payment_status'], ['await_gcash', 'await_cash', 'overdue'], true)) {
+            ba_reply(409, ['ok' => false, 'message' => 'Payment is not open on this booking. Reject the receipt under review first, or confirm it.']);
+        }
+        $newAllowed = (int) $a['used'] + 5;
+        $pdo->beginTransaction();
+        $pdo->prepare('UPDATE bookings SET receipt_attempts_allowed = :n, updated_by_user_id = :u WHERE id = :b')
+            ->execute([':n' => $newAllowed, ':u' => $actor, ':b' => $bookingId]);
+        /* Not a status change, so the timeline trigger would not see it — written here. */
+        $pdo->prepare(
+            "INSERT INTO booking_timeline (booking_id, action_code, performed_by_user_id, note, metadata_json)
+             VALUES (:b, 'receipt_attempts_allowed', :u, :n, :m)"
+        )->execute([':b' => $bookingId, ':u' => $actor,
+                    ':n' => '5 more GCash receipt attempts (now ' . $newAllowed . ' in total): ' . $note,
+                    ':m' => json_encode(['allowed_before' => (int) $a['receipt_attempts_allowed'], 'allowed_after' => $newAllowed])]);
+        $pdo->commit();
+        break;
+    }
 
     /* ================= THE REFUND CHAIN (staff decisions) =================
        A refund travels: requested -> (returned_for_correction) -> approved
@@ -439,5 +493,7 @@ ba_reply(200, [
         'total'      => $after['amount'],
         'discount'   => $after['discountPercent'],
         'payBy'      => $after['payment']['payByLabel'],
+        'attempts'        => $after['receiptAttempts'],
+        'attemptsAllowed' => $after['receiptAttemptsAllowed'],
     ] : null,
 ]);

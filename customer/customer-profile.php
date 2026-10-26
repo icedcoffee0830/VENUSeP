@@ -71,7 +71,7 @@ try {
 <!DOCTYPE html>
 <!-- ==================================================================
   MAP: [0] SHELL CSS · [1] PAGE CSS · [2] HEADER · [3] SIDEBAR ·
-       [4] CONTENT (summary + Personal Info / Security / Preferences /
+       [4] CONTENT (summary + Personal Info / Security /
        Account Actions) · [6] SCRIPT (validation + show/hide password)
   The record is the session customer's own row; the forms save to profile-save.php.
   ================================================================== -->
@@ -160,9 +160,6 @@ try {
       .btn-profile-danger { color: var(--danger); border-color: #e4b1b1; }
       .btn-profile[disabled] { opacity: .5; cursor: not-allowed; }
 
-      .preference-list { display: grid; gap: 12px; }
-      .preference-item { display: flex; align-items: center; gap: 10px; }
-      .preference-item label { font-size: .88rem; }
       .form-check-input { width: 16px; height: 16px; accent-color: var(--black); flex: none; }
 
       .account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -392,19 +389,6 @@ try {
 
                     <?php tfa_view_panel_steps($cpTfaOn, $customerProfile['email'], ['btn' => 'btn-profile', 'primary' => 'btn-profile btn-profile-primary', 'input' => 'form-control tfa-code-input']); ?>
                     <?php endif; ?>
-                  </section>
-
-                  <section class="profile-section" aria-labelledby="preferencesTitle">
-                    <div class="profile-section-header"><h2 id="preferencesTitle">Preferences</h2><p>Choose which account updates you receive.</p></div>
-                    <form id="customerPreferencesForm" action="" method="post">
-                      <div class="preference-list">
-                        <div class="preference-item"><input class="form-check-input" type="checkbox" id="emailNotifications" name="email_notifications" checked><label for="emailNotifications">Email notifications</label></div>
-                        <div class="preference-item"><input class="form-check-input" type="checkbox" id="bookingStatusUpdates" name="booking_status_updates" checked><label for="bookingStatusUpdates">Booking status updates</label></div>
-                        <div class="preference-item"><input class="form-check-input" type="checkbox" id="paymentReminders" name="payment_reminders" checked><label for="paymentReminders">Payment reminders</label></div>
-                      </div>
-                      <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-check2" aria-hidden="true"></i>Save Preferences</button></div>
-                      <small class="profile-success" id="preferencesSuccessMessage" aria-live="polite"></small>
-                    </form>
                   </section>
 
                   <section class="profile-section" aria-labelledby="accountActionsTitle">
@@ -650,18 +634,6 @@ try {
                 window.setTimeout(function () { window.location.reload(); }, 1500);
               })
               .catch(function () { go.disabled = false; setFieldError(pw, 'googlePasswordMessage', 'Could not reach the server, so nothing was changed.'); });
-          });
-        }
-
-        const preferencesForm = document.getElementById('customerPreferencesForm');
-        if (preferencesForm) {
-          preferencesForm.addEventListener('submit', function (event) {
-            event.preventDefault();
-            // [SIM] TODO: persist preferences server-side (CSRF-protected).
-            document.getElementById('preferencesSuccessMessage').textContent = 'Preferences saved successfully.';
-          });
-          preferencesForm.addEventListener('change', function () {
-            document.getElementById('preferencesSuccessMessage').textContent = '';
           });
         }
       });

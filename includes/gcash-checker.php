@@ -54,7 +54,7 @@
    ============================================================ */
 
 /* ---- duplicate store — a LOCAL HINT ONLY, no longer the record.
-        The real gates are uq_gcash_reference and uq_gcash_file_hash in the
+        The real gates are uq_gcash_active_reference and uq_gcash_active_file in the
         database, enforced across EVERY booking by customer/payment-submit.php.
         This store is per-browser and forgets everything on another machine,
         which is exactly why it could never be the record; what it still buys
@@ -72,6 +72,16 @@ function gcRemember(rec){
 function gcUsedRef(ref){ return !!ref && gcStore().some(r=>r.ref===ref); }
 function gcUsedSha(sha){ return !!sha && gcStore().some(r=>r.sha===sha); }
 function clearGcashHistory(){ localStorage.removeItem(GC_STORE_KEY); removeReceipt(); }
+
+/* ---- THIS booking's own earlier uploads, from the database. A page that has
+        them (customer/pay.php) defines gcPriorUploads() -> [{no, sha, ref,
+        outcome}]; the booking pages do not, and this finds nothing there.
+        Sending one again is refused by payment-submit.php WITHOUT counting an
+        attempt; this says so before the receipt is even read. ---- */
+function gcPrior(sha, ref){
+  if(typeof gcPriorUploads!=='function') return null;
+  return gcPriorUploads().find(u=>(sha && u.sha===sha) || (ref && u.ref===ref)) || null;
+}
 
 /* ---- digit-field OCR cleanup (per-field whitelist analog):
    letters Tesseract commonly confuses for digits, fixed ONLY inside
@@ -226,6 +236,10 @@ const GC_LABELS={
   amounts_inconsistent:'"Amount" and "Total Amount Sent" differ on the same receipt (possible edit).',
   low_confidence:'OCR was not confident reading this image — staff will double-check it.',
   ocr_unavailable:'The OCR engine could not load (internet required) — staff will verify manually.',
+  attempt_limit_reached:'This was the last receipt attempt allowed for this booking — staff review it now.',
+  already_uploaded_file:'You already uploaded this exact image for this booking.',
+  already_uploaded_ref:'You already uploaded a receipt with this reference number for this booking.',
+  rejected_by_staff:'Staff checked this receipt and rejected it.',
 };
 
 /* ---- checker.php port: the verdict engine ---- */
@@ -241,9 +255,13 @@ function evaluateReceipt(input, expectedCentavos){
 
   /* G1 — exact same file submitted before (blocks even if unreadable) */
   if(input.sha && gcUsedSha(input.sha)) reasons.push('duplicate_file');
+  /* G0 — this booking's OWN earlier upload: checkReceipt() skips the OCR for
+     it, so there is no text to judge and "unreadable" would be wrong. */
+  let prior=input.sha ? gcPrior(input.sha, null) : null;
+  if(prior) reasons.push('already_uploaded_file');
 
   if(text.trim().length<20){
-    flags.push('unreadable');
+    if(!prior) flags.push('unreadable');
   }else{
     /* G2 — must plausibly BE a GCash receipt before anything else */
     if(parsed.likeness<2) reasons.push('not_gcash_receipt');
@@ -252,6 +270,7 @@ function evaluateReceipt(input, expectedCentavos){
     /* G3 — duplicate reference number (strongest anti-reuse gate) */
     if(parsed.ref!=null){
       if(gcUsedRef(parsed.ref)) reasons.push('duplicate_ref');
+      if(!prior && (prior=gcPrior(null, parsed.ref))) reasons.push('already_uploaded_ref');
       if(parsed.ref.length!==13) flags.push('ref_format');
     }else flags.push('ref_unreadable');
 
@@ -306,7 +325,7 @@ function evaluateReceipt(input, expectedCentavos){
   const status = (ur.length || bothWrong) ? 'rejected'
                : (bothRight && !uf.length) ? 'accepted'
                : 'manual_review';
-  return { status, parsed, flags:uf, reasons:ur, sha:input.sha||'',
+  return { status, parsed, flags:uf, reasons:ur, sha:input.sha||'', prior,
            confidence:input.confidence!=null?Math.round(input.confidence):null,
            textExcerpt:text.trim().slice(0,900) };
 }
@@ -408,6 +427,11 @@ async function checkReceipt(input){
     const sha=await sha256Hex(buf);
     const {img,url}=await gcLoadImage(file);
     state.ocr.thumb=url;
+
+    if(gcPrior(sha, null)){                          // this booking's own earlier upload — nothing to read
+      state.ocr.rec=evaluateReceipt({text:'', sha}, expectedC);
+      state.ocr.phase='done'; render(); return;
+    }
 
     if(typeof Tesseract==='undefined'){             // offline → same manual-review path as the PHP fallback
       state.ocr.rec=evaluateReceipt({text:'', sha, preFlags:['ocr_unavailable']}, expectedC);

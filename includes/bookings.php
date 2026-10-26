@@ -68,7 +68,7 @@ function bookings_query(array $opts = []) {
         SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
                b.is_usep_affiliated, b.affiliation_verified,
                b.room_price, b.discount_percent, b.discount_amount, b.total_amount,
-               b.refunds_allowed, b.current_deadline_at, b.submitted_at, b.approved_at,
+               b.refunds_allowed, b.current_deadline_at, b.receipt_attempts_allowed, b.submitted_at, b.approved_at,
                b.completed_at, b.cancelled_at, b.customer_notes, b.staff_notes,
                c.id AS customer_id, c.full_name AS customer_name, c.phone AS customer_phone,
                c.university_id_no, u.email AS customer_email, c.contact_email,
@@ -100,11 +100,16 @@ function bookings_query(array $opts = []) {
                  ORDER BY gr.id DESC LIMIT 1) AS receipt_reference,
                /* The uploaded GCash screenshot's own row id — document-view.php's
                   ?receipt= param. Not the System Receipt (#22); this is the proof
-                  of payment the customer sent, which staff review it against. */
+                  of payment the customer sent, which staff review it against.
+                  Rejected uploads are on record too (DB-DECISIONS #6), so the one
+                  that went through is preferred; a rejected one only when there
+                  is nothing else. */
                (SELECT gr.id FROM gcash_receipts gr WHERE gr.booking_id = b.id
-                 ORDER BY gr.id DESC LIMIT 1) AS gcash_receipt_id,
+                 ORDER BY gr.verdict = 'rejected', gr.id DESC LIMIT 1) AS gcash_receipt_id,
                (SELECT COALESCE(JSON_LENGTH(gr.flags_json), 0) FROM gcash_receipts gr
-                 WHERE gr.booking_id = b.id ORDER BY gr.id DESC LIMIT 1) AS receipt_flags
+                 WHERE gr.booking_id = b.id ORDER BY gr.id DESC LIMIT 1) AS receipt_flags,
+               /* The 5-attempt rule: every upload counts, rejected ones too. */
+               (SELECT COUNT(*) FROM gcash_receipts gr WHERE gr.booking_id = b.id) AS receipt_attempts
           FROM bookings b
           JOIN customers c                      ON c.id = b.customer_id
           LEFT JOIN users u                     ON u.id = c.user_id
@@ -225,6 +230,10 @@ function booking_shape(array $row) {
         'receiptReference'=> (string) $row['receipt_reference'],
         'receiptFlags'    => (int) $row['receipt_flags'],
         'gcashReceiptId'  => $row['gcash_receipt_id'] !== null ? (int) $row['gcash_receipt_id'] : null,
+        /* The 5-attempt rule (DB-DECISIONS #6): uploads made, uploads allowed. */
+        'receiptAttempts'        => (int) $row['receipt_attempts'],
+        'receiptAttemptsAllowed' => (int) $row['receipt_attempts_allowed'],
+        'receiptLimitReached'    => (int) $row['receipt_attempts'] >= (int) $row['receipt_attempts_allowed'],
 
         'pos'           => (string) $row['pos_number'],
         'officialReceipt' => (string) $row['official_receipt_no'],
@@ -350,9 +359,11 @@ function booking_queue_action(array $b) {
         case 'await_gcash':    return 'Pay by ' . $due . ' · customer notified';
         case 'await_cash':     return 'Pay at cashier by ' . $due;
         case 'under_review':
-            return $b['receiptVerdict'] === 'accepted'
+            /* the last allowed attempt is with staff — there is no next try */
+            $limit = !empty($b['receiptLimitReached']) ? 'All ' . $b['receiptAttemptsAllowed'] . ' receipt attempts used · ' : '';
+            return $limit . ($b['receiptVerdict'] === 'accepted'
                 ? 'Match ref ' . $b['receiptReference'] . ' in GCash'
-                : $b['receiptFlags'] . ($b['receiptFlags'] == 1 ? ' flag needs' : ' flags need') . ' a human look';
+                : $b['receiptFlags'] . ($b['receiptFlags'] == 1 ? ' flag needs' : ' flags need') . ' a human look');
         case 'overdue':
             return $b['refundsAllowed']
                 ? 'Pre-pay booking · deadline passed ' . $due . ' · slot releasable'
@@ -724,6 +735,47 @@ function booking_document_ids($bookingId) {
     }
 }
 
+/* EVERY GCash upload on a booking, oldest first, flags decoded — rejected ones
+   included (DB-DECISIONS #6). The staff side shows this as the upload history,
+   so a receipt the checker refused is no longer invisible to the people who
+   decide the payment. Ids only for the images: document-view.php serves them. */
+function booking_receipt_attempts($bookingId) {
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return [];
+    }
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT id, attempt_no, reference_number, receiver_number, amount_centavos,
+                    sha256_hash, verdict, flags_json, reviewed_at, override_note, created_at
+               FROM gcash_receipts WHERE booking_id = :b ORDER BY attempt_no, id'
+        );
+        $stmt->execute([':b' => (int) $bookingId]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $flags = json_decode((string) $r['flags_json'], true);
+            $r['flags'] = is_array($flags) ? $flags : [];
+            unset($r['flags_json']);
+            $r['outcome'] = booking_receipt_outcome($r);
+            $out[] = $r;
+        }
+        return $out;
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
+/* What became of one upload, in the customer's words — for "you already
+   uploaded this receipt (attempt 2, rejected by staff: …)". $r is a row of
+   booking_receipt_attempts(), flags decoded. */
+function booking_receipt_outcome(array $r) {
+    if (in_array('rejected_by_staff', $r['flags'], true)) {
+        $why = trim((string) ($r['override_note'] ?? ''));
+        return 'rejected by staff' . ($why !== '' ? ' — "' . $why . '"' : '');
+    }
+    return $r['verdict'] === 'rejected' ? 'rejected by the receipt check' : 'sent to staff for review';
+}
+
 /* The latest GCash receipt on a booking, with its flags decoded. */
 function booking_receipt($bookingId) {
     $pdo = venusep_db();
@@ -783,6 +835,7 @@ function booking_history_events(array $b) {
                 'counter_id_checked'         => 'ID checked in person',
                 'counter_identity_confirmed' => 'Account confirmed by password',
                 'counter_no_email'           => 'No email, receipt printed',
+                'receipt_attempts_allowed'   => 'More receipt attempts allowed',
             ];
             foreach ($stmt->fetchAll() as $t) {
                 $code = (string) $t['action_code'];

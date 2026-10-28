@@ -15,7 +15,7 @@ Route::get('/customer/pay', Customer\PayController::class)->middleware('customer
 Route::match(['get', 'post'], '/customer/payment-submit', Customer\PaymentSubmitController::class)->withoutMiddleware(ValidateCsrfToken::class)->name('customer.payment-submit');
 Route::match(['get', 'post'], '/customer/receipt', Customer\ReceiptController::class)->middleware('customer')->withoutMiddleware(ValidateCsrfToken::class)->name('customer.receipt');
 Route::get('/receipt-pdf', Customer\ReceiptPdfController::class)->name('root.receipt-pdf');
-Route::get('/customer/refund-request', PendingController::class)->name('customer.refund-request');
-Route::match(['get', 'post'], '/customer/refund-submit', PendingController::class)->name('customer.refund-submit');
+Route::get('/customer/refund-request', Customer\RefundRequestController::class)->middleware('customer')->name('customer.refund-request');
+Route::match(['get', 'post'], '/customer/refund-submit', Customer\RefundSubmitController::class)->withoutMiddleware(ValidateCsrfToken::class)->name('customer.refund-submit');
 Route::get('/customer/transaction-history', Customer\TransactionHistoryController::class)->middleware('customer')->name('customer.transaction-history');
 Route::get('/customer/faq', PendingController::class)->name('customer.faq');

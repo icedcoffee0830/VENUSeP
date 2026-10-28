@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth;
 use App\Http\Controllers\PendingController;
 use Illuminate\Support\Facades\Route;
 
@@ -7,8 +8,8 @@ use Illuminate\Support\Facades\Route;
    Every route below starts as a PendingController placeholder (501 "not ported yet").
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
-Route::match(['get', 'post'], '/admin/admin-login', PendingController::class)->name('admin.admin-login');
-Route::match(['get', 'post'], '/admin/logout', PendingController::class)->name('admin.logout');
+Route::match(['get', 'post'], '/admin/admin-login', Auth\AdminLoginController::class)->name('admin.admin-login');
+Route::match(['get', 'post'], '/admin/logout', [Auth\LogoutController::class, 'admin'])->name('admin.logout');
 Route::match(['get', 'post'], '/customer/customer-login', PendingController::class)->name('customer.customer-login');
 Route::get('/customer/customer-register', PendingController::class)->name('customer.customer-register');
 Route::match(['get', 'post'], '/register-submit', PendingController::class)->name('root.register-submit');

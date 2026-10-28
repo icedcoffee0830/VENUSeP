@@ -68,7 +68,7 @@ function pr_request(PDO $pdo, string $email, ?string $ip, ?array $mailConfig = n
     }
 
     $token = pr_b64url(random_bytes(32));
-    $link  = mail_base_url() . '/customer/reset-password.php?token=' . $token;
+    $link  = mail_base_url() . '/customer/reset-password?token=' . $token;   // LARAVEL: the page's new URL (route customer.reset-password)
     $m     = pr_email(re_first_name((string) $who['full_name']), $link, (string) $who['email']);
 
     $pdo->beginTransaction();

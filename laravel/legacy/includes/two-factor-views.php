@@ -5,7 +5,8 @@
    Shared by admin/admin-login.php and customer/customer-login.php, which
    use the same auth layout and class names. The crimson panel says where
    the person is (tfa_view_hero); the white card holds only the action.
-   Every form posts back to the page it is on, with a csrf token and a
+   Every form posts back to the page it is on, with the csrf token (LARAVEL:
+   in the _token field Laravel checks) and a
    tfa_step telling the page which step it is.
 
    The pages load assets/css/two-factor.css and, while a step is showing,
@@ -47,7 +48,7 @@ function tfa_view_cancel(string $csrf): void
 {
     ?>
           <form class="tfa-cancel" method="post" action="">
-            <input type="hidden" name="csrf" value="<?php echo tfa_e($csrf); ?>" />
+            <input type="hidden" name="_token" value="<?php echo tfa_e($csrf); ?>" />
             <input type="hidden" name="tfa_step" value="cancel" />
             <button type="submit" class="tfa-text-btn">Use a different account</button>
           </form>
@@ -73,7 +74,7 @@ function tfa_view_code(string $csrf, string $account, string $error, int $lockSe
             <p class="auth-subtitle">Open Google Authenticator and type the 6-digit code shown for <strong><?php echo tfa_e(tfa_entry_name($account)); ?></strong>.</p>
           </div>
           <form method="post" action="" novalidate>
-            <input type="hidden" name="csrf" value="<?php echo tfa_e($csrf); ?>" />
+            <input type="hidden" name="_token" value="<?php echo tfa_e($csrf); ?>" />
             <input type="hidden" name="tfa_step" value="code" />
             <div class="form-group">
               <label for="tfaCode" class="form-label">Verification code</label>
@@ -117,7 +118,7 @@ function tfa_view_enroll(string $csrf, string $account, string $secret, string $
           <p class="tfa-tip">Tip: scan it on a second phone too, as a backup.</p>
           <hr class="tfa-rule" />
           <form method="post" action="" novalidate>
-            <input type="hidden" name="csrf" value="<?php echo tfa_e($csrf); ?>" />
+            <input type="hidden" name="_token" value="<?php echo tfa_e($csrf); ?>" />
             <input type="hidden" name="tfa_step" value="enroll_confirm" />
             <label for="tfaCode" class="tfa-field-label">Enter the 6-digit code shown for <?php echo tfa_e(tfa_entry_name($account)); ?></label>
             <div class="form-group">
@@ -211,7 +212,7 @@ function tfa_view_codes(string $csrf, array $codes, string $account, string $err
             </div>
           </div>
           <form method="post" action="" novalidate>
-            <input type="hidden" name="csrf" value="<?php echo tfa_e($csrf); ?>" />
+            <input type="hidden" name="_token" value="<?php echo tfa_e($csrf); ?>" />
             <input type="hidden" name="tfa_step" value="codes_done" />
             <label class="tfa-confirm" for="tfaSaved">
               <input class="form-check-input" type="checkbox" id="tfaSaved" name="saved" value="1" data-tfa-saved required />

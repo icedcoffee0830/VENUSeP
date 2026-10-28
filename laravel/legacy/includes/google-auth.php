@@ -56,6 +56,10 @@
                without checking the signature; issuer, audience, expiry,
                nonce and email_verified are still all checked.
 
+   LARAVEL: the session is Laravel's (session()), never $_SESSION. The Laravel
+   copy has NO google-config.php, so google_enabled() is false and every
+   Google button stays hidden (the old "not configured" behaviour).
+
    SETTINGS: includes/google-config.php (git-ignored; template in
    google-config.example.php). Without it the Google buttons are hidden.
    ===================================================================== */
@@ -131,9 +135,9 @@ function google_begin(string $purpose = 'signin', int $userId = 0, bool $remembe
     $state    = google_b64url(random_bytes(32));
     $nonce    = google_b64url(random_bytes(32));
     $verifier = google_b64url(random_bytes(48));   // 64 characters; PKCE allows 43–128
-    $_SESSION['google_flow'] = ['state' => $state, 'nonce' => $nonce, 'verifier' => $verifier, 'at' => time(),
+    session(['google_flow' => ['state' => $state, 'nonce' => $nonce, 'verifier' => $verifier, 'at' => time(),
                                 'purpose' => in_array($purpose, GOOGLE_PURPOSES, true) ? $purpose : 'signin',
-                                'user_id' => $userId, 'remember' => $remember && $purpose === 'signin'];
+                                'user_id' => $userId, 'remember' => $remember && $purpose === 'signin']]);
 
     return GOOGLE_AUTH_ENDPOINT . '?' . http_build_query([
         'client_id'             => (string) $cfg['client_id'],
@@ -152,8 +156,7 @@ function google_begin(string $purpose = 'signin', int $userId = 0, bool $remembe
    state Google sent back is the one we made, within GOOGLE_FLOW_TTL. */
 function google_take_flow(string $state): ?array
 {
-    $flow = $_SESSION['google_flow'] ?? null;
-    unset($_SESSION['google_flow']);
+    $flow = session()->pull('google_flow');
     if (!is_array($flow) || $state === '' || !hash_equals((string) $flow['state'], $state)) {
         return null;
     }
@@ -300,19 +303,19 @@ function google_resolve(PDO $pdo, string $sub, string $email): array
    --------------------------------------------------------------------- */
 function google_proof_set(string $key, int $userId): void
 {
-    $_SESSION[$key] = ['user_id' => $userId, 'at' => time()];
+    session([$key => ['user_id' => $userId, 'at' => time()]]);
 }
 
 function google_proof_valid(string $key, int $userId): bool
 {
-    $p = $_SESSION[$key] ?? null;
+    $p = session($key);
     return is_array($p) && (int) ($p['user_id'] ?? 0) === $userId && $userId > 0
         && time() - (int) ($p['at'] ?? 0) <= GOOGLE_PROOF_TTL;
 }
 
 function google_proof_clear(string $key): void
 {
-    unset($_SESSION[$key]);
+    session()->forget($key);
 }
 
 /* Connects a Google id to a signed-in customer. Null on success (or if it was
@@ -345,12 +348,12 @@ function google_link(PDO $pdo, int $userId, string $sub): ?string
 /* The Google identity waiting on the "finish your account" screen, or null. */
 function google_signup_pending(): ?array
 {
-    $p = $_SESSION['google_signup'] ?? null;
+    $p = session('google_signup');
     if (!is_array($p)) {
         return null;
     }
     if (time() - (int) ($p['at'] ?? 0) > GOOGLE_SIGNUP_TTL) {
-        unset($_SESSION['google_signup']);
+        session()->forget('google_signup');
         return null;
     }
     return $p;

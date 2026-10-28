@@ -49,20 +49,22 @@ function customer_session_open(PDO $pdo, int $userId): bool
         return false;
     }
 
-    // Prevent session fixation after successful authentication.
-    session_regenerate_id(true);
-
     // Start from an empty session so nothing from a previous login
-    // (e.g. an admin on the same browser) survives into this one.
-    $_SESSION = [];
-    $_SESSION['user_id'] = (int)$customer['user_id'];
-    $_SESSION['customer_id'] = (int)$customer['customer_id'];
-    $_SESSION['account_type'] = 'customer';
-    $_SESSION['customer_name'] = $customer['full_name'];
-    $_SESSION['customer_email'] = $customer['email'];
-    /* When this session proved who it is: a password change after this moment
-       ends it (customer_session_heal(), #23). */
-    $_SESSION['auth_at'] = time();
+    // (e.g. an admin on the same browser) survives into this one, and
+    // prevent session fixation after successful authentication.
+    // LARAVEL: flush() + regenerate(true) = the old $_SESSION = [] + session_regenerate_id(true).
+    session()->flush();
+    session()->regenerate(true);
+    session([
+        'user_id' => (int)$customer['user_id'],
+        'customer_id' => (int)$customer['customer_id'],
+        'account_type' => 'customer',
+        'customer_name' => $customer['full_name'],
+        'customer_email' => $customer['email'],
+        /* When this session proved who it is: a password change after this moment
+           ends it (customer_session_heal(), #23). */
+        'auth_at' => time(),
+    ]);
 
     $update = $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id');
     $update->execute([':id' => $customer['user_id']]);
@@ -77,8 +79,7 @@ function cl_finish_login(PDO $pdo, int $userId, bool $remember = false): void
 {
     if (!customer_session_open($pdo, $userId)) {
         tfa_pending_clear();
-        header('Location: customer-login.php');
-        exit;
+        tfa_redirect_now(route('customer.customer-login'));
     }
     if ($remember) {
         require_once __DIR__ . '/remember-me.php';
@@ -88,6 +89,5 @@ function cl_finish_login(PDO $pdo, int $userId, bool $remember = false): void
             error_log('VENUSeP remember me: ' . $e->getMessage());   // signed in anyway, just not remembered
         }
     }
-    header('Location: venusep_venue_booking.php');
-    exit;
+    tfa_redirect_now(route('customer.venues'));
 }

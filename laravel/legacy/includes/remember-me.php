@@ -135,33 +135,33 @@ function remember_check(PDO $pdo, string $cookie): array
     return ['status' => 'theft'];
 }
 
+/* LARAVEL: setcookie() becomes a cookie QUEUED on Laravel's cookie jar, which
+   the web middleware adds to whatever response this request ends with (a page,
+   a redirect, a thrown redirect). The cookie is excluded from encryption in
+   bootstrap/app.php, so its value is exactly "selector:validator" as before.
+   $_COOKIE becomes the request's cookie bag. */
 function remember_cookie_set(string $value, int $expires): void
 {
-    if (headers_sent()) {
-        return;
-    }
-    setcookie(REMEMBER_COOKIE, $value, [
-        'expires'  => $expires,
-        'path'     => '/',
-        'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
-    $_COOKIE[REMEMBER_COOKIE] = $value;
+    \Illuminate\Support\Facades\Cookie::queue(new \Symfony\Component\HttpFoundation\Cookie(
+        REMEMBER_COOKIE, $value, $expires, '/', null, request()->isSecure(), true, false, 'lax'
+    ));
+    request()->cookies->set(REMEMBER_COOKIE, $value);
 }
 
 function remember_cookie_clear(): void
 {
-    if (!headers_sent() && isset($_COOKIE[REMEMBER_COOKIE])) {
-        setcookie(REMEMBER_COOKIE, '', ['expires' => time() - 42000, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
+    if (request()->cookies->has(REMEMBER_COOKIE)) {
+        \Illuminate\Support\Facades\Cookie::queue(new \Symfony\Component\HttpFoundation\Cookie(
+            REMEMBER_COOKIE, '', time() - 42000, '/', null, false, true, false, 'lax'
+        ));
     }
-    unset($_COOKIE[REMEMBER_COOKIE]);
+    request()->cookies->remove(REMEMBER_COOKIE);
 }
 
 /* "Remember me" was ticked: remember this device. Called after the session is open. */
 function remember_issue(PDO $pdo, int $userId): void
 {
-    [$value, $expires] = remember_create($pdo, $userId, $_SERVER['HTTP_USER_AGENT'] ?? null);
+    [$value, $expires] = remember_create($pdo, $userId, request()->userAgent());
     remember_cookie_set($value, $expires);
 }
 
@@ -169,12 +169,11 @@ function remember_issue(PDO $pdo, int $userId): void
    the customer is signed in again. Tried once per request. */
 function remember_restore(PDO $pdo): bool
 {
-    static $tried = false;
-    if ($tried) {
+    /* LARAVEL: once per REQUEST (a static would last the whole test process). */
+    if (!venusep_once_per_request('remember_restore')) {
         return false;
     }
-    $tried = true;
-    $cookie = $_COOKIE[REMEMBER_COOKIE] ?? null;
+    $cookie = request()->cookies->get(REMEMBER_COOKIE);
     if (!is_string($cookie) || $cookie === '') {
         return false;
     }
@@ -183,7 +182,7 @@ function remember_restore(PDO $pdo): bool
         $r = remember_check($pdo, $cookie);
         if ($r['status'] === 'ok' || $r['status'] === 'race') {
             if (customer_session_open($pdo, (int) $r['user_id'])) {
-                $_SESSION['remembered'] = true;   // signed in by the cookie, not by a password this time
+                session(['remembered' => true]);   // signed in by the cookie, not by a password this time
                 if ($r['status'] === 'ok') {
                     remember_cookie_set($r['cookie'], $r['expires']);
                 }
@@ -201,7 +200,7 @@ function remember_restore(PDO $pdo): bool
 /* Log Out: forget THIS device. */
 function remember_forget_current(PDO $pdo): void
 {
-    $cookie = $_COOKIE[REMEMBER_COOKIE] ?? null;
+    $cookie = request()->cookies->get(REMEMBER_COOKIE);
     if (is_string($cookie) && preg_match('/^([0-9a-f]{24}):/', $cookie, $m)) {
         try {
             $pdo->prepare('DELETE FROM remember_tokens WHERE selector = :s')->execute([':s' => $m[1]]);

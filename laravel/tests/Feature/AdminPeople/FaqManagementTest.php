@@ -1,0 +1,92 @@
+<?php
+
+namespace Tests\Feature\AdminPeople;
+
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
+/* admin/faq-management.php + admin/faq-save.php */
+class FaqManagementTest extends TestCase
+{
+    public function test_guest_is_sent_to_the_staff_sign_in(): void
+    {
+        $this->get(route('admin.faq-management'))->assertRedirect(route('admin.admin-login'));
+        $this->post(route('admin.faq-save'), ['action' => 'toggle', 'id' => 1])->assertRedirect(route('admin.admin-login'));
+    }
+
+    public function test_customer_is_sent_to_the_staff_sign_in(): void
+    {
+        $this->actingAsCustomer()->get(route('admin.faq-management'))->assertRedirect(route('admin.admin-login'));
+    }
+
+    public function test_staff_sees_every_section_with_live_values_and_working_links(): void
+    {
+        $pct = (int) DB::table('system_settings')->where('setting_key', 'discount_percent')->value('setting_value') ?: 20;
+        $this->actingAsStaff()->get(route('admin.faq-management'))->assertOk()
+            ->assertSee('FAQ Management')
+            ->assertSee('Add a question')
+            ->assertSee('Paying with GCash')
+            ->assertSee('Who gets the ' . $pct . '% off?', false)                         // {discount} filled in
+            ->assertSee('href="' . route('customer.booking-history') . '"', false)      // display link -> the route
+            ->assertSee('href="../customer/booking-history.php"', false)                // the editor keeps the stored form
+            ->assertSee('name="_token"', false)
+            ->assertSee('action="' . route('admin.faq-save') . '"', false);
+    }
+
+    public function test_admin_sees_the_page_and_a_flash_message(): void
+    {
+        $this->actingAsAdmin()->get(route('admin.faq-management', ['msg' => 'builtin']))->assertOk()
+            ->assertSee('Built-in questions cannot be deleted — hide it instead.');
+    }
+
+    public function test_add_then_delete_an_added_question(): void
+    {
+        $this->actingAsStaff();
+        $res = $this->post(route('admin.faq-save'), [
+            'action' => 'add', 'section' => 'cash', 'policy' => 'refunds_on',
+            'question' => 'Port test question?', 'answer' => "Line one\r\n- a\r\n- b",
+        ]);
+        $res->assertRedirect(route('admin.faq-management') . '?msg=added&show=refunds_on#cash');
+        $row = DB::table('faqs')->where('question', 'Port test question?')->first();
+        $this->assertNotNull($row);
+        $this->assertSame("Line one\n- a\n- b", $row->answer);
+        $this->assertSame(0, (int) $row->is_builtin);
+        $max = DB::table('faqs')->where('section_key', 'cash')->max('sort_order');
+        $this->assertSame((int) $max, (int) $row->sort_order);
+
+        $this->post(route('admin.faq-save'), ['action' => 'delete', 'id' => $row->id])
+            ->assertRedirect(route('admin.faq-management') . '?msg=deleted');
+        $this->assertNull(DB::table('faqs')->where('id', $row->id)->first());
+    }
+
+    public function test_validation_and_refusals(): void
+    {
+        $this->actingAsStaff();
+        $this->post(route('admin.faq-save'), ['action' => 'add', 'section' => 'cash', 'question' => '', 'answer' => 'x'])
+            ->assertRedirect(route('admin.faq-management') . '?msg=question&keep=1');
+        $this->post(route('admin.faq-save'), ['action' => 'add', 'section' => 'nope', 'question' => 'q', 'answer' => 'x'])
+            ->assertRedirect(route('admin.faq-management') . '?msg=section');
+        $this->post(route('admin.faq-save'), ['action' => 'delete', 'id' => 26])          // built-in
+            ->assertRedirect(route('admin.faq-management') . '?msg=builtin');
+        $this->assertNotNull(DB::table('faqs')->where('id', 26)->first());
+        $this->get(route('admin.faq-save'))->assertRedirect(route('admin.faq-management') . '?msg=method');
+        $this->post(route('admin.faq-save'), ['action' => 'bogus'])->assertRedirect(route('admin.faq-management') . '?msg=action');
+    }
+
+    public function test_toggle_twice_and_move_round_trip(): void
+    {
+        $this->actingAsStaff();
+        $before = DB::table('faqs')->where('id', 26)->value('is_active');
+        $this->post(route('admin.faq-save'), ['action' => 'toggle', 'id' => 26])->assertRedirect(route('admin.faq-management') . '?msg=toggled');
+        $this->assertNotSame((int) $before, (int) DB::table('faqs')->where('id', 26)->value('is_active'));
+        $this->post(route('admin.faq-save'), ['action' => 'toggle', 'id' => 26]);
+        $this->assertSame((int) $before, (int) DB::table('faqs')->where('id', 26)->value('is_active'));
+
+        $first = DB::table('faqs')->where('section_key', 'after')->orderBy('sort_order')->orderBy('id')->first();
+        $this->post(route('admin.faq-save'), ['action' => 'move', 'id' => $first->id, 'dir' => 'down'])
+            ->assertRedirect(route('admin.faq-management') . '?msg=moved#after');
+        $this->assertGreaterThan((int) $first->sort_order, (int) DB::table('faqs')->where('id', $first->id)->value('sort_order'));
+        $this->post(route('admin.faq-save'), ['action' => 'move', 'id' => $first->id, 'dir' => 'up']);
+        $this->assertSame((int) $first->sort_order, (int) DB::table('faqs')->where('id', $first->id)->value('sort_order'));
+    }
+}

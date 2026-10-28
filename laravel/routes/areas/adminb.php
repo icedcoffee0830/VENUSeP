@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\FaqController;
 use App\Http\Controllers\PendingController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,5 +15,5 @@ Route::get('/admin/customer-management', PendingController::class)->name('admin.
 Route::match(['get', 'post'], '/admin/customer-save', PendingController::class)->name('admin.customer-save');
 Route::match(['get', 'post'], '/admin/customer-search', PendingController::class)->name('admin.customer-search');
 Route::match(['get', 'post'], '/admin/customer-verify', PendingController::class)->name('admin.customer-verify');
-Route::get('/admin/faq-management', PendingController::class)->name('admin.faq-management');
-Route::match(['get', 'post'], '/admin/faq-save', PendingController::class)->name('admin.faq-save');
+Route::middleware('staff')->get('/admin/faq-management', [FaqController::class, 'index'])->name('admin.faq-management');
+Route::middleware('staff')->match(['get', 'post'], '/admin/faq-save', [FaqController::class, 'save'])->name('admin.faq-save');

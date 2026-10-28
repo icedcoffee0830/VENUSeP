@@ -23,7 +23,7 @@
 
 require_once __DIR__ . '/bookings.php';
 
-const RECEIPT_LOGO = __DIR__ . '/../assets/img/receipt-logo.png';   /* flattened on white: FPDF cannot draw alpha PNGs without gd */
+const RECEIPT_LOGO = __DIR__ . '/../../public/assets/img/receipt-logo.png';   /* LARAVEL: the assets are under public/ */   /* flattened on white: FPDF cannot draw alpha PNGs without gd */
 
 function receipt_number(int $id, string $issuedAt): string
 {

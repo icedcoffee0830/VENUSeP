@@ -20,7 +20,7 @@
 
 require_once __DIR__ . '/db.php';
 
-define('ROOM_PHOTO_BASE', __DIR__ . '/../assets/img/venues/rooms');
+define('ROOM_PHOTO_BASE', public_path('assets/img/venues/rooms'));   // Laravel: the public/ copy of assets/
 define('ROOM_PHOTO_WEB_BASE', '../assets/img/venues/rooms');   // relative from admin/ and customer/ (both one level deep)
 define('ROOM_ID_RE', '/^[a-zA-Z0-9_-]{1,40}$/');
 define('ROOM_PHOTO_ALLOWED_EXT', ['jpg', 'jpeg', 'png', 'webp']);
@@ -41,17 +41,24 @@ function rp_room_dir($id) {
 
 /* rooms.id (bigint PK) for a room_code like "r1", or null if the room
    doesn't exist in the DB (or the DB is unreachable). Cached per request
-   — this gets called from render loops (room cards, listing pages). */
+   — this gets called from render loops (room cards, listing pages).
+   Laravel: cached on the REQUEST, not in a static (a static would outlive
+   the request in a test run and miss a room created after the first look). */
 function rp_db_room_id($code) {
-  static $cache = [];
-  if (array_key_exists($code, $cache)) return $cache[$code];
-  if (!rp_room_id_valid($code)) return $cache[$code] = null;
-  $pdo = venusep_db();
-  if ($pdo === null) return $cache[$code] = null;
-  $stmt = $pdo->prepare('SELECT id FROM rooms WHERE room_code = :code');
-  $stmt->execute([':code' => $code]);
-  $id = $stmt->fetchColumn();
-  return $cache[$code] = ($id !== false ? (int) $id : null);
+  $cache = request()->attributes->get('rp_db_room_id', []);
+  if (!array_key_exists($code, $cache)) {
+    $id = null;
+    $pdo = rp_room_id_valid($code) ? venusep_db() : null;
+    if ($pdo !== null) {
+      $stmt = $pdo->prepare('SELECT id FROM rooms WHERE room_code = :code');
+      $stmt->execute([':code' => $code]);
+      $found = $stmt->fetchColumn();
+      $id = $found !== false ? (int) $found : null;
+    }
+    $cache[$code] = $id;
+    request()->attributes->set('rp_db_room_id', $cache);
+  }
+  return $cache[$code];
 }
 
 /* Recursively create $dir under ROOM_PHOTO_BASE and force 0775 on every
@@ -329,7 +336,7 @@ function rp_cover_url($code) {
   if ($photos) return $photos[0];
   if (!rp_room_id_valid($code)) return null;
   foreach (ROOM_PHOTO_ALLOWED_EXT as $ext) {
-    if (file_exists(__DIR__ . '/../assets/img/venues/' . $code . '.' . $ext)) {
+    if (file_exists(public_path('assets/img/venues/' . $code . '.' . $ext))) {
       return '../assets/img/venues/' . $code . '.' . $ext;
     }
   }

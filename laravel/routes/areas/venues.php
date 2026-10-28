@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\CatalogDeleteController;
+use App\Http\Controllers\Admin\HostelRoomFormController;
 use App\Http\Controllers\Admin\RoomFormController;
 use App\Http\Controllers\Admin\RoomPhotosApiController;
 use App\Http\Controllers\Admin\RoomSaveController;
@@ -9,18 +10,16 @@ use App\Http\Controllers\Admin\VenueFormController;
 use App\Http\Controllers\Admin\VenueManagementController;
 use App\Http\Controllers\Admin\VenuePhotoApiController;
 use App\Http\Controllers\Admin\VenueSaveController;
-use App\Http\Controllers\PendingController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 /* Area: venues — see the ownership table in LARAVEL-PORT.md.
-   Every route below starts as a PendingController placeholder (501 "not ported yet").
-   Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
+   Every page of this area is ported; KEEP the names and URLs: other areas link to them. */
 
 Route::get('/admin/venue-management', VenueManagementController::class)->middleware('staff')->name('admin.venue-management');
 Route::get('/admin/venue-form', VenueFormController::class)->middleware('staff')->name('admin.venue-form');
 Route::get('/admin/room-form', RoomFormController::class)->middleware('staff')->name('admin.room-form');
-Route::get('/admin/hostel-room-form', PendingController::class)->name('admin.hostel-room-form');
+Route::get('/admin/hostel-room-form', HostelRoomFormController::class)->middleware('staff')->name('admin.hostel-room-form');
 
 /* The JSON endpoints answer exactly as the old scripts did: their own 401
    "session ended" JSON (no redirecting guard), then the old 400 "page has

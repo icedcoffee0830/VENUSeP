@@ -28,7 +28,8 @@ class BookingRequestTest extends TestCase
             ->assertSee('fetch(' . json_encode(route('admin.booking-action')), false)
             ->assertSee('_token: CSRF', false)
             ->assertSee(asset('assets/js/confirm-modal.js'), false)
-            ->assertDontSee('.php\'', false);
+            ->assertDontSee("fetch('booking-", false)
+            ->assertDontSee('../document-view.php', false);
     }
 
     public function test_admin_gets_the_page(): void

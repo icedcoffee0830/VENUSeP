@@ -27,7 +27,7 @@ include_once __DIR__ . '/venue-rooms.php';                             /* $venue
 include_once __DIR__ . '/hostel-rooms.php';                            /* $HOSTEL_VENUE — its name, from the one source */
 $navMode = isset($navMode) ? $navMode : 'solid';
 $navHere = isset($navHere) ? $navHere : '';
-$navSelf = isset($navSelf) ? $navSelf : basename($_SERVER['SCRIPT_NAME']);   /* the page including this bar */
+$navSelf = isset($navSelf) ? $navSelf : (string) optional(request()->route())->getName();   /* Laravel: the including page's ROUTE NAME (customer.venues on the landing) */   /* the page including this bar */
 $navAuthed  = customer_logged_in();
 $navCounter = counter_mode();     /* staff booking for a walk-in — see the block below */
 /* room-reservation.php renders its own counter bar (staff name + this same
@@ -38,14 +38,14 @@ $navCounterHasOwnBar = isset($navCounterHasOwnBar) ? $navCounterHasOwnBar : fals
    Every customer page reads this same session row now. This chip was once the
    ONLY part that did: the rest showed a hard-coded demo customer, so one screen
    could name two different people. */
-$navName  = $navAuthed && !empty($_SESSION['customer_name']) ? $_SESSION['customer_name'] : $customerContact['name'];
+$navName  = $navAuthed && session('customer_name') ? session('customer_name') : $customerContact['name'];
 $navFirst = explode(' ', trim($navName))[0];
 $navParts = preg_split('/\s+/', trim($navName));
 $navInit  = strtoupper(substr($navParts[0], 0, 1) . substr(end($navParts), 0, 1));
 /* anchors stay in-page on the landing. In counter mode every link carries
    counter=1, or one click drops staff into the customer pages (2026-10-27). */
 $navCounterQ = $navCounter ? '?counter=1' : '';
-$navHome  = $navSelf === 'venusep_venue_booking.php' ? '' : 'venusep_venue_booking.php' . $navCounterQ;
+$navHome  = $navSelf === 'customer.venues' ? '' : route('customer.venues') . $navCounterQ;
 $navLinks = [];
 foreach (array_values(array_unique(array_column($venueRooms, 'venue'))) as $navVenue) {   /* Bahay Alumni, USeP Venues, ... */
   $navSlug = 'venue-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($navVenue));           /* -> the landing page's group anchor */
@@ -54,8 +54,8 @@ foreach (array_values(array_unique(array_column($venueRooms, 'venue'))) as $navV
 $navLinks = array_merge($navLinks, [
   ['hostel',   $navHome . '#hostel-listings', $HOSTEL_VENUE],
   ['how',      $navHome . '#how',             'How it works'],
-  ['bookings', 'booking-history.php',         'My bookings'],
-  ['faq',      'faq.php' . $navCounterQ,      'FAQ'],
+  ['bookings', route('customer.booking-history'),         'My bookings'],
+  ['faq',      route('customer.faq') . $navCounterQ,      'FAQ'],
 ]);
 if (!$navAuthed) {                                                      /* a guest has no bookings to show */
   $navLinks = array_values(array_filter($navLinks, function ($l) { return $l[0] !== 'bookings'; }));
@@ -128,7 +128,7 @@ echo demo_banner_html();
 ?>
 <header class="cn-nav<?php echo $navMode === 'hero' ? '' : ' solid is-static'; ?>" id="cnNav">
   <div class="cn-wrap">
-    <a class="cn-logo" href="venusep_venue_booking.php" title="Back to the landing page"><img src="../logo/Logo Header 3.png" alt="VENUSeP"></a>
+    <a class="cn-logo" href="<?php echo route('customer.venues'); ?>" title="Back to the landing page"><img src="<?php echo asset('logo/Logo Header 3.png'); ?>" alt="VENUSeP"></a>
     <nav class="cn-links">
 <?php foreach ($navLinks as $l): ?>
       <a href="<?php echo htmlspecialchars($l[1]); ?>"<?php echo $l[0] === $navHere ? ' class="is-here" aria-current="page"' : ''; ?>><?php echo $l[2]; ?></a>
@@ -148,18 +148,18 @@ echo demo_banner_html();
            (the landing page, FAQ). -->
       <span class="cn-name" style="color:#fff">Counter</span>
 <?php if (!$navCounterHasOwnBar): ?>
-      <a class="cn-leave" href="../admin/Admin_Dashboard.php">Leave counter mode</a>
+      <a class="cn-leave" href="<?php echo route('admin.dashboard'); ?>">Leave counter mode</a>
 <?php endif; ?>
 <?php elseif ($navAuthed): ?>
-      <a class="cn-user" href="customer-profile.php" title="Your profile">
+      <a class="cn-user" href="<?php echo route('customer.customer-profile'); ?>" title="Your profile">
         <span class="cn-avatar"><?php echo htmlspecialchars($navInit); ?></span>
         <span class="cn-name"><?php echo htmlspecialchars($navFirst); ?></span>
       </a>
-      <a class="cn-logout" href="logout.php">Log out</a>
+      <a class="cn-logout" href="<?php echo route('customer.logout'); ?>">Log out</a>
 <?php else: ?>
       <span class="cn-auth">
-        <a class="cn-login" href="customer-login.php">Log in</a>
-        <a class="cn-signup" href="customer-register.php">Sign up</a>
+        <a class="cn-login" href="<?php echo route('customer.customer-login'); ?>">Log in</a>
+        <a class="cn-signup" href="<?php echo route('customer.customer-register'); ?>">Sign up</a>
       </span>
 <?php endif; ?>
       <button class="cn-burger" type="button" aria-label="Menu" aria-controls="cnMenu" aria-expanded="false" onclick="var m=document.getElementById('cnMenu');m.classList.toggle('open');this.setAttribute('aria-expanded',m.classList.contains('open'))">
@@ -173,14 +173,14 @@ echo demo_banner_html();
 <?php endforeach; ?>
 <?php if ($navCounter): /* same reason as the bar above: no way to sign a customer in here */ ?>
 <?php if (!$navCounterHasOwnBar): ?>
-    <a href="../admin/Admin_Dashboard.php">Leave counter mode</a>
+    <a href="<?php echo route('admin.dashboard'); ?>">Leave counter mode</a>
 <?php endif; ?>
 <?php elseif ($navAuthed): ?>
-    <a href="customer-profile.php">Profile</a>
-    <a href="logout.php">Log out</a>
+    <a href="<?php echo route('customer.customer-profile'); ?>">Profile</a>
+    <a href="<?php echo route('customer.logout'); ?>">Log out</a>
 <?php else: ?>
-    <a href="customer-login.php">Log in</a>
-    <a href="customer-register.php">Sign up</a>
+    <a href="<?php echo route('customer.customer-login'); ?>">Log in</a>
+    <a href="<?php echo route('customer.customer-register'); ?>">Sign up</a>
 <?php endif; ?>
   </nav>
 </header>

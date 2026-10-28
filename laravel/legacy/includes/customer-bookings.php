@@ -50,7 +50,7 @@ function customer_contact() {
                FROM customers c LEFT JOIN users u ON u.id = c.user_id
               WHERE c.id = :id LIMIT 1'
         );
-        $stmt->execute([':id' => (int) $_SESSION['customer_id']]);
+        $stmt->execute([':id' => (int) session('customer_id')]);
         $row = $stmt->fetch();
         if ($row) {
             $contact = [

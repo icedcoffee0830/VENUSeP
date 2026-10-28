@@ -42,6 +42,20 @@ laravel/
 (`booking_queue_rows()`, `cb_is_refundable()`, ...). `venusep_db()` and `venusep_db_or_fail()`
 work (they return Laravel's PDO, FETCH_ASSOC default, time_zone +08:00, same as before).
 
+Some legacy files define top-level VARIABLES (`$venueRooms`, `$hostelRooms`, `$HOSTEL_VENUE`,
+`$DISCOUNT_PERCENT`, `$REFUNDS_ENABLED`, `$customerContact`, `$customerBookings`, `$venues`,
+`$gcAccounts`, `$AMENITY_GROUPS`...). `legacy()` returns all of them, so in a controller:
+`extract(legacy('venue-rooms', 'pricing'));` — then `$venueRooms` exists exactly as it did after
+the old `include`. Pass what the view needs into the view. **Never `include`/`require` a legacy
+file yourself** — always `legacy()`, or the variables go missing (require_once runs once).
+Legacy *templates* (customer-nav, notification-bell) are included by the Blade partials in
+`resources/views/partials/` — use `@include('partials.customer-nav', ['navHere' => 'faq'])`.
+
+Tests run each test METHOD in its own PHP process (`processIsolation` in phpunit.xml), because
+legacy files compute per-request data at load time and keep `static` caches. Inside ONE test
+method, a second request still sees the first request's legacy data — so for pages that read
+`$customerContact`, `$venueRooms` etc., test one role per method.
+
 A legacy include that reads/writes `$_SESSION`, calls `header()`/`exit`, `setcookie()` or
 `session_*()` must NOT be called as-is from Laravel. Those few are owned and ported by the
 **auth** area (see ownership table). If your page needs one of them, use the Laravel

@@ -18,6 +18,7 @@ class SkeletonTest extends TestCase
         Route::middleware(['web', 'booking.access'])->get('/_t/booking', fn () => 'booking ok');
         Route::middleware(['web', 'staff'])->get('/_t/admin-layout', fn () => view('_skeleton.admin-page'));
         Route::middleware(['web', 'customer'])->get('/_t/customer-layout', fn () => view('_skeleton.customer-page'));
+        Route::middleware('web')->get('/_t/nav', fn () => view('_skeleton.nav-page'));
         Route::middleware('web')->get('/_t/legacy', function () {
             legacy('db', 'pricing', 'bookings');
             $pdo = venusep_db();
@@ -88,5 +89,15 @@ class SkeletonTest extends TestCase
         $this->get('/_t/legacy')->assertOk()->assertJson([
             'tz' => '+08:00', 'row_is_array' => true, 'php_tz' => 'Asia/Manila',
         ]);
+    }
+
+    public function test_customer_nav_for_a_guest_a_customer_and_the_counter(): void
+    {
+        $this->get('/_t/nav')->assertOk()->assertSee(route('customer.customer-login'), false)
+            ->assertSee('nav body')->assertDontSee(route('customer.booking-history'), false);
+        $this->actingAsCustomer()->get('/_t/nav')->assertOk()
+            ->assertSee(route('customer.booking-history'), false)->assertSee(route('customer.logout'), false);
+        $this->flushSession();
+        $this->actingAsStaff()->get('/_t/nav?counter=1')->assertOk()->assertSee(route('admin.dashboard'), false);
     }
 }

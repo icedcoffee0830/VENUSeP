@@ -7,9 +7,8 @@ use App\Http\Controllers\Admin\StaffController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
-/* Area: adminb — see the ownership table in LARAVEL-PORT.md.
-   Every route below starts as a PendingController placeholder (501 "not ported yet").
-   Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
+/* Area: adminb — see the ownership table in LARAVEL-PORT.md. All nine pages ported
+   (2026-10-29). KEEP the names and the URLs: other areas link to them. */
 
 Route::middleware('staff:admin')->get('/admin/staff', [StaffController::class, 'index'])->name('admin.staff');
 /* JSON for the page's JS: own admin-only 403/400 JSON (no redirecting middleware, own CSRF check). */

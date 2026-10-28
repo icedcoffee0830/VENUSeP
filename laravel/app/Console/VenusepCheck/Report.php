@@ -43,7 +43,7 @@ final class Report
         $stamp = date('Y-m-d_His');
         $base = $dir . DIRECTORY_SEPARATOR . $stamp;
         for ($n = 2; is_file($base . '.json'); $n++) {
-            $base = $dir . DIRECTORY_SEPARATOR . $stamp . '-' . $n;
+            $base = $dir . DIRECTORY_SEPARATOR . $stamp . '_' . $n;   // sorts after the first one
         }
         file_put_contents($base . '.json', json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE));
         file_put_contents($base . '.html', self::html($data));

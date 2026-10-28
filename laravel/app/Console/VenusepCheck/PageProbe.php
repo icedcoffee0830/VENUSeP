@@ -31,7 +31,7 @@ final class PageProbe
 
     /* PHP / Laravel error output that must never reach a page */
     private const ERROR_PATTERNS = [
-        '/\b(?:Warning|Notice|Deprecated|Fatal error|Parse error|Catchable fatal error):\s/' => 'PHP error text',
+        '/\b(?:Warning|Notice|Deprecated|Fatal error|Parse error|Catchable fatal error)(?:<\/b>)?:\s/' => 'PHP error text',
         '/Undefined (?:variable|array key|index|offset|property)\b/' => 'PHP "undefined" error',
         '/Stack trace:/' => 'stack trace in the page',
         '/Uncaught [A-Z]\w*(?:Exception|Error)\b/' => 'uncaught exception text',

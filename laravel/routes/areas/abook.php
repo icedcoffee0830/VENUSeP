@@ -20,6 +20,6 @@ Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsContro
 Route::get('/admin/calendar', PendingController::class)->name('admin.calendar');
 Route::get('/admin/receipt', Admin\ReceiptController::class)->middleware('staff')->name('admin.receipt');
 Route::get('/admin/transaction-history', Admin\TransactionHistoryController::class)->middleware('staff')->name('admin.transaction-history');
-Route::get('/booking-details', PendingController::class)->name('root.booking-details');
+Route::get('/booking-details', \App\Http\Controllers\BookingDetailsController::class)   /* its own 404 JSON is the guard */->name('root.booking-details');
 Route::get('/document-view', PendingController::class)->name('root.document-view');
 Route::get('/valid-id-view', PendingController::class)->name('root.valid-id-view');

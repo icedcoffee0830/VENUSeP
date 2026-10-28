@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin;
 use App\Http\Controllers\PendingController;
 use Illuminate\Support\Facades\Route;
 
@@ -7,7 +8,7 @@ use Illuminate\Support\Facades\Route;
    Every route below starts as a PendingController placeholder (501 "not ported yet").
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
-Route::get('/admin/booking-requests', PendingController::class)->name('admin.booking-requests');
+Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
 Route::get('/admin/booking-request', PendingController::class)->name('admin.booking-request');
 Route::match(['get', 'post'], '/admin/booking-action', PendingController::class)->name('admin.booking-action');
 Route::match(['get', 'post'], '/admin/booking-create', PendingController::class)->name('admin.booking-create');

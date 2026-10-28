@@ -65,10 +65,12 @@ class VenusepCheck extends Command
 
         $notes = [];
         $sessions = [];
+        $skipped = [];   // role => why it cannot sign in
         foreach ($roles as $role) {
             $why = $role === 'admin' ? Targets::prepareAdmin($db) : null;
             $session = $why ?? Targets::session($role);
             if (is_string($session)) {
+                $skipped[$role] = $session;
                 $notes[] = "{$role}: skipped — {$session}";
                 continue;
             }
@@ -84,11 +86,8 @@ class VenusepCheck extends Command
         $results = [];
         foreach ($routes as $name => $route) {
             foreach ($roles as $role) {
-                $results[] = $byRole[$role][$name] ?? [
-                    'route' => $name, 'role' => $role, 'url' => '/' . ltrim($route->uri(), '/'), 'status' => null,
-                    'redirect' => null, 'ms' => 0.0, 'result' => 'skipped',
-                    'problems' => [['warn', preg_replace('/^\w+: skipped — /', '', $this->noteFor($notes, $role) ?? 'not run')]],
-                ];
+                $results[] = $byRole[$role][$name]
+                    ?? self::row($name, $role, 'skipped', ['warn', $skipped[$role] ?? 'not run'], '/' . ltrim($route->uri(), '/'));
             }
         }
 
@@ -171,17 +170,6 @@ class VenusepCheck extends Command
         return [$role];
     }
 
-    private function noteFor(array $notes, string $role): ?string
-    {
-        foreach ($notes as $note) {
-            if (str_starts_with($note, $role . ':')) {
-                return $note;
-            }
-        }
-
-        return null;
-    }
-
     /** @return array<string, array<string, array>> role => route => result */
     private function runHere(array $routes, array $sessions): array
     {
@@ -189,8 +177,7 @@ class VenusepCheck extends Command
         foreach ($sessions as $role => $session) {
             $params = new Params($role, $session);
             foreach ($routes as $name => $route) {
-                [$query, $missing] = $params->for($name);
-                $out[$role][$name] = PageProbe::run($name, $route, $role, $session, $query, $missing);
+                $out[$role][$name] = PageProbe::run($name, $route, $role, $session, ...$params->for($name));
             }
         }
 
@@ -209,19 +196,22 @@ class VenusepCheck extends Command
         $all = Targets::routes();
         $params = new Params($role, $session);
         foreach (array_filter(explode(',', (string) $this->option('routes'))) as $name) {
-            fwrite(STDOUT, '@@VSTART ' . $name . PHP_EOL);
+            fwrite(STDOUT, "@@VSTART {$name}" . PHP_EOL);
             $result = isset($all[$name])
-                ? (function () use ($params, $name, $all, $role, $session) {
-                    [$query, $missing] = $params->for($name);
-                    return PageProbe::run($name, $all[$name], $role, $session, $query, $missing);
-                })()
-                : ['route' => $name, 'role' => $role, 'url' => '', 'status' => null, 'redirect' => null, 'ms' => 0.0,
-                    'result' => 'fail', 'problems' => [['fail', 'route not found in the worker']]];
+                ? PageProbe::run($name, $all[$name], $role, $session, ...$params->for($name))
+                : self::row($name, $role, 'fail', ['fail', 'route not found in the worker']);
             fwrite(STDOUT, '@@VRESULT ' . json_encode($result, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) . PHP_EOL);
         }
         fwrite(STDOUT, '@@VDONE' . PHP_EOL);
 
         return 0;
+    }
+
+    /* a row for a page that was not (or could not be) requested */
+    private static function row(string $name, string $role, string $result, array $problem, string $url = ''): array
+    {
+        return ['route' => $name, 'role' => $role, 'url' => $url, 'status' => null, 'redirect' => null, 'ms' => 0.0,
+            'result' => $result, 'problems' => [$problem]];
     }
 
     /** @return array<string, array<string, array>> role => route => result */
@@ -263,11 +253,11 @@ class VenusepCheck extends Command
                     : 'the PHP process ended (exit code ' . $proc->getExitCode() . '): ' . self::tail($proc);
                 if ($current === null) {   // died before its first page: give up on the rest
                     foreach ($remaining as $n) {
-                        $results[$role][$n] = self::deadRow($n, $role, 'worker could not start — ' . $why);
+                        $results[$role][$n] = self::row($n, $role, 'fail', ['fail', 'worker could not start — ' . $why]);
                     }
                     continue;
                 }
-                $results[$role][$current] = self::deadRow($current, $role, 'request killed the worker — ' . $why);
+                $results[$role][$current] = self::row($current, $role, 'fail', ['fail', 'request killed the worker — ' . $why]);
                 $remaining = array_values(array_diff($remaining, [$current]));
                 if ($remaining) {
                     $procs[$role] = $this->startWorker($role, $remaining, $db);
@@ -319,12 +309,6 @@ class VenusepCheck extends Command
         $text = trim(preg_replace('/\s+/', ' ', strip_tags($text)));
 
         return $text === '' ? '(no output)' : mb_substr($text, -400);
-    }
-
-    private static function deadRow(string $name, string $role, string $why): array
-    {
-        return ['route' => $name, 'role' => $role, 'url' => '', 'status' => null, 'redirect' => null, 'ms' => 0.0,
-            'result' => 'fail', 'problems' => [['fail', $why]]];
     }
 
     private function printTable(array $results): void

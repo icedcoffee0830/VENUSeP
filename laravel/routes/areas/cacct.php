@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Customer;
 use App\Http\Controllers\PendingController;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 /* Area: cacct — see the ownership table in LARAVEL-PORT.md.
@@ -10,7 +11,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/customer/booking-history', Customer\BookingHistoryController::class)->middleware('customer')->name('customer.booking-history');
 Route::get('/customer/pay', Customer\PayController::class)->middleware('customer')->name('customer.pay');
-Route::match(['get', 'post'], '/customer/payment-submit', PendingController::class)->name('customer.payment-submit');
+/* JSON endpoint: own 401 + "page has expired" JSON, as before (see the controller) */
+Route::match(['get', 'post'], '/customer/payment-submit', Customer\PaymentSubmitController::class)->withoutMiddleware(ValidateCsrfToken::class)->name('customer.payment-submit');
 Route::get('/customer/receipt', PendingController::class)->name('customer.receipt');
 Route::get('/receipt-pdf', PendingController::class)->name('root.receipt-pdf');
 Route::get('/customer/refund-request', PendingController::class)->name('customer.refund-request');

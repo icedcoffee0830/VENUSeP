@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
 Route::get('/admin/dashboard', Admin\DashboardController::class)->middleware('staff')->name('admin.dashboard');
-Route::get('/admin/reports', PendingController::class)->name('admin.reports');
+Route::get('/admin/reports', Admin\ReportsController::class)->middleware('staff')->name('admin.reports');
 Route::match(['get', 'post'], '/notifications', Admin\NotificationsController::class)->name('root.notifications');   // guards itself (JSON 401)
 Route::get('/admin/backup-restore', PendingController::class)->name('admin.backup-restore');
 Route::match(['get', 'post'], '/admin/backup-action', PendingController::class)->name('admin.backup-action');

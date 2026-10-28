@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Customer;
 use App\Http\Controllers\PendingController;
 use Illuminate\Support\Facades\Route;
 
@@ -7,7 +8,7 @@ use Illuminate\Support\Facades\Route;
    Every route below starts as a PendingController placeholder (501 "not ported yet").
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
-Route::get('/customer/venues', PendingController::class)->name('customer.venues');
+Route::get('/customer/venues', Customer\VenueBookingController::class)->name('customer.venues');   /* public: no guard */
 Route::get('/customer/room-reservation', PendingController::class)->name('customer.room-reservation');
 Route::get('/customer/hostel-reservation', PendingController::class)->name('customer.hostel-reservation');
 Route::match(['get', 'post'], '/customer/booking-submit', PendingController::class)->name('customer.booking-submit');

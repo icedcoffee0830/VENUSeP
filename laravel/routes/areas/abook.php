@@ -15,7 +15,8 @@ Route::get('/admin/booking-request', Admin\BookingRequestController::class)->mid
 Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)
     ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-action');
 Route::match(['get', 'post'], '/admin/booking-create', PendingController::class)->name('admin.booking-create');
-Route::match(['get', 'post'], '/admin/booking-emails', PendingController::class)->name('admin.booking-emails');
+Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsController::class)
+    ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-emails');   /* JSON; checks its own token, like booking-action */
 Route::get('/admin/calendar', PendingController::class)->name('admin.calendar');
 Route::get('/admin/receipt', PendingController::class)->name('admin.receipt');
 Route::get('/admin/transaction-history', PendingController::class)->name('admin.transaction-history');

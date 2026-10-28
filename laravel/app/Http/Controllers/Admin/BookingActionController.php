@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -33,6 +34,8 @@ use PDOException;
    ===================================================================== */
 class BookingActionController extends Controller
 {
+    use RepliesJson;
+
     public function __invoke(Request $request)
     {
         legacy('auth', 'db', 'bookings', 'receipt-emails');
@@ -49,7 +52,7 @@ class BookingActionController extends Controller
         if (!session()->has('user_id') || !in_array($sessionType, ['admin', 'staff'], true)) {
             $this->reply(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
         }
-        if (!csrf_valid($request->post('_token') ?? $request->header('X-CSRF-TOKEN'))) {
+        if (!csrf_valid($this->tokenOf($request))) {
             $this->reply(400, ['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
         }
 
@@ -152,14 +155,6 @@ class BookingActionController extends Controller
                 'attemptsAllowed' => $after['receiptAttemptsAllowed'],
             ] : null,
         ]);
-    }
-
-    /* The JSON reply, ending the request (the old ba_reply()). */
-    private function reply(int $status, array $data, array $headers = []): never
-    {
-        throw new HttpResponseException(
-            response()->json($data, $status, ['Cache-Control' => 'no-store'] + $headers)
-        );
     }
 
     /* The timeline is written by trg_bookings_after_update on every status

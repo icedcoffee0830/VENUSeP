@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
    Every route below starts as a PendingController placeholder (501 "not ported yet").
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
-Route::get('/admin/dashboard', PendingController::class)->name('admin.dashboard');
+Route::get('/admin/dashboard', Admin\DashboardController::class)->middleware('staff')->name('admin.dashboard');
 Route::get('/admin/reports', PendingController::class)->name('admin.reports');
 Route::match(['get', 'post'], '/notifications', Admin\NotificationsController::class)->name('root.notifications');   // guards itself (JSON 401)
 Route::get('/admin/backup-restore', PendingController::class)->name('admin.backup-restore');

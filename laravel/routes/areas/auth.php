@@ -18,8 +18,8 @@ Route::match(['get', 'post'], '/register-submit', Auth\RegisterSubmitController:
     ->withoutMiddleware(ValidateCsrfToken::class);
 Route::match(['get', 'post'], '/customer/forgot-password', [Auth\PasswordResetController::class, 'forgot'])->name('customer.forgot-password');
 Route::match(['get', 'post'], '/customer/reset-password', [Auth\PasswordResetController::class, 'reset'])->name('customer.reset-password');
-Route::match(['get', 'post'], '/customer/google-start', PendingController::class)->name('customer.google-start');
-Route::match(['get', 'post'], '/customer/google-callback', PendingController::class)->name('customer.google-callback');
+Route::match(['get', 'post'], '/customer/google-start', [Auth\GoogleController::class, 'start'])->name('customer.google-start');
+Route::match(['get', 'post'], '/customer/google-callback', [Auth\GoogleController::class, 'callback'])->name('customer.google-callback');
 Route::match(['get', 'post'], '/customer/logout', [Auth\LogoutController::class, 'customer'])->name('customer.logout');
 Route::get('/admin/profile', PendingController::class)->name('admin.profile');
 Route::get('/customer/customer-profile', PendingController::class)->name('customer.customer-profile');

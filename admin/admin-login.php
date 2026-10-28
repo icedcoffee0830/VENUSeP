@@ -365,9 +365,12 @@ $tfaSecret = $tfaView === 'enroll' ? tfa_setup_secret((int)$pending['user_id']) 
             <button type="submit" class="btn-auth"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>Login</button>
             <small class="success-message<?php echo $loginError !== '' ? ' is-error' : ''; ?>" id="loginSuccessMessage" aria-live="polite"><?php echo htmlspecialchars($loginError, ENT_QUOTES, 'UTF-8'); ?></small>
           </form>
+          <!-- No self-registration here (2026-10-28): staff and admin accounts are
+               created by a signed-in administrator — Staff Management, Add account
+               (admin-register.php is admin-only). A Register button here only
+               bounced a signed-out visitor straight back to this page. -->
           <div class="auth-alt">
-            <span class="auth-alt-text">Don&rsquo;t have an admin account yet?</span>
-            <a class="btn-auth btn-auth-outline" href="admin-register.php">Register</a>
+            <span class="auth-alt-text">Don&rsquo;t have an account yet? Ask an administrator &mdash; they create staff and admin accounts from <strong>Staff Management</strong>.</span>
           </div>
           <?php endif; ?>
         </div>

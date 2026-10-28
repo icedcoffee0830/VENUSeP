@@ -139,6 +139,53 @@ function admin_is_admin()
     return isset($_SESSION['user_id'], $_SESSION['account_type']) && $_SESSION['account_type'] === 'admin';
 }
 
+/* =====================================================================
+   WHICH VENUE A STAFF MEMBER HANDLES (decided 2026-10-27).
+
+   Every staff account belongs to exactly ONE venue (staff.venue_id,
+   required by trg_staff_venue_required), and staff may act only on THAT
+   venue's bookings. Admins handle every venue.
+
+   staff_venue_scope() returns null for an admin (no limit), or the staff
+   member's venue id. It re-reads the database every request, not the
+   session, so moving someone to another venue takes effect on their next
+   click, the same as staff_session_heal() does for suspensions.
+   Returns 0 (matches no venue) when the account cannot be read: refuse
+   rather than allow.
+
+   The server-side checks use this today (admin/booking-action.php,
+   admin/booking-create.php). The staff UI will use the same function to
+   filter its lists, so the rule lives in one place.
+   ===================================================================== */
+function staff_venue_scope()
+{
+    static $scope = false;
+    if ($scope !== false) {
+        return $scope;
+    }
+    venusep_session_start();
+    if (isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'admin') {
+        return $scope = null;
+    }
+    require_once __DIR__ . '/db.php';
+    $pdo = venusep_db();
+    if ($pdo === null || !isset($_SESSION['user_id'])) {
+        return $scope = 0;
+    }
+    $st = $pdo->prepare('SELECT s.venue_id FROM staff s JOIN users u ON u.id = s.user_id
+                          WHERE s.user_id = :u AND u.account_type = \'staff\'');
+    $st->execute([':u' => (int) $_SESSION['user_id']]);
+    $venue = $st->fetchColumn();
+    return $scope = ($venue === false || $venue === null) ? 0 : (int) $venue;
+}
+
+/* May the signed-in staff member act on something at this venue? */
+function staff_may_handle_venue($venueId)
+{
+    $scope = staff_venue_scope();
+    return $scope === null || ($scope !== 0 && $scope === (int) $venueId);
+}
+
 /* ---- CUSTOMER SIDE (2026-09-17, ACE) — mirrors admin_require_login() above.
    The session is what customer-login.php writes: user_id, customer_id,
    account_type = 'customer'. A staff session does NOT count as a customer —

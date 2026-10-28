@@ -743,14 +743,21 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
 
         <div class="vm-top-fields">
         <div class="vm-row">
+          <!-- the room's REAL capacity and rate (2026-10-27) — these used to open
+               at 150 / ₱4,000 for every room, whatever it actually held -->
           <div class="vm-field">
             <label for="roomCap">Capacity (persons)</label>
-            <input id="roomCap" class="vm-control" type="number" value="150" placeholder="e.g. 150" />
+            <input id="roomCap" class="vm-control" type="number" min="1" value="<?php echo $roomFormRoom ? (int) $roomFormRoom['capacity'] : ''; ?>" placeholder="e.g. 150" />
           </div>
           <div class="vm-field">
-            <label for="roomRate">Rate (₱)</label>
-            <input id="roomRate" class="vm-control" type="number" step="0.01" value="4000.00" placeholder="0.00" />
+            <label for="roomRate">Rate per day (₱)</label>
+            <input id="roomRate" class="vm-control" type="number" min="0" step="0.01" value="<?php echo $roomFormRoom ? number_format((float) $roomFormRoom['fee'], 2, '.', '') : ''; ?>" placeholder="0.00" />
+            <div class="vm-hint" style="margin:.4rem 0 0">A new rate applies to new bookings; existing ones keep their price.</div>
           </div>
+        </div>
+        <div class="vm-field">
+          <label for="roomDesc">Description</label>
+          <textarea id="roomDesc" class="vm-control" rows="3" placeholder="What the room is like, shown at the top of its page"><?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['description'] : ''); ?></textarea>
         </div>
 
         <hr class="vm-divider" />
@@ -821,37 +828,28 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
         <h2 class="vm-section-head">At a glance</h2>
         <p class="vm-hint">Shown on the customer's room page. Fill the free-text fields, then tap the attributes that apply. (Reservation fee uses the Rate above.)</p>
 
+        <!-- "At a glance" — one line each of prose about the room (2026-10-27:
+             editable, stored in rooms.best_for / catering / accessibility; empty
+             falls back to the old text in includes/amenities.php). The hours are
+             the booking page's own (7 AM – 10 PM), shown here, not set here. -->
         <div class="vm-row">
           <div class="vm-field">
             <label for="roomBestFor">Best for</label>
-            <input id="roomBestFor" class="vm-control" type="text" value="Seminars · Trainings · Org events" placeholder="e.g. Seminars · Trainings · Ceremonies" />
+            <input id="roomBestFor" class="vm-control" type="text" maxlength="255" value="<?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['bestFor'] : ''); ?>" placeholder="e.g. Seminars · Trainings · Ceremonies" />
           </div>
           <div class="vm-field">
             <label for="roomHours">Bookable hours</label>
-            <input id="roomHours" class="vm-control" type="text" value="7 AM – 10 PM daily" placeholder="e.g. 7 AM – 10 PM daily" />
+            <input id="roomHours" class="vm-control" type="text" value="7 AM – 10 PM daily" readonly title="Set by the booking page for every room" />
           </div>
         </div>
-
-        <!-- "At a glance" — best for / catering / accessibility. PHP-coded per
-             DB-DECISIONS #9: these are one-line PROSE about a room, not a
-             pickable vocabulary, so they are shown here rather than offered as
-             chips. The pool that used to sit here was a THIRD vocabulary
-             ("Large area", "Near restrooms") that mapped to nothing, saved
-             nothing, and showed the same selections for every room. -->
-        <div class="vm-field">
-          <label>At a glance</label>
-<?php $rfGlance = room_glance($roomId); ?>
-          <div class="vm-hint" style="line-height:1.7">
-            <?php if ($rfGlance['bestFor'] === '' && $roomId !== ''): ?>
-              No at-a-glance facts are recorded for this room yet. They are set in
-              <code>includes/amenities.php</code>.
-            <?php elseif ($roomId === ''): ?>
-              Set once the room exists, in <code>includes/amenities.php</code>.
-            <?php else: ?>
-              <strong>Best for:</strong> <?php echo htmlspecialchars($rfGlance['bestFor']); ?><br>
-              <strong>Catering:</strong> <?php echo htmlspecialchars($rfGlance['catering']); ?><br>
-              <strong>Access:</strong> <?php echo htmlspecialchars($rfGlance['accessible']); ?>
-            <?php endif; ?>
+        <div class="vm-row">
+          <div class="vm-field">
+            <label for="roomCatering">Catering</label>
+            <input id="roomCatering" class="vm-control" type="text" maxlength="255" value="<?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['catering'] : ''); ?>" placeholder="e.g. Outside catering allowed" />
+          </div>
+          <div class="vm-field">
+            <label for="roomAccess">Accessibility</label>
+            <input id="roomAccess" class="vm-control" type="text" maxlength="255" value="<?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['accessible'] : ''); ?>" placeholder="e.g. Wheelchair accessible" />
           </div>
         </div>
 
@@ -948,6 +946,28 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
          assets/img/venues/rooms/<id>/pano.<ext> and survives a reload.
          ============================================================ -->
     <script>
+      /* The window as admin/room-save.php reads it (2026-10-27). */
+      function mtValue() {
+        if (!document.getElementById('mtOn').checked) return { on: false };
+        return { on: true,
+          tier: document.querySelector('input[name="mtTier"]:checked').value,
+          from: document.getElementById('mtFrom').value,
+          until: document.getElementById('mtIndef').checked ? null : (document.getElementById('mtUntil').value || ''),
+          reason: document.getElementById('mtReason').value.trim() };
+      }
+      /* The saved window opens as it is — this section used to open switched
+         off for every room, even one that was closed. */
+      (function () {
+        var m = <?php echo json_encode($roomFormRoom ? $roomFormRoom['maintenance'] : null); ?>;
+        if (!m) return;
+        document.getElementById('mtOn').checked = true;
+        document.querySelector('input[name="mtTier"][value="' + (m.blocks ? 'hard' : 'medium') + '"]').checked = true;
+        document.getElementById('mtFrom').value = m.from;
+        if (m.until) { document.getElementById('mtUntil').value = m.until; } else { document.getElementById('mtIndef').checked = true; }
+        document.getElementById('mtReason').value = m.reason || '';
+        mtSync();
+      })();
+
       var VM_ROOM_ID = document.getElementById('vmRoomId').value;
       var VM_CSRF = document.getElementById('vmCsrf').value;
       var VM_API = 'room-photos-api.php';
@@ -1178,11 +1198,10 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
       function vmCloseGallery() { var ov = document.getElementById('vmGalOverlay'); if (ov) ov.remove(); }
 
       /* "Save Changes" — photos and the 360° tour already save themselves the
-         moment you add/remove/reorder them (see vmApiPost above); Name and
-         Location save here, to rooms.name / rooms.venue_id via
-         admin/room-save.php. Capacity, rate, maintenance and amenities on
-         this form are saved on CREATE; on an edit only name, location and
-         mockup — so the confirmation says so rather than pretend. */
+         moment you add/remove/reorder them (see vmApiPost above); EVERYTHING
+         else on the form saves here, on create and on edit (2026-10-27), via
+         admin/room-save.php — which also says what the change means for
+         bookings already made (shown in the confirmation). */
       function vmSaveChanges() {
         /* No room id = CREATE. The screen always offered "Add Room"; it used
            to answer with an alert saying it could not. room-save.php generates
@@ -1194,16 +1213,22 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
         var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
         if (!name) { venusepAlert('Enter a room name.'); return; }
         if (!venue || venue === 'Select a venue') { venusepAlert('Choose a location.'); return; }
+        var mtv = mtValue();
+        if (mtv.on && mtv.until === '') { venusepAlert('Set the maintenance end date, or tick "No set return date".'); return; }
 
         var body = new FormData();
         body.append('room_id', VM_ROOM_ID || '');
         body.append('name', name);
         body.append('venue', venue);
         body.append('room_type', 'event');
-        if (isNew) {
-          body.append('capacity', document.getElementById('roomCap').value);
-          body.append('fee', document.getElementById('roomRate').value);
-        }
+        /* every detail on the form, on create AND edit (2026-10-27) */
+        body.append('capacity', document.getElementById('roomCap').value);
+        body.append('fee', document.getElementById('roomRate').value);
+        body.append('description', document.getElementById('roomDesc').value);
+        body.append('best_for', document.getElementById('roomBestFor').value);
+        body.append('catering', document.getElementById('roomCatering').value);
+        body.append('accessibility', document.getElementById('roomAccess').value);
+        body.append('maintenance', JSON.stringify(mtValue()));
         /* The ticked amenity KEYS. Always sent — an empty list is a real answer
            (the admin unticked everything), which is why room-save.php
            distinguishes "absent" from "empty". */
@@ -1213,12 +1238,13 @@ foreach ($AMENITY_GROUPS_EVENT as $rfGroup) {
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.ok) { venusepAlert(res.message || 'Could not save the room.'); return; }
-            venusepAlert(res.message || 'Room saved.');
-            if (res.created && res.room_id) {
-              location.href = 'room-form.php?id=' + encodeURIComponent(res.room_id);
-              return;
-            }
-            location.href = 'venue-management.php';
+            /* move on only once OK is clicked — unlike alert(), the modal does
+               not block, and navigating at once wiped it off the screen */
+            venusepAlert(res.message || 'Room saved.', { tone: 'ok', title: 'Saved' }).then(function () {
+              location.href = (res.created && res.room_id)
+                ? 'room-form.php?id=' + encodeURIComponent(res.room_id)
+                : 'venue-management.php';
+            });
           })
           .catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }

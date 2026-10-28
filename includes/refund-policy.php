@@ -114,7 +114,10 @@ function postpay_grace_days()
 }
 
 /* Everything a page needs to say about one booking's payment timing.
-     $prepay    the booking's refunds_allowed snapshot (TRUE = pre-pay)
+     $prepay    the booking's refunds_allowed snapshot (TRUE = pre-pay), or
+                'pay_to_use' for a hostel stay paid before the bed is used
+                (bookings.pay_to_use, 2026-10-27): due by the END of the
+                check-in day, open from approval
      $firstIso  first booked day  'Y-m-d'   (event start / check-in)
      $lastIso   last booked day   'Y-m-d'   (event end / check-out); defaults to first
      $now       unix time, for tests
@@ -127,6 +130,18 @@ function payment_policy_for($prepay, $firstIso, $lastIso = null, $now = null)
     $now   = $now ?? time();
     $first = strtotime($firstIso . ' 00:00:00');
     $last  = strtotime(($lastIso ?: $firstIso) . ' 00:00:00');
+    if ($prepay === 'pay_to_use') {
+        $payBy = strtotime('23:59:59', $first);
+        return [
+            'policy'     => 'pay_to_use',
+            'payByTs'    => $payBy,
+            'payByLabel' => date('M j, Y', $payBy),
+            'open'       => true,
+            'late'       => false,
+            'overdue'    => false,
+            'opensLabel' => 'on approval',
+        ];
+    }
     if ($prepay) {
         $payBy = strtotime('-1 day 23:59:59', $first);
         $late  = $payBy <= $now;

@@ -109,21 +109,41 @@ function numberMatchesMasked(receiptNumber, expectedNumber){
   if(receiptNumber==null || String(receiptNumber).trim()==='') return null;
   const expected=String(expectedNumber).replace(/\D+/g,'');
   if(expected.length!==11) return null;               // business number misconfigured — never fail customers on it
-  let r=String(receiptNumber).replace(/[•xX#]/g,'*').replace(/[^0-9*]/g,'');
-  if(r.startsWith('63') && r.length===12) r='0'+r.slice(2);   // +63 9xx… → 09xx…
-  if(r.length===10 && r[0]==='9') r='0'+r;
-  if(r.length!==11) return null;
-  let visible=0;
-  for(let i=0;i<11;i++){
-    if(r[i]==='*') continue;
-    if(r[i]!==expected[i]) return false;
-    visible++;
+  /* Compare the NATIONAL part — the ten characters after +63 / 63 / 0,
+     "9xxxxxxxxx". GCash hides middle digits with dots, and OCR reads those
+     dots as almost anything ("+63 9•••••2358" came back as "+63 Deceee2358",
+     2026-10-27), so EVERY non-digit counts as a hidden digit. Spaces and
+     dashes are layout, not characters. */
+  let s=String(receiptNumber).replace(/[\s\-]+/g,'');
+  if(/^\+?63/.test(s)) s=s.replace(/^\+?63/,'');
+  else if(s[0]==='0') s=s.slice(1);
+  const r=s.replace(/[^0-9]/g,'*');
+  const exp=expected.slice(1);
+  if(r.length===10){
+    let visible=0;
+    for(let i=0;i<10;i++){
+      if(r[i]==='*') continue;
+      if(r[i]!==exp[i]) return false;
+      visible++;
+    }
+    return visible>=4 ? true : null;
   }
-  return visible>=4 ? true : null;
+  /* OCR merged or split the dots, so positions no longer line up — judge the
+     visible ENDS only: the leading and trailing runs of digits. */
+  const lead=(r.match(/^\d+/)||[''])[0], tail=(r.match(/\d+$/)||[''])[0];
+  if(lead===r) return null;                           // all digits, wrong length: a misread, not a mismatch
+  if(lead && !exp.startsWith(lead)) return false;
+  if(tail && !exp.endsWith(tail)) return false;
+  return (lead.length+tail.length)>=4 ? true : null;
 }
 function maskedNameMatches(maskedName, expectedName){
   if(maskedName==null || String(maskedName).trim()==='') return null;
-  const runs=String(maskedName).match(/[a-z]+/gi)||[];  // visible letter-runs, e.g. "MI....A J.. J." → [MI,A,J,J]
+  /* visible letter-runs, e.g. "MI....A J.. J." → [MI,A,J,J]. GCash prints a
+     masked name in CAPITALS, and OCR reads the hiding dots as stray lowercase
+     letters ("FR••••S" → "FReeeeS"), so when capitals are present only the
+     capital runs are evidence. */
+  const mn=String(maskedName);
+  const runs=(/[A-Z]/.test(mn) ? mn.match(/[A-Z]+/g) : mn.match(/[a-z]+/gi))||[];
   const letters=String(expectedName).toLowerCase().replace(/[^a-z]/g,'');
   if(!letters || !runs.length) return null;
   let total=0, cursor=0;
@@ -201,7 +221,13 @@ function parseReceiptText(text){
   }else{
     const amountPos=lower.indexOf('amount');
     const head=amountPos!==-1?text.slice(0,amountPos):text;
-    if((m=head.match(/(\+?63\s?9[0-9*•xX#\s]{7,13}|\b09[0-9*•xX#]{4,9})/))) out.receiverNumber=m[1].trim();
+    /* "+63" then ANY run of characters on that line: the hidden digits come
+       out of OCR as letters or punctuation (numberMatchesMasked() reads them
+       as hidden). Cut after the last digit so trailing words are not taken. */
+    if((m=head.match(/(\+[ \t]?63[ \t]?[0-9A-Za-z*•#.°·\- \t]{6,18}|\b09[0-9*•xX#]{4,9})/))){
+      const n=m[1].replace(/[^0-9]+$/,'').trim();
+      if(/\d{2,}$/.test(n)) out.receiverNumber=n;
+    }
   }
 
   /* 6. Receiver names (masked "MI....A J.. J." + short display name) */
@@ -211,7 +237,10 @@ function parseReceiptText(text){
     if(/amount/i.test(line)) break;                     // names live above the money rows
     if(stop.test(line)) continue;
     if(!/^[A-Za-z.•* ]{2,40}$/.test(line)) continue;    // a name line, possibly masked — no digits
-    if(out.receiverNameMasked==null && /\.\.|[•*]/.test(line)){ out.receiverNameMasked=line; continue; }
+    /* masked: dots or bullets — or capitals with stray lowercase INSIDE a word
+       ("FReeeeS"), which is how OCR returns GCash's bullets. A normal name
+       ("Ramon T.") never has a lowercase run between two capitals. */
+    if(out.receiverNameMasked==null && (/\.\.|[•*]/.test(line) || /[A-Z][a-z]+[A-Z]/.test(line))){ out.receiverNameMasked=line; continue; }
     if(out.receiverNameShort==null && line.split(/\s+/).length<=3 && line.length<=24) out.receiverNameShort=line;
   }
   return out;

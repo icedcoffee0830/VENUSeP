@@ -134,6 +134,9 @@ $emptyBookingMessage = 'No booking history found.';
       .badge-overdue { background: #fcecec; color: #b23a3a; }
       .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
       .booking-pay-note.is-overdue { color: #b23a3a; }
+      /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
+      .badge-expired, .badge-released { background: #eef0f2; color: #55606b; }
+      .booking-status-note { display: block; margin-top: 4px; max-width: 220px; font-size: 11px; line-height: 1.4; color: var(--muted); }
       /* row actions */
       .booking-actions { display: inline-flex; gap: 6px; }
       .booking-action { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
@@ -309,7 +312,8 @@ $emptyBookingMessage = 'No booking history found.';
                               <span class="booking-pay-note is-overdue">was due <?php echo bh_e($booking['payment']['payByLabel']); ?> &middot; can still be paid</span>
                             <?php endif; ?>
                           </td>
-                          <td data-label="Status"><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span></td>
+                          <td data-label="Status"><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span>
+                            <?php if (!empty($booking['expiryNote'])): ?><span class="booking-status-note"><?php echo bh_e($booking['expiryNote']); ?></span><?php endif; ?></td>
                           <td data-label="Actions" class="booking-actions-cell">
                             <div class="booking-actions">
                               <?php /* Payment is open (or a receipt is with staff): the way back to
@@ -324,9 +328,9 @@ $emptyBookingMessage = 'No booking history found.';
                                   <i class="bi bi-hourglass-split" aria-hidden="true"></i>Payment
                                 </a>
                               <?php endif; ?>
-                              <!-- the valid ID submitted with this booking — same target as Transaction
-                                   History's View button, always clickable (an ID is required at every booking). -->
-                              <a class="booking-action" href="../valid-id-view.php?booking=<?php echo urlencode($booking['bookingId']); ?>" target="_blank" rel="noopener"><i class="bi bi-eye" aria-hidden="true"></i>View</a>
+                              <!-- the booking and its payment, in a modal over this page — same as
+                                   Transaction History's View (includes/booking-details-modal.php) -->
+                              <button type="button" class="booking-action" onclick="openBookingDetails('<?php echo bh_e(rawurlencode($booking['bookingId'])); ?>')"><i class="bi bi-eye" aria-hidden="true"></i>View</button>
                               <?php if (isset($bhReceipts[(int) ($booking['id'] ?? 0)])): ?>
                                 <a class="booking-action booking-action-receipt" href="receipt.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
                                   <i class="bi bi-file-earmark-text" aria-hidden="true"></i>Receipt
@@ -569,5 +573,6 @@ $emptyBookingMessage = 'No booking history found.';
         if (search) search.dispatchEvent(new Event('input'));
       });
     </script>
+    <?php include __DIR__ . '/../includes/booking-details-modal.php'; /* "View" */ ?>
   </body>
 </html>

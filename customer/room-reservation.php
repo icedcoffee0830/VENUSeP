@@ -79,6 +79,10 @@
   .cal-day.out{color:#c6c2ba}
   .cal-day.today:not(.sel){box-shadow:inset 0 0 0 1.5px #b9c0d0}
   .cal-day.sel,.cal-day.sel:hover{background:#a11626;color:#fff;font-weight:650}
+  /* partly booked: still pickable, other hours are free (2026-10-27) */
+  .cal-day.part{position:relative;color:#8a5a12;font-weight:600}
+  .cal-day.part::after{content:'';position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:999px;background:#d9930d}
+  .cal-day.part.sel::after{background:#fff}
   /* time dropdown (booking panel) */
   .tt-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;min-width:118px;z-index:70;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.14);max-height:196px;overflow-y:auto;padding:5px}
   .tt-opt{display:block;width:100%;border:none;background:none;text-align:left;padding:8px 11px;border-radius:8px;font:500 13.5px 'Inter',system-ui,sans-serif;color:#1c1b19;cursor:pointer;white-space:nowrap}
@@ -344,23 +348,27 @@ $mrOthers = array_slice($mrOthers, 0, 4);
         <div class="bk-footer-links">
           <a href="venusep_venue_booking.php#venue-listings">Browse venues</a>
           <a href="venusep_venue_booking.php#hostel-listings">Hostel beds</a>
+<?php if (counter_mode()): /* counter mode: staff calendar; no customer-only links (2026-10-27) */ ?>
+          <a href="../admin/calendar.php">Availability calendar</a>
+<?php else: ?>
           <a href="calendar.php">Availability calendar</a>
           <a href="booking-history.php">My bookings</a>
+<?php endif; ?>
         </div>
       </div>
       <div>
         <h4>Help</h4>
         <div class="bk-footer-links">
-          <a href="faq.php">Frequently asked questions</a>
-          <a href="faq.php#gcash">How to pay by GCash</a>
-          <a href="faq.php#after"><?php echo $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy'; ?></a>
-          <a href="faq.php#discount">USeP discount rules</a>
+          <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>">Frequently asked questions</a>
+          <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>#gcash">How to pay by GCash</a>
+          <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>#after"><?php echo $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy'; ?></a>
+          <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>#discount">USeP discount rules</a>
         </div>
       </div>
     </div>
     <div class="bk-footer-bottom">
       <span>&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</span>
-      <span><a href="faq.php#after">Booking &amp; cancellation policy</a><a href="faq.php">Privacy</a></span>
+      <span><a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>#after">Booking &amp; cancellation policy</a><a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>">Privacy</a></span>
     </div>
   </div>
 </footer>
@@ -391,6 +399,7 @@ $mrRoomsWithPhotos = array_map(function ($r) {
 ?>
 const ROOMS = <?php echo json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 </script>
+<?php include __DIR__ . '/../includes/counter-booker.php'; /* the counter's "who" step, shared with the hostel page */ ?>
 <script>
 /* ============================================================
    USeP Room Reservation — customer booking UI
@@ -472,6 +481,10 @@ const DEMO_MODE = <?php echo demo_mode_on() ? 'true' : 'false'; ?>;
    --------------------------------------------------------------------- */
 const COUNTER = <?php echo counter_mode() ? 'true' : 'false'; ?>;
 const COUNTER_STAFF = <?php echo json_encode(counter_staff_name(), JSON_UNESCAPED_UNICODE); ?>;
+/* SAME DAY, DIFFERENT TIME (2026-10-27): minutes kept free before and after
+   every booking of a room. From system_settings, the same value
+   sp_add_venue_slot() enforces. */
+const VENUE_GAP_MIN = <?php echo (int) venue_cleanup_gap_minutes(); ?>;
 
 /* ROOMS is defined at the top of the page from includes/venue-rooms.php — the ONE
    shared source, so the booking page, the landing page and admin Venue Management
@@ -487,28 +500,7 @@ const ROOM_PARAM = new URLSearchParams(location.search).get('room');
 const ROOM_OK = ROOMS.some(r=>r.id===ROOM_PARAM);
 if(!ROOM_OK) location.replace('venusep_venue_booking.php');
 
-/* COUNTER MODE: who the booking is FOR. In the customer flow this is simply
-   whoever is signed in; at the counter it is a person standing there, who may
-   or may not already have an account, so it has to be asked and — when they
-   claim an account — proved. `verified` only goes true after the server has
-   checked their password (admin/customer-verify.php); the page cannot set it
-   on its own, and booking-create.php re-checks the session before trusting it. */
-const booker0 = {
-  mode: 'account',        // 'account' = has a login | 'walkin' = no account at all
-  query: '',              // what staff typed into the search box
-  results: [],            // matches, with the phone already masked by the server
-  searching: false,
-  customerId: 0,          // the chosen account
-  name: '', phone: '',    // the chosen account's details, or the walk-in's
-  address: '',            // walk-ins only, optional
-  email: '',              // walk-ins only, required unless noEmail: where their confirmation + System Receipt go
-  noEmail: false,         // walk-ins only: the guest has no email, so the receipt is printed at the counter
-  password: '',           // typed by the CUSTOMER, sent once, never stored
-  verified: false,        // the server confirmed that password
-  error: '',
-  idChecked: false,       // staff confirm they have seen a valid ID in person
-  usepId: false,          // ...and that it is a USeP ID -> the discount applies
-};
+/* booker0 — who a COUNTER booking is for — lives in includes/counter-booker.php */
 
 let state = {
   screen: 'detail',                                                   // detail | who | review | pending | payment | done
@@ -621,18 +613,55 @@ function maintCovers(m,ds){ return !!m && ds>=m.from && (m.until==null || ds<=m.
 function maintLive(m){ return !!m && (m.until==null || m.until>=TODAY); }                  // still relevant at all? → the chip
 function maintUntilLabel(m){ return m.until ? 'Until '+fmtDate(m.until) : 'No set return date'; }
 
-/* A day is BLOCKED when anything stops it being booked. ONE question, two
-   sources: an existing booking, or HARD maintenance. Returns null when the day
-   is free, otherwise the REASON — so the status card and the modal read the
-   answer instead of each re-deriving it and drifting apart. */
+/* A day is BLOCKED when nothing at all can be booked on it: HARD maintenance.
+   Returns null when the day is open, otherwise the REASON — so the status card
+   and the modal read the answer instead of each re-deriving it.
+   An existing booking does NOT block the day any more (2026-10-27): other
+   hours stay bookable as long as they keep the cleanup gap — see clashesOn(). */
 function dayBlock(ds){
   const r=getRoom(); if(!r) return null;
-  const slots=r.booked.filter(b=>b.date===ds);
-  if(slots.length) return { why:'booked', slots };
   if(maintCovers(r.maintenance,ds) && r.maintenance.blocks) return { why:'maintenance', m:r.maintenance };
   return null;
 }
 function isDayBlocked(ds){ return !!dayBlock(ds); }
+
+/* ---------- same day, different time ----------
+   The bookings already on a date, and which of them a chosen start–end would
+   come too close to. Too close = within VENUE_GAP_MIN minutes, before or after
+   — the same test sp_add_venue_slot() runs, so what this page accepts the
+   database accepts. */
+const DAY_OPEN = 7*60, DAY_CLOSE = 22*60;            // the hours the time pickers offer
+function bookedOn(ds){ const r=getRoom(); return r ? r.booked.filter(b=>b.date===ds) : []; }
+function clashesOn(ds, start, end){
+  const s=toMin(start), e=toMin(end);
+  if(s===null || e===null) return [];
+  return bookedOn(ds).filter(b => s < toMin(b.end)+VENUE_GAP_MIN && e+VENUE_GAP_MIN > toMin(b.start));
+}
+function minToT(m){ return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+function gapWords(){ return VENUE_GAP_MIN%60===0 ? (VENUE_GAP_MIN/60)+'-hour' : VENUE_GAP_MIN+'-minute'; }
+function takenLabel(slots){ return slots.map(k=>fmtTime(k.start)+' – '+fmtTime(k.end)).join(', '); }
+/* the windows still open on a date, gap included, e.g. "10:00 AM – 10:00 PM" */
+function freeWindows(ds){
+  let free=[[DAY_OPEN, DAY_CLOSE]];
+  bookedOn(ds).forEach(function(b){
+    const lo=toMin(b.start)-VENUE_GAP_MIN, hi=toMin(b.end)+VENUE_GAP_MIN;
+    const next=[];
+    free.forEach(function(w){
+      if(hi<=w[0] || lo>=w[1]){ next.push(w); return; }
+      if(lo>w[0]) next.push([w[0], lo]);
+      if(hi<w[1]) next.push([hi, w[1]]);
+    });
+    free=next;
+  });
+  return free.filter(w=>w[1]-w[0]>=30).map(w=>fmtTime(minToT(w[0]))+' – '+fmtTime(minToT(w[1])));
+}
+/* one sentence for a date that already has bookings */
+function partlyBookedNote(ds){
+  const taken=bookedOn(ds); if(!taken.length) return '';
+  const free=freeWindows(ds);
+  return 'Already booked '+takenLabel(taken)+'. Bookings keep a '+gapWords()+' gap for cleanup, so '
+    +(free.length ? 'you can book '+free.join(' or ')+'.' : 'nothing else fits that day.');
+}
 
 /* the dates the customer is actually booking: the range minus unavailable days
    — those are excluded automatically, so a Jul 17–20 pick with Jul 18 taken
@@ -689,7 +718,14 @@ function slotStatus(){
   if(!anyInput) return { show:false };
   if(badDay)   return { show:true, ok:false, invalid:true, badDay, badReason, date, dateEnd:end2, dates };
 
-  // unavailable dates were already excluded above, so every remaining day is free
+  /* the hours each day asks for must keep the cleanup gap from that day's
+     existing bookings — the first day that doesn't is the one to fix */
+  for(const ds of dates){
+    const t=dayTime(ds), c=clashesOn(ds, t.start, t.end);
+    if(c.length) return { show:true, ok:false, clash:true, clashDay:ds, clashSlots:c, date, dateEnd:end2, dates };
+  }
+
+  // closed dates were already excluded above, and no day clashes
   return { show:true, ok:true, date, dateEnd:end2, dates, allDates };
 }
 
@@ -762,7 +798,12 @@ function derive(){
     } else if(sr.allBlocked){
       slot={show:true,dot:'#d9930d',title: multi?'These dates are not available':'This date is not available',
         detail: sr.why==='maintenance' ? 'The room is closed for maintenance on these dates — please pick different dates.'
-                                       : 'Already booked — please pick different dates.'};
+                                       : 'Not available — please pick different dates.'};
+    } else if(sr.clash){
+      const cl=new Date(sr.clashDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      slot={show:true,dot:'#d9930d',
+        title:(multi?cl+': ':'')+'Too close to another booking',
+        detail:partlyBookedNote(sr.clashDay)};
     } else if(sr.invalid){
       let title;
       if(multi) title = badDayLabel+(sr.badReason==='missing'?' needs its hours set':' ends before it starts');
@@ -798,6 +839,7 @@ function derive(){
   else if(sr.show && sr.badRange) hint='End date must be on or after the start date';
   else if(sr.show && sr.allBlocked) hint = sr.why==='maintenance' ? 'Closed for maintenance — pick different dates' : 'These dates are already booked — pick different ones';
   else if(sr.show && sr.invalid) hint= (multi?badDayLabel+': ':'')+badFix;
+  else if(sr.show && sr.clash) hint='Pick hours that keep a '+gapWords()+' gap from the existing booking';
   else if(!sr.show) hint='Set the hours to check availability';
   else if(tooSoon) hint = sameDayOk ? 'Pick a start time that hasn\'t passed yet today' : 'Bookings must be made at least 12 hours in advance';
   else if(isNaN(ba)||ba<=0) hint='Enter the number of attendees';
@@ -884,12 +926,14 @@ function calHtml(field){
   for(let i=0;i<42;i++){
     const iso=isoOf(cur);
     const inMonth=cur.getMonth()===m-1;
-    const booked=!!R && R.booked.some(k=>k.date===iso);
-    const off=iso<min || booked;
-    const cls='cal-day'+(inMonth?'':' out')+(iso===sel?' sel':'')+(iso===TODAY?' today':'');
+    /* a booked day stays pickable — other hours can still be booked
+       (2026-10-27); it is marked, and says what is taken */
+    const taken=R ? R.booked.filter(k=>k.date===iso) : [];
+    const off=iso<min;
+    const cls='cal-day'+(inMonth?'':' out')+(iso===sel?' sel':'')+(iso===TODAY?' today':'')+(taken.length&&!off?' part':'');
     cells+=off
-      ? `<button type="button" class="${cls}" disabled${booked&&iso>=min?' title="Already booked"':''}>${cur.getDate()}</button>`
-      : `<button type="button" class="${cls}" onclick="calPick('${iso}')">${cur.getDate()}</button>`;
+      ? `<button type="button" class="${cls}" disabled>${cur.getDate()}</button>`
+      : `<button type="button" class="${cls}" onclick="calPick('${iso}')"${taken.length?` title="Partly booked: ${esc(takenLabel(taken))}"`:''}>${cur.getDate()}</button>`;
     cur.setDate(cur.getDate()+1);
   }
   return `
@@ -1058,85 +1102,10 @@ function setTab(k){ state.tab=k; render(); }
    we ask who it is for — so the "who" step sits between detail and review. */
 function goReview(){ if(derive().ready){ state.screen = COUNTER ? 'who' : 'review'; window.scrollTo(0,0); render(); } }
 
-/* ---------- counter: who is this booking for ---------- */
-function setBookerMode(m){
-  /* Switching mode clears everything chosen under the other one. A customer id
-     left behind from a search would otherwise ride along invisibly and book
-     under someone who walked away. */
-  state.booker = Object.assign({}, booker0, { mode:m, idChecked:state.booker.idChecked, usepId:state.booker.usepId });
-  render();
-}
-function setBookerField(f, v){ state.booker[f] = v; state.booker.error=''; render(); }
-function toggleBookerFlag(f, el){ state.booker[f] = !!el.checked; if(f==='idChecked' && !el.checked) state.booker.usepId=false; if(f==='noEmail' && el.checked) state.booker.email=''; render(); }
-
-let searchTimer = null;
-function searchCustomers(v){
-  state.booker.query = v;
-  state.booker.customerId = 0; state.booker.verified = false;
-  clearTimeout(searchTimer);
-  if(v.trim().length < 3){ state.booker.results = []; render(); return; }
-  state.booker.searching = true; render();
-  searchTimer = setTimeout(async function(){
-    try{
-      const res = await fetch('../admin/customer-search.php?q=' + encodeURIComponent(v.trim()), { credentials:'same-origin' });
-      const out = await res.json().catch(function(){ return { ok:false, results:[] }; });
-      state.booker.results = out.ok ? out.results : [];
-    }catch(e){ state.booker.results = []; }
-    state.booker.searching = false; render();
-  }, 250);
-}
-function pickCustomer(id, name, phone){
-  state.booker.customerId = id; state.booker.name = name; state.booker.phone = phone;
-  state.booker.results = []; state.booker.password=''; state.booker.verified = false; state.booker.error='';
-  render();
-}
-/* The customer types their own password on the counter-facing screen. It is
-   checked and discarded — no session is started, so the staff member beside
-   them stays signed in. Required: without it there is nothing but a name to
-   say this is the right account, and a wrong match hands one customer
-   another's booking. */
-async function verifyBooker(){
-  const pw = (document.getElementById('bkPassword')||{}).value || '';
-  if(!pw){ state.booker.error='Ask the customer to type their password.'; render(); return; }
-  state.booker.error=''; render();
-  try{
-    const body = new URLSearchParams({ csrf: CSRF, customer_id: state.booker.customerId, password: pw });
-    const res = await fetch('../admin/customer-verify.php', { method:'POST', body:body, credentials:'same-origin' });
-    const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
-    state.booker.verified = !!out.ok;
-    state.booker.error = out.ok ? '' : (out.message || 'That password did not match.');
-  }catch(e){ state.booker.verified=false; state.booker.error='Could not reach the server.'; }
-  render();
-}
-function counterBookerReady(){
-  const b = state.booker;
-  if(!b.idChecked) return false;                       // staff must confirm they saw an ID
-  if(b.mode==='account') return b.customerId>0 && b.verified;
-  return b.name.trim()!=='' && cleanPhone(b.phone)!==null && (b.noEmail || walkinEmailOk(b.email));
-}
-/* REQUIRED (decided 2026-10-04): it is where a walk-in's confirmation and
-   System Receipt are sent. The server re-checks it (booking-create.php) —
-   this only saves a round trip. */
-function walkinEmailOk(v){
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
-}
-/* 11 digits starting 09 — the same shape cb_normalise_mobile() accepts server
-   side, so the counter cannot store a number the rest of the system rejects. */
-function cleanPhone(raw){
-  let d = String(raw||'').replace(/\D+/g,'');
-  if(d.length===12 && d.slice(0,2)==='63') d = '0'+d.slice(2);
-  if(d.length===10 && d[0]==='9') d = '0'+d;
-  return (d.length===11 && d.slice(0,2)==='09') ? d : null;
-}
-function goFromWho(){
-  if(!counterBookerReady()) return;
-  /* At the counter the affiliation question has already been answered — by the
-     ID the staff member just looked at. Feeding it into the same `affiliated`
-     field the customer flow uses means the price panel, the review card and the
-     submitted value all keep working untouched. */
-  state.affiliated = !!state.booker.usepId;
-  state.screen='review'; window.scrollTo(0,0); render();
-}
+/* ---------- counter: who is this booking for ----------
+   setBookerMode(), searchCustomers(), verifyBooker(), counterBookerReady(),
+   goFromWho(), whoScreen() and counterBar() live in includes/counter-booker.php,
+   shared with the hostel page (2026-10-27). */
 function backToDetail(){ state.screen='detail'; window.scrollTo(0,0); render(); }
 function backToPending(){ state.screen='pending'; window.scrollTo(0,0); render(); }
 
@@ -1457,7 +1426,7 @@ function detailScreen(){
       : [{d:'No current bookings', t:'This room is open'}];
     content=`
       <h3 style="margin:0 0 6px;font-size:16px;font-weight:660">Availability</h3>
-      <p style="margin:0 0 22px;font-size:13.5px;color:#7a766f;max-width:70ch">Bookable hours are 7:00 AM – 10:00 PM daily. Dates listed below already have a booking and are <strong>not available</strong>. Pick your dates and time in the booking panel to check a specific slot.</p>
+      <p style="margin:0 0 22px;font-size:13.5px;color:#7a766f;max-width:70ch">Bookable hours are 7:00 AM – 10:00 PM daily. The times listed below are already booked. The rest of those days is still open, as long as your booking keeps a <strong>${gapWords()} gap</strong> before and after for cleanup. Pick your dates and time in the booking panel to check a specific slot.</p>
       <div style="font-size:12.5px;font-weight:600;color:#7a766f;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Existing bookings for this room</div>
       ${list.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:13.5px;max-width:520px"><span style="color:#3a372f">${esc(x.d)}</span><span style="color:#8a857d">${esc(x.t)}</span></div>`).join('')}`;
   } else {
@@ -1465,8 +1434,8 @@ function detailScreen(){
     content=`
       <h3 style="margin:0 0 4px;font-size:16px;font-weight:660">Reservation policies</h3>
       ${leadMsFor(R)===0
-        ? policy('Booking window','This USeP Venues room can be booked <strong>the same day</strong> — your start time just has to be later than right now, with enough of the day left before the <strong>10:00 PM</strong> closing time for your event. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')
-        : policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation is <strong>not available</strong>; in a multi-day range, booked dates are left out automatically and you only pay for the available days.')}
+        ? policy('Booking window','This USeP Venues room can be booked <strong>the same day</strong> — your start time just has to be later than right now, with enough of the day left before the <strong>10:00 PM</strong> closing time for your event. A date that already has a reservation can still be booked at <strong>other times</strong>, keeping a <strong>'+gapWords()+' gap</strong> before and after each booking for cleanup. You pay the day rate for each day you book.')
+        : policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation can still be booked at <strong>other times</strong>, keeping a <strong>'+gapWords()+' gap</strong> before and after each booking for cleanup. You pay the day rate for each day you book.')}
       ${policy('Valid ID & approval','Every booking request must include a photo of a <strong>valid ID</strong> (USeP or government-issued). Your reservation stays <strong>pending</strong> — and payment stays locked — until staff approve both the ID and the reservation.')}
       ${PAY_POLICY.prepay
         ? policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')
@@ -1485,14 +1454,23 @@ function detailScreen(){
   /* time section: one start/end for a single day, or a per-day schedule for
      multi-day. Each field is a dropdown of half-hour slots within the bookable
      window (7:00 AM – 10:00 PM), displayed in 12-hour AM/PM format. */
-  const timeInput = (id,val,onchg)=>{
+  /* ds + kind ('start'|'end'): grey out the times that fall inside another
+     booking or its cleanup gap on that date — they can never work */
+  const timeInput = (id,val,onchg,ds,kind)=>{
     const open=state.timeDd===id;
     let opts='';
     if(open){
+      const taken=ds ? bookedOn(ds) : [];
       for(let h=7;h<=22;h++) for(const mm of ['00','30']){
         if(h===22 && mm==='30') continue;
-        const v=String(h).padStart(2,'0')+':'+mm;
-        opts+=`<button type="button" class="tt-opt${v===val?' sel':''}" onclick="state.timeDd=null;${onchg.replace('this.value',"'"+v+"'")}">${fmtTime(v)}</button>`;
+        const v=String(h).padStart(2,'0')+':'+mm, vm=toMin(v);
+        const hit=taken.find(b=>{
+          const lo=toMin(b.start)-VENUE_GAP_MIN, hi=toMin(b.end)+VENUE_GAP_MIN;
+          return kind==='end' ? (vm>lo && vm<=hi) : (vm>=lo && vm<hi);
+        });
+        opts+= hit
+          ? `<button type="button" class="tt-opt" disabled title="Too close to the ${esc(fmtTime(hit.start)+' – '+fmtTime(hit.end))} booking" style="opacity:.35;cursor:not-allowed;text-decoration:line-through">${fmtTime(v)}</button>`
+          : `<button type="button" class="tt-opt${v===val?' sel':''}" onclick="state.timeDd=null;${onchg.replace('this.value',"'"+v+"'")}">${fmtTime(v)}</button>`;
       }
     }
     return `<div style="position:relative;min-width:0">
@@ -1507,21 +1485,22 @@ function detailScreen(){
     let n=0;
     const rows=d.allDates.map(ds=>{
       const lbl=new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-      const taken=R.booked.filter(k=>k.date===ds);
-      if(taken.length){
-        const takenLbl=taken.map(k=>fmtTime(k.start)+'–'+fmtTime(k.end)).join(', ');
+      /* a closed day (HARD maintenance) is left out; a partly booked one keeps
+         its pickers and says what is taken (2026-10-27) */
+      if(isDayBlocked(ds)){
         return `<div class="bk-day-row bk-day-off" style="display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center;margin-bottom:8px">
-          <span style="font-size:12px;font-weight:600;color:#f2d0cb">${lbl}<div style="font-size:12px;font-weight:500;color:#d5b8b5">booked ${takenLbl}</div></span>
-          <span style="height:42px;display:flex;align-items:center;padding:0 11px;border:1px dashed rgba(0,0,0,.14);border-radius:9px;font-size:12px;color:#a5a19a;background:#fff">Not available — already booked</span>
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">${lbl}</span>
+          <span style="height:42px;display:flex;align-items:center;padding:0 11px;border:1px dashed rgba(0,0,0,.14);border-radius:9px;font-size:12px;color:#a5a19a;background:#fff">Not available — closed for maintenance</span>
         </div>`;
       }
+      const taken=bookedOn(ds);
       n++;
       const t=dayTime(ds);
-      return `<div class="bk-day-row" style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px">
+      return `<div class="bk-day-row" style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;align-items:center;margin-bottom:${taken.length?'2px':'8px'}">
         <span style="font-size:12px;font-weight:600;color:#f2d0cb">Day ${n}<div style="font-size:12px;font-weight:500;color:#d5b8b5">${lbl}</div></span>
-        ${timeInput('bk-t-'+ds+'-s',t.start,"setDayTime('"+ds+"','start',this.value)")}
-        ${timeInput('bk-t-'+ds+'-e',t.end,"setDayTime('"+ds+"','end',this.value)")}
-      </div>`;
+        ${timeInput('bk-t-'+ds+'-s',t.start,"setDayTime('"+ds+"','start',this.value)",ds,'start')}
+        ${timeInput('bk-t-'+ds+'-e',t.end,"setDayTime('"+ds+"','end',this.value)",ds,'end')}
+      </div>${taken.length?`<div style="font-size:11.5px;color:#f6d79a;margin:0 0 8px 96px;line-height:1.45">Booked ${esc(takenLabel(taken))} · keep a ${gapWords()} gap</div>`:''}`;
     }).join('');
     timeSection=`
       <div style="margin-bottom:12px">
@@ -1533,20 +1512,21 @@ function detailScreen(){
           <span></span><span style="font-size:12px;color:#d5b8b5">Start</span><span style="font-size:12px;color:#d5b8b5">End</span>
         </div>
         ${rows}
-        ${d.excluded?`<div style="font-size:12px;color:#d5b8b5;margin-top:2px">Unavailable days are left out automatically — you only book and pay for the available days.</div>`:''}
+        ${d.excluded?`<div style="font-size:12px;color:#d5b8b5;margin-top:2px">Days closed for maintenance are left out automatically — you only book and pay for the available days.</div>`:''}
       </div>`;
   } else {
     timeSection=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
         <label style="display:flex;flex-direction:column;gap:5px">
           <span style="font-size:12px;font-weight:600;color:#f2d0cb">Start time</span>
-          ${timeInput('bk-start',b.start,"setBooking('start',this.value)")}
+          ${timeInput('bk-start',b.start,"setBooking('start',this.value)",b.date,'start')}
         </label>
         <label style="display:flex;flex-direction:column;gap:5px">
           <span style="font-size:12px;font-weight:600;color:#f2d0cb">End time</span>
-          ${timeInput('bk-end',b.end,"setBooking('end',this.value)")}
+          ${timeInput('bk-end',b.end,"setBooking('end',this.value)",b.date,'end')}
         </label>
-      </div>`;
+      </div>
+      ${b.date && bookedOn(b.date).length && !slotStatus().clash ? `<div style="font-size:12px;color:#f6d79a;line-height:1.5;margin:-4px 0 12px">${esc(partlyBookedNote(b.date))}</div>` : ''}`;
   }
 
   const slot = d.slot.show ? `
@@ -1718,129 +1698,6 @@ function scheduleHtml(x){
    which is the point — so it has to say out loud that it is not one, or a staff
    member will eventually take a booking on it thinking they are signed in as
    somebody. It names the staff member for the same reason. */
-function counterBar(){
-  return `<div style="position:sticky;top:0;z-index:60;background:#1f1e1e;color:#fff;padding:9px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px">
-    <strong style="letter-spacing:.06em;font-size:11.5px;text-transform:uppercase;background:#a11626;padding:3px 8px;border-radius:999px">Counter booking</strong>
-    <span style="opacity:.85">Booking on behalf of a walk-in &middot; staff: <strong>${esc(COUNTER_STAFF)}</strong></span>
-    <a href="../admin/Admin_Dashboard.php" style="margin-left:auto;color:#ffd166;font-weight:600;text-decoration:none">Leave counter mode</a>
-  </div>`;
-}
-
-/* ---------- screen: WHO IS THIS FOR (counter mode only) ----------
-   The step the customer flow has no need of: online, the booker is whoever is
-   signed in. Here a person is standing at the desk, and three things have to be
-   settled before a booking can exist in their name — which account it belongs
-   to (or that it belongs to none), that they are really that person, and what
-   the staff member saw on their ID. All three end up in the booking's timeline,
-   because each one is someone's judgement rather than a fact the system knows. */
-function whoScreen(){
-  const b = state.booker;
-  const card = (inner, pad) => `<div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:${pad||'16px'};box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05);margin-top:14px">${inner}</div>`;
-  const label = t => `<div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:6px">${t}</div>`;
-  const inputStyle = 'width:100%;height:42px;border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:0 12px;font-size:14px;font-family:inherit;background:#fff';
-
-  const modeBtn = (m, title, sub) => {
-    const on = b.mode === m;
-    return `<button type="button" onclick="setBookerMode('${m}')" style="flex:1;min-width:200px;text-align:left;border:1.5px solid ${on?'#a11626':'rgba(0,0,0,.14)'};background:${on?'#fdf4f5':'#fff'};border-radius:12px;padding:12px 14px;cursor:pointer;font-family:inherit">
-      <div style="font-size:13.5px;font-weight:680;color:#1c1b19">${title}</div>
-      <div style="font-size:12.5px;color:#8a857d;margin-top:2px">${sub}</div>
-    </button>`;
-  };
-
-  /* ---- with an account: search, then prove it ---- */
-  let accountBlock = '';
-  if(b.mode === 'account'){
-    const results = b.results.map(r => `
-      <button type="button" onclick="pickCustomer(${r.id}, ${JSON.stringify(r.name).replace(/"/g,'&quot;')}, ${JSON.stringify(r.phone).replace(/"/g,'&quot;')})"
-              style="display:block;width:100%;text-align:left;border:none;border-bottom:1px solid #f0efec;background:#fff;padding:10px 12px;cursor:pointer;font-family:inherit">
-        <div style="font-size:13.5px;font-weight:640;color:#1c1b19">${esc(r.name)}</div>
-        <div style="font-size:12.5px;color:#8a857d">${esc(r.email)} &middot; ${esc(r.phone)}</div>
-      </button>`).join('');
-
-    accountBlock = card(`
-      ${label('Find the account')}
-      <input id="bkSearch" type="text" value="${esc(b.query)}" oninput="searchCustomers(this.value)" placeholder="Full name or email address" style="${inputStyle}" autocomplete="off">
-      <div style="font-size:12px;color:#a5a19a;margin-top:6px">Type at least three characters. Phone numbers are shown partly hidden &mdash; enough to confirm, not enough to copy down.</div>
-      ${b.searching ? `<div style="font-size:12.5px;color:#8a857d;margin-top:10px">Searching&hellip;</div>` : ''}
-      ${results ? `<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden;margin-top:10px">${results}</div>` : ''}
-      ${(!b.searching && b.query.trim().length>=3 && !b.results.length && !b.customerId)
-        ? `<div style="font-size:12.5px;color:#8a5a12;margin-top:10px">No account matches that. If they have never registered, switch to <strong>No account</strong>.</div>` : ''}
-
-      ${b.customerId ? `
-        <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:14px">
-          <div style="font-size:13.5px;font-weight:680;color:#1c1b19">${esc(b.name)}</div>
-          <div style="font-size:12.5px;color:#8a857d;margin-bottom:10px">${esc(b.phone)}</div>
-          ${b.verified ? `
-            <div style="display:flex;align-items:center;gap:8px;background:#eaf6ef;border:1px solid #d4ebdd;border-radius:10px;padding:10px 12px">
-              <span style="color:#1c7a4f;font-size:15px">&check;</span>
-              <div style="font-size:13px;color:#1c7a4f">Identity confirmed &mdash; the customer entered their password.</div>
-            </div>` : `
-            ${label('Hand the screen to the customer')}
-            <div style="font-size:12.5px;color:#8a857d;margin-bottom:8px;line-height:1.5">They type their own password to confirm this is their account. It is checked and discarded &mdash; they are not signed in, and you stay signed in.</div>
-            <input id="bkPassword" type="password" placeholder="Customer's password" style="${inputStyle}" autocomplete="off">
-            ${b.error ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">${esc(b.error)}</div>` : ''}
-            <button type="button" onclick="verifyBooker()" style="margin-top:10px;height:40px;padding:0 16px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer;font-family:inherit">Confirm identity</button>`}
-        </div>` : ''}
-    `);
-  } else {
-    /* ---- no account: the walk-in shape the database already has ----
-       A walk-in has no `users` row (DB-DECISIONS #4), so their email — when
-       they give one — goes in customers.contact_email, the single exception
-       (#22): it is where their confirmation and System Receipt are sent.
-       Required (2026-10-04) and unverified: staff read it back to the guest. */
-    accountBlock = card(`
-      ${label('Guest details')}
-      <input id="bkName" type="text" value="${esc(b.name)}" oninput="setBookerField('name', this.value)" placeholder="Full name" style="${inputStyle}" autocomplete="off">
-      <div style="height:10px"></div>
-      <input id="bkPhone" type="tel" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Contact number (09XXXXXXXXX)" style="${inputStyle}" autocomplete="off">
-      ${(b.phone.trim()!=='' && cleanPhone(b.phone)===null) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That is not an 11-digit mobile number starting 09.</div>` : ''}
-      <div style="height:10px"></div>
-      ${b.noEmail ? '' : `
-      <input id="bkEmail" type="text" inputmode="email" spellcheck="false" autocapitalize="off" aria-label="Guest email" value="${esc(b.email)}" oninput="setBookerField('email', this.value)" placeholder="Email — for their confirmation and receipt" style="${inputStyle}" autocomplete="off" aria-describedby="bkEmailHint">
-      ${(b.email.trim()!=='' && !walkinEmailOk(b.email)) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That doesn't look like an email address. Check it with the guest.</div>` : ''}
-      <div id="bkEmailHint" style="font-size:12px;color:#77736c;margin-top:8px;line-height:1.5">Required: their booking confirmation and receipt are emailed here. Read the address back to the guest. Nothing checks it, so a typo sends their booking to a stranger.</div>`}
-      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;margin-top:${b.noEmail ? '0' : '10px'}">
-        <input type="checkbox" id="bkNoEmail" ${b.noEmail?'checked':''} onchange="toggleBookerFlag('noEmail', this)" style="width:15px;height:15px;margin-top:2px;flex:none;accent-color:#a11626">
-        <span style="font-size:13px;line-height:1.5;color:#1c1b19">Guest has no email. <strong>Print the receipt</strong> at the counter instead.</span>
-      </label>
-      <div style="height:10px"></div>
-      <input id="bkAddress" type="text" value="${esc(b.address)}" oninput="setBookerField('address', this.value)" placeholder="Address (optional)" style="${inputStyle}" autocomplete="off">
-      <div style="font-size:12px;color:#a5a19a;margin-top:8px;line-height:1.5">No account means this booking will not appear in anyone's <strong>My Bookings</strong>, cannot be paid online, and can only be refunded by staff. Payment must be taken at the counter.</div>
-    `);
-  }
-
-  /* ---- what the staff member saw ---- */
-  const idBlock = card(`
-    ${label('The ID you were shown')}
-    <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
-      <input type="checkbox" id="bkIdChecked" ${b.idChecked?'checked':''} onchange="toggleBookerFlag('idChecked', this)" style="width:15px;height:15px;margin-top:2px;flex:none;accent-color:#a11626">
-      <span style="font-size:13.5px;line-height:1.5;color:#1c1b19">I have seen a <strong>valid ID</strong> for this person in person.</span>
-    </label>
-    ${b.idChecked ? `
-      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;margin-top:12px;padding-top:12px;border-top:1px solid #f0efec">
-        <input type="checkbox" id="bkUsepId" ${b.usepId?'checked':''} onchange="toggleBookerFlag('usepId', this)" style="width:15px;height:15px;margin-top:2px;flex:none;accent-color:#a11626">
-        <span style="font-size:13.5px;line-height:1.5;color:#1c1b19">It was a <strong>USeP ID</strong> &mdash; apply the ${DISCOUNT_PERCENT}% affiliate discount.</span>
-      </label>` : ''}
-    <div style="font-size:12px;color:#a5a19a;margin-top:12px;line-height:1.5">Recorded against your name, <strong>${esc(COUNTER_STAFF)}</strong>, on this booking's history. The discount is a decision, not a claim &mdash; online it needs an uploaded ID that staff verify; here it needs you to have looked at one.</div>
-  `);
-
-  const ready = counterBookerReady();
-  return `
-  <main style="max-width:680px;margin:0 auto;padding:26px 18px 80px">
-    <button onclick="state.screen='detail';window.scrollTo(0,0);render()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">&larr; Back to the room</button>
-    <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px">Who is this booking for?</h1>
-    <p style="font-size:14px;color:#6b675f;margin:0 0 4px;line-height:1.6">The room and dates are set. Now the person at the counter.</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
-      ${modeBtn('account','Has an account','They have registered before')}
-      ${modeBtn('walkin','No account','A pure walk-in')}
-    </div>
-    ${accountBlock}
-    ${idBlock}
-    <button onclick="goFromWho()" ${ready?'':'disabled'} style="width:100%;height:48px;margin-top:18px;border:none;border-radius:12px;background:${ready?'#a11626':'#e7e4de'};color:${ready?'#fff':'#a5a19a'};font-size:14.5px;font-weight:680;cursor:${ready?'pointer':'not-allowed'};font-family:inherit">Continue &mdash; review the booking</button>
-    ${!ready ? `<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">${b.idChecked ? (b.mode==='account' ? 'Find the account and have the customer confirm their password.' : 'Enter the guest’s name and contact number.') : 'Confirm you have seen a valid ID.'}</div>` : ''}
-  </main>`;
-}
-
 /* ---------- screen: REVIEW ---------- */
 function reviewScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
@@ -2227,7 +2084,7 @@ function paymentScreen(){
     ${cash?cashBody:gcashBody}
 
     <button onclick="confirmBooking()" ${paid?'':'disabled'} style="width:100%;height:50px;border:none;border-radius:12px;background:${paid?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:700;cursor:${paid?'pointer':'not-allowed'};opacity:${paid?'1':'.85'};margin-top:20px">${cash?'Submit reservation — pay at the office':'Submit payment &amp; reservation'}</button>
-    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:9px">${cash?'Your booking stays pending until the cashier records your payment.':'Your booking will be pending staff confirmation after submission.'} Need help? <a href="faq.php" target="_blank" rel="noopener" style="cursor:pointer;color:#a11626;font-weight:600;text-decoration:underline">Check the FAQ</a>${cash?'':' · <a onclick="clearGcashHistory()" style="cursor:pointer;color:#8a857d;text-decoration:underline">Reset receipt history (demo)</a>'}</div>
+    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:9px">${cash?'Your booking stays pending until the cashier records your payment.':'Your booking will be pending staff confirmation after submission.'} Need help? <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>" target="_blank" rel="noopener" style="cursor:pointer;color:#a11626;font-weight:600;text-decoration:underline">Check the FAQ</a>${cash?'':' · <a onclick="clearGcashHistory()" style="cursor:pointer;color:#8a857d;text-decoration:underline">Reset receipt history (demo)</a>'}</div>
   </main>`;
 }
 

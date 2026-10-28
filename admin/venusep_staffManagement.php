@@ -43,7 +43,7 @@ try {
             'position' => (string) $r['position_role'],
             'phone'    => (string) $r['phone'],
             'venueId'  => $r['venue_id'] === null ? '' : (string) (int) $r['venue_id'],
-            'venue'    => $r['venue_name'] === null ? 'Unassigned' : (string) $r['venue_name'],
+            'venue'    => $r['account_type'] === 'admin' ? 'All venues' : ($r['venue_name'] === null ? 'Choose a venue' : (string) $r['venue_name']),
             'lastLogin'=> $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
             'isSelf'   => (int) $r['id'] === (int) $_SESSION['user_id'],
         ];
@@ -354,6 +354,44 @@ body {
   width: min(100%, 18rem);
 }
 
+.staff-panel-tools {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.staff-panel-tools .table-search {
+  width: 16rem;
+  flex: none;
+}
+
+@media (max-width: 640px) {
+  .staff-panel-header { flex-wrap: wrap; }
+  .staff-panel-tools { flex-wrap: wrap; width: 100%; justify-content: flex-start; }
+  .staff-panel-tools .table-search { width: 100%; flex: 1 1 100%; }
+}
+
+.btn-staff-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 32px;
+  padding: 0 0.85rem;
+  border-radius: 8px;
+  background: #a11626;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-staff-add:hover {
+  background: #7d0f1e;
+  color: #fff;
+}
+
 .input-group-text,
 .form-control {
   border-color: var(--venusep-border);
@@ -566,9 +604,13 @@ body {
           <section class="staff-panel">
             <div class="staff-panel-header">
               <h2>Users</h2>
-              <div class="input-group input-group-sm table-search">
-                <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
-                <input id="table-filter" type="search" class="form-control" placeholder="Filter rows..." aria-label="Filter rows"/>
+              <div class="staff-panel-tools">
+                <div class="input-group input-group-sm table-search">
+                  <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
+                  <input id="table-filter" type="search" class="form-control" placeholder="Filter rows..." aria-label="Filter rows"/>
+                </div>
+                <!-- the way to the account form (2026-10-28): it is admin-only, and so is this page -->
+                <a class="btn-staff-add" href="admin-register.php"><i class="bi bi-person-plus" aria-hidden="true"></i>Add account</a>
               </div>
             </div>
             <div class="staff-panel-body">
@@ -599,8 +641,10 @@ body {
       const data = <?php echo json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
       const venues = <?php echo json_encode($smVenues, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
       const CSRF = <?php echo json_encode($smCsrf); ?>;
-      const venueEditorValues = { '': 'Unassigned' };
-      const venueFilterValues = { '': 'All Venues', '__unassigned': 'Unassigned' };
+      /* No "Unassigned" (2026-10-27): every staff member handles exactly one
+         venue, and staff-save.php refuses an empty one. Admins handle all. */
+      const venueEditorValues = {};
+      const venueFilterValues = { '': 'All Venues' };
       venues.forEach(function (venue) {
         venueEditorValues[String(venue.id)] = venue.name;
         venueFilterValues[String(venue.id)] = venue.name;
@@ -662,7 +706,8 @@ body {
             title: 'Venue',
             field: 'venueId',
             formatter: function (cell) {
-              return venueEditorValues[String(cell.getValue())] || 'Unassigned';
+              if (cell.getRow().getData().role !== 'Staff') return 'All venues';
+              return venueEditorValues[String(cell.getValue())] || 'Choose a venue';
             },
             editor: 'list',
             editorParams: { values: venueEditorValues },
@@ -671,7 +716,6 @@ body {
             headerFilterParams: { values: venueFilterValues, clearable: true },
             headerFilterFunc: function (filterValue, rowValue) {
               if (!filterValue) return true;
-              if (filterValue === '__unassigned') return !rowValue;
               return String(rowValue) === String(filterValue);
             },
             width: 175,

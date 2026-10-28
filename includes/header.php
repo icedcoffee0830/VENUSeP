@@ -86,6 +86,7 @@ echo demo_banner_html();
     </ul>
     <ul class="hd-nav">
       <li><a class="hd-quick<?php echo $hdHere === 'faq.php' ? ' is-here' : ''; ?>" href="faq.php?in=app"><i class="bi bi-question-circle"></i><span>FAQ</span></a></li>
+      <li><?php $nbLook = 'admin'; include __DIR__ . '/notification-bell.php'; /* notifications (2026-10-28) */ ?></li>
       <li><span class="hd-sep" aria-hidden="true"></span></li>
       <li><a class="hd-user" href="customer-profile.php" title="Your profile"><span class="hd-avatar" aria-hidden="true"><?php echo htmlspecialchars($hdAvatar); ?></span><span class="hd-username"><?php echo htmlspecialchars($hdName); ?></span></a></li>
     </ul>
@@ -98,6 +99,7 @@ echo demo_banner_html();
       <li><button class="hd-toggle" id="hdBurger" type="button" aria-label="Show or hide the menu" aria-controls="hdSidebar"><i class="bi bi-list"></i></button></li>
     </ul>
     <ul class="hd-nav">
+      <li><?php $nbLook = 'admin'; include __DIR__ . '/notification-bell.php'; /* notifications (2026-10-28) */ ?></li>
       <li><a class="hd-user" href="venusep_profile.php" title="Your account"><span class="hd-avatar" aria-hidden="true"><?php echo htmlspecialchars($hdAvatar); ?></span><span class="hd-username"><?php echo htmlspecialchars($hdName); ?></span></a></li>
     </ul>
   </div>

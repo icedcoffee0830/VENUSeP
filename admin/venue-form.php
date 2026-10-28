@@ -9,6 +9,31 @@ $venueId = isset($_GET['id']) && ctype_digit((string) $_GET['id']) ? (int) $_GET
 $venueFormRow = $venueId ? vp_venue_row($venueId) : null;
 if ($venueFormRow === null) $venueId = 0;   // unknown id — behaves like Add
 $venueFormCsrf = csrf_token();
+
+/* ASSIGNED STAFF (2026-10-27): the real staff.venue_id rows. Every staff member
+   handles exactly one venue, so the picker MOVES people here from the venue
+   they handle now. Nobody can be removed into "no venue". Only an admin may
+   change it (admin/venue-save.php re-checks); staff see the list read-only. */
+$vfStaff = [];
+$vfPdo = venusep_db();
+if ($vfPdo !== null) {
+    try {
+        $vfStaff = $vfPdo->query(
+            "SELECT u.id, u.is_active, s.full_name, s.position_role, s.venue_id, v.name AS venue_name
+               FROM users u JOIN staff s ON s.user_id = u.id LEFT JOIN venues v ON v.id = s.venue_id
+              WHERE u.account_type = 'staff' ORDER BY s.full_name"
+        )->fetchAll();
+    } catch (PDOException $e) {
+        $vfStaff = [];
+    }
+}
+$vfHere   = array_values(array_filter($vfStaff, function ($s) use ($venueId) { return $venueId && (int) $s['venue_id'] === $venueId; }));
+$vfOthers = array_values(array_filter($vfStaff, function ($s) use ($venueId) { return !$venueId || (int) $s['venue_id'] !== $venueId; }));
+$vfCanAssign = admin_is_admin();
+function vf_initials($name) {
+    $parts = preg_split('/\s+/', trim((string) $name));
+    return strtoupper(mb_substr($parts[0] ?? '', 0, 1) . mb_substr($parts[1] ?? '', 0, 1));
+}
 ?>
 <!DOCTYPE html>
 <!-- ==================================================================
@@ -267,6 +292,12 @@ $venueFormCsrf = csrf_token();
         font-weight: 500;
       }
 
+      /* real assignments (2026-10-27): who they are, and where a move comes from */
+      .vm-staff-sub { display: block; font-size: 0.76rem; font-weight: 400; color: var(--vm-muted); margin-top: 1px; }
+      .vm-staff-sub.is-moving { color: #8a5a12; }
+      .vm-staff-hint { font-size: 0.78rem; color: var(--vm-muted); margin: -0.25rem 0 0.6rem; line-height: 1.5; }
+      .vm-staff-empty { font-size: 0.82rem; color: var(--vm-muted); padding: 0.55rem 0.1rem; }
+
       .vm-remove {
         background: transparent;
         border: 0;
@@ -465,40 +496,41 @@ $venueFormCsrf = csrf_token();
 
         <!-- Assigned staff -->
         <p class="vm-staff-title">Assigned Staff</p>
+        <p class="vm-staff-hint">Staff handle only their own venue's bookings, and each staff member belongs to exactly one venue. Adding someone here moves them from the venue they handle now.</p>
         <div class="vm-staff-list" id="staffList">
-          <div class="vm-staff-item">
-            <span class="vm-avatar">JD</span>
-            <span class="vm-staff-name">Juan Dela Cruz</span>
-            <button type="button" class="vm-remove" onclick="this.closest('.vm-staff-item').remove()">&times;</button>
-          </div>
-          <div class="vm-staff-item">
-            <span class="vm-avatar">MS</span>
-            <span class="vm-staff-name">Maria Santos</span>
-            <button type="button" class="vm-remove" onclick="this.closest('.vm-staff-item').remove()">&times;</button>
-          </div>
+          <?php if (!$vfHere): ?>
+            <div class="vm-staff-empty" id="staffEmpty">No staff handle this venue yet<?php echo $vfCanAssign ? ' — add someone below.' : '.'; ?></div>
+          <?php endif; ?>
+          <?php foreach ($vfHere as $s): ?>
+            <div class="vm-staff-item">
+              <span class="vm-avatar"><?php echo htmlspecialchars(vf_initials($s['full_name'])); ?></span>
+              <span class="vm-staff-name"><?php echo htmlspecialchars($s['full_name']); ?>
+                <span class="vm-staff-sub"><?php echo htmlspecialchars($s['position_role'] ?: 'Staff'); ?><?php echo $s['is_active'] ? '' : ' · Suspended'; ?></span></span>
+            </div>
+          <?php endforeach; ?>
         </div>
 
+        <?php if ($vfCanAssign): ?>
         <button type="button" class="vm-add-staff" onclick="togglePicker()">➕ Add Staff</button>
 
         <div class="vm-picker" id="staffPicker" hidden>
-          <input class="vm-picker-search" type="search" placeholder="Search staff..." />
-          <div class="vm-picker-item">
-            <span class="vm-avatar">PR</span>
-            <span class="vm-staff-name">Pedro Reyes</span>
-            <button type="button" class="vm-picker-add" onclick="addStaff('PR','Pedro Reyes', this)">+ Add</button>
-          </div>
-          <div class="vm-picker-item">
-            <span class="vm-avatar">AL</span>
-            <span class="vm-staff-name">Ana Lim</span>
-            <button type="button" class="vm-picker-add" onclick="addStaff('AL','Ana Lim', this)">+ Add</button>
-          </div>
-          <div class="vm-picker-item">
-            <span class="vm-avatar">CT</span>
-            <span class="vm-staff-name">Carlos Tan</span>
-            <button type="button" class="vm-picker-add" onclick="addStaff('CT','Carlos Tan', this)">+ Add</button>
-          </div>
+          <input class="vm-picker-search" type="search" placeholder="Search staff..." oninput="filterPicker(this.value)" />
+          <?php foreach ($vfOthers as $s): ?>
+            <div class="vm-picker-item" data-search="<?php echo htmlspecialchars(mb_strtolower($s['full_name'] . ' ' . $s['venue_name'])); ?>">
+              <span class="vm-avatar"><?php echo htmlspecialchars(vf_initials($s['full_name'])); ?></span>
+              <span class="vm-staff-name"><?php echo htmlspecialchars($s['full_name']); ?>
+                <span class="vm-staff-sub">handles <?php echo htmlspecialchars($s['venue_name'] ?: 'no venue'); ?><?php echo $s['is_active'] ? '' : ' · Suspended'; ?></span></span>
+              <button type="button" class="vm-picker-add" onclick="addStaff(this)"
+                      data-id="<?php echo (int) $s['id']; ?>"
+                      data-name="<?php echo htmlspecialchars($s['full_name']); ?>"
+                      data-initials="<?php echo htmlspecialchars(vf_initials($s['full_name'])); ?>"
+                      data-from="<?php echo htmlspecialchars($s['venue_name'] ?: 'no venue'); ?>">+ Add</button>
+            </div>
+          <?php endforeach; ?>
+          <div class="vm-staff-empty" id="pickerEmpty"<?php echo $vfOthers ? ' hidden' : ''; ?>>No other staff to add. Create a staff account in Staff Management first.</div>
           <button type="button" class="vm-picker-done" onclick="togglePicker()">Done</button>
         </div>
+        <?php endif; ?>
 
         <div class="vm-form-foot">
           <a class="vm-btn vm-btn-outline" href="venue-management.php">Cancel</a>
@@ -573,58 +605,98 @@ $venueFormCsrf = csrf_token();
       }
 
       /* "Save Changes" — the photo already saves itself the moment you
-         change/remove it; Name and Description save here, to
-         venues.name / venues.description via admin/venue-save.php.
-         Assigned Staff on this form is still [SIM] — no venue-to-staff
-         table exists in the schema, so the confirmation says so rather
-         than pretend. */
-      function vpSaveChanges() {
+         change/remove it; Name, Description and the staff moved here save
+         together, via admin/venue-save.php. */
+      async function vpSaveChanges() {
         var name = document.getElementById('venueName').value.trim();
         var description = document.getElementById('venueDesc').value.trim();
         if (!name) { venusepAlert('Enter a venue name.'); return; }
+
+        /* Moving someone changes which bookings they may act on, so say so first. */
+        var moves = Object.keys(VP_MOVES);
+        if (moves.length) {
+          var lines = moves.map(function (id) { return VP_MOVES[id].name + ' (now ' + VP_MOVES[id].from + ')'; }).join('\n');
+          var ok = await venusepConfirm(lines + '\n\nThey will handle ' + name + '\'s bookings instead, and can no longer act on their old venue\'s.',
+            { title: 'Move ' + (moves.length === 1 ? 'this staff member' : 'these staff members') + ' here?', okLabel: 'Move and save' });
+          if (!ok) return;
+        }
 
         var body = new FormData();
         body.append('venue_id', VP_VENUE_ID);
         body.append('name', name);
         body.append('description', description);
+        body.append('move_staff', JSON.stringify(moves));
         body.append('csrf', VP_CSRF);
         fetch('venue-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
           .then(vpParseApiResponse)
           .then(function (res) {
             if (!res.ok) { venusepAlert(res.message || 'Could not save the venue.'); return; }
-            venusepAlert('Venue saved.\n\n(Assigned Staff on this form is not connected to storage yet.)');
-            if (res.created && res.venue_id) {
-              location.href = 'venue-form.php?id=' + encodeURIComponent(res.venue_id);
-              return;
-            }
-            location.href = 'venue-management.php';
+            /* move on only once OK is clicked — unlike alert(), the modal does
+               not block, and navigating at once wiped it off the screen */
+            var movedLine = (res.moved && res.moved.length) ? '\n\n' + res.moved.join(', ') + (res.moved.length === 1 ? ' now handles ' : ' now handle ') + name + '.' : '';
+            venusepAlert('Venue saved.' + movedLine, { tone: 'ok', title: 'Saved' }).then(function () {
+              location.href = (res.created && res.venue_id)
+                ? 'venue-form.php?id=' + encodeURIComponent(res.venue_id)
+                : 'venue-management.php';
+            });
           })
           .catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }
     </script>
     <!-- ============================================================
-         [6b] PAGE SCRIPT — this page's own JS (UI-only, no backend):
+         [6b] PAGE SCRIPT — the Assigned Staff picker (2026-10-27):
          · togglePicker()  show/hide the "Add Staff" picker
-         · addStaff()      move a person from the picker to the list
-         [SIM] adding/removing staff only changes the page in memory —
-         nothing is saved; the real app will save via the server.
+         · filterPicker()  the picker's search box
+         · addStaff()      queue a move of that person to THIS venue
+         · undoMove()      take a queued move back (before Save)
+         Nothing moves until Save Changes, which sends VP_MOVES.
          ============================================================ -->
     <script>
-      // UI-only staff management. No backend.
+      /* user id -> { name, from }: people to move here on Save */
+      const VP_MOVES = {};
+
       function togglePicker() {
         const p = document.getElementById('staffPicker');
-        p.hidden = !p.hidden;
+        if (p) p.hidden = !p.hidden;
       }
 
-      function addStaff(initials, name, btn) {
+      function filterPicker(q) {
+        q = String(q || '').trim().toLowerCase();
+        document.querySelectorAll('#staffPicker .vm-picker-item').forEach(function (item) {
+          if (item.dataset.moved) return;
+          item.hidden = q !== '' && item.dataset.search.indexOf(q) === -1;
+        });
+      }
+
+      function vfEsc(s) { const d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+
+      function addStaff(btn) {
+        const d = btn.dataset;
+        VP_MOVES[d.id] = { name: d.name, from: d.from };
         const item = document.createElement('div');
         item.className = 'vm-staff-item';
+        item.dataset.moveId = d.id;
         item.innerHTML =
-          '<span class="vm-avatar">' + initials + '</span>' +
-          '<span class="vm-staff-name">' + name + '</span>' +
-          '<button type="button" class="vm-remove" onclick="this.closest(\'.vm-staff-item\').remove()">&times;</button>';
+          '<span class="vm-avatar">' + vfEsc(d.initials) + '</span>' +
+          '<span class="vm-staff-name">' + vfEsc(d.name) +
+            '<span class="vm-staff-sub is-moving">Moving here from ' + vfEsc(d.from) + ' — saved with Save Changes</span></span>' +
+          '<button type="button" class="vm-remove" title="Keep them at ' + vfEsc(d.from) + '" onclick="undoMove(\'' + vfEsc(d.id) + '\')">&times;</button>';
         document.getElementById('staffList').appendChild(item);
-        btn.closest('.vm-picker-item').remove();
+        const pick = btn.closest('.vm-picker-item');
+        pick.dataset.moved = '1';
+        pick.hidden = true;
+        const empty = document.getElementById('staffEmpty');
+        if (empty) empty.hidden = true;
+      }
+
+      function undoMove(id) {
+        delete VP_MOVES[id];
+        const item = document.querySelector('#staffList [data-move-id="' + id + '"]');
+        if (item) item.remove();
+        const btn = document.querySelector('#staffPicker .vm-picker-add[data-id="' + id + '"]');
+        if (btn) { const pick = btn.closest('.vm-picker-item'); delete pick.dataset.moved; pick.hidden = false; }
+        const empty = document.getElementById('staffEmpty');
+        if (empty && !document.querySelector('#staffList .vm-staff-item')) empty.hidden = false;
       }
     </script>
   </body>

@@ -61,6 +61,22 @@ $action = isset($_POST['action']) ? (string) $_POST['action'] : '';
 $ref    = isset($_POST['booking']) ? (string) $_POST['booking'] : '';
 $note   = trim((string) ($_POST['note'] ?? ''));
 
+/* STAFF ACT ONLY ON THEIR OWN VENUE'S BOOKINGS (decided 2026-10-27). Checked
+   before the demo branch too, so a showcase never teaches the wrong rule.
+   Admins handle every venue (staff_venue_scope() in includes/auth.php). */
+$scopeId = booking_id_from_reference($ref);
+if ($scopeId !== null && staff_venue_scope() !== null) {
+    $scopePdo = venusep_db();
+    $scopeVenue = $scopePdo ? $scopePdo->prepare('SELECT r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b') : null;
+    if ($scopeVenue) {
+        $scopeVenue->execute([':b' => $scopeId]);
+        $venueOfBooking = $scopeVenue->fetchColumn();
+        if ($venueOfBooking !== false && !staff_may_handle_venue($venueOfBooking)) {
+            ba_reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can act on it.']);
+        }
+    }
+}
+
 /* ---------------------------------------------------------------------
    DEMO MODE — staff actions are a showcase too, and this is the endpoint
    that would otherwise APPROVE, CONFIRM and REFUND the seeded bookings a
@@ -84,19 +100,35 @@ if (demo_mode_on()) {
     switch ($action) {
         case 'approve':
             $res = 'approved';
-            $pay = !$demoAfter['refundsAllowed'] ? 'await_event'
-                 : ($demoAfter['type'] === 'hostel' ? 'await_pos'
-                 : ($demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash'));
+            /* A pay-to-use hostel stay opens payment at once; an older one keeps
+               its POS or post-pay route (sp_approve_booking draws the same lines). */
+            $pay = !empty($demoAfter['payToUse']) ? ($demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash')
+                 : (!$demoAfter['refundsAllowed'] ? 'await_event'
+                 : ($demoAfter['type'] === 'hostel'
+                    ? ($demoAfter['eventDateIso'] !== '' && $demoAfter['eventDateIso'] <= date('Y-m-d') ? 'await_cash' : 'await_pos')
+                 : ($demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash')));
             break;
         case 'reject':           $res = 'rejected';  $pay = 'locked'; break;
         case 'confirm_payment':  $pay = $demoAfter['method'] === 'Cash' ? 'paid_cash' : 'confirmed'; break;
+        case 'cash_received':
+            if (empty($demoAfter['payToUse']) || $pay !== 'await_cash') {
+                ba_reply(409, ['ok' => false, 'message' => $pay === 'await_gcash'
+                    ? 'The guest has not chosen to pay at the front desk. Ask them to choose "Cash — hostel front desk" in Pay now first.'
+                    : 'This stay is not waiting on a cash payment.']);
+            }
+            $pay = 'paid_cash';
+            break;
         case 'reject_payment':   $pay = $demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash'; break;
-        case 'record_pos':       $pay = $demoAfter['refundsAllowed'] ? 'await_gcash' : $pay; break;
+        case 'record_pos':       $pay = ($demoAfter['refundsAllowed'] && empty($demoAfter['payToUse']) && $pay === 'await_pos') ? 'await_gcash' : $pay; break;
         case 'refund_return':    $pay = 'refund_correction'; break;
         case 'refund_deny':      $pay = 'refund_denied'; break;
         case 'refund_complete':  $res = 'cancelled'; $pay = 'refunded'; break;
-        case 'record_or':
         case 'check_in':
+            if (!empty($demoAfter['payToUse']) && !in_array($pay, ['confirmed', 'paid_cash'], true)) {
+                ba_reply(409, ['ok' => false, 'message' => 'Not paid yet. The guest pays before using the bed.']);
+            }
+            break;
+        case 'record_or':
         case 'allow_receipt_attempts': break;   // documents, arrival and the attempt allowance change no status
         default:
             ba_reply(400, ['ok' => false, 'message' => 'Unknown action.']);
@@ -106,7 +138,8 @@ if (demo_mode_on()) {
         'booking' => ['res' => $res, 'pay' => $pay,
                       'resLabel' => 'Reservation ' . $res, 'payLabel' => str_replace('_', ' ', $pay),
                       'total' => $demoAfter['amount'], 'discount' => $demoAfter['discountPercent'],
-                      'payBy' => $demoAfter['payment']['payByLabel']]]);
+                      'payBy' => $demoAfter['payment']['payByLabel'],
+                      'method' => $action === 'cash_received' ? 'Cash' : $demoAfter['method']]]);
 }
 
 $bookingId = booking_id_from_reference($ref);
@@ -119,9 +152,13 @@ if ($pdo === null) {
     ba_reply(503, ['ok' => false, 'message' => 'The database is unreachable, so nothing was changed.']);
 }
 
+/* Apply the deadline rules first, so staff act on what the booking IS now: a
+   request whose date has arrived cannot still be approved. */
+venusep_expire_due_bookings();
+
 $cur = $pdo->prepare(
     'SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
-            b.is_usep_affiliated, b.room_price, b.refunds_allowed
+            b.is_usep_affiliated, b.room_price, b.refunds_allowed, b.pay_to_use, b.approved_at
        FROM bookings b WHERE b.id = :b'
 );
 $cur->execute([':b' => $bookingId]);
@@ -147,6 +184,9 @@ try {
 
     /* ---- APPROVE the ID + the reservation. Optionally grant the USeP rate. ---- */
     case 'approve':
+        if ($bk['reservation_status'] === 'released' && $bk['approved_at'] === null) {
+            ba_reply(409, ['ok' => false, 'message' => 'This request has expired: it was not approved before its date, so the slot was released.']);
+        }
         if ($bk['reservation_status'] !== 'pending') {
             ba_reply(409, ['ok' => false, 'message' => 'Only a pending booking can be approved.']);
         }
@@ -202,8 +242,9 @@ try {
             'UPDATE hostel_booking_details SET pos_number = :p, pos_recorded_at = NOW() WHERE booking_id = :b'
         )->execute([':p' => mb_substr($pos, 0, 100), ':b' => $bookingId]);
         /* Payment only opens now if this booking pre-pays. A post-pay booking
-           stays locked until its stay is over, POS or no POS. */
-        if ($bk['refunds_allowed'] && $bk['payment_status'] === 'await_pos') {
+           stays locked until its stay is over, POS or no POS. A pay-to-use stay
+           (2026-10-27) never waits on the POS: this only records the number. */
+        if ($bk['refunds_allowed'] && !$bk['pay_to_use'] && $bk['payment_status'] === 'await_pos') {
             ba_actor($pdo, $actor, 'POS ' . $pos . ' recorded; payment unlocked.');
             $pdo->prepare(
                 "UPDATE bookings SET payment_status = IF(payment_method = 'cash', 'await_cash', 'await_gcash'),
@@ -231,55 +272,69 @@ try {
         )->execute([':o' => mb_substr($or, 0, 100), ':b' => $bookingId]);
         break;
 
-    /* ---- HOSTEL: the guest arrived. A manual staff action, hostel only. ---- */
+    /* ---- HOSTEL: the guest arrived. A manual staff action, hostel only.
+            PAY TO USE (2026-10-27): no bed until the stay is paid — a GCash
+            receipt still under review is not paid yet. ---- */
     case 'check_in':
         if ($bk['booking_type'] !== 'hostel') {
             ba_reply(400, ['ok' => false, 'message' => 'Only a hostel booking has a check-in.']);
+        }
+        if ($bk['pay_to_use'] && !in_array($bk['payment_status'], ['confirmed', 'paid_cash'], true)) {
+            ba_reply(409, ['ok' => false, 'message' => $bk['payment_status'] === 'under_review'
+                ? 'Not paid yet: the GCash receipt is still under review. Confirm it first, then check the guest in.'
+                : ($bk['payment_status'] === 'await_cash'
+                    ? 'Not paid yet. The guest chose to pay cash at the front desk — take it first (Cash received).'
+                    : 'Not paid yet. The guest pays before using the bed — by GCash in Pay now, or by choosing cash at the front desk there.')]);
         }
         $pdo->prepare(
             'UPDATE hostel_booking_details SET checked_in = 1, checked_in_at = NOW() WHERE booking_id = :b'
         )->execute([':b' => $bookingId]);
         break;
 
+    /* ---- HOSTEL, PAY TO USE (2026-10-27): the guest paid CASH at the front
+            desk. Whatever they meant to pay with, the money in hand is cash,
+            so the booking becomes a cash booking and is paid at once. ---- */
+    case 'cash_received':
+        if (!$bk['pay_to_use']) {
+            ba_reply(400, ['ok' => false, 'message' => 'Only a hostel stay is paid in cash at the front desk this way.']);
+        }
+        if ($bk['payment_status'] === 'under_review') {
+            ba_reply(409, ['ok' => false, 'message' => 'A GCash receipt is waiting for review. Confirm it or reject it first, then take the cash if it was rejected.']);
+        }
+        /* Only once the GUEST chose to pay at the front desk (2026-10-28) — in
+           Pay now, which also closes GCash for them until they cancel it. */
+        if ($bk['payment_status'] === 'await_gcash') {
+            /* the current state goes back too: the guest may have cancelled the
+               cash choice after this page was opened, and the page redraws */
+            ba_reply(409, ['ok' => false, 'booking' => ['pay' => 'await_gcash'],
+                'message' => 'The guest has not chosen to pay at the front desk (or cancelled it). Ask them to choose "Cash — hostel front desk" in Pay now first.']);
+        }
+        if ($bk['payment_status'] !== 'await_cash') {
+            ba_reply(409, ['ok' => false, 'message' => 'This stay is not waiting on a payment.']);
+        }
+        /* fall through: the rest is confirming a payment, as cash */
+
     /* ---- Money landed and staff verified it. ---- */
     case 'confirm_payment':
         if (!in_array($bk['payment_status'], ['await_gcash', 'await_cash', 'under_review', 'overdue'], true)) {
             ba_reply(409, ['ok' => false, 'message' => 'This booking is not waiting on a payment.']);
         }
-        $paid = $bk['payment_method'] === 'cash' ? 'paid_cash' : 'confirmed';
-        /* ONE transaction: the payment, its ledger row and its System Receipt
-           land together or not at all, so a paid booking never lacks a receipt. */
-        $pdo->beginTransaction();
-        ba_actor($pdo, $actor, $note !== '' ? $note : 'Payment confirmed.');
-        $pdo->prepare('UPDATE bookings SET payment_status = :s, updated_by_user_id = :u WHERE id = :b')
-            ->execute([':s' => $paid, ':u' => $actor, ':b' => $bookingId]);
-        ba_clear($pdo);
-        /* The payment row is the money's own record, separate from the booking's
-           state — a booking says what it owes, a payment says what arrived.
-
-           SETTLE the row the customer's submission already created rather than
-           adding another. Inserting unconditionally gave one payment TWO rows,
-           an 'under_review' and a 'confirmed', for a single transfer — which
-           would have made the ledger describe money that never moved twice. */
-        $settle = $pdo->prepare(
-            "UPDATE payments SET payment_record_status = 'confirmed', confirmed_at = NOW(),
-                    confirmed_by_user_id = :u
-              WHERE booking_id = :b AND payment_record_status IN ('submitted', 'under_review')"
-        );
-        $settle->execute([':u' => $actor, ':b' => $bookingId]);
-        if ($settle->rowCount() === 0) {
-            /* Nothing was pending: a cash payment handed over at the counter,
-               which the customer side never records because no money moves
-               online. Staff confirming IS its first record. */
-            $pdo->prepare(
-                "INSERT INTO payments (booking_id, payment_method, amount, payment_record_status, paid_at, confirmed_at, confirmed_by_user_id)
-                 SELECT id, COALESCE(payment_method, 'gcash'), total_amount, 'confirmed', NOW(), NOW(), :u
-                   FROM bookings WHERE id = :b"
-            )->execute([':u' => $actor, ':b' => $bookingId]);
+        $asCash = $action === 'cash_received';
+        /* Waiting on GCash with no receipt in: there is nothing to confirm. Staff
+           never record a GCash payment by hand (#18), and this is also a cash
+           button clicked on a page loaded before the customer cancelled paying
+           cash (2026-10-28) — refused, and the page redraws. */
+        if ($action === 'confirm_payment' && $bk['payment_status'] === 'await_gcash') {
+            ba_reply(409, ['ok' => false, 'booking' => ['pay' => 'await_gcash'],
+                'message' => 'Nothing to confirm: the customer is paying by GCash and has not sent a receipt yet (they may have cancelled paying cash).']);
         }
-        /* The VENUSeP System Receipt. A walk-in who gave an email at the counter
+        /* ONE transaction: the payment, its ledger row and its System Receipt
+           land together or not at all, so a paid booking never lacks a receipt.
+           The VENUSeP System Receipt: a walk-in who gave an email at the counter
            is sent it; account holders find it in My Bookings (nothing automatic). */
-        $receiptId = receipt_issue($pdo, $bookingId, $actor);
+        $pdo->beginTransaction();
+        $receiptId = payment_confirm($pdo, $bookingId, $actor,
+            $note !== '' ? $note : ($asCash ? 'Cash received at the front desk.' : 'Payment confirmed.'), $asCash);
         if ($receiptId !== null) {
             /* A database error here undoes the confirmation like any other; a
                problem building the EMAIL must not — the payment is real. */
@@ -493,6 +548,7 @@ ba_reply(200, [
         'total'      => $after['amount'],
         'discount'   => $after['discountPercent'],
         'payBy'      => $after['payment']['payByLabel'],
+        'method'     => $after['method'],          /* Cash received turns a stay into a cash booking */
         'attempts'        => $after['receiptAttempts'],
         'attemptsAllowed' => $after['receiptAttemptsAllowed'],
     ] : null,

@@ -41,6 +41,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/amenities.php';
 
 $hrPdo = venusep_db_or_fail();
+venusep_expire_due_bookings();   /* a lapsed request must not still hold its beds */
 
 /* Same opt-in flag as venue-rooms.php — customer pages never set it (active
    rooms only); admin/venue-management.php sets it so a disabled room stays
@@ -57,7 +58,7 @@ $HOSTEL_VENUE = (string) $hrPdo->query(
 $hrRoomRows = $hrPdo->query(
   "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
           v.name AS venue_name,
-          d.cr_type, d.rate_per_head_per_night,
+          d.cr_type, d.rate_per_head_per_night, d.check_in_time, d.check_out_time,
           (SELECT COUNT(*) FROM hostel_beds b WHERE b.room_id = r.id AND b.is_active = 1) AS bed_count
      FROM rooms r
      JOIN venues v                   ON v.id = r.venue_id
@@ -143,6 +144,8 @@ foreach ($hrRoomRows as $r) {
     'active'      => (bool) $r['is_active'],     // catalog visibility — admin only reads this; customer pages never see a false row
     'cr_type'     => $r['cr_type'],
     'rate'        => (int) $r['rate_per_head_per_night'],
+    'checkIn'     => $r['check_in_time'] !== null ? substr($r['check_in_time'], 0, 5) : '14:00',    // 'HH:MM'
+    'checkOut'    => $r['check_out_time'] !== null ? substr($r['check_out_time'], 0, 5) : '12:00',
     'beds'        => (int) $r['bed_count'],
     'description' => (string) $r['description'],
     'amenities'   => amenity_labels($r['amenities']),

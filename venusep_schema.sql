@@ -257,6 +257,12 @@ CREATE TABLE rooms (
     -- them. On MariaDB `JSON` is an alias for LONGTEXT — the CHECK below is what
     -- actually enforces well-formed JSON.
     amenities           JSON NULL,
+    -- "At a glance" prose on the customer's room page (2026-10-27: editable on
+    -- the room form). NULL = fall back to $ROOM_GLANCE in includes/amenities.php,
+    -- where these lived before, so a room nobody has edited reads as it always did.
+    best_for            VARCHAR(255) NULL,
+    catering            VARCHAR(255) NULL,
+    accessibility       VARCHAR(255) NULL,
     is_active           BOOLEAN NOT NULL DEFAULT TRUE,      -- FALSE = retire/hide a room (distinct from a maintenance window)
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -426,6 +432,12 @@ CREATE TABLE bookings (
     --   FALSE = post-pay: pay after the last day, within postpay_grace_days
     -- (fn_payment_deadline / sp_approve_booking read it; nothing else decides).
     refunds_allowed     BOOLEAN NOT NULL DEFAULT FALSE,
+    -- PAY TO USE (2026-10-27, migration 11): a hostel guest pays BEFORE using
+    -- the bed, whatever refunds_allowed says — due by the end of the check-in
+    -- day, and check-in is refused until paid. Set on every new hostel booking
+    -- by trg_bookings_type_ins; a snapshot like refunds_allowed, so stays booked
+    -- before it keep their policy. Venues are always FALSE.
+    pay_to_use          BOOLEAN NOT NULL DEFAULT FALSE,
     current_deadline_at DATETIME NULL,                     -- the pay-by moment for the booking's policy (see above)
     -- The 5-attempt rule (DB-DECISIONS #6): how many GCash receipt uploads this
     -- booking may make, rejected ones included. The 5th goes to staff for manual
@@ -818,6 +830,28 @@ CREATE TABLE booking_timeline (
         ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+-- IN-APP NOTIFICATIONS (2026-10-28, migration 12): everyone's inbox — one row
+-- per person per event, unread until that person clicks it (read_at). The
+-- words are not stored; the bell writes them from kind + booking when shown
+-- (includes/notifications.php). Written by trg_booking_timeline_notify (booking
+-- status changes), customer/booking-submit.php (new requests) and the staff
+-- account pages, through sp_notify_*; nobody is notified of their own action.
+-- Read rows older than 90 days are deleted by the bell's endpoint.
+CREATE TABLE notifications (
+    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id       BIGINT UNSIGNED NOT NULL,          -- who it is for
+    kind          VARCHAR(40) NOT NULL,              -- see includes/notifications.php
+    booking_id    BIGINT UNSIGNED NULL,              -- the booking it is about, if any
+    actor_user_id BIGINT UNSIGNED NULL,              -- who did it (NULL = the system)
+    detail        TEXT NULL,                         -- JSON: {pay, note} for booking events, {email, role, venue} for accounts
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at       DATETIME NULL,                     -- NULL = unread
+    KEY idx_notifications_inbox (user_id, read_at, id),
+    CONSTRAINT fk_notifications_user    FOREIGN KEY (user_id)       REFERENCES users (id)    ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_booking FOREIGN KEY (booking_id)    REFERENCES bookings (id) ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_actor   FOREIGN KEY (actor_user_id) REFERENCES users (id)    ON DELETE SET NULL
+) ENGINE=InnoDB;
+
 -- ============================================================================
 -- 6b. ADMIN FAQs  (2026-09-18)
 --     EVERY question on the customer FAQ page lives here — the built-in ones
@@ -870,6 +904,7 @@ INSERT INTO system_settings (setting_key, setting_value, value_type, description
   ('hostel_pos_deadline_hours',       '72', 'integer', 'Hours an approved hostel booking may sit in await_pos before expiry checks release it.'),
   ('hostel_advance_booking_max_days', '7',  'integer', 'Hostel cannot be reserved more than this many days before check-in. Events: no limit.'),
   ('postpay_grace_days',              '3',  'integer', 'Refunds OFF only: days after the last booked day (event end / check-out) the customer has to pay. Past it payment_status becomes overdue; nothing is released.'),
+  ('venue_cleanup_gap_minutes',       '60', 'integer', 'Venue rooms: minutes kept free before and after every booking for cleanup and setup, so one room can take several bookings on the same day (2026-10-27). Not used for hostel beds.'),
   ('refunds_enabled',                 '0',  'boolean', 'Customer refund requests. 0 = OFF (all new bookings non-refundable, the USeP default). Admin-only. Snapshotted onto each booking as bookings.refunds_allowed.'),
   -- Showcase switch. A ROW, not a column, so removing demo mode later is one
   -- DELETE and leaves nothing behind in the schema. While it is on, booking /
@@ -910,8 +945,8 @@ INSERT INTO faqs (section_key, sort_order, is_builtin, policy, question, answer,
   ('hostel', 1, TRUE, 'any', 'How is the hostel different from booking a venue?', 'You reserve **beds, not rooms**. Each room has six beds; you book one or more, and other guests may book the remaining beds in the same room. Book all six and the room is effectively yours. The price is **per head, per night**.', 'How is the hostel different from booking a venue?', 'You reserve **beds, not rooms**. Each room has six beds; you book one or more, and other guests may book the remaining beds in the same room. Book all six and the room is effectively yours. The price is **per head, per night**.'),
   ('hostel', 2, TRUE, 'any', 'Communal CR or private CR — what is the difference?', '**{cr_communal}** rooms share a bathroom outside the room — {rate_communal} per head, per night. **{cr_private}** rooms have the bathroom inside — {rate_private} per head, per night. The USeP discount applies to both.', 'Communal CR or private CR — what is the difference?', '**{cr_communal}** rooms share a bathroom outside the room — {rate_communal} per head, per night. **{cr_private}** rooms have the bathroom inside — {rate_private} per head, per night. The USeP discount applies to both.'),
   ('hostel', 3, TRUE, 'any', 'How are nights counted?', 'From check-in to check-out, **not including the check-out day**. Checking in on the 1st and out on the 4th is three nights — the 1st, 2nd and 3rd. The venue page shows how many beds are free for tonight; the booking page shows availability for your exact dates.', 'How are nights counted?', 'From check-in to check-out, **not including the check-out day**. Checking in on the 1st and out on the 4th is three nights — the 1st, 2nd and 3rd. The venue page shows how many beds are free for tonight; the booking page shows availability for your exact dates.'),
-  ('hostel', 4, TRUE, 'refunds_on', 'How do I pay for a hostel bed?', 'Hostel payments go through **CEDU**. After staff approve your ID, they obtain a payment order from CEDU for your stay; you then pay — GCash to the business account, or cash to staff — and receive the **Official Receipt**. Your bed is held while this happens.', 'How do I pay for a hostel bed?', 'Hostel payments go through **CEDU**. After staff approve your ID, they obtain a payment order from CEDU for your stay; you then pay — GCash to the business account, or cash to staff — and receive the **Official Receipt**. Your bed is held while this happens.'),
-  ('hostel', 5, TRUE, 'refunds_off', 'How do I pay for a hostel bed?', 'Hostel payments go through **CEDU**, and — like venues — you pay **after your stay**. Staff approve your ID and hold your beds. After you check out they obtain a payment order (POS) from CEDU; payment opens then and is due within **{grace_days} days of your check-out day** — GCash to the designated account, or cash to staff — and you receive the **Official Receipt**.', 'How do I pay for a hostel bed?', 'Hostel payments go through **CEDU**, and — like venues — you pay **after your stay**. Staff approve your ID and hold your beds. After you check out they obtain a payment order (POS) from CEDU; payment opens then and is due within **{grace_days} days of your check-out day** — GCash to the designated account, or cash to staff — and you receive the **Official Receipt**.'),
+  ('hostel', 4, TRUE, 'refunds_on', 'How do I pay for a hostel bed?', 'The hostel is **pay to use**: your stay is paid **before** you get your bed. After staff approve your ID and booking, pay any time up to your check-in day — **GCash** to the designated hostel account from My Bookings, or **cash at the front desk** when you arrive. A stay not paid by the **end of its check-in day** is released. Booking at the front desk? You pay in cash there and then. You get the **VENUSeP System Receipt** once your payment is confirmed, and the **Official Receipt** from the University Cashier later.', 'How do I pay for a hostel bed?', 'The hostel is **pay to use**: your stay is paid **before** you get your bed. After staff approve your ID and booking, pay any time up to your check-in day — **GCash** to the designated hostel account from My Bookings, or **cash at the front desk** when you arrive. A stay not paid by the **end of its check-in day** is released. Booking at the front desk? You pay in cash there and then. You get the **VENUSeP System Receipt** once your payment is confirmed, and the **Official Receipt** from the University Cashier later.'),
+  ('hostel', 5, TRUE, 'refunds_off', 'How do I pay for a hostel bed?', 'The hostel is **pay to use**: your stay is paid **before** you get your bed. After staff approve your ID and booking, pay any time up to your check-in day — **GCash** to the designated hostel account from My Bookings, or **cash at the front desk** when you arrive. A stay not paid by the **end of its check-in day** is released. Booking at the front desk? You pay in cash there and then. You get the **VENUSeP System Receipt** once your payment is confirmed, and the **Official Receipt** from the University Cashier later.', 'How do I pay for a hostel bed?', 'The hostel is **pay to use**: your stay is paid **before** you get your bed. After staff approve your ID and booking, pay any time up to your check-in day — **GCash** to the designated hostel account from My Bookings, or **cash at the front desk** when you arrive. A stay not paid by the **end of its check-in day** is released. Booking at the front desk? You pay in cash there and then. You get the **VENUSeP System Receipt** once your payment is confirmed, and the **Official Receipt** from the University Cashier later.'),
   ('gcash', 1, TRUE, 'any', 'How do I pay with GCash?', 'Once staff approve your ID and reservation, the payment step unlocks. Send the amount shown to the GCash account on screen, take a screenshot of your GCash receipt, and upload it. The system reads the receipt on the spot and tells you whether it was accepted.', 'How do I pay with GCash?', 'Once staff approve your ID and reservation, the payment step unlocks. Send the amount shown to the GCash account on screen, take a screenshot of your GCash receipt, and upload it. The system reads the receipt on the spot and tells you whether it was accepted.'),
   ('gcash', 2, TRUE, 'any', 'Why must I send the exact amount?', 'The automatic check compares your receipt against the **exact amount shown**. A different amount is not confirmed on the spot — it goes to a coordinator to look at instead, which delays your booking. A receipt is only rejected outright when **nothing** on it matches, or when the same receipt has already been used.', 'Why must I send the exact amount?', 'The automatic check compares your receipt against the **exact amount shown**. A different amount is not confirmed on the spot — it goes to a coordinator to look at instead, which delays your booking. A receipt is only rejected outright when **nothing** on it matches, or when the same receipt has already been used.'),
   ('gcash', 3, TRUE, 'any', 'What is the "Reference to include" (USEP-######)?', 'That is your **booking code** in this system. Type it into the message or note field when you send the GCash payment, so staff can match the payment to your booking. It is different from GCash''s own 13-digit reference number, which GCash prints on the receipt by itself.', 'What is the "Reference to include" (USEP-######)?', 'That is your **booking code** in this system. Type it into the message or note field when you send the GCash payment, so staff can match the payment to your booking. It is different from GCash''s own 13-digit reference number, which GCash prints on the receipt by itself.'),
@@ -1188,15 +1223,23 @@ END$$
 
 -- The pay-by moment for a booking, from ITS policy snapshot (2026-09-17):
 --   pre-pay  (refunds_allowed = TRUE) : 23:59:59 the day before the first day;
---                                       if that is already past, the first
---                                       day's start time — pay before it begins.
+--                                       if that is already past, a venue pays by
+--                                       its first day's start time, and a hostel
+--                                       stay by the END of its check-in day
+--                                       (2026-10-27: same-day check-ins are
+--                                       allowed and paid at the front desk on
+--                                       arrival, any time that day).
 --   post-pay (refunds_allowed = FALSE): 23:59:59 postpay_grace_days after the
 --                                       last day.
+--   pay to use (pay_to_use = TRUE, every hostel stay since migration 11):
+--                                       23:59:59 on the check-in day, whatever
+--                                       the refund policy.
 CREATE FUNCTION fn_payment_deadline(p_booking_id BIGINT UNSIGNED)
 RETURNS DATETIME
 NOT DETERMINISTIC READS SQL DATA
 BEGIN
     DECLARE v_prepay BOOLEAN;
+    DECLARE v_pay_to_use BOOLEAN;
     DECLARE v_type VARCHAR(20);
     DECLARE v_first DATE;
     DECLARE v_last DATE;
@@ -1204,11 +1247,15 @@ BEGIN
     DECLARE v_grace INT DEFAULT 3;
     DECLARE v_deadline DATETIME;
 
-    SELECT refunds_allowed INTO v_prepay FROM bookings WHERE id = p_booking_id;
+    SELECT refunds_allowed, pay_to_use INTO v_prepay, v_pay_to_use FROM bookings WHERE id = p_booking_id;
     SET v_first = fn_booking_first_day(p_booking_id);
     SET v_last  = fn_booking_last_day(p_booking_id);
     IF v_first IS NULL THEN
         RETURN NULL;
+    END IF;
+
+    IF v_pay_to_use THEN
+        RETURN TIMESTAMP(v_first, '23:59:59');
     END IF;
 
     IF v_prepay THEN
@@ -1218,12 +1265,10 @@ BEGIN
             IF v_type = 'venue' THEN
                 SELECT COALESCE(MIN(start_time), '00:00:00') INTO v_start
                   FROM venue_booking_slots WHERE booking_id = p_booking_id AND slot_date = v_first;
+                SET v_deadline = TIMESTAMP(v_first, v_start);
             ELSE
-                SELECT COALESCE(hrd.check_in_time, '00:00:00') INTO v_start
-                  FROM bookings b JOIN hostel_room_details hrd ON hrd.room_id = b.room_id
-                 WHERE b.id = p_booking_id;
+                SET v_deadline = TIMESTAMP(v_first, '23:59:59');
             END IF;
-            SET v_deadline = TIMESTAMP(v_first, v_start);
         END IF;
     ELSE
         SELECT CAST(setting_value AS SIGNED) INTO v_grace
@@ -1231,6 +1276,36 @@ BEGIN
         SET v_deadline = TIMESTAMP(DATE_ADD(v_last, INTERVAL v_grace DAY), '23:59:59');
     END IF;
     RETURN v_deadline;
+END$$
+
+-- When a request nobody has APPROVED lapses (decided 2026-10-27). The rule is the
+-- same under both refund policies:
+--   venue  : the start time of its first held slot (a 2 PM booking still pending
+--            at 2 PM is over);
+--   hostel : the END of the check-in day (guests arrive any time that day, and
+--            same-day stays are booked during it).
+-- The type is passed in, so sp_expire_due_bookings() can call this inside
+-- its UPDATE of bookings without reading that table back.
+CREATE FUNCTION fn_request_expiry(p_booking_id BIGINT UNSIGNED, p_type VARCHAR(20))
+RETURNS DATETIME
+NOT DETERMINISTIC READS SQL DATA
+BEGIN
+    DECLARE v_first DATE;
+    DECLARE v_start TIME;
+    IF p_type = 'venue' THEN
+        SELECT MIN(slot_date) INTO v_first FROM venue_booking_slots WHERE booking_id = p_booking_id;
+        IF v_first IS NULL THEN
+            RETURN NULL;
+        END IF;
+        SELECT MIN(start_time) INTO v_start
+          FROM venue_booking_slots WHERE booking_id = p_booking_id AND slot_date = v_first;
+        RETURN TIMESTAMP(v_first, v_start);
+    END IF;
+    SELECT check_in_date INTO v_first FROM hostel_booking_details WHERE booking_id = p_booking_id;
+    IF v_first IS NULL THEN
+        RETURN NULL;
+    END IF;
+    RETURN TIMESTAMP(v_first, '23:59:59');
 END$$
 
 DELIMITER ;
@@ -1261,7 +1336,8 @@ BEGIN
     END IF;
 END$$
 
--- A booking's type must match its room's type.
+-- A booking's type must match its room's type. Every new hostel booking is
+-- pay to use (2026-10-27, migration 11).
 CREATE TRIGGER trg_bookings_type_ins BEFORE INSERT ON bookings
 FOR EACH ROW
 BEGIN
@@ -1274,6 +1350,7 @@ BEGIN
        OR (NEW.booking_type = 'venue'  AND v_rt <> 'event') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Booking type must match the room type.';
     END IF;
+    SET NEW.pay_to_use = (NEW.booking_type = 'hostel');
 END$$
 
 CREATE TRIGGER trg_bookings_type_upd BEFORE UPDATE ON bookings
@@ -1354,6 +1431,78 @@ BEGIN
     END IF;
 END$$
 
+-- Every STAFF account handles exactly one venue (decided 2026-10-27): staff act
+-- only on their own venue's bookings, so a staff row without a venue would be a
+-- person who can handle nothing. Admin rows (also in `staff`) may have none.
+-- The INSERT check skips a row that already exists, because
+-- INSERT ... ON DUPLICATE KEY UPDATE (profile-save.php, staff-save.php) fires
+-- this trigger before it turns into an update that leaves venue_id alone.
+CREATE TRIGGER trg_staff_venue_required_ins BEFORE INSERT ON staff
+FOR EACH ROW
+BEGIN
+    IF NEW.venue_id IS NULL
+       AND (SELECT account_type FROM users WHERE id = NEW.user_id) = 'staff'
+       AND NOT EXISTS (SELECT 1 FROM staff WHERE user_id = NEW.user_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Every staff member must handle a venue.';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_staff_venue_required_upd BEFORE UPDATE ON staff
+FOR EACH ROW
+BEGIN
+    IF NEW.venue_id IS NULL
+       AND (SELECT account_type FROM users WHERE id = NEW.user_id) = 'staff' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Every staff member must handle a venue.';
+    END IF;
+END$$
+
+-- NOTIFICATIONS (2026-10-28, migration 12). Every status change already lands
+-- in booking_timeline; this decides which ones someone should hear about, and
+-- who. First match wins, so the order matters: a staff rejection of a receipt
+-- (under_review -> await_*) is a "receipt rejected" for the customer, not a
+-- "cash chosen" for staff. The sp_notify_* procedures are in section 11.
+CREATE TRIGGER trg_booking_timeline_notify AFTER INSERT ON booking_timeline
+FOR EACH ROW
+BEGIN
+    DECLARE v_kind VARCHAR(40) DEFAULT NULL;
+    DECLARE v_staff BOOLEAN DEFAULT FALSE;     -- FALSE: the customer; TRUE: venue staff + admins
+
+    IF NEW.action_code = 'status_changed' THEN
+        IF NEW.old_reservation_status = 'pending' AND NEW.new_reservation_status = 'approved' THEN
+            SET v_kind = 'approved';
+        ELSEIF NEW.new_reservation_status = 'rejected' AND NEW.old_reservation_status <> 'rejected' THEN
+            SET v_kind = 'rejected';
+        ELSEIF NEW.new_reservation_status = 'released' AND NEW.old_reservation_status <> 'released' THEN
+            SET v_kind = 'expired';
+        ELSEIF NEW.new_payment_status IN ('confirmed', 'paid_cash') AND NEW.old_payment_status NOT IN ('confirmed', 'paid_cash') THEN
+            SET v_kind = 'payment_confirmed';
+        ELSEIF NEW.old_payment_status = 'under_review' AND NEW.new_payment_status IN ('await_gcash', 'await_cash') THEN
+            SET v_kind = 'receipt_rejected';
+        ELSEIF NEW.old_payment_status IN ('await_event', 'await_pos', 'locked') AND NEW.new_payment_status IN ('await_gcash', 'await_cash') THEN
+            SET v_kind = 'payment_open';
+        ELSEIF NEW.new_payment_status IN ('refunded', 'refund_denied', 'refund_correction', 'refund_processing', 'refund_await_or')
+               AND NEW.old_payment_status <> NEW.new_payment_status THEN
+            SET v_kind = 'refund_update';
+        ELSEIF NEW.new_payment_status = 'under_review' AND NEW.old_payment_status <> 'under_review' THEN
+            SET v_kind = 'receipt_uploaded'; SET v_staff = TRUE;
+        ELSEIF NEW.old_payment_status = 'await_gcash' AND NEW.new_payment_status = 'await_cash' THEN
+            SET v_kind = 'cash_chosen'; SET v_staff = TRUE;
+        ELSEIF NEW.old_payment_status = 'await_cash' AND NEW.new_payment_status = 'await_gcash' THEN
+            SET v_kind = 'cash_cancelled'; SET v_staff = TRUE;
+        ELSEIF NEW.new_payment_status = 'refund_requested' AND NEW.old_payment_status <> 'refund_requested' THEN
+            SET v_kind = 'refund_requested'; SET v_staff = TRUE;
+        END IF;
+    END IF;
+
+    IF v_kind IS NOT NULL THEN
+        IF v_staff THEN
+            CALL sp_notify_venue_staff(NEW.booking_id, v_kind, NEW.performed_by_user_id, JSON_OBJECT('pay', NEW.new_payment_status, 'note', NEW.note));
+        ELSE
+            CALL sp_notify_customer(NEW.booking_id, v_kind, NEW.performed_by_user_id, JSON_OBJECT('pay', NEW.new_payment_status, 'note', NEW.note));
+        END IF;
+    END IF;
+END$$
+
 DELIMITER ;
 
 -- ============================================================================
@@ -1365,9 +1514,17 @@ DELIMITER $$
 --   (1) POST-PAY bookings whose last day has passed: open payment
 --       (await_event -> await_gcash / await_cash). The customer chooses the
 --       channel at checkout; GCash is the default until they pick cash.
---   (2) PRE-PAY bookings past their pay-by moment: release the hold (as before).
---   (3) POST-PAY bookings past their pay-by moment: mark OVERDUE. Nothing is
+--   (2) REQUESTS NOBODY APPROVED, under either policy, once their booking
+--       begins (fn_request_expiry): release the hold (2026-10-27). Before, a
+--       post-pay request never lapsed, and a pre-pay one lapsed a day early at
+--       a payment deadline it could not meet before approval.
+--   (3) APPROVED PRE-PAY or PAY-TO-USE bookings still unpaid past their pay-by
+--       moment: release the hold. Paid or under-review bookings are never
+--       touched. A pay-to-use hostel stay is due by the end of its check-in day.
+--   (4) POST-PAY bookings past their pay-by moment: mark OVERDUE. Nothing is
 --       released — the event already happened; chasing it is staff's job.
+-- The app calls this before every booking/availability read
+-- (venusep_expire_due_bookings() in includes/db.php).
 CREATE PROCEDURE sp_expire_due_bookings ()
 BEGIN
     SET @venusep_actor_user_id = NULL;
@@ -1375,23 +1532,34 @@ BEGIN
     SET @venusep_action_note = 'Event over; payment window opened.';
     UPDATE bookings
         SET payment_status = CASE WHEN payment_method = 'cash' THEN 'await_cash' ELSE 'await_gcash' END
-        WHERE refunds_allowed = FALSE
+        WHERE refunds_allowed = FALSE AND pay_to_use = FALSE
           AND payment_status = 'await_event'
           AND reservation_status IN ('approved','completed')
           AND fn_booking_last_day(id) < CURDATE();
 
-    SET @venusep_action_note = 'Auto-expired by deadline check.';
+    SET @venusep_action_note = 'Not approved before the booking date; the request expired.';
     UPDATE bookings
         SET reservation_status = 'released', payment_status = 'expired'
-        WHERE refunds_allowed = TRUE
-          AND reservation_status IN ('pending','approved')
+        WHERE reservation_status = 'pending'
+          AND fn_request_expiry(id, booking_type) <= NOW();
+
+    -- Only a booking STILL WAITING for its money. This used to match every
+    -- approved pre-pay booking, so a PAID one (or one whose receipt sat with
+    -- staff) was released on its event day, because its day-before deadline
+    -- had passed (found 2026-10-27).
+    SET @venusep_action_note = 'Not paid by the deadline; the hold was released.';
+    UPDATE bookings
+        SET reservation_status = 'released', payment_status = 'expired'
+        WHERE (refunds_allowed = TRUE OR pay_to_use = TRUE)
+          AND reservation_status = 'approved'
+          AND payment_status IN ('await_gcash','await_cash','await_pos')
           AND current_deadline_at IS NOT NULL
           AND current_deadline_at <= NOW();
 
     SET @venusep_action_note = 'Payment not received within the post-event window.';
     UPDATE bookings
         SET payment_status = 'overdue'
-        WHERE refunds_allowed = FALSE
+        WHERE refunds_allowed = FALSE AND pay_to_use = FALSE
           AND reservation_status IN ('approved','completed')
           AND payment_status IN ('await_gcash','await_cash','await_pos')
           AND current_deadline_at IS NOT NULL
@@ -1405,9 +1573,18 @@ END$$
 -- refunds_allowed snapshot, so no page has to know the rule.
 --   venue  + pre-pay : approved / await_gcash|await_cash, pay-by = 1 day before
 --   venue  + post-pay: approved / await_event,            pay-by = last day + grace
---   hostel + pre-pay : approved / await_pos (POS from CEDU first, as before)
+--   hostel + pre-pay : approved / await_pos (POS from CEDU first, as before) —
+--                      unless check-in is TODAY or already here: then there is
+--                      no time for the POS chain, and the stay is approved
+--                      straight to await_cash, paid at the front desk on
+--                      arrival by the end of that day (2026-10-27).
 --   hostel + post-pay: approved / await_event; staff call sp_start_await_pos
 --                      after check-out, then the guest pays within the grace days.
+--   hostel PAY TO USE (every hostel stay since migration 11, either policy):
+--                      approved / await_gcash (await_cash if cash was chosen) —
+--                      payment opens at once, no POS wait, due by the end of the
+--                      check-in day. The two hostel lines above are only for
+--                      stays booked before it.
 CREATE PROCEDURE sp_approve_booking (
     IN p_booking_id BIGINT UNSIGNED,
     IN p_actor_user_id BIGINT UNSIGNED
@@ -1415,16 +1592,41 @@ CREATE PROCEDURE sp_approve_booking (
 BEGIN
     DECLARE v_type VARCHAR(20);
     DECLARE v_prepay BOOLEAN;
+    DECLARE v_pay_to_use BOOLEAN;
     DECLARE v_method VARCHAR(10);
     DECLARE v_status VARCHAR(40);
 
-    SELECT booking_type, refunds_allowed, payment_method INTO v_type, v_prepay, v_method
+    SELECT booking_type, refunds_allowed, pay_to_use, payment_method INTO v_type, v_prepay, v_pay_to_use, v_method
       FROM bookings WHERE id = p_booking_id AND reservation_status = 'pending';
     IF v_type IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only a pending booking can be approved.';
     END IF;
 
-    IF v_type = 'hostel' AND v_prepay THEN
+    IF v_pay_to_use THEN
+        -- Payment opens at once: GCash from Pay now, or cash at the front desk.
+        SET @venusep_actor_user_id = p_actor_user_id;
+        SET @venusep_action_note = 'Approved; pay before check-in (GCash online, or cash at the front desk).';
+        UPDATE bookings
+            SET reservation_status = 'approved',
+                payment_status = IF(v_method = 'cash', 'await_cash', 'await_gcash'),
+                current_deadline_at = fn_payment_deadline(p_booking_id),
+                approved_at = COALESCE(approved_at, NOW()),
+                updated_by_user_id = p_actor_user_id
+            WHERE id = p_booking_id;
+        SET @venusep_actor_user_id = NULL;
+        SET @venusep_action_note = NULL;
+    ELSEIF v_type = 'hostel' AND v_prepay AND fn_booking_first_day(p_booking_id) <= CURDATE() THEN
+        SET @venusep_actor_user_id = p_actor_user_id;
+        SET @venusep_action_note = 'Approved; same-day stay — pay in cash at the front desk on arrival.';
+        UPDATE bookings
+            SET reservation_status = 'approved', payment_status = 'await_cash', payment_method = 'cash',
+                current_deadline_at = fn_payment_deadline(p_booking_id),
+                approved_at = COALESCE(approved_at, NOW()),
+                updated_by_user_id = p_actor_user_id
+            WHERE id = p_booking_id;
+        SET @venusep_actor_user_id = NULL;
+        SET @venusep_action_note = NULL;
+    ELSEIF v_type = 'hostel' AND v_prepay THEN
         CALL sp_start_await_pos(p_booking_id, p_actor_user_id);
     ELSE
         IF v_prepay THEN
@@ -1561,6 +1763,7 @@ BEGIN
     DECLARE v_block INT DEFAULT 0;
     DECLARE v_lock VARCHAR(128);
     DECLARE v_got INT DEFAULT 0;
+    DECLARE v_gap INT DEFAULT 60;
 
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
@@ -1595,6 +1798,17 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'HARD maintenance on the requested date.';
     END IF;
 
+    -- SAME DAY, DIFFERENT TIME (decided 2026-10-27): a room can hold several
+    -- bookings on one date, but each needs the CLEANUP GAP (system_settings
+    -- venue_cleanup_gap_minutes, 60) before and after it. Venue rooms only;
+    -- hostel beds are per night.
+    -- Held = a live booking's unreleased slot. The old extra test, "deadline
+    -- still in the future", let a PAID pre-pay booking be booked over on its
+    -- event day (its day-before deadline had passed). Lapsed holds are already
+    -- released by sp_expire_due_bookings() at the top of this procedure.
+    SELECT COALESCE(MAX(CAST(setting_value AS UNSIGNED)), 60) INTO v_gap
+      FROM system_settings WHERE setting_key = 'venue_cleanup_gap_minutes';
+
     SELECT COUNT(*) INTO v_conflict
     FROM venue_booking_slots s
     JOIN bookings b ON b.id = s.booking_id
@@ -1602,11 +1816,10 @@ BEGIN
       AND s.slot_date = p_slot_date
       AND s.released_at IS NULL
       AND b.reservation_status IN ('pending','approved')
-      AND (b.current_deadline_at IS NULL OR b.current_deadline_at > NOW())
-      AND p_start_time < s.end_time
-      AND p_end_time > s.start_time;
+      AND p_start_time < ADDTIME(s.end_time, SEC_TO_TIME(v_gap * 60))
+      AND ADDTIME(p_end_time, SEC_TO_TIME(v_gap * 60)) > s.start_time;
     IF v_conflict > 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'The room is already held for an overlapping time range.';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'That time is too close to another booking: bookings need a cleanup gap before and after them.';
     END IF;
 
     INSERT INTO venue_booking_slots (booking_id, room_id, slot_date, start_time, end_time)
@@ -1628,6 +1841,46 @@ BEGIN
     DELETE FROM user_recovery_codes WHERE user_id = p_user_id;
 END$$
 
+-- NOTIFICATIONS (2026-10-28, migration 12) — who hears about what. Each skips
+-- whoever acted: nobody is notified of their own action.
+-- Staff of the booking's venue + every admin.
+CREATE PROCEDURE sp_notify_venue_staff (
+    IN p_booking_id BIGINT UNSIGNED, IN p_kind VARCHAR(40),
+    IN p_actor_user_id BIGINT UNSIGNED, IN p_detail TEXT
+)
+BEGIN
+    DECLARE v_venue BIGINT UNSIGNED;
+    SELECT r.venue_id INTO v_venue FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = p_booking_id;
+    INSERT INTO notifications (user_id, kind, booking_id, actor_user_id, detail)
+    SELECT u.id, p_kind, p_booking_id, p_actor_user_id, p_detail
+      FROM users u LEFT JOIN staff s ON s.user_id = u.id
+     WHERE u.is_active = 1 AND u.id <> COALESCE(p_actor_user_id, 0)
+       AND (u.account_type = 'admin' OR (u.account_type = 'staff' AND s.venue_id = v_venue));
+END$$
+
+-- The booking's customer, if they have an account (a walk-in has no login).
+CREATE PROCEDURE sp_notify_customer (
+    IN p_booking_id BIGINT UNSIGNED, IN p_kind VARCHAR(40),
+    IN p_actor_user_id BIGINT UNSIGNED, IN p_detail TEXT
+)
+BEGIN
+    INSERT INTO notifications (user_id, kind, booking_id, actor_user_id, detail)
+    SELECT c.user_id, p_kind, p_booking_id, p_actor_user_id, p_detail
+      FROM bookings b JOIN customers c ON c.id = b.customer_id
+     WHERE b.id = p_booking_id AND c.user_id IS NOT NULL AND c.user_id <> COALESCE(p_actor_user_id, 0);
+END$$
+
+-- Every active admin (staff/admin account events).
+CREATE PROCEDURE sp_notify_admins (
+    IN p_kind VARCHAR(40), IN p_actor_user_id BIGINT UNSIGNED, IN p_detail TEXT
+)
+BEGIN
+    INSERT INTO notifications (user_id, kind, actor_user_id, detail)
+    SELECT u.id, p_kind, p_actor_user_id, p_detail
+      FROM users u
+     WHERE u.account_type = 'admin' AND u.is_active = 1 AND u.id <> COALESCE(p_actor_user_id, 0);
+END$$
+
 DELIMITER ;
 
 -- ============================================================================
@@ -1646,8 +1899,9 @@ SELECT
     b.payment_status, ps.staff_label AS payment_staff_label, ps.customer_label AS payment_customer_label,
     b.payment_method, b.is_usep_affiliated, b.affiliation_verified,
     b.room_price, b.discount_percent, b.discount_amount, b.total_amount,
-    b.refunds_allowed,
-    IF(b.refunds_allowed, 'prepay', 'postpay') AS payment_policy,   -- 2026-09-17: when this booking pays
+    b.refunds_allowed, b.pay_to_use,
+    -- when this booking pays (2026-09-17; pay_to_use 2026-10-27)
+    IF(b.pay_to_use, 'pay_to_use', IF(b.refunds_allowed, 'prepay', 'postpay')) AS payment_policy,
     fn_booking_first_day(b.id) AS first_day,
     fn_booking_last_day(b.id)  AS last_day,
     b.current_deadline_at, b.submitted_at, b.updated_at

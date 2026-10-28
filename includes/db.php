@@ -44,6 +44,13 @@ if (date_default_timezone_get() !== VENUSEP_TZ) {
     date_default_timezone_set(VENUSEP_TZ);
 }
 
+/* The credentials, in ONE place. A function so admin backup & restore
+   (includes/backup.php) hands the SAME ones to mysqldump / mysql. */
+function venusep_db_config()
+{
+    return ['host' => '127.0.0.1', 'name' => 'venusep', 'user' => 'root', 'pass' => ''];
+}
+
 function venusep_db()
 {
     static $pdo = null;
@@ -53,10 +60,11 @@ function venusep_db()
     }
     $tried = true;
 
-    $dbHost = '127.0.0.1';
-    $dbName = 'venusep';
-    $dbUser = 'root';
-    $dbPass = '';
+    $dbCfg  = venusep_db_config();
+    $dbHost = $dbCfg['host'];
+    $dbName = $dbCfg['name'];
+    $dbUser = $dbCfg['user'];
+    $dbPass = $dbCfg['pass'];
 
     try {
         $pdo = new PDO(
@@ -123,4 +131,67 @@ function venusep_db_or_fail()
        . '<a href="javascript:location.reload()">Try again</a>'
        . '</div></body></html>';
     exit;
+}
+
+/* =====================================================================
+   THE DEADLINE RULES, APPLIED BEFORE ANYONE LOOKS (2026-10-27).
+
+   sp_expire_due_bookings() expires requests nobody approved, releases
+   unpaid pre-pay holds, opens post-pay payment windows and marks overdue
+   ones. The schema always said to call it "before availability / queue /
+   detail reads", but nothing in the app ever did — it only ran inside the
+   two procedures that take a NEW booking, so a booking expired only when
+   somebody else happened to book. Now every booking list, calendar and
+   availability read calls this first.
+
+   Once per request. Skipped while demo mode is on, because a showcase
+   promises to change nothing. It runs on the next ordinary page load.
+   ===================================================================== */
+/* Minutes kept free before and after every VENUE booking (2026-10-27), so a
+   room can take several bookings on one day. system_settings is the one
+   source: sp_add_venue_slot() enforces it, and the booking page draws from
+   it. 60 if the setting cannot be read. */
+function venue_cleanup_gap_minutes()
+{
+    static $gap = null;
+    if ($gap !== null) {
+        return $gap;
+    }
+    $gap = 60;
+    $pdo = venusep_db();
+    if ($pdo !== null) {
+        try {
+            $v = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'venue_cleanup_gap_minutes'")->fetchColumn();
+            if ($v !== false && ctype_digit((string) $v)) {
+                $gap = (int) $v;
+            }
+        } catch (PDOException $e) {
+            /* keep the default */
+        }
+    }
+    return $gap;
+}
+
+function venusep_expire_due_bookings()
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+    require_once __DIR__ . '/demo-mode.php';
+    if (demo_mode_on()) {
+        return;
+    }
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return;
+    }
+    try {
+        $pdo->exec('CALL sp_expire_due_bookings()');
+    } catch (PDOException $e) {
+        /* Never stop a page over housekeeping. The rules run again on the
+           next read. */
+        error_log('VENUSeP sp_expire_due_bookings: ' . $e->getMessage());
+    }
 }

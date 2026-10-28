@@ -740,13 +740,15 @@ foreach ($AMENITY_GROUPS_HOSTEL as $rfGroup) {
         <div class="vm-row-3">
           <div class="vm-field">
             <label for="roomBeds">Beds</label>
-            <input id="roomBeds" class="vm-control" type="number" min="1" max="12" value="6" placeholder="e.g. 6" />
-            <div class="vm-hint" style="margin:.4rem 0 0">How many beds exist in the room. Guests book these one at a time.</div>
+            <!-- the room's REAL values (2026-10-27) — these used to open at
+                 6 beds / ₱350 / communal for every room -->
+            <input id="roomBeds" class="vm-control" type="number" min="1" max="20" value="<?php echo $roomFormRoom ? (int) $roomFormRoom['beds'] : 6; ?>" placeholder="e.g. 6" />
+            <div class="vm-hint" style="margin:.4rem 0 0">How many beds exist in the room. Beds with upcoming guests cannot be removed.</div>
           </div>
           <div class="vm-field">
             <label>CR type</label>
             <details class="vm-dd" id="roomCr">
-              <summary class="vm-dd-trigger">Communal CR</summary>
+              <summary class="vm-dd-trigger"><?php echo ($roomFormRoom && $roomFormRoom['cr_type'] === 'private') ? 'Private CR' : 'Communal CR'; ?></summary>
               <ul class="vm-dd-menu" aria-label="CR type options">
                 <li class="vm-dd-option" data-rate="350">Communal CR</li>
                 <li class="vm-dd-option" data-rate="400">Private CR</li>
@@ -756,9 +758,13 @@ foreach ($AMENITY_GROUPS_HOSTEL as $rfGroup) {
           </div>
           <div class="vm-field">
             <label for="roomRate">Rate (₱ per head, per night)</label>
-            <input id="roomRate" class="vm-control" type="number" step="0.01" value="350.00" placeholder="0.00" />
-            <div class="vm-hint" style="margin:.4rem 0 0">A guest pays this once per bed, per night — in full, up front.</div>
+            <input id="roomRate" class="vm-control" type="number" min="0" step="0.01" value="<?php echo $roomFormRoom ? number_format((float) $roomFormRoom['rate'], 2, '.', '') : '350.00'; ?>" placeholder="0.00" />
+            <div class="vm-hint" style="margin:.4rem 0 0">Per bed, per night. A new rate applies to new bookings; existing stays keep their price.</div>
           </div>
+        </div>
+        <div class="vm-field">
+          <label for="roomDesc">Description</label>
+          <textarea id="roomDesc" class="vm-control" rows="3" placeholder="What the room is like, shown at the top of its page"><?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['description'] : ''); ?></textarea>
         </div>
 
         <hr class="vm-divider" />
@@ -832,13 +838,12 @@ foreach ($AMENITY_GROUPS_HOSTEL as $rfGroup) {
         <div class="vm-row">
           <div class="vm-field">
             <label for="roomCheckIn">Check-in from</label>
-            <input id="roomCheckIn" class="vm-control" type="text" value="2:00 PM" placeholder="e.g. 2:00 PM" />
-            <div class="vm-hint" style="margin:.4rem 0 0">[SIM] display only — nights are counted from the dates, not the clock.</div>
+            <input id="roomCheckIn" class="vm-control" type="time" value="<?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['checkIn'] : '14:00'); ?>" />
+            <div class="vm-hint" style="margin:.4rem 0 0">Saved with the room. Nights are counted from the dates, not the clock.</div>
           </div>
           <div class="vm-field">
             <label for="roomCheckOut">Check-out by</label>
-            <input id="roomCheckOut" class="vm-control" type="text" value="12:00 NN" placeholder="e.g. 12:00 NN" />
-            <div class="vm-hint" style="margin:.4rem 0 0">[SIM] display only.</div>
+            <input id="roomCheckOut" class="vm-control" type="time" value="<?php echo htmlspecialchars($roomFormRoom ? $roomFormRoom['checkOut'] : '12:00'); ?>" />
           </div>
         </div>
 
@@ -955,6 +960,28 @@ foreach ($AMENITY_GROUPS_HOSTEL as $rfGroup) {
          assets/img/venues/rooms/<id>/pano.<ext> and survives a reload.
          ============================================================ -->
     <script>
+      /* The window as admin/room-save.php reads it (2026-10-27). */
+      function mtValue() {
+        if (!document.getElementById('mtOn').checked) return { on: false };
+        return { on: true,
+          tier: document.querySelector('input[name="mtTier"]:checked').value,
+          from: document.getElementById('mtFrom').value,
+          until: document.getElementById('mtIndef').checked ? null : (document.getElementById('mtUntil').value || ''),
+          reason: document.getElementById('mtReason').value.trim() };
+      }
+      /* The saved window opens as it is — this section used to open switched
+         off for every room, even one that was closed. */
+      (function () {
+        var m = <?php echo json_encode($roomFormRoom ? $roomFormRoom['maintenance'] : null); ?>;
+        if (!m) return;
+        document.getElementById('mtOn').checked = true;
+        document.querySelector('input[name="mtTier"][value="' + (m.blocks ? 'hard' : 'medium') + '"]').checked = true;
+        document.getElementById('mtFrom').value = m.from;
+        if (m.until) { document.getElementById('mtUntil').value = m.until; } else { document.getElementById('mtIndef').checked = true; }
+        document.getElementById('mtReason').value = m.reason || '';
+        mtSync();
+      })();
+
       var VM_ROOM_ID = document.getElementById('vmRoomId').value;
       var VM_CSRF = document.getElementById('vmCsrf').value;
       var VM_API = 'room-photos-api.php';
@@ -1187,9 +1214,9 @@ foreach ($AMENITY_GROUPS_HOSTEL as $rfGroup) {
       /* "Save Changes" — photos and the 360° tour already save themselves the
          moment you add/remove/reorder them (see vmApiPost above); Name and
          Location save here, to rooms.name / rooms.venue_id via
-         admin/room-save.php. Beds, CR type, rate, maintenance and amenities
-         on this form are saved on CREATE; on an edit only name, location and
-         mockup — so the confirmation says so rather than pretend. */
+         admin/room-save.php — and so, since 2026-10-27, is everything else on
+         the form, on create and on edit: beds, CR type, rate, check-in/out
+         times, description, maintenance and amenities. */
       function vmSaveChanges() {
         /* No room id = CREATE. The screen always offered "Add Room"; it used
            to answer with an alert saying it could not. room-save.php generates
@@ -1201,20 +1228,34 @@ foreach ($AMENITY_GROUPS_HOSTEL as $rfGroup) {
         var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
         if (!name) { venusepAlert('Enter a room name.'); return; }
         if (!venue || venue === 'Select a venue') { venusepAlert('Choose a location.'); return; }
+        var mtv = mtValue();
+        if (mtv.on && mtv.until === '') { venusepAlert('Set the maintenance end date, or tick "No set return date".'); return; }
+        var crTrigger = document.querySelector('#roomCr .vm-dd-trigger');
 
         var body = new FormData();
         body.append('room_id', VM_ROOM_ID || '');
         body.append('name', name);
         body.append('venue', venue);
         body.append('room_type', 'hostel');
+        /* every detail on the form, on create AND edit (2026-10-27) */
+        body.append('beds', document.getElementById('roomBeds').value);
+        body.append('cr_type', crTrigger && /private/i.test(crTrigger.textContent) ? 'private' : 'communal');
+        body.append('rate', document.getElementById('roomRate').value);
+        body.append('check_in_time', document.getElementById('roomCheckIn').value);
+        body.append('check_out_time', document.getElementById('roomCheckOut').value);
+        body.append('description', document.getElementById('roomDesc').value);
+        body.append('maintenance', JSON.stringify(mtv));
         body.append('amenities', JSON.stringify(selectedAmenities()));
         body.append('csrf', VM_CSRF);
         fetch('room-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.ok) { venusepAlert(res.message || 'Could not save the room.'); return; }
-            venusepAlert(res.message || 'Room saved.');
-            location.href = 'venue-management.php';
+            /* move on only once OK is clicked — unlike alert(), the modal does
+               not block, and navigating at once wiped it off the screen */
+            venusepAlert(res.message || 'Room saved.', { tone: 'ok', title: 'Saved' }).then(function () {
+              location.href = 'venue-management.php';
+            });
           })
           .catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }

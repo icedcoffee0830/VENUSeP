@@ -3,7 +3,10 @@
    PAYMENT SUBMIT — the ONLY way a customer records a payment.
 
    POST (multipart for GCash)
-     csrf, booking=<VB-reference>, method=gcash|cash
+     csrf, booking=<VB-reference>, method=gcash|cash|cancel_cash
+     cancel_cash (a pay-to-use hostel stay, 2026-10-28): take back "I will
+            pay in cash at the front desk" — GCash opens again, and staff no
+            longer see Cash received
      gcash: receipt FILE, plus what the browser's OCR read —
             ref, receiver_name, receiver_number, amount_centavos,
             receipt_datetime, confidence, flags (json), text_excerpt
@@ -75,6 +78,7 @@ if (!csrf_valid(isset($_POST['csrf']) ? $_POST['csrf'] : null)) {
 }
 
 $ref    = (string) ($_POST['booking'] ?? '');
+$cancelCash = ($_POST['method'] ?? '') === 'cancel_cash';
 $method = ($_POST['method'] ?? '') === 'cash' ? 'cash' : 'gcash';
 
 /* DEMO MODE — a payment against a booking that only exists in the session.
@@ -87,6 +91,19 @@ if (demo_owns($ref)) {
     $demoRow = demo_get_booking($ref);
     $owed    = (int) round((float) $demoRow['amountValue'] * 100);
     $claimed = ($_POST['amount_centavos'] ?? '') !== '' ? (int) $_POST['amount_centavos'] : null;
+    $demoPtu = !empty($demoRow['payToUse']);
+    if ($cancelCash) {
+        if ($demoRow['paymentCode'] !== 'await_cash') {
+            ps_reply(409, ['ok' => false, 'message' => 'There is no cash payment to cancel.']);
+        }
+        demo_update_booking($ref, ['paymentCode' => 'await_gcash', 'paymentStatus' => 'Payment due',
+                                   'paymentStatusStaff' => 'Awaiting GCash payment', 'method' => 'GCash']);
+        ps_reply(200, ['ok' => true, 'demo' => true, 'status' => 'await_gcash',
+            'message' => 'Cash choice cancelled. (Demo mode — nothing was saved.)']);
+    }
+    if ($demoRow['paymentCode'] === 'await_cash' && ($_POST['method'] ?? '') !== 'cash') {
+        ps_reply(409, ['ok' => false, 'message' => 'You chose to pay in cash ' . ($demoPtu ? 'at the front desk' : 'at the office') . '. Cancel that first to pay by GCash.']);
+    }
     if (($_POST['method'] ?? '') === 'cash') {
         demo_update_booking($ref, ['paymentCode' => 'await_cash', 'paymentStatus' => 'Payment due',
                                    'paymentStatusStaff' => 'Awaiting cash payment', 'method' => 'Cash']);
@@ -119,11 +136,15 @@ if ($pdo === null) {
     ps_reply(503, ['ok' => false, 'message' => 'The database is unreachable, so your payment was not recorded.']);
 }
 
+/* A deadline that passed while the page sat open is applied before the
+   booking is read, so payment is refused for a hold that has lapsed. */
+venusep_expire_due_bookings();
+
 /* The booking must be THIS customer's. Scoped by customer_id, not just by
    reference: otherwise anyone could pay against — or read the total of —
    someone else's booking by typing its number. */
 $bk = $pdo->prepare(
-    "SELECT b.id, b.customer_id, b.payment_status, b.payment_method, b.total_amount,
+    "SELECT b.id, b.customer_id, b.payment_status, b.payment_method, b.total_amount, b.pay_to_use,
             v.name AS venue_name,
             g.account_name, g.mobile_number
        FROM bookings b
@@ -136,6 +157,32 @@ $bk->execute([':b' => $id, ':c' => (int) $_SESSION['customer_id']]);
 $booking = $bk->fetch();
 if (!$booking) {
     ps_reply(404, ['ok' => false, 'message' => 'That booking was not found.']);
+}
+
+/* THE CASH CHOICE (2026-10-28): a customer who said "I will pay in cash" — at
+   the hostel front desk or the venue cashier — may take it back while the cash
+   is still unpaid. GCash opens again, and staff stop seeing their cash button
+   (booking-action.php only takes cash from someone who chose it). A hostel
+   stay goes back to "no method chosen"; a venue booking to GCash. */
+if ($cancelCash) {
+    if ($booking['payment_status'] !== 'await_cash') {
+        ps_reply(409, ['ok' => false, 'message' => $booking['payment_status'] === 'paid_cash'
+            ? 'Staff have already recorded your cash payment, so it cannot be cancelled.'
+            : 'There is no cash payment to cancel.']);
+    }
+    $pdo->prepare('SET @venusep_actor_user_id = :a, @venusep_action_note = :n')
+        ->execute([':a' => (int) $_SESSION['user_id'], ':n' => $booking['pay_to_use']
+            ? 'Guest cancelled paying cash at the front desk; GCash is open again.'
+            : 'Customer cancelled paying cash at the office; GCash is open again.']);
+    $pdo->prepare("UPDATE bookings SET payment_status = 'await_gcash', payment_method = IF(pay_to_use, NULL, 'gcash')
+                    WHERE id = :b AND payment_status = 'await_cash'")->execute([':b' => $id]);
+    $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
+    ps_reply(200, ['ok' => true, 'status' => 'await_gcash', 'message' => 'Cash choice cancelled. You can pay by GCash again.']);
+}
+/* ...and while that choice stands, GCash stays closed: one way to pay at a time. */
+if ($booking['payment_status'] === 'await_cash' && $method === 'gcash') {
+    ps_reply(409, ['ok' => false, 'message' => 'You chose to pay in cash ' . ($booking['pay_to_use'] ? 'at the front desk' : 'at the office')
+        . '. Cancel that first to pay by GCash.']);
 }
 
 /* Payment has to be OPEN. A post-pay booking sitting in await_event cannot be
@@ -159,10 +206,14 @@ if ($method !== $booking['payment_method']) {
    here would claim money arrived that nobody has seen.
    --------------------------------------------------------------------- */
 if ($method === 'cash') {
+    $pdo->prepare('SET @venusep_actor_user_id = :a, @venusep_action_note = :n')
+        ->execute([':a' => (int) $_SESSION['user_id'],
+                   ':n' => $booking['pay_to_use'] ? 'Guest will pay cash at the front desk.' : 'Customer will pay in cash.']);
     $pdo->prepare("UPDATE bookings SET payment_status = 'await_cash' WHERE id = :b AND payment_status <> 'overdue'")
         ->execute([':b' => $id]);
+    $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
     ps_reply(200, ['ok' => true, 'status' => 'await_cash',
-        'message' => 'Pay at the venue office — staff will record it.']);
+        'message' => $booking['pay_to_use'] ? 'Pay at the hostel front desk — staff will record it.' : 'Pay at the venue office — staff will record it.']);
 }
 
 /* ---------------------------------------------------------------------
@@ -201,19 +252,36 @@ function ps_number_matches($receiptNumber, $expected) {
     if (strlen($exp) !== 11) {
         return null;                      // our own account is misconfigured; never fail a customer on it
     }
-    $r = preg_replace('/[^0-9*]/', '', str_replace(['•', 'x', 'X', '#'], '*', (string) $receiptNumber));
-    if (strlen($r) === 12 && substr($r, 0, 2) === '63') { $r = '0' . substr($r, 2); }
-    if (strlen($r) === 10 && $r[0] === '9')             { $r = '0' . $r; }
-    if (strlen($r) !== 11) {
-        return null;
+    /* The NATIONAL part (after +63 / 63 / 0), ten characters. Every non-digit
+       is a hidden digit: OCR reads GCash's masking dots as letters
+       ("+63 9•••••2358" -> "+63 Deceee2358"). mb_ functions, because a "•"
+       is one character but three bytes. */
+    $s = preg_replace('/[\s\-]+/u', '', (string) $receiptNumber);
+    if (preg_match('/^\+?63/', $s)) { $s = preg_replace('/^\+?63/', '', $s); }
+    elseif (mb_substr($s, 0, 1) === '0') { $s = mb_substr($s, 1); }
+    $r   = preg_replace('/[^0-9]/u', '*', $s);
+    $nat = substr($exp, 1);
+    if (strlen($r) === 10) {
+        $visible = 0;
+        for ($i = 0; $i < 10; $i++) {
+            if ($r[$i] === '*') { continue; }
+            if ($r[$i] !== $nat[$i]) { return false; }
+            $visible++;
+        }
+        return $visible >= 4 ? true : null;
     }
-    $visible = 0;
-    for ($i = 0; $i < 11; $i++) {
-        if ($r[$i] === '*') { continue; }
-        if ($r[$i] !== $exp[$i]) { return false; }
-        $visible++;
+    /* Dots merged or split by OCR: positions are lost, so judge the visible
+       ENDS — the leading and trailing digit runs. */
+    preg_match('/^\d*/', $r, $lm);
+    preg_match('/\d*$/', $r, $tm);
+    $lead = $lm[0];
+    $tail = $tm[0];
+    if ($lead === $r) {
+        return null;                      // all digits, wrong length: a misread, not a mismatch
     }
-    return $visible >= 4 ? true : null;
+    if ($lead !== '' && strpos($nat, $lead) !== 0) { return false; }
+    if ($tail !== '' && substr($nat, -strlen($tail)) !== $tail) { return false; }
+    return (strlen($lead) + strlen($tail)) >= 4 ? true : null;
 }
 
 /* THE TWO CHECKS THAT MATTER, both against values read from the database. */

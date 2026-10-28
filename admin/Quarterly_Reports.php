@@ -253,9 +253,17 @@ foreach ($rpQuarters as $rpQ) {
             padding: 5px 10px;
         }
 
-        .tag-finalized {
-            background: #1f1e1e;
-            color: #ffffff;
+        /* the selected quarter's status (2026-10-28): still running, or over */
+        .tag-progress {
+            background: #fdf3e6;
+            border: 1px solid #f1d9b5;
+            color: #8a5a12;
+        }
+
+        .tag-closed {
+            background: #e8f2ec;
+            border: 1px solid #c9e2d3;
+            color: #1c7a4f;
         }
 
         .stats-grid {
@@ -514,6 +522,71 @@ foreach ($rpQuarters as $rpQ) {
       .panel { border-radius: 14px; }
       .panel-header { padding: 14px 18px; border-bottom: 1px solid #f0efec; }
       .panel-header h3 { font-size: 14.5px; font-weight: 650; }
+
+      /* ============================================================
+         PRINT LAYOUT (2026-10-28). Paper is narrower than the 1024px
+         breakpoint, so without this the page printed its PHONE layout —
+         one tile per row, four mostly-empty pages, the charts cut off at
+         the width they were drawn at on screen, and the table scrolling.
+         html.rp-print is set by the script just before printing (Print
+         PDF or Ctrl+P), so the charts can be measured and redrawn at the
+         width they will have on paper; it is a class rather than only
+         @media print so that measuring happens in the same layout.
+         The content is 186mm wide — A4 or Letter with 12mm margins.
+         ============================================================ */
+      .rp-print-meta { display: none; }
+      @page { margin: 12mm; }
+      @media print {
+        html, body { background: #fff !important; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .app-header, .sidebar, .report-controls, .btn { display: none !important; }
+      }
+      html.rp-print .app-header, html.rp-print .sidebar,
+      html.rp-print .report-controls, html.rp-print .btn { display: none !important; }
+      html.rp-print body { overflow: visible; }
+      html.rp-print .app-container { margin: 0 !important; padding: 0 !important; min-height: 0; display: block; }
+      html.rp-print .main { width: 186mm; margin: 0 auto; padding: 0 !important; }
+      html.rp-print .header { margin-bottom: 8px; padding: 0 0 6px; border-bottom: 1.5px solid #1f1e1e; display: block; }
+      html.rp-print .header h1 { font-size: 20px; }
+      html.rp-print .header p { font-size: 11.5px; }
+      html.rp-print .rp-print-meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 11.5px; color: #4a463f; }
+      html.rp-print .rp-print-meta strong { color: #1f1e1e; }
+      html.rp-print .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+      html.rp-print .stat-card { min-height: 0; padding: 10px 12px; border-radius: 8px; box-shadow: none; break-inside: avoid; }
+      html.rp-print .stat-card .stat-icon { display: none; }
+      html.rp-print .stat-card h3 { font-size: 9px; padding-right: 0; }
+      html.rp-print .stat-card .number { font-size: 19px; margin-top: 6px; }
+      html.rp-print .stat-card .info { font-size: 9.5px; }
+      html.rp-print .chart-grid { grid-template-columns: 3fr 2fr; gap: 8px; margin-bottom: 8px; align-items: stretch; }
+      html.rp-print .chart-grid.three { grid-template-columns: repeat(3, 1fr); }
+      html.rp-print .panel { border-radius: 8px; box-shadow: none; break-inside: avoid; }
+      html.rp-print .panel-header { padding: 6px 12px; display: block; }
+      html.rp-print .panel-header h3 { font-size: 12.5px; }
+      html.rp-print .panel-header-subtitle { font-size: 10px; display: block; margin-top: 1px; }
+      html.rp-print .panel-content { padding: 6px 8px; }
+      html.rp-print .chart-box, html.rp-print .chart-box.compact { min-height: 0; }
+      html.rp-print .table-scroll { overflow: visible; }
+      html.rp-print table { min-width: 0; }
+      html.rp-print th { padding: 5px 12px; font-size: 9.5px; }
+      html.rp-print td { padding: 5px 12px; font-size: 11.5px; }
+      html.rp-print tr { break-inside: avoid; }
+
+      /* THE LETTERHEAD (2026-10-28) — USeP's own header and footer, on paper
+         only: the seal + "University of Southeastern Philippines · CEDU" at
+         the top, the vision / address / certifications strip at the bottom
+         (assets/img/reports/). The footer is pinned to the foot of the page;
+         the page keeps room for it. Charts print a little shorter so the
+         whole report still fits on one page. */
+      .rp-letterhead, .rp-letterfoot { display: none; }
+      html.rp-print .rp-letterhead { display: block; text-align: center; margin: 0 0 6px; }
+      html.rp-print .rp-letterhead img { height: 62px; width: auto; }
+      html.rp-print .header p { display: none; }
+      html.rp-print .rp-letterfoot { display: block; border-top: 1.5px solid #1f1e1e; padding-top: 6px; margin-top: 10px; }
+      html.rp-print .rp-letterfoot img { display: block; width: 100%; height: auto; }
+      @media print {
+        html.rp-print .rp-letterfoot { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; background: #fff; }
+        html.rp-print .main { padding-bottom: 98px !important; }   /* room above the pinned footer */
+      }
     </style>
 </head>
 <body>
@@ -526,12 +599,16 @@ foreach ($rpQuarters as $rpQ) {
 
         <div class="app-container">
             <main class="main">
+                <!-- printed only: the university letterhead -->
+                <div class="rp-letterhead"><img src="../assets/img/reports/print-header.png" alt="University of Southeastern Philippines — CEDU"></div>
                 <div class="header">
                     <div>
                         <h1>Quarterly Reports</h1>
                         <p>Review revenue, booking counts, cancellations, and venue performance for the selected quarter.</p>
+                        <!-- printed only: the period picker is hidden on paper, so say which quarter this is -->
+                        <div class="rp-print-meta"><span>Reporting period: <strong id="rpPrintPeriod"></strong> &middot; Status: <span id="rpPrintStatus"></span></span><span id="rpPrintDate"></span></div>
                     </div>
-                    <button class="btn btn-primary" onclick="window.print()">
+                    <button class="btn btn-primary" onclick="printReport()">
                         <i class="bi bi-printer"></i>
                         Print PDF
                     </button>
@@ -549,7 +626,9 @@ foreach ($rpQuarters as $rpQ) {
 <?php endforeach; ?>
                         </select>
                     </div>
-                    <span class="tag tag-finalized">Status: Finalized</span>
+                    <!-- the SELECTED quarter: the current one is still running, an
+                         earlier one is over — set by periodStatus() below -->
+                    <span class="tag" id="rpStatus" title=""></span>
                 </div>
 
                 <div class="stats-grid">
@@ -653,6 +732,8 @@ foreach ($rpQuarters as $rpQ) {
                         </table>
                     </div>
                 </div>
+                <!-- printed only: the university footer — vision, address, certifications -->
+                <div class="rp-letterfoot"><img src="../assets/img/reports/print-footer.png" alt="USeP vision: Premier research university transforming communities in the ASEAN and beyond. University of Southeastern Philippines, Iñigo St., Bo. Obrero, Davao City, Philippines 8000 · (082) 227-8192 local 255 · www.usep.edu.ph · president@usep.edu.ph"></div>
             </main>
         </div>
     </div>
@@ -715,9 +796,25 @@ foreach ($rpQuarters as $rpQ) {
             })).filter((item) => Number.isFinite(item.value) && item.value > 0);
         }
 
+        /* The selected quarter's status (2026-10-28). The window always ends at
+           the CURRENT quarter (report_quarters()), which is still running — its
+           numbers keep changing; every earlier one is over. Today's quarter
+           comes from the server, not the viewer's clock. */
+        const currentQuarter = <?php echo json_encode('Q' . (int) ceil((int) date('n') / 3) . ' ' . date('Y')); ?>;
+        function periodStatus(label) {
+            const running = label === currentQuarter;
+            const tag = document.querySelector('#rpStatus');
+            tag.textContent = running ? 'Status: In progress' : 'Status: Closed';
+            tag.className = 'tag ' + (running ? 'tag-progress' : 'tag-closed');
+            tag.title = running ? 'This quarter is not over yet, so these figures will still change.'
+                                : 'This quarter has ended.';
+            document.querySelector('#rpPrintStatus').textContent = running ? 'In progress (figures still changing)' : 'Closed';
+        }
+
         function renderPeriod() {
             const period = venueByQuarter[periodIndex] || null;
             venueReport = period ? period.venues : allTimeVenues;
+            periodStatus(period ? period.label : currentQuarter);
 
             const currentRevenue = period
                 ? period.revenue
@@ -806,7 +903,7 @@ foreach ($rpQuarters as $rpQ) {
         const initialEventRows = venueChartRows('events');
         const initialDiscountedRows = venueChartRows('discounted');
 
-        new ApexCharts(document.querySelector('#revenueGrowthChart'), {
+        const revenueGrowthChart = new ApexCharts(document.querySelector('#revenueGrowthChart'), {
             series: [
                 {
                     name: 'Total Revenue',
@@ -869,7 +966,8 @@ foreach ($rpQuarters as $rpQ) {
                     },
                 },
             },
-        }).render();
+        });
+        revenueGrowthChart.render();
 
         venueRevenueChart = new ApexCharts(document.querySelector('#venueRevenueChart'), {
             series: initialRevenueRows.map((item) => item.value),
@@ -994,7 +1092,7 @@ foreach ($rpQuarters as $rpQ) {
         });
         discountedBookingsChart.render();
 
-        new ApexCharts(document.querySelector('#cancelledReservationsChart'), {
+        const cancelledReservationsChart = new ApexCharts(document.querySelector('#cancelledReservationsChart'), {
             series: [
                 {
                     name: 'Cancelled Reservations',
@@ -1036,7 +1134,63 @@ foreach ($rpQuarters as $rpQ) {
                     },
                 },
             },
-        }).render();
+        });
+        cancelledReservationsChart.render();
+
+        /* ============================================================
+           PRINTING (2026-10-28). An ApexCharts chart is drawn at a fixed
+           pixel width, so on paper it kept its screen width and was cut
+           off. Before printing, html.rp-print switches the page to its
+           paper layout (see the PRINT LAYOUT styles), and every chart is
+           redrawn at the width its box has there, with animation off so
+           it is drawn at once; afterwards everything goes back.
+           Ctrl+P fires beforeprint, which does the same synchronously.
+           ============================================================ */
+        /* Short charts on paper (the letterhead takes room too): the two whose
+           x-axis labels slant on screen print them straight and smaller, or
+           the slant would eat most of a 140px chart. `screenX` puts them back. */
+        const flatLabels  = { labels: { rotate: 0, rotateAlways: false, hideOverlappingLabels: false, trim: false, style: { fontSize: '8px' } } };
+        const slantLabels = (deg) => ({ labels: { rotate: deg, hideOverlappingLabels: true, style: { fontSize: '12px' } } });
+        const printCharts = [
+            { chart: revenueGrowthChart,         el: '#revenueGrowthChart',         screen: 320, paper: 150 },
+            { chart: venueRevenueChart,          el: '#venueRevenueChart',          screen: 320, paper: 150 },
+            { chart: eventsByVenueChart,         el: '#eventsByVenueChart',         screen: 280, paper: 140 },
+            { chart: discountedBookingsChart,    el: '#discountedBookingsChart',    screen: 280, paper: 140,
+              paperX: { xaxis: flatLabels }, screenX: { xaxis: slantLabels(-35) } },
+            /* this chart takes its x values from top-level `labels`; they are passed
+               again, or changing the axis drops them and it prints "1 2 3 4" */
+            { chart: cancelledReservationsChart, el: '#cancelledReservationsChart', screen: 280, paper: 140,
+              paperX: { labels: quarterLabels, xaxis: flatLabels }, screenX: { labels: quarterLabels, xaxis: slantLabels(-45) } },
+        ];
+        let printPrepared = false;
+        function prepareForPrint() {
+            if (printPrepared) return;
+            printPrepared = true;
+            const sel = document.querySelector('#reportPeriod');
+            document.querySelector('#rpPrintPeriod').textContent = sel ? sel.value : '—';
+            document.querySelector('#rpPrintDate').textContent = 'Printed ' + new Date().toLocaleString('en-PH',
+                { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+            document.documentElement.classList.add('rp-print');
+            printCharts.forEach(({ chart, el, paper, paperX }) => {
+                const box = document.querySelector(el);
+                chart.updateOptions(Object.assign({ chart: { width: box.clientWidth, height: paper, animations: { enabled: false } } }, paperX || {}), false, false);
+            });
+        }
+        function restoreAfterPrint() {
+            if (!printPrepared) return;
+            printPrepared = false;
+            document.documentElement.classList.remove('rp-print');
+            printCharts.forEach(({ chart, screen, screenX }) => {
+                chart.updateOptions(Object.assign({ chart: { width: '100%', height: screen, animations: { enabled: true } } }, screenX || {}), false, false);
+            });
+        }
+        function printReport() {
+            prepareForPrint();
+            /* one frame for the redrawn charts to land before the dialog opens */
+            requestAnimationFrame(() => setTimeout(() => window.print(), 50));
+        }
+        window.addEventListener('beforeprint', prepareForPrint);
+        window.addEventListener('afterprint', restoreAfterPrint);
     </script>
 </body>
 </html>

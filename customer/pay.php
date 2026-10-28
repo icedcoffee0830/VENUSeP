@@ -57,7 +57,11 @@ $payDemoBlocked = demo_mode_on() && !$payIsDemo;
 /* The receipt staff are reviewing, if one is in. Demo bookings never stored one. */
 $payReceipt = (!$payIsDemo && in_array($payCode, ['under_review', 'confirmed'], true)) ? booking_receipt($payB['id']) : null;
 
-$paySent = in_array($_GET['sent'] ?? '', ['accepted', 'manual_review', 'cash', 'limit'], true) ? $_GET['sent'] : '';
+$paySent = in_array($_GET['sent'] ?? '', ['accepted', 'manual_review', 'cash', 'cash_cancelled', 'limit'], true) ? $_GET['sent'] : '';
+/* THE CASH CHOICE (2026-10-28): a customer who chose to pay in cash — at the
+   hostel front desk or the venue cashier — has GCash closed until they cancel
+   that choice (customer/payment-submit.php). Hostel first, venues since. */
+$payCashLocked = $payCode === 'await_cash';
 
 /* The 5-attempt rule (DB-DECISIONS #6): uploads made, uploads allowed. A demo
    booking has neither, so it simply starts at 0 of 5. */
@@ -86,12 +90,13 @@ header('Cache-Control: private, no-store');
 /* One sentence for every state that is NOT "pay now". */
 function pay_state_note(array $b, $code) {
     switch ($code) {
-        case 'locked':      return ['Waiting for approval', 'Staff are reviewing your ID and reservation. Payment opens here once they approve it.'];
+        case 'locked':      return ['Waiting for approval', 'Staff are reviewing your ID and reservation. Payment opens here once they approve it.'
+                                . (!empty($b['payToUse']) ? ' Then pay before you check in — here by GCash, or in cash at the front desk.' : '')];
         case 'await_event': return ['Payment opens after your event', 'This booking is paid after it happens. Payment opens ' . $b['payment']['opensLabel'] . ' and is due by ' . $b['payment']['payByLabel'] . '.'];
         case 'await_pos':   return ['Waiting for your POS', 'Hostel staff are getting your POS (order of payment) from CEDU. Payment opens here as soon as it is recorded.'];
         case 'confirmed':
         case 'paid_cash':   return ['Paid', 'Your payment is confirmed. Nothing more to do.'];
-        case 'expired':     return ['This booking expired', 'It was not paid before its deadline, so the dates were released.'];
+        case 'expired':     return ['This booking expired', $b['expiryNote'] ?: 'It was not paid before its deadline, so the dates were released.'];
         default:            return ['Nothing to pay here', 'This booking is not waiting on a payment.'];
     }
 }
@@ -113,6 +118,8 @@ function pay_state_note(array $b, $code) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/600.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/700.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
+    <script src="../assets/js/confirm-modal.js"></script>
     <!-- Tesseract.js — in-browser OCR for the GCash receipt checker (needs internet) -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
@@ -197,7 +204,9 @@ function pay_state_note(array $b, $code) {
               <?php elseif ($paySent === 'limit'): ?>
                 <div class="pay-note is-bad" role="status"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><div><strong>That was your last receipt attempt</strong>The receipt could not be accepted automatically, and you have now used all <?php echo $payAllowed; ?> attempts. Staff will review your payment and contact you.</div></div>
               <?php elseif ($paySent === 'cash'): ?>
-                <div class="pay-note is-ok" role="status"><i class="bi bi-check-circle" aria-hidden="true"></i><div><strong>Noted — you will pay in cash</strong>Pay at <?php echo bh_e($payCash['where']); ?> and quote your reference. Staff record it there.</div></div>
+                <div class="pay-note is-ok" role="status"><i class="bi bi-check-circle" aria-hidden="true"></i><div><strong>Noted — you will pay in cash</strong>Pay at <?php echo bh_e($payCash['where']); ?> and quote your reference. Staff record it there.<?php echo $payCashLocked ? ' Changed your mind? Cancel it below to pay by GCash instead.' : ''; ?></div></div>
+              <?php elseif ($paySent === 'cash_cancelled'): ?>
+                <div class="pay-note is-ok" role="status"><i class="bi bi-check-circle" aria-hidden="true"></i><div><strong>Cash payment cancelled</strong>GCash is open again. You can still choose to pay in cash at <?php echo bh_e($payCash['where']); ?>.</div></div>
               <?php endif; ?>
 
               <!-- the booking being paid -->
@@ -241,6 +250,9 @@ function pay_state_note(array $b, $code) {
               <?php else: ?>
                 <?php if ($payCode === 'overdue'): ?>
                   <div class="pay-note is-bad"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><div><strong>This payment is overdue</strong>It was due <?php echo bh_e($payB['payment']['payByLabel']); ?>. It can still be paid, but staff may release the slot.</div></div>
+                <?php elseif (!empty($payB['payToUse'])): ?>
+                  <!-- the hostel is pay to use (2026-10-27, DB-DECISIONS #26) -->
+                  <div class="pay-note is-info"><i class="bi bi-info-circle" aria-hidden="true"></i><div><strong>Pay before you check in</strong>Pay here by GCash, or in cash at the front desk when you arrive. If it is not paid by the end of <?php echo bh_e($payB['payment']['payByLabel']); ?>, the beds are released. You get your bed once the stay is paid.</div></div>
                 <?php endif; ?>
                 <!-- [4b] the payment itself — drawn by the script below -->
                 <div id="payApp"></div>
@@ -265,6 +277,7 @@ function pay_state_note(array $b, $code) {
           'account'   => $payAccount,                       /* null = no GCash for this venue */
           'method'    => $payCode === 'await_cash' ? 'cash' : 'gcash',
           'cashChosen'=> $payCode === 'await_cash',
+          'cashLocked'=> $payCashLocked,                        /* cash chosen -> GCash closed until cancelled */
           'cash'      => $payCash,
           'hostel'    => $payIsHostel,
           'used'      => $payUsed,                          /* GCash receipt uploads so far (5-attempt rule) */
@@ -274,7 +287,7 @@ function pay_state_note(array $b, $code) {
       const CSRF = <?php echo json_encode($payCsrf); ?>;
 
       /* `state` and render() are what the shared checker drives. */
-      const state = { ocr: null, agreeExact: false, method: PAY.account ? PAY.method : 'cash', sending: false, error: null };
+      const state = { ocr: null, agreeExact: false, method: (PAY.account && !PAY.cashLocked) ? PAY.method : 'cash', sending: false, error: null };
 
       function gcAccount()          { return PAY.account || { name: '', number: '' }; }
       function gcExpectedCentavos() { return PAY.centavos; }
@@ -283,7 +296,7 @@ function pay_state_note(array $b, $code) {
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
       function fmtNumber(n) { return String(n || '').replace(/^(\d{4})(\d{3})(\d{4})$/, '$1 $2 $3'); }
-      function setMethod(m) { if (m === 'gcash' && !PAY.account) return; state.method = m; state.error = null; render(); }
+      function setMethod(m) { if (m === 'gcash' && (!PAY.account || PAY.cashLocked)) return; state.method = m; state.error = null; render(); }
       function toggleAgree(el) { state.agreeExact = !!el.checked; render(); }
 
       /* The receipt panel: upload zone -> OCR progress -> verdict card (same three
@@ -418,14 +431,43 @@ function pay_state_note(array $b, $code) {
           `<button type="button" class="pay-method${state.method === m ? ' is-on' : ''}" ${off ? 'disabled style="opacity:.5;cursor:not-allowed"' : ''} onclick="setMethod('${m}')"><b>${title}</b><span>${sub}</span></button>`;
         el.innerHTML = `
           <div class="pay-methods" role="group" aria-label="Payment method">
-            ${methodBtn('gcash', 'GCash', PAY.account ? 'Send online, then upload your receipt' : 'Not available for this venue yet', !PAY.account)}
+            ${methodBtn('gcash', 'GCash',
+                PAY.cashLocked ? 'Closed while you pay in cash — cancel below to use GCash'
+                  : (PAY.account ? 'Send online, then upload your receipt' : 'Not available for this venue yet'),
+                !PAY.account || PAY.cashLocked)}
             ${methodBtn('cash', PAY.hostel ? 'Cash — hostel front desk' : 'Cash — at the office', 'Pay in person; staff record it')}
           </div>
           ${cash ? cashBody() : gcashBody()}
           <button type="button" class="pay-btn" ${ready && !state.sending ? '' : 'disabled'} onclick="submitPayment()">${
-            state.sending ? 'Sending…' : (cash ? (PAY.cashChosen ? 'You chose cash — pay at the office' : 'I will pay in cash') : 'Submit receipt')}</button>
+            state.sending ? 'Sending…' : (cash ? (PAY.cashChosen ? (PAY.hostel ? 'You chose cash — pay at the front desk' : 'You chose cash — pay at the office') : 'I will pay in cash') : 'Submit receipt')}</button>
+          ${PAY.cashLocked ? `<button type="button" class="pay-btn" style="background:#fff;color:#a11626;border:1.5px solid #a11626;margin-top:10px" ${state.sending ? 'disabled' : ''} onclick="cancelCash()">Cancel cash payment — pay by GCash instead</button>` : ''}
           ${state.error ? `<div class="pay-err" role="alert">${esc(state.error)}</div>` : ''}
           <div class="pay-small">${cash ? 'Your booking stays as it is until staff record the payment.' : 'Staff confirm every GCash payment against the business GCash history.'} Need help? <a href="faq.php" style="color:#a11626;font-weight:600">Check the FAQ</a></div>`;
+      }
+
+      /* THE CASH CHOICE (2026-10-28): take back "I will pay in cash" — at the
+         hostel front desk or the venue cashier. GCash opens again, and staff
+         stop seeing their cash button. The server refuses it once staff have
+         already recorded the cash. */
+      async function cancelCash() {
+        if (state.sending) return;
+        if (!(await venusepConfirm('You will pay by GCash instead. Staff will no longer expect cash from you at ' + PAY.cash.where + '.',
+              { title: 'Cancel your cash payment?', okLabel: 'Yes, cancel cash', cancelLabel: 'Keep paying cash' }))) return;
+        const fd = new FormData();
+        fd.append('csrf', CSRF);
+        fd.append('booking', PAY.ref);
+        fd.append('method', 'cancel_cash');
+        state.sending = true; state.error = null; render();
+        try {
+          const res = await fetch('payment-submit.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+          const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });
+          if (!out.ok) { state.sending = false; state.error = out.message || 'Nothing was changed.'; render(); return; }
+          location.href = 'pay.php?booking=' + encodeURIComponent(PAY.ref) + '&sent=cash_cancelled';
+        } catch (e) {
+          state.sending = false;
+          state.error = 'Could not reach the server, so nothing was changed.';
+          render();
+        }
       }
 
       /* Send it FOR REAL. The server recomputes the verdict against the database

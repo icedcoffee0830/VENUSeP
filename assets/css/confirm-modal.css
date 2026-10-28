@@ -3,9 +3,10 @@
    confirm()/alert() ("localhost says...") with something that actually
    looks like the rest of the app.
 
-   Used by: venusepConfirm() / venusepAlert() in assets/js/confirm-modal.js.
-   Include both on any admin or customer page that asks a yes/no question
-   or reports a result — never call window.confirm()/window.alert() directly.
+   Used by: venusepConfirm() / venusepAlert() / venusepPrompt() in
+   assets/js/confirm-modal.js. Include both on any admin or customer page that
+   asks a yes/no question, asks for a value, or reports a result — never call
+   window.confirm()/window.alert()/window.prompt() directly.
    ===================================================================== */
 .vz-modal-overlay {
   position: fixed;
@@ -98,6 +99,23 @@
 .vz-modal.vz-danger .vz-modal-btn.vz-ok { background: #a11626; }
 .vz-modal.vz-danger .vz-modal-btn.vz-ok:hover { background: #7d0f1e; }
 .vz-modal-btn:focus-visible { outline: 2px solid #a11626; outline-offset: 2px; }
+
+/* venusepPrompt(): one labelled field, e.g. a password re-entry */
+.vz-modal-field { margin: -6px 0 18px; text-align: left; }
+.vz-modal-label { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: #4a463f; }
+.vz-modal-input {
+  width: 100%;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 13px;
+  border: 1.5px solid rgba(0, 0, 0, 0.14);
+  border-radius: 11px;
+  font: inherit;
+  font-size: 14px;
+  color: #1f1e1e;
+  background: #fff;
+}
+.vz-modal-input:focus { outline: none; border-color: #a11626; box-shadow: 0 0 0 3px rgba(161, 22, 38, 0.12); }
 
 @media (max-width: 420px) {
   .vz-modal { padding: 22px 18px 16px; }

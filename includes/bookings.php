@@ -53,6 +53,7 @@ function bookings_query(array $opts = []) {
     if ($pdo === null) {
         return [];
     }
+    venusep_expire_due_bookings();   /* lapse what is due before showing it (includes/db.php) */
 
     $where = [];
     $args  = [];
@@ -68,7 +69,7 @@ function bookings_query(array $opts = []) {
         SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
                b.is_usep_affiliated, b.affiliation_verified,
                b.room_price, b.discount_percent, b.discount_amount, b.total_amount,
-               b.refunds_allowed, b.current_deadline_at, b.receipt_attempts_allowed, b.submitted_at, b.approved_at,
+               b.refunds_allowed, b.pay_to_use, b.current_deadline_at, b.receipt_attempts_allowed, b.submitted_at, b.approved_at,
                b.completed_at, b.cancelled_at, b.customer_notes, b.staff_notes,
                c.id AS customer_id, c.full_name AS customer_name, c.phone AS customer_phone,
                c.university_id_no, u.email AS customer_email, c.contact_email,
@@ -219,9 +220,11 @@ function booking_shape(array $row) {
         'paymentCode'        => $row['payment_status'],
 
         'method'        => $row['payment_method'] === 'cash' ? 'Cash' : 'GCash',
+        'methodCode'    => $row['payment_method'],               // null = not chosen yet (an online hostel stay, 2026-10-27)
         'isUsep'        => (bool) $row['is_usep_affiliated'],
         'usepVerified'  => (bool) $row['affiliation_verified'],
         'refundsAllowed'=> (bool) $row['refunds_allowed'],
+        'payToUse'      => (bool) $row['pay_to_use'],          // hostel: pay before using the bed (2026-10-27)
         'refundStatus'  => $row['refund_status'],
         'refundFiledIso'=> $row['refund_requested_at'] ? date('Y-m-d', strtotime($row['refund_requested_at'])) : null,
         'refundOrPending' => (bool) $row['refund_or_pending'],
@@ -255,7 +258,7 @@ function booking_shape(array $row) {
        moment the event STARTS ("pay immediately on approval"), not on a date
        that is already behind us. Thirty-seven bookings displayed a pay-by date
        one day earlier than the one being enforced. */
-    $b['payment'] = payment_policy_for($b['refundsAllowed'], $firstIso ?: date('Y-m-d'), $lastBooked);
+    $b['payment'] = payment_policy_for($b['payToUse'] ? 'pay_to_use' : $b['refundsAllowed'], $firstIso ?: date('Y-m-d'), $lastBooked);
     if (!empty($row['current_deadline_at'])) {
         $ts = strtotime($row['current_deadline_at']);
         $b['payment']['payByTs']    = $ts;
@@ -264,8 +267,40 @@ function booking_shape(array $row) {
         $b['payment']['late']       = $b['payment']['policy'] === 'prepay'
                                         && $ts <= strtotime(($firstIso ?: date('Y-m-d')) . ' 23:59:59');
     }
+
+    /* WHY a released booking was released, in plain words (2026-10-27). A
+       request nobody approved before its date reads "Expired" rather than
+       "Released": nothing was ever held for the customer to lose, and nothing
+       was charged. sp_expire_due_bookings() decides it; this only explains it. */
+    $b['neverApproved'] = $row['reservation_status'] === 'released' && $row['approved_at'] === null;
+    $b['expiryNote']    = null;
+    if ($b['neverApproved']) {
+        $b['bookingStatus']      = 'Expired';
+        $b['bookingStatusStaff'] = 'Request expired (never approved)';
+        $b['expiryNote'] = 'Not approved before your ' . ($b['type'] === 'hostel' ? 'check-in' : 'event')
+                         . ' date, so the request expired. Nothing was charged.';
+    } elseif ($row['reservation_status'] === 'released') {
+        $b['expiryNote'] = 'Not paid by the deadline, so the ' . ($b['type'] === 'hostel' ? 'beds were' : 'date was') . ' released.';
+    }
+
     $b['refundable'] = cb_is_refundable($b);
     return $b;
+}
+
+/* What to tell someone whose venue slot sp_add_venue_slot() refused (45000).
+   The procedure says why; this turns it into a sentence for a person. */
+function venue_slot_refusal_message(PDOException $e) {
+    $m = $e->getMessage();
+    if (stripos($m, 'cleanup gap') !== false) {
+        $gap = venue_cleanup_gap_minutes();
+        return 'That time is too close to another booking on the same day. Bookings need '
+             . ($gap % 60 === 0 ? ($gap / 60) . ' hour' . ($gap === 60 ? '' : 's') : $gap . ' minutes')
+             . ' free before and after them for cleanup. Please pick another time.';
+    }
+    if (stripos($m, 'maintenance') !== false) {
+        return 'The room is closed for maintenance on that date. Please pick another date.';
+    }
+    return 'That slot was taken while the booking was being made. Please pick another time.';
 }
 
 /* The logged-in customer's own bookings. */
@@ -351,6 +386,16 @@ function booking_queue_pay_key(array $b) {
    it stays true as days pass instead of ageing into a hard-coded lie. */
 function booking_queue_action(array $b) {
     $due = $b['payment']['payByLabel'];
+    /* a pay-to-use hostel stay (2026-10-27): paid before the bed is used */
+    if (!empty($b['payToUse']) && $b['paymentCode'] === 'await_cash') {
+        return 'Guest will pay cash at the front desk · by end of ' . $due;
+    }
+    if (!empty($b['payToUse']) && $b['paymentCode'] === 'await_gcash') {
+        return 'Pay before check-in · by end of ' . $due . ' · GCash, or the guest chooses cash';
+    }
+    if (!empty($b['payToUse']) && in_array($b['paymentCode'], ['confirmed', 'paid_cash'], true) && $b['reservationCode'] === 'approved') {
+        return !empty($b['checkedIn']) ? 'Paid · guest checked in' : 'Paid · ready for check-in';
+    }
     switch ($b['paymentCode']) {
         case 'locked':
             return $b['reservationCode'] === 'pending' ? 'Review the submitted ID' : 'Payment locked';
@@ -368,7 +413,7 @@ function booking_queue_action(array $b) {
             return $b['refundsAllowed']
                 ? 'Pre-pay booking · deadline passed ' . $due . ' · slot releasable'
                 : 'Post-pay window ended ' . $due . ' · still payable · follow up';
-        case 'expired':           return 'Never paid · hold released';
+        case 'expired':           return !empty($b['neverApproved']) ? 'Never approved · request expired' : 'Never paid · hold released';
         case 'refund_requested':  return 'All documents in · verify';
         case 'refund_await_or':   return 'Receipts in · OR still to come';
         case 'refund_correction': return 'Returned to the customer · waiting on them';
@@ -634,6 +679,24 @@ function calendar_events($customerId = null) {
     ];
 
     $bookings = $customerId ? bookings_for_customer($customerId) : bookings_all();
+
+    /* A venue booking holds TIMES, not whole days (2026-10-27: several bookings
+       can share a date, with a cleanup gap), so its title says which hours —
+       read from the first day it holds. One query for every booking. */
+    $firstSlot = [];
+    $pdo = venusep_db();
+    if ($pdo !== null) {
+        try {
+            foreach ($pdo->query('SELECT booking_id, slot_date, start_time, end_time FROM venue_booking_slots ORDER BY slot_date, start_time') as $s) {
+                if (!isset($firstSlot[$s['booking_id']])) {
+                    $firstSlot[$s['booking_id']] = date('g:i A', strtotime($s['start_time'])) . '–' . date('g:i A', strtotime($s['end_time']));
+                }
+            }
+        } catch (PDOException $e) {
+            $firstSlot = [];
+        }
+    }
+
     $events = [];
     foreach ($bookings as $b) {
         if (!$b['eventDateIso']) {
@@ -652,10 +715,11 @@ function calendar_events($customerId = null) {
             $end = date('Y-m-d', strtotime($b['endDateIso'] . ' +1 day'));
         }
 
+        $hours = ($b['type'] === 'venue' && isset($firstSlot[$b['id']])) ? $firstSlot[$b['id']] . ' · ' : '';
         $event = [
-            'title'           => $customerId
+            'title'           => $hours . ($customerId
                                     ? $b['eventName']
-                                    : $b['eventName'] . ' · ' . $b['roomName'],
+                                    : $b['eventName'] . ' · ' . $b['roomName']),
             'start'           => $b['eventDateIso'],
             'backgroundColor' => $c[0],
             'borderColor'     => $c[0],

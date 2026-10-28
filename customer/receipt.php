@@ -186,7 +186,7 @@ header('Cache-Control: private, no-store');
           <div class="container-fluid">
             <div class="rc-wrap">
               <div class="rc-bar">
-                <a class="rc-back" href="booking-history.php"><i class="bi bi-arrow-left" aria-hidden="true"></i>Booking History</a>
+                <a class="rc-back" href="booking-history.php" onclick="if (document.referrer.indexOf(location.origin) === 0 && history.length > 1) { history.back(); return false; }"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back</a>
                 <div class="rc-tools">
                   <a class="rc-btn" href="../receipt-pdf.php?booking=<?php echo urlencode($rcRef); ?>"><i class="bi bi-download" aria-hidden="true"></i>Download PDF</a>
                   <?php if ($rcFlash !== 'sent'): ?>

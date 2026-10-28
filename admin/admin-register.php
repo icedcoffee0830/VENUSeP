@@ -27,6 +27,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <!-- shared VENUSeP modal: your password, before creating an administrator -->
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
+    <script src="../assets/js/confirm-modal.js"></script>
     <style>
       /* ==================================================================
          AUTH UI — split layout (customer-login + customer-register share it)
@@ -69,6 +72,12 @@
       .auth-heading { margin-bottom: 26px; text-align: center; }
       .auth-title { font-family: var(--font-display); font-size: 30px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 8px; }
       .auth-subtitle { color: var(--muted); font-size: 14px; line-height: 1.55; margin: 0; }
+      /* staff or administrator (2026-10-27) */
+      .role-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 18px; }
+      .role-option { display: flex; gap: 9px; align-items: flex-start; border: 1.5px solid rgba(0,0,0,.12); border-radius: 12px; padding: 11px 12px; cursor: pointer; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+      .role-option b { display: block; font-size: 14px; color: #1f1e1e; }
+      .role-option input { margin-top: 3px; accent-color: #a11626; flex: none; }
+      .role-option:has(input:checked) { border-color: #a11626; background: #fbf4f4; }
 
 /* fields: pill inputs with a leading icon; the label stays for screen readers */
       .form-group { margin-bottom: 14px; }
@@ -145,18 +154,28 @@
         <div class="auth-card">
           <a class="auth-brand" href="admin-login.php" title="VENUSeP staff"><img src="../logo/Logo Header 3.png" alt="VENUSeP" /></a>
           <div class="auth-heading">
-            <h1 class="auth-title" id="adminRegisterTitle">Create a staff account</h1>
-            <p class="auth-subtitle">Choose the venue this staff account belongs to.</p>
+            <h1 class="auth-title" id="adminRegisterTitle">Create a staff or admin account</h1>
+            <p class="auth-subtitle" id="roleSubtitle">Staff handle one venue's bookings. Choose which venue below.</p>
+          </div>
+
+          <!-- WHICH KIND OF ACCOUNT (2026-10-27). An administrator handles every
+               venue, so they get no venue; creating one asks for YOUR password
+               (register-submit.php re-checks it), and they set up two-step
+               verification the first time they sign in. -->
+          <div class="role-pick" role="radiogroup" aria-label="Account type">
+            <label class="role-option"><input type="radio" name="account_role" value="staff" checked> <span><b>Staff</b> One venue's bookings</span></label>
+            <label class="role-option"><input type="radio" name="account_role" value="admin"> <span><b>Administrator</b> Everything, every venue</span></label>
           </div>
 
           <!-- Venue options come from the venues table through includes/venues.php. -->
           <form id="adminRegisterForm" action="" method="post" novalidate data-auth-form="register" data-redirect="admin-login.php" data-success-target="registrationSuccessMessage" data-success-message="Account created successfully. Redirecting to login...">
-            <div class="form-group">
+            <div class="form-group" id="venueGroup">
               <label for="staffVenue" class="form-label">Venue</label>
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-building" aria-hidden="true"></i></span>
-                <select id="staffVenue" name="venue_id" aria-describedby="venueValidation">
-                  <option value="">Unassigned</option>
+                <select id="staffVenue" name="venue_id" aria-describedby="venueValidation" required>
+                  <!-- no "Unassigned": every staff account handles one venue (2026-10-27) -->
+                  <option value="" disabled selected>Select the venue they will handle</option>
                   <?php foreach ($venuesById as $venueId => $venueName): ?>
                     <option value="<?php echo (int) $venueId; ?>"><?php echo htmlspecialchars($venueName, ENT_QUOTES, 'UTF-8'); ?></option>
                   <?php endforeach; ?>
@@ -235,6 +254,18 @@
         });
 
         const CSRF = <?php echo json_encode(csrf_token()); ?>;
+
+        /* Staff or Administrator: an administrator has no venue to choose. */
+        function regRole() { const r = document.querySelector('[name="account_role"]:checked'); return r ? r.value : 'staff'; }
+        document.querySelectorAll('[name="account_role"]').forEach(function (r) {
+          r.addEventListener('change', function () {
+            const admin = regRole() === 'admin';
+            document.getElementById('venueGroup').hidden = admin;
+            document.getElementById('roleSubtitle').textContent = admin
+              ? 'Administrators handle every venue and every setting. You will confirm with your own password, and they set up two-step verification at their first sign-in.'
+              : 'Staff handle one venue’s bookings. Choose which venue below.';
+          });
+        });
         document.querySelectorAll('[data-auth-form]').forEach(function (form) {
           form.querySelectorAll('input, select').forEach(function (field) {
             field.addEventListener(field.type === 'checkbox' || field.tagName === 'SELECT' ? 'change' : 'input', function () {
@@ -242,7 +273,7 @@
             });
           });
 
-          form.addEventListener('submit', function (event) {
+          form.addEventListener('submit', async function (event) {
             event.preventDefault();
             const email = form.querySelector('[name="email"]');
             const password = form.querySelector('[name="password"]');
@@ -265,6 +296,13 @@
             setFieldState(confirmPassword, 'confirmPasswordValidation', confirmError);
             setFieldState(terms, 'termsValidation', termsError);
             hasError = hasError || Boolean(fullNameError || contactError || passwordError || confirmError || termsError);
+            /* every staff account handles one venue — no unassigned staff.
+               An administrator handles all of them, so has none. */
+            const isAdmin = regRole() === 'admin';
+            const venue = form.querySelector('[name="venue_id"]');
+            const venueError = isAdmin || (venue && venue.value) ? '' : 'Choose the venue this staff member will handle.';
+            if (venue) setFieldState(venue, 'venueValidation', venueError);
+            hasError = hasError || Boolean(venueError);
 
             const emailError = email.value.trim() && email.checkValidity() ? '' : 'Please enter a valid email address.';
             setFieldState(email, 'emailValidation', emailError);
@@ -283,11 +321,22 @@
 
                The admin stays signed in as themselves afterwards: they created
                an account, they did not become it. */
+            /* An administrator can do everything, so creating one needs YOUR
+               password — a borrowed admin session must not be enough. */
+            let creatorPw = null;
+            if (isAdmin) {
+              creatorPw = await venusepPrompt(
+                (form.querySelector('[name="full_name"]').value.trim() || 'This person') + ' will be able to change every setting, venue, payment account and staff account.',
+                { title: 'Create an administrator?', label: 'Your own admin password', inputType: 'password',
+                  autocomplete: 'current-password', okLabel: 'Create administrator', danger: true });
+              if (creatorPw === null) return;          /* cancelled — nothing sent */
+            }
             const submitBtn = form.querySelector('button[type="submit"]');
             if (submitBtn) submitBtn.disabled = true;
             const body = new FormData(form);
             body.append('csrf', CSRF);
-            body.append('kind', 'staff');
+            body.append('kind', isAdmin ? 'admin' : 'staff');
+            if (isAdmin) { body.delete('venue_id'); body.append('creator_password', creatorPw); }
             fetch('../register-submit.php', { method: 'POST', body: body, credentials: 'same-origin' })
               .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
               .then(function (out) {
@@ -302,7 +351,7 @@
                   else { setMessage(form.dataset.successTarget, out.message || 'The account was not created.'); }
                   return;
                 }
-                setMessage(form.dataset.successTarget, 'Staff account created. Returning to the dashboard…');
+                setMessage(form.dataset.successTarget, (isAdmin ? 'Administrator account created — they set up two-step verification at their first sign-in.' : 'Staff account created.') + ' Returning to the dashboard…');
                 window.setTimeout(function () { window.location.href = 'Admin_Dashboard.php'; }, 900);
               })
               .catch(function () {

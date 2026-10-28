@@ -197,3 +197,45 @@ Layouts (`resources/views/layouts/*`), `routes/web.php`, `bootstrap/app.php`,
 `app/Http/Middleware/*`, `app/Support/*`, `tests/TestCase.php` belong to the integrator
 (the main session). If you truly need a change there, make the smallest change, and say so
 in your final report so it can be reconciled at merge time.
+
+## Auto-tester (`php artisan venusep:check`)
+
+Requests every GET page (every route named `admin.*`, `customer.*`, `root.*`) as **guest,
+customer** (customer@gmail.com), **staff** (staff@gmail.com) and **admin** (admin@gmail.com),
+internally through Laravel's HTTP kernel — no server, no browser needed.
+
+```
+cd laravel
+C:\xamp5\php\php.exe artisan venusep:check
+```
+
+Options:
+
+| option | what it does |
+|---|---|
+| `--only=admin.booking` | only routes whose NAME starts with this |
+| `--role=customer` | only one role (guest, customer, staff, admin) |
+| `--db=venusep_laravel_test_abook` | run against another copy (default: the one in `.env`). It **refuses** the real `venusep`. |
+| `--in-process` | everything in this one PHP process (default: one worker process per role, in parallel) |
+| `--browser` | also load every page that answered 200 in Edge/Chrome via Playwright and record console errors, JS errors and failed requests. Needs a running `php artisan serve` (`--base-url=http://127.0.0.1:8000` is the default) and a Playwright package already installed (e.g. the global `@playwright/cli`); it downloads nothing. Other sites (CDNs, fonts) are blocked unless `--browser-external`. |
+
+How to read it: a table (route, role, status, result, first problem) and a summary line,
+then the paths of the full report: `laravel/storage/app/venusep-check/<timestamp>.html` (open it
+in a browser; filter buttons per result) and `.json`. Results:
+
+- **ok** — answered without problems (a redirect is ok: e.g. a guest sent to the sign-in page).
+- **failing** — 5xx, an exception, PHP/Laravel error text in the page, a broken internal link or
+  a missing asset (a `href`/`src` that matches no route and no file in `public/`), or a page that
+  killed its worker process (`exit`, fatal error). Any failure → exit code 1.
+- **warnings** — a page answering 4xx, a `<form method="post">` without `@csrf`, output echoed
+  outside the response, browser-pass findings. Do not change the exit code.
+- **not ported** — still the 501 placeholder. **needs params** — the page reads a `?query` value
+  and nothing suitable was found in the database (values ARE filled in where they can be: the
+  latest booking reference — the customer's own for the customer, one at staff's venue for staff —,
+  the first room/venue, `?counter=1` for staff on the booking pages). **skipped** — the role could
+  not sign in (e.g. "admin needs 2FA set up": on a database whose name does not start with
+  `venusep_laravel_test` the checker does not give admin@gmail.com a 2FA key itself).
+
+Each request gets a fresh session. Pages may still write while being viewed (e.g.
+`sp_expire_due_bookings`) — another reason it only runs against the Laravel copies.
+Exit codes: 0 no failures, 1 failures, 2 refused / bad option / database unreachable.

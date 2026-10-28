@@ -100,6 +100,7 @@ class VenusepCheck extends Command
             foreach ($browser['notes'] ?? [] as $note) {
                 $notes[] = 'browser: ' . $note;
             }
+            $results = BrowserPass::merge($results, $browser['pages'] ?? []);
         }
 
         $counts = Report::summary($results);

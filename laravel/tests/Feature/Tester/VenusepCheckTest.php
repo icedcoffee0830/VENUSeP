@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Tester;
 
+use App\Console\VenusepCheck\BrowserPass;
 use App\Http\Controllers\PendingController;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -161,5 +162,20 @@ class VenusepCheckTest extends TestCase
         $this->artisan('venusep:check', ['--only' => 'customer.room-reservation', '--role' => 'staff', '--in-process' => true]);
         $r = $this->row($this->lastReport(), 'customer.room-reservation', 'staff');
         $this->assertStringContainsString('counter=1', $r['url']);   // staff open the booking pages at the counter
+    }
+
+    public function test_browser_findings_join_the_page_row_as_warnings(): void
+    {
+        $rows = [['route' => 'admin.dashboard', 'role' => 'staff', 'result' => 'ok', 'problems' => []],
+            ['route' => 'admin.dashboard', 'role' => 'admin', 'result' => 'ok', 'problems' => []]];
+        $merged = BrowserPass::merge($rows, [
+            ['route' => 'admin.dashboard', 'role' => 'staff', 'problem' => true, 'pageErrors' => ['x is not defined'],
+                'consoleErrors' => [], 'failedRequests' => ['http://127.0.0.1:8000/assets/a.js (HTTP 404)']],
+            ['role' => 'staff', 'note' => 'blocked other sites: cdn.jsdelivr.net'],
+        ]);
+        $this->assertSame('warn', $merged[0]['result']);
+        $this->assertSame([['warn', 'browser JS error: x is not defined'],
+            ['warn', 'browser failed request: http://127.0.0.1:8000/assets/a.js (HTTP 404)']], $merged[0]['problems']);
+        $this->assertSame('ok', $merged[1]['result']);
     }
 }

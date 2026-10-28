@@ -74,6 +74,34 @@ final class BrowserPass
         return $out + ['notes' => []];
     }
 
+    /* Browser findings join the page's row as warnings (not failures: with other
+       sites blocked, a page whose script needs a CDN library errors here only). */
+    public static function merge(array $results, array $pages): array
+    {
+        $found = [];
+        foreach ($pages as $p) {
+            if (empty($p['problem'])) {
+                continue;
+            }
+            foreach (['pageErrors' => 'JS error', 'consoleErrors' => 'console error', 'failedRequests' => 'failed request'] as $key => $label) {
+                foreach ($p[$key] ?? [] as $text) {
+                    $found[$p['route'] . '|' . $p['role']][] = ['warn', "browser {$label}: {$text}"];
+                }
+            }
+        }
+        foreach ($results as &$r) {
+            foreach ($found[$r['route'] . '|' . $r['role']] ?? [] as $problem) {
+                $r['problems'][] = $problem;
+            }
+            if (isset($found[$r['route'] . '|' . $r['role']])) {
+                $r['result'] = PageProbe::verdict($r['problems']);
+            }
+        }
+        unset($r);
+
+        return $results;
+    }
+
     public const HOW_TO = 'To enable the browser pass: install Node.js, have playwright (or @playwright/cli) installed '
         . '(npm i -g @playwright/cli), an installed Edge or Chrome (set VENUSEP_BROWSER_CHANNEL=chrome to pick Chrome), '
         . 'and start the site first: php artisan serve --port=8000.';

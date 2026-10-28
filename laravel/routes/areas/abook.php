@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\PendingController;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 /* Area: abook — see the ownership table in LARAVEL-PORT.md.
@@ -10,7 +11,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
 Route::get('/admin/booking-request', PendingController::class)->name('admin.booking-request');
-Route::match(['get', 'post'], '/admin/booking-action', PendingController::class)->name('admin.booking-action');
+/* JSON endpoint: answers 401 / 400 JSON itself (the old order), so it checks the CSRF token itself too. */
+Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)
+    ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-action');
 Route::match(['get', 'post'], '/admin/booking-create', PendingController::class)->name('admin.booking-create');
 Route::match(['get', 'post'], '/admin/booking-emails', PendingController::class)->name('admin.booking-emails');
 Route::get('/admin/calendar', PendingController::class)->name('admin.calendar');

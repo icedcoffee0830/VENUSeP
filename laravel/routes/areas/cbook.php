@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
 Route::get('/customer/venues', Customer\VenueBookingController::class)->name('customer.venues');   /* public: no guard */
-Route::get('/customer/room-reservation', PendingController::class)->name('customer.room-reservation');
+Route::get('/customer/room-reservation', Customer\RoomReservationController::class)->middleware('booking.access')->name('customer.room-reservation');
 Route::get('/customer/hostel-reservation', PendingController::class)->name('customer.hostel-reservation');
 Route::match(['get', 'post'], '/customer/booking-submit', PendingController::class)->name('customer.booking-submit');
 Route::get('/customer/calendar', PendingController::class)->name('customer.calendar');

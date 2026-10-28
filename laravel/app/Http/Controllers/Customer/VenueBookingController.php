@@ -14,12 +14,13 @@ use App\Http\Controllers\Controller;
    decides the discount at approval — legacy pricing.php). */
 class VenueBookingController extends Controller
 {
+    use CapturesLegacyOutput;
+
     public function __invoke()
     {
         extract(legacy('auth', 'venue-rooms', 'hostel-rooms', 'room-photos', 'venue-photos', 'customer-bookings'));
-        ob_start();
-        extract(legacy('pricing'));   /* PHP helpers now; the old page captured its JS block and never printed it */
-        ob_end_clean();
+        self::legacyOutput('pricing');   /* PHP helpers now; the old page captured its JS block and never printed it */
+        extract(legacy('pricing'));
         $isUsep = usep_is_account($customerContact['email']);
 
         $lpVenueNames = array_values(array_unique(array_column($venueRooms, 'venue')));

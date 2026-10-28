@@ -42,7 +42,10 @@ $navName  = $navAuthed && !empty($_SESSION['customer_name']) ? $_SESSION['custom
 $navFirst = explode(' ', trim($navName))[0];
 $navParts = preg_split('/\s+/', trim($navName));
 $navInit  = strtoupper(substr($navParts[0], 0, 1) . substr(end($navParts), 0, 1));
-$navHome  = $navSelf === 'venusep_venue_booking.php' ? '' : 'venusep_venue_booking.php';   /* anchors stay in-page on the landing */
+/* anchors stay in-page on the landing. In counter mode every link carries
+   counter=1, or one click drops staff into the customer pages (2026-10-27). */
+$navCounterQ = $navCounter ? '?counter=1' : '';
+$navHome  = $navSelf === 'venusep_venue_booking.php' ? '' : 'venusep_venue_booking.php' . $navCounterQ;
 $navLinks = [];
 foreach (array_values(array_unique(array_column($venueRooms, 'venue'))) as $navVenue) {   /* Bahay Alumni, USeP Venues, ... */
   $navSlug = 'venue-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($navVenue));           /* -> the landing page's group anchor */
@@ -52,7 +55,7 @@ $navLinks = array_merge($navLinks, [
   ['hostel',   $navHome . '#hostel-listings', $HOSTEL_VENUE],
   ['how',      $navHome . '#how',             'How it works'],
   ['bookings', 'booking-history.php',         'My bookings'],
-  ['faq',      'faq.php',                     'FAQ'],
+  ['faq',      'faq.php' . $navCounterQ,      'FAQ'],
 ]);
 if (!$navAuthed) {                                                      /* a guest has no bookings to show */
   $navLinks = array_values(array_filter($navLinks, function ($l) { return $l[0] !== 'bookings'; }));
@@ -132,6 +135,9 @@ echo demo_banner_html();
 <?php endforeach; ?>
     </nav>
     <div style="display:flex;align-items:center;gap:10px">
+<?php if ($navCounter || $navAuthed): ?>
+      <?php $nbLook = 'nav'; include __DIR__ . '/notification-bell.php'; /* notifications (2026-10-28): the customer's, or the staff member's at the counter */ ?>
+<?php endif; ?>
 <?php if ($navCounter): ?>
       <!-- COUNTER MODE: no Log in / Sign up. This screen runs on the STAFF
            session, and a customer signing in here would replace it — the app

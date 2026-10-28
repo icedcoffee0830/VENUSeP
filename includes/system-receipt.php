@@ -79,6 +79,51 @@ function receipt_issue(PDO $pdo, int $bookingId, int $actorUserId): ?int
     return (int) $pdo->lastInsertId();
 }
 
+/* Money landed: mark the booking paid, settle its payment row and issue its
+   System Receipt. Runs inside the CALLER's transaction — staff confirming a
+   payment (admin/booking-action.php), and the hostel counter, where the stay
+   is only recorded once the cash is taken (admin/booking-create.php,
+   2026-10-27). $asCash = staff took cash in hand, whatever method the booking
+   had: a pay-to-use guest may arrive and pay cash at the desk.
+   Returns the receipt id (null only if no confirmed payment came of it). */
+function payment_confirm(PDO $pdo, int $bookingId, int $actorUserId, string $note, bool $asCash = false): ?int
+{
+    $pdo->prepare('SET @venusep_actor_user_id = :a')->execute([':a' => $actorUserId]);
+    $pdo->prepare('SET @venusep_action_note = :n')->execute([':n' => $note !== '' ? $note : null]);
+    $pdo->prepare(
+        "UPDATE bookings
+            SET payment_method = IF(:c, 'cash', payment_method),
+                payment_status = IF(payment_method = 'cash', 'paid_cash', 'confirmed'),
+                updated_by_user_id = :u
+          WHERE id = :b"
+    )->execute([':c' => $asCash ? 1 : 0, ':u' => $actorUserId, ':b' => $bookingId]);
+    $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
+    /* The payment row is the money's own record, separate from the booking's
+       state — a booking says what it owes, a payment says what arrived.
+
+       SETTLE the row the customer's submission already created rather than
+       adding another. Inserting unconditionally gave one payment TWO rows,
+       an 'under_review' and a 'confirmed', for a single transfer — which
+       would have made the ledger describe money that never moved twice. */
+    $settle = $pdo->prepare(
+        "UPDATE payments SET payment_record_status = 'confirmed', confirmed_at = NOW(),
+                confirmed_by_user_id = :u
+          WHERE booking_id = :b AND payment_record_status IN ('submitted', 'under_review')"
+    );
+    $settle->execute([':u' => $actorUserId, ':b' => $bookingId]);
+    if ($settle->rowCount() === 0) {
+        /* Nothing was pending: a cash payment handed over at the counter,
+           which the customer side never records because no money moves
+           online. Staff confirming IS its first record. */
+        $pdo->prepare(
+            "INSERT INTO payments (booking_id, payment_method, amount, payment_record_status, paid_at, confirmed_at, confirmed_by_user_id)
+             SELECT id, COALESCE(payment_method, 'gcash'), total_amount, 'confirmed', NOW(), NOW(), :u
+               FROM bookings WHERE id = :b"
+        )->execute([':u' => $actorUserId, ':b' => $bookingId]);
+    }
+    return receipt_issue($pdo, $bookingId, $actorUserId);
+}
+
 /* What the receipt says, frozen. Deliberately NOT here: phone, university ID
    number, address, document paths — a receipt is sent and printed, so it
    carries nothing a stranger finding it could misuse. */

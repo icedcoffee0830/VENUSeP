@@ -16,7 +16,15 @@
      Existing call sites written as `if (!confirm(...)) return;` become
      `if (!(await venusepConfirm(...))) return;` inside an async function.
 
-   opts: { title, okLabel, cancelLabel, danger }
+   venusepPrompt(message, opts?) -> Promise<string|null>
+     Asks for ONE value — the replacement for prompt(). Resolves the typed
+     value on OK (or Enter), null on Cancel / Escape / click outside.
+     opts.inputType:'password' hides what is typed, which prompt() never
+     could: an admin re-entering a password at the payment settings had it
+     shown on screen (2026-10-27).
+
+   opts: { title, okLabel, cancelLabel, danger,
+           inputType, label, placeholder, autocomplete }   (the last four: prompt only)
      danger:true tints the icon/OK button red (destructive actions, e.g.
      Delete) instead of the neutral/dark default.
    ===================================================================== */
@@ -45,8 +53,16 @@
   function openDialog(message, opts, mode) {
     opts = opts || {};
     var danger = !!opts.danger;
-    var tone = mode === 'confirm' ? (danger ? 'vz-danger' : '') : (opts.tone === 'ok' ? 'vz-ok' : '');
-    var icon = danger ? ICONS.warning : (mode === 'confirm' ? ICONS.question : ICONS.info);
+    var asks = mode === 'confirm' || mode === 'prompt';      // both have Cancel + OK
+    var tone = asks ? (danger ? 'vz-danger' : '') : (opts.tone === 'ok' ? 'vz-ok' : '');
+    var icon = danger ? ICONS.warning : (asks ? ICONS.question : ICONS.info);
+    var field = mode === 'prompt'
+      ? '<div class="vz-modal-field">' +
+          (opts.label ? '<label class="vz-modal-label" for="vzPromptInput">' + escapeHtml(opts.label) + '</label>' : '') +
+          '<input class="vz-modal-input" id="vzPromptInput" data-vz="input" type="' + (opts.inputType === 'password' ? 'password' : 'text') + '"' +
+          ' placeholder="' + escapeHtml(opts.placeholder || '') + '" autocomplete="' + escapeHtml(opts.autocomplete || 'off') + '">' +
+        '</div>'
+      : '';
 
     return new Promise(function (resolve) {
       var overlay = document.createElement('div');
@@ -57,8 +73,9 @@
           '<div class="vz-modal-icon">' + icon + '</div>' +
           (opts.title ? '<div class="vz-modal-title">' + escapeHtml(opts.title) + '</div>' : '') +
           '<p class="vz-modal-message">' + escapeHtml(message) + '</p>' +
+          field +
           '<div class="vz-modal-actions' + (mode === 'alert' ? ' vz-single' : '') + '">' +
-            (mode === 'confirm' ? '<button type="button" class="vz-modal-btn vz-cancel" data-vz="cancel">' + escapeHtml(opts.cancelLabel || 'Cancel') + '</button>' : '') +
+            (asks ? '<button type="button" class="vz-modal-btn vz-cancel" data-vz="cancel">' + escapeHtml(opts.cancelLabel || 'Cancel') + '</button>' : '') +
             '<button type="button" class="vz-modal-btn vz-ok" data-vz="ok">' + escapeHtml(opts.okLabel || 'OK') + '</button>' +
           '</div>' +
         '</div>';
@@ -68,7 +85,10 @@
 
       var okBtn = overlay.querySelector('[data-vz="ok"]');
       var cancelBtn = overlay.querySelector('[data-vz="cancel"]');
+      var input = overlay.querySelector('[data-vz="input"]');
       var done = false;
+      /* a prompt answers with its value (or null); the others with true/false */
+      function answer(ok) { return input ? (ok ? input.value : null) : ok; }
 
       function close(result) {
         if (done) return;
@@ -83,13 +103,15 @@
         // Enter is deliberately left alone: a focused button already
         // activates on Enter natively, and this would otherwise override
         // whichever one — OK or Cancel — actually has focus.
-        if (e.key === 'Escape') { e.preventDefault(); close(false); }
+        if (e.key === 'Escape') { e.preventDefault(); close(answer(false)); }
       }
       document.addEventListener('keydown', onKey, true);
-      overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(false); });
-      if (okBtn) okBtn.addEventListener('click', function () { close(true); });
-      if (cancelBtn) cancelBtn.addEventListener('click', function () { close(false); });
-      setTimeout(function () { (okBtn || overlay).focus(); }, 0);
+      overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(answer(false)); });
+      if (okBtn) okBtn.addEventListener('click', function () { close(answer(true)); });
+      if (cancelBtn) cancelBtn.addEventListener('click', function () { close(answer(false)); });
+      /* Enter in the field submits, as it did in prompt() */
+      if (input) input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); close(answer(true)); } });
+      setTimeout(function () { (input || okBtn || overlay).focus(); }, 0);
     });
   }
 
@@ -101,6 +123,12 @@
 
   window.venusepConfirm = function (message, opts) {
     var run = queue.then(function () { return openDialog(message, opts, 'confirm'); });
+    queue = run.catch(function () {});
+    return run;
+  };
+
+  window.venusepPrompt = function (message, opts) {
+    var run = queue.then(function () { return openDialog(message, opts, 'prompt'); });
     queue = run.catch(function () {});
     return run;
   };

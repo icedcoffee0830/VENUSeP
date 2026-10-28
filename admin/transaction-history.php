@@ -17,7 +17,6 @@ require_once __DIR__ . '/../includes/bookings.php';
 $transactionRows = transaction_rows();     // every customer — this is the staff view
 $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
 ?>
-?>
 <!DOCTYPE html>
 <!-- ==================================================================
   MAP OF THIS FILE — Ctrl+F the [n] tag to jump:
@@ -132,7 +131,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 
       /* row action buttons */
       .th-actions { display: inline-flex; gap: 6px; }
-      .th-act { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: #1f1e1e; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
+      .th-act { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: #1f1e1e; font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
       .th-act:hover { background: #f4f2ee; border-color: #c9c2b6; }
       .th-act.is-disabled { opacity: .5; cursor: not-allowed; }
 
@@ -254,6 +253,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 
     <!-- Tabulator library (the only third-party script this page needs) -->
     <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
+    <script src="../assets/js/table-page-size.js"></script>
 
     <!-- ============================================================
          [6] PAGE SCRIPT — builds the table, filters, exports.
@@ -285,13 +285,10 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 
         const actionButtons = (cell) => {
           const row = cell.getRow().getData();
-          // View — the valid ID submitted with this booking (staff can open
-          // ANY booking's, the same rule admin/booking-request.php relies
-          // on). Always clickable: an ID is required at every booking
-          // (unlike the GCash receipt, which only exists once payment
-          // happens), so there is always something for valid-id-view.php
-          // (root) to show.
-          const viewBtn = `<a class="th-act" href="../valid-id-view.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
+          // View — the booking and its payment, in a modal over this page
+          // (includes/booking-details-modal.php, 2026-10-27). The valid ID is
+          // a link inside it; staff can open ANY booking's.
+          const viewBtn = `<button type="button" class="th-act" onclick="openBookingDetails('${encodeURIComponent(row.bookingId)}')"><i class="bi bi-eye"></i>View</button>`;
           // Receipt opens admin/receipt.php — the same styled "paper slip" view
           // customer/receipt.php shows, just gated for staff instead of the
           // booking's own customer (see that file's header for why it's separate).
@@ -300,7 +297,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
           // (Content-Disposition: attachment), so linking the button straight to
           // it here would never let staff just LOOK at the receipt in the tab.
           const receiptBtn = row.hasReceipt
-            ? `<a class="th-act" href="receipt.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i>Receipt</a>`
+            ? `<a class="th-act" href="receipt.php?booking=${encodeURIComponent(row.bookingId)}"><i class="bi bi-receipt"></i>Receipt</a>`
             : `<span class="th-act is-disabled" title="No System Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
           return `
             <div class="th-actions">
@@ -314,8 +311,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
           layout: 'fitDataStretch',
           placeholder: emptyTransactionMessage,
           pagination: true,
-          paginationSize: 10,
-          paginationSizeSelector: [10, 25, 50, 100],
+          paginationSize: 10,          /* the size box is assets/js/table-page-size.js: type a number, or pick 10 / 25 / 50 / 100 / All */
           movableColumns: true,
           initialSort: [{ column: 'transactionDate', dir: 'desc' }],
           columns: [
@@ -329,7 +325,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
             { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150 },
             { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
             { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 180, width: 180, hozAlign: 'center' },
+            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 180, width: 180, hozAlign: 'center', print: false },   /* buttons mean nothing on paper */
           ],
         });
 
@@ -381,8 +377,12 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
 
         document.getElementById('export-csv').addEventListener('click', () => table.download('csv', 'transaction-history.csv'));
         document.getElementById('export-json').addEventListener('click', () => table.download('json', 'transaction-history.json'));
-        document.getElementById('print-table').addEventListener('click', () => table.print(false, true));
+        /* Print exactly the rows on the current page; pick "All rows" in the page
+           size to print the whole (filtered) list. */
+        document.getElementById('print-table').addEventListener('click', () => table.print('visible', true));
+        venusepPageSize(table, [10, 25, 50, 100]);
       });
     </script>
+    <?php include __DIR__ . '/../includes/booking-details-modal.php'; /* "View" */ ?>
   </body>
 </html>

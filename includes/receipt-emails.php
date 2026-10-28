@@ -135,8 +135,8 @@ function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
 
     $details = re_rows([
         ['Room', bh_e($b['roomName']) . '<br><span style="color:#6e6a64;font-size:13px;">' . bh_e($b['venueName']) . '</span>'],
-        ['Event', bh_e($b['eventName'])],
-        [count($days) > 1 ? 'Dates' : 'Date', $when],
+        [$b['type'] === 'hostel' ? 'Stay' : 'Event', bh_e($b['eventName'])],
+        [$b['type'] === 'hostel' ? 'Dates' : (count($days) > 1 ? 'Dates' : 'Date'), $when],
     ]);
     $lines = (float) $b['discountAmount'] > 0
         ? [['Subtotal', receipt_money((float) $b['roomPrice'])],
@@ -145,8 +145,12 @@ function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
     $amounts = re_amounts($lines, 'Amount due', $due);
 
     $ref = '<strong style="color:#1d1214;">' . bh_e($b['bookingId']) . '</strong>';
-    if ($b['payment']['policy'] === 'postpay') {
-        $heading = 'Pay after your event';
+    if ($b['paymentCode'] === 'await_pos') {
+        /* a hostel stay booked at the counter (2026-10-27): the POS from CEDU comes first */
+        $heading = 'Payment opens with your POS';
+        $how = 'Hostel staff get your POS (order of payment) from CEDU; payment opens then, in cash at the front desk. Bring this reference: ' . $ref . '.';
+    } elseif ($b['payment']['policy'] === 'postpay') {
+        $heading = $b['type'] === 'hostel' ? 'Pay after your stay' : 'Pay after your event';
         $how = 'Payment opens ' . bh_e($b['payment']['opensLabel']) . ' and is due by ' . bh_e($b['payment']['payByLabel'])
              . '. Pay <strong style="color:#1d1214;">' . bh_e($due) . '</strong> in cash at the counter and bring this reference: ' . $ref . '.';
     } else {

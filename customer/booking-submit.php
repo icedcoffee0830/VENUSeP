@@ -133,7 +133,7 @@ if (demo_mode_on()) {
     }
     /* Priced by the SAME rule the real path uses, from the room's own rate —
        a demo that showed a made-up total would be demonstrating nothing. */
-    $policy = payment_policy_for($refundsAllowed, $first, $last);
+    $policy = payment_policy_for($type === 'hostel' ? 'pay_to_use' : $refundsAllowed, $first, $last);
     $row = demo_add_booking([
         'type' => $type, 'roomCode' => $roomCode, 'roomName' => $room['name'] ?? $roomCode,
         'venue' => $room['name'] ?? $roomCode, 'venueName' => $room['venue_name'] ?? '',
@@ -148,7 +148,7 @@ if (demo_mode_on()) {
         'bookingStatus' => 'Pending', 'paymentStatus' => 'Locked',
         'bookingStatusStaff' => 'Reservation pending review', 'paymentStatusStaff' => 'Payment locked',
         'method' => $method === 'cash' ? 'Cash' : 'GCash',
-        'refundsAllowed' => (bool) $refundsAllowed, 'refundable' => false,
+        'refundsAllowed' => (bool) $refundsAllowed, 'payToUse' => $type === 'hostel', 'refundable' => false,
         'refundStatus' => null, 'receiptVerdict' => null, 'payment' => $policy,
         'beds' => $type === 'hostel' ? ($beds ?? 0) : 0,
         'nights' => $type === 'hostel' ? ($nights ?? 0) : 0,
@@ -169,8 +169,9 @@ if (!$refundsAllowed && empty($_POST['agree_no_refund'])) {
 
 /* USeP Venues has no advance-notice requirement — same-day is fine as long as
    the slot hasn't passed yet. Bahay Alumni keeps the 12-hour rule. Mirrors
-   leadMsFor() in customer/room-reservation.php, which draws the same line. */
-$LEAD_HOURS = ($type === 'venue' && $room['venue_name'] === 'USeP Venues') ? 0 : 12;
+   leadMsFor() in customer/room-reservation.php, which draws the same line.
+   Venues only: the hostel takes same-day check-ins (see below). */
+$LEAD_HOURS = ($room['venue_name'] === 'USeP Venues') ? 0 : 12;
 
 /* ============================ VENUE ============================ */
 if ($type === 'venue') {
@@ -266,7 +267,7 @@ if ($type === 'venue') {
             error_log('VENUSeP booking-submit (venue): ' . $e->getMessage());
         }
         $msg = $e->getCode() === '45000'
-            ? 'That slot was taken while you were booking. Please pick another time.'
+            ? venue_slot_refusal_message($e)
             : 'Something went wrong, so your booking was not submitted.';
         bs_reply($e->getCode() === '45000' ? 409 : 500, ['ok' => false, 'message' => $msg]);
     }
@@ -294,9 +295,20 @@ if ($type === 'venue') {
     }
     /* Nights are EXCLUSIVE of check-out: Aug 1 -> Aug 4 is 3 nights. */
     $nights = (int) round((strtotime($checkOut) - strtotime($checkIn)) / 86400);
-    if (strtotime($checkIn . ' 14:00') - time() < $LEAD_HOURS * 3600) {
-        bs_reply(409, ['ok' => false, 'message' => 'Bookings must start at least ' . $LEAD_HOURS . ' hours from now.']);
+    /* SAME-DAY CHECK-IN IS ALLOWED (decided 2026-10-27): a guest who checks in
+       uses the room at once, so there is no advance-notice rule — only a past
+       date is refused. This used to demand 12 hours before a 2 PM check-in,
+       which quietly refused every booking for today while demo mode (which
+       stops before this line) accepted it. */
+    if ($checkIn < date('Y-m-d')) {
+        bs_reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
     }
+    /* PAY TO USE (decided 2026-10-27, DB-DECISIONS #26): the guest pays before
+       using the bed — GCash from Pay now once approved, or cash at the front
+       desk — so no method is chosen now (NULL). trg_bookings_type_ins marks the
+       stay pay_to_use; approval opens payment at once, due by the end of the
+       check-in day. */
+    $method = null;
 
     /* Priced per HEAD per NIGHT: beds x rate x nights. */
     $price = (float) $room['rate_per_head_per_night'] * count($clean) * $nights;
@@ -340,6 +352,9 @@ if ($type === 'venue') {
         $pdo->commit();
     } catch (PDOException $e) {
         if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        /* Same reason as the venue branch: without this line the failure is
+           invisible to everyone. */
+        error_log('VENUSeP booking-submit (hostel): ' . $e->getMessage());
         bs_reply(500, ['ok' => false, 'message' => 'Something went wrong, so your booking was not submitted.']);
     }
 
@@ -382,6 +397,16 @@ doc_store($bookingId, 'customer_id', $_FILES['id_document']['tmp_name'],
    and the slot is held. It surfaces to staff as a booking with no ID document,
    which is a thing they can chase — throwing away a valid booking over a failed
    file write would be worse. */
+
+/* Tell the venue's staff and the admins (2026-10-28). A new request is an
+   INSERT, which the booking timeline does not record, so it is announced
+   here. A failure costs a notification, never the booking. */
+require_once __DIR__ . '/../includes/notifications.php';
+try {
+    notify_new_request($pdo, $bookingId, (int) $_SESSION['user_id']);
+} catch (PDOException $e) {
+    error_log('VENUSeP booking-submit (notify): ' . $e->getMessage());
+}
 
 $submitted = $pdo->prepare('SELECT submitted_at FROM bookings WHERE id = :b');
 $submitted->execute([':b' => $bookingId]);

@@ -2,9 +2,10 @@
 /* =====================================================================
    REGISTER SUBMIT — the ONLY way an account is created.
 
-   POST  csrf, kind=customer|staff, full_name, email, contact_number,
+   POST  csrf, kind=customer|staff|admin, full_name, email, contact_number,
          password, confirm_password, terms
-         staff also: venue_id (optional), and the CALLER MUST ALREADY BE AN ADMIN
+         staff also: venue_id (required), and the CALLER MUST ALREADY BE AN ADMIN
+         admin also: creator_password — the CALLER's own password, re-checked
    Replies with JSON.
 
    One endpoint for both because the checks are the same and the only
@@ -18,6 +19,13 @@
                guards the page with admin_require_login(['admin']), but a
                page guard is not a security boundary: the endpoint is what
                someone would POST to directly.
+     admin     ADMINS ONLY, and the admin re-enters THEIR OWN password
+               (2026-10-27). An admin can do everything, so a borrowed admin
+               session must not be enough to mint another one. The check uses
+               the same users.reauth_* lockout as the refund switch and the
+               GCash accounts: one shared budget. The new admin has no venue
+               (admins handle all of them) and sets up two-step verification
+               on their first sign-in (admin-login.php enrols them).
 
    PASSWORDS are hashed with Argon2id (venusep_password_hash(),
    includes/passwords.php, DB-DECISIONS #21) and never logged, echoed or
@@ -57,11 +65,12 @@ if (!csrf_valid(isset($_POST['csrf']) ? $_POST['csrf'] : null)) {
     rg_reply(400, ['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
 }
 
-$kind = ($_POST['kind'] ?? '') === 'staff' ? 'staff' : 'customer';
+$kindRaw = (string) ($_POST['kind'] ?? '');
+$kind = in_array($kindRaw, ['staff', 'admin'], true) ? $kindRaw : 'customer';
 
-/* Creating a staff account is an ADMIN action, re-checked server-side. */
-if ($kind === 'staff' && !admin_is_admin()) {
-    rg_reply(403, ['ok' => false, 'message' => 'Only an administrator can create a staff account.']);
+/* Creating a staff or admin account is an ADMIN action, re-checked server-side. */
+if ($kind !== 'customer' && !admin_is_admin()) {
+    rg_reply(403, ['ok' => false, 'message' => 'Only an administrator can create a staff or admin account.']);
 }
 
 $name    = trim((string) ($_POST['full_name'] ?? ''));
@@ -102,9 +111,15 @@ if ($pdo === null) {
 }
 
 $venueId = null;
-if ($kind === 'staff' && $venueRaw !== '') {
+/* Every staff account belongs to ONE venue (decided 2026-10-27): there are no
+   unassigned staff, because a staff member handles only their own venue's
+   bookings. trg_staff_venue_required enforces the same rule in the database. */
+if ($kind === 'staff' && $venueRaw === '') {
+    rg_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Choose the venue this staff member will handle.']);
+}
+if ($kind === 'staff') {
     if (!is_scalar($venueRaw) || !ctype_digit((string) $venueRaw) || (int) $venueRaw < 1) {
-        rg_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue or Unassigned.']);
+        rg_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue.']);
     }
     $venueCheck = $pdo->prepare('SELECT id FROM venues WHERE id = :id');
     $venueCheck->execute([':id' => (int) $venueRaw]);
@@ -113,6 +128,65 @@ if ($kind === 'staff' && $venueRaw !== '') {
         rg_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'That venue does not exist.']);
     }
     $venueId = (int) $venueId;
+}
+
+/* A NEW ADMIN needs the creating admin's own password (see the header). Checked
+   before anything is written, with the shared re-entry lockout: 5 wrong = a
+   lock, each longer than the last (admin/gcash-account-save.php, same ladder). */
+if ($kind === 'admin') {
+    $creatorPw = (string) ($_POST['creator_password'] ?? '');
+    if ($creatorPw === '') {
+        rg_reply(400, ['ok' => false, 'field' => 'creator_password', 'error' => 'no_password',
+            'message' => 'Enter your own admin password to create another administrator.']);
+    }
+    try {
+        $pdo->beginTransaction();
+        $u = $pdo->prepare(
+            'SELECT id, password_hash, account_type, is_active, reauth_failed_attempts, reauth_lock_level,
+                    CASE WHEN reauth_locked_until > NOW()
+                         THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
+               FROM users WHERE id = :id FOR UPDATE'
+        );
+        $u->execute([':id' => (int) $_SESSION['user_id']]);
+        $creator = $u->fetch();
+        if (!$creator || !(bool) $creator['is_active'] || $creator['account_type'] !== 'admin') {
+            $pdo->rollBack();
+            rg_reply(403, ['ok' => false, 'message' => 'Only an administrator can create an admin account.']);
+        }
+        if ((int) $creator['lock_seconds'] > 0) {
+            $pdo->rollBack();
+            rg_reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => (int) $creator['lock_seconds'],
+                'message' => 'Too many wrong passwords. Try again in ' . (int) $creator['lock_seconds'] . ' seconds.']);
+        }
+        if (!password_verify($creatorPw, (string) $creator['password_hash'])) {
+            $attempts = (int) $creator['reauth_failed_attempts'] + 1;
+            $ladder = [10, 30, 60, 300, 900];
+            if ($attempts >= 5) {
+                $level = min((int) $creator['reauth_lock_level'] + 1, 255);
+                $seconds = $ladder[min($level, count($ladder)) - 1];
+                $pdo->prepare(
+                    'UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :l,
+                            reauth_locked_until = DATE_ADD(NOW(), INTERVAL :s SECOND) WHERE id = :id'
+                )->execute([':l' => $level, ':s' => $seconds, ':id' => $creator['id']]);
+                $pdo->commit();
+                rg_reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => $seconds,
+                    'message' => 'Too many wrong passwords. Try again in ' . $seconds . ' seconds.']);
+            }
+            $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id')
+                ->execute([':a' => $attempts, ':id' => $creator['id']]);
+            $pdo->commit();
+            rg_reply(401, ['ok' => false, 'field' => 'creator_password', 'error' => 'wrong_password',
+                'attemptsLeft' => 5 - $attempts,
+                'message' => 'That is not your password. ' . (5 - $attempts) . ' attempt(s) left before a temporary lock.']);
+        }
+        $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id')
+            ->execute([':id' => $creator['id']]);
+        $pdo->commit();
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        error_log('VENUSeP register-submit (admin re-auth): ' . $e->getMessage());
+        rg_reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
+    }
 }
 
 /* A unique username derived from the email — the same rule Google sign-up uses. */
@@ -138,14 +212,15 @@ try {
         ':e' => $email,
         ':u' => $username,
         ':p' => venusep_password_hash($pass),
-        ':t' => $kind === 'staff' ? 'staff' : 'customer',
+        ':t' => $kind,
     ]);
     $userId = (int) $pdo->lastInsertId();
 
-    if ($kind === 'staff') {
+    if ($kind !== 'customer') {
+        /* staff: their one venue; admin: none — they handle every venue */
         $pdo->prepare(
             'INSERT INTO staff (user_id, venue_id, full_name, phone) VALUES (:u, :v, :n, :p)'
-        )->execute([':u' => $userId, ':v' => $venueId, ':n' => $name, ':p' => $phoneNorm]);
+        )->execute([':u' => $userId, ':v' => $kind === 'staff' ? $venueId : null, ':n' => $name, ':p' => $phoneNorm]);
     } else {
         $pdo->prepare(
             'INSERT INTO customers (user_id, full_name, phone) VALUES (:u, :n, :p)'
@@ -173,6 +248,24 @@ try {
     rg_reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
 }
 
+/* A new staff or admin account is announced to the other admins (2026-10-28).
+   A failure costs a notification, never the account. */
+if ($kind !== 'customer') {
+    require_once __DIR__ . '/includes/notifications.php';
+    try {
+        $venueName = '';
+        if ($venueId !== null) {
+            $vn = $pdo->prepare('SELECT name FROM venues WHERE id = :v');
+            $vn->execute([':v' => $venueId]);
+            $venueName = (string) $vn->fetchColumn();
+        }
+        notify_admins($pdo, 'account_created', (int) $_SESSION['user_id'],
+            ['email' => $email, 'role' => $kind, 'venue' => $venueName]);
+    } catch (PDOException $e) {
+        error_log('VENUSeP register-submit (notify): ' . $e->getMessage());
+    }
+}
+
 /* A new CUSTOMER is not logged in automatically: they go to the login page and
    sign in, which proves the password they just chose actually works. A staff
    account is created BY an admin, so logging in as them would be wrong —
@@ -180,7 +273,7 @@ try {
 rg_reply(200, [
     'ok'      => true,
     'kind'    => $kind,
-    'message' => $kind === 'staff'
-        ? 'Staff account created.'
-        : 'Account created. You can sign in now.',
+    'message' => $kind === 'admin'
+        ? 'Administrator account created. They set up two-step verification the first time they sign in.'
+        : ($kind === 'staff' ? 'Staff account created.' : 'Account created. You can sign in now.'),
 ]);

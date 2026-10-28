@@ -44,6 +44,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/amenities.php';
 
 $vrPdo = venusep_db_or_fail();
+venusep_expire_due_bookings();   /* a lapsed request must not still show as taken */
 
 /* Customer-facing pages never set this: they get active rooms only, same as
    always. admin/venue-management.php sets it to true first, because staff
@@ -55,6 +56,7 @@ $vrIncludeInactive = isset($vrIncludeInactive) ? (bool) $vrIncludeInactive : fal
 /* ---- 1. the rooms themselves ---- */
 $vrRoomRows = $vrPdo->query(
   "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
+          r.best_for, r.catering, r.accessibility,
           v.name AS venue_name,
           d.attendee_capacity, d.fee_per_day
      FROM rooms r
@@ -103,7 +105,6 @@ $vrSlotRows = $vrPdo->query(
      JOIN bookings b ON b.id = s.booking_id
     WHERE s.released_at IS NULL
       AND b.reservation_status IN ('pending','approved')
-      AND (b.current_deadline_at IS NULL OR b.current_deadline_at > NOW())
     ORDER BY s.slot_date, s.start_time"
 )->fetchAll();
 foreach ($vrSlotRows as $s) {
@@ -117,7 +118,12 @@ foreach ($vrSlotRows as $s) {
 /* ---- 4. assemble the exact shape every page has always consumed ---- */
 $venueRooms = [];
 foreach ($vrRoomRows as $r) {
+  /* "At a glance": what the room form saved (2026-10-27), else the text that
+     used to be hard-coded in includes/amenities.php */
   $glance = room_glance($r['room_code']);
+  if ($r['best_for'] !== null)      { $glance['bestFor']    = (string) $r['best_for']; }
+  if ($r['catering'] !== null)      { $glance['catering']   = (string) $r['catering']; }
+  if ($r['accessibility'] !== null) { $glance['accessible'] = (string) $r['accessibility']; }
   $venueRooms[] = [
     'id'          => $r['room_code'],
     'name'        => $r['name'],

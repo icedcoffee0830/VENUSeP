@@ -108,6 +108,7 @@ foreach ($brqAll as $b) {
         'submitted' => date('M j, Y · g:i A', strtotime($b['bookingDateIso'])),
         'res'       => $b['reservationCode'],
         'pay'       => $b['paymentCode'],
+        'neverApproved' => $b['neverApproved'],   /* expired before anyone approved it (2026-10-27) */
         'idStatus'  => brqIdStatus($b),
         'idLabel'   => brqIdLabel($b),
         'discountPercent' => $b['discountPercent'],
@@ -117,6 +118,22 @@ foreach ($brqAll as $b) {
            for the right person. */
         'docs'      => booking_document_ids($b['id']),
         'receiptId' => $rec ? (int) $rec['id'] : null,
+        /* Every GCash upload, rejected ones included, and the 5-attempt rule
+           (DB-DECISIONS #6). Image ids only — document-view.php serves them. */
+        'attempts'  => array_map(function ($a) {
+            return [
+                'id'      => (int) $a['id'],
+                'no'      => (int) $a['attempt_no'],
+                'at'      => date('M j · g:i A', strtotime($a['created_at'])),
+                'verdict' => $a['verdict'],
+                'ref'     => (string) $a['reference_number'],
+                'amount'  => $a['amount_centavos'] !== null ? '₱' . number_format(((int) $a['amount_centavos']) / 100, 2) : '—',
+                'to'      => (string) $a['receiver_number'],
+                'flags'   => $a['flags'],
+                'staffNote' => in_array('rejected_by_staff', $a['flags'], true) ? (string) $a['override_note'] : '',
+            ];
+        }, booking_receipt_attempts($b['id'])),
+        'attemptsAllowed' => $b['receiptAttemptsAllowed'],
         'refund'    => $refund,
         'refundTo'  => $refund ? $refund['refundTo'] : null,
         'tl'        => booking_history_events($b),
@@ -133,6 +150,10 @@ foreach ($brqAll as $b) {
             'pos'       => $b['pos'] !== '' ? $b['pos'] : null,
             'or'        => $b['officialReceipt'] !== '' ? $b['officialReceipt'] : null,
             'checkedIn' => $b['checkedIn'],
+            /* pay before using the bed (2026-10-27, DB-DECISIONS #26); an
+               online stay chooses no method until it pays */
+            'payToUse'  => $b['payToUse'],
+            'methodChosen' => $b['methodCode'] !== null,
         ];
     } else {
         $row += [
@@ -180,6 +201,8 @@ foreach ($brqAll as $b) {
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
+    <script src="../assets/js/confirm-modal.js"></script>
 
     <!-- ============================================================
          [0] SHELL CSS — the TEAM header bar + sidebar + layout
@@ -325,6 +348,21 @@ foreach ($brqAll as $b) {
       .br-tl .x { font-size: 0.83rem; font-weight: 600; margin: 0.06rem 0 0.1rem; }
       .br-tl .m { color: var(--vm-muted); font-size: 0.76rem; line-height: 1.45; }
 
+      /* GCash upload history — every attempt, rejected ones too (DB-DECISIONS #6) */
+      .br-att { border-top: 1px solid var(--vm-hairline); margin-top: 0.95rem; padding-top: 0.85rem; }
+      .br-att-head { align-items: baseline; display: flex; gap: 0.6rem; justify-content: space-between; margin-bottom: 0.5rem; }
+      .br-att-count { font-size: 0.76rem; font-weight: 600; }
+      .br-att-row { align-items: flex-start; display: flex; gap: 0.7rem; padding: 0.55rem 0; }
+      .br-att-row + .br-att-row { border-top: 1px solid var(--vm-hairline); }
+      .br-att-row img { background: #f4f4f4; border: 1px solid var(--vm-border); border-radius: 6px; flex: none; height: 52px; object-fit: cover; width: 40px; }
+      .br-att-no { color: var(--vm-muted); flex: none; font-size: 0.72rem; font-weight: 600; min-width: 4.2rem; padding-top: 0.15rem; }
+      .br-att-main { flex: 1; font-size: 0.78rem; line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
+      .br-att-main .f { color: var(--vm-muted); font-size: 0.72rem; }
+      .br-vd { border-radius: 999px; display: inline-block; font-size: 0.68rem; font-weight: 650; margin-right: 0.35rem; padding: 0.08rem 0.5rem; }
+      .br-vd.accepted { background: #e7f4ec; color: #1c7a4f; }
+      .br-vd.manual_review { background: #fbf1dd; color: #8a5a12; }
+      .br-vd.rejected { background: #fbe6e6; color: #b23a3a; }
+
       .br-ovr { border: 1px dashed #d9d7d2; border-radius: 11px; margin-top: 0.95rem; padding: 0.9rem 0.95rem; }
       .br-ovr input, .br-ovr textarea { border: 1px solid var(--vm-border); border-radius: 8px; font-family: inherit; font-size: 0.82rem; padding: 0.5rem 0.62rem; width: 100%; }
       .br-ovr input:focus, .br-ovr textarea:focus { border-color: #b9b5ad; outline: none; }
@@ -466,7 +504,11 @@ foreach ($brqAll as $b) {
         try {
           const res = await fetch('booking-action.php', { method: 'POST', body: body, credentials: 'same-origin' });
           const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });
-          if (!out.ok) { cur.actionError = out.message || 'Nothing was changed.'; acting = false; render(); return false; }
+          if (!out.ok) {
+            cur.actionError = out.message || 'Nothing was changed.';
+            if (out.booking && out.booking.pay) cur.pay = out.booking.pay;   /* the booking moved on since this page loaded */
+            acting = false; render(); return false;
+          }
           cur.actionError = null;
           if (out.booking) {
             cur.res = out.booking.res;
@@ -803,6 +845,19 @@ foreach ($brqAll as $b) {
           + `<button class="br-btn" onclick="rejectRequest()">Reject request</button>`;
         if (cur.pay === 'overdue') return `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
         if (OPEN_REFUND.includes(cur.pay)) return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button><button class="br-btn" onclick="openAction('fix')">Return for correction</button><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
+        /* PAY TO USE (2026-10-27): no bed until the stay is paid. A receipt
+           still under review is not paid; staff confirm it first. The OR is
+           paperwork for later and holds nothing up. */
+        if (cur.kind === 'hostel' && cur.payToUse && cur.res === 'approved' && !cur.checkedIn) {
+          if (cur.pay === 'confirmed' || cur.pay === 'paid_cash') {
+            return `<button class="br-btn br-btn-primary" onclick="checkIn()">Check the guest in</button>`;
+          }
+          /* Cash received only once the GUEST chose the front desk in Pay now
+             (2026-10-28); if they cancel that, it goes away again. */
+          return cur.pay === 'await_cash'
+            ? `<button class="br-btn br-btn-primary" onclick="cashReceived()">Cash received</button><span class="none">Not paid yet &mdash; the guest chose to pay cash here</span>`
+            : `<span class="none">Not paid yet &mdash; the guest pays before using the bed</span>`;
+        }
         /* Check-in is hostel-only: an event venue has no arrivals. It needs the
            OR in hand, because that is what the guest is asked to show. */
         if (cur.kind === 'hostel' && cur.pay === 'confirmed' && !cur.checkedIn) {
@@ -822,7 +877,7 @@ foreach ($brqAll as $b) {
             ${cur.receiptId
               /* The real screenshot, so staff can read the reference off it
                  rather than trusting what the scanner claims it says. */
-              ? `<a href="../document-view.php?receipt=${cur.receiptId}" target="_blank" rel="noopener" title="Open the full-size receipt in a new tab">
+              ? `<a href="../valid-id-view.php?receipt=${cur.receiptId}" title="Open the receipt">
                    <img src="../document-view.php?receipt=${cur.receiptId}" alt="GCash receipt"
                         style="display:block;width:120px;height:150px;object-fit:cover;background:#f4f4f4;border:1px solid var(--vm-border);border-radius:8px">
                  </a>`
@@ -832,7 +887,69 @@ foreach ($brqAll as $b) {
               ${kv('Receipt date', esc(r.date))}${kv('Sent to', esc(r.to))}
             </div>
           </div>
-          <div style="color:var(--vm-muted);font-size:0.74rem;margin-bottom:0.5rem">OCR confidence ${r.conf} &middot; the reference and the file were not seen on any earlier booking</div>`;
+          <div style="color:var(--vm-muted);font-size:0.74rem;margin-bottom:0.5rem">OCR confidence ${r.conf} &middot; ${
+            (r.flags || []).some(f => f === 'duplicate_ref' || f === 'duplicate_file')
+              ? '<strong style="color:#b23a3a">this reference or image was already used on an earlier receipt</strong>'
+              : 'the reference and the file were not seen on any earlier booking'}</div>`;
+      }
+
+      /* ============================================================
+         GCASH UPLOAD HISTORY + THE 5-ATTEMPT RULE (DB-DECISIONS #6).
+         Every upload is on record now, rejected ones included, so staff
+         see what the customer actually tried — not just the last receipt.
+         When the allowance is used up and payment is open again (staff
+         rejected the last one), staff may allow 5 more, with a reason.
+         ============================================================ */
+      const ATT_FLAG_TEXT = {
+        duplicate_ref: 'reference already used', duplicate_file: 'same image as an earlier upload',
+        amount_mismatch: 'wrong amount', receiver_mismatch: 'wrong receiver',
+        amount_unreadable: 'amount unreadable', receiver_unreadable: 'receiver unreadable',
+        low_confidence: 'low OCR confidence', attempt_limit_reached: 'last allowed attempt',
+        rejected_by_staff: 'rejected by staff',
+      };
+      const ATT_VERDICT = { accepted: 'Accepted', manual_review: 'Manual review', rejected: 'Rejected' };
+      function attemptsUsedUp() { return (cur.attempts || []).length >= (cur.attemptsAllowed || 5); }
+      function attemptsBlock() {
+        const list = cur.attempts || [];
+        if (!list.length) return '';
+        const allowed = cur.attemptsAllowed || 5;
+        const open = ['await_gcash', 'await_cash', 'overdue'].includes(cur.pay);
+        let html = `<div class="br-att">
+            <div class="br-att-head"><span class="br-h2" style="margin:0">GCash uploads</span>
+              <span class="br-att-count" style="color:${attemptsUsedUp() ? '#b23a3a' : 'var(--vm-muted)'}">${list.length} of ${allowed} attempts used</span></div>` +
+          list.slice().reverse().map(a => `
+            <div class="br-att-row">
+              <a href="../valid-id-view.php?receipt=${a.id}" title="Open upload ${a.no}"><img src="../document-view.php?receipt=${a.id}" alt="Upload ${a.no}"></a>
+              <div class="br-att-no">Attempt ${a.no}<br><span style="font-weight:400">${esc(a.at)}</span></div>
+              <div class="br-att-main">${a.flags.includes('rejected_by_staff')
+                  /* a person's decision outranks the checker's verdict, which stays on record */
+                  ? `<span class="br-vd rejected">Rejected by staff</span>`
+                  : `<span class="br-vd ${esc(a.verdict)}">${ATT_VERDICT[a.verdict] || esc(a.verdict)}</span>`}Ref ${esc(a.ref)} &middot; ${esc(a.amount)} &middot; to ${esc(a.to || '—')}
+                ${a.flags.length ? `<div class="f">${a.flags.filter(f => f !== 'rejected_by_staff').map(f => esc(ATT_FLAG_TEXT[f] || String(f).replace(/_/g, ' '))).join(' &middot; ')}${a.flags.includes('rejected_by_staff') ? `<div>Checker said: ${esc(ATT_VERDICT[a.verdict] || a.verdict)}${a.staffNote ? ' &middot; Staff: ' + esc(a.staffNote) : ''}</div>` : ''}</div>` : ''}
+              </div>
+            </div>`).join('');
+        if (attemptsUsedUp() && open) {
+          html += `
+            <div class="br-ovr">
+              <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.4rem">All ${allowed} receipt attempts are used</div>
+              <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.5;margin-bottom:0.6rem">The customer cannot upload another GCash receipt. If they should get another chance &mdash; an honest mistake, an unreadable screenshot &mdash; allow 5 more. Your reason goes into the booking's timeline. They can always pay in cash at the office instead.</div>
+              <textarea id="attNote" rows="2" placeholder="Required note — why does this booking get more attempts?">${esc(cur.attNote || '')}</textarea>
+              ${(cur.attErr || cur.actionError) ? `<div style="color:#b23a3a;font-size:0.74rem;margin-top:0.35rem">${esc(cur.attErr || cur.actionError)}</div>` : ''}
+              <div style="margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="allowAttempts()">Allow 5 more attempts</button></div>
+            </div>`;
+        }
+        return html + `</div>`;
+      }
+      function allowAttempts() {
+        cur.attNote = (document.getElementById('attNote') || {}).value || '';
+        if (!cur.attNote.trim()) { cur.attErr = 'Write the reason first — it goes into the booking’s timeline.'; render(); return; }
+        cur.attErr = null;
+        const note = cur.attNote.trim();
+        staffAction('allow_receipt_attempts', { note: note }, function (out) {
+          if (out.booking && out.booking.attemptsAllowed) cur.attemptsAllowed = out.booking.attemptsAllowed;
+          cur.attNote = '';
+          cur.tl.push({ w: now(), x: 'More receipt attempts allowed', m: '5 more GCash receipt attempts: ' + note });
+        });
       }
 
       /* ============================================================
@@ -870,13 +987,53 @@ foreach ($brqAll as $b) {
         return `
           <div class="br-ovr" style="margin-top:0.7rem">
             <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.4rem">Official Receipt not issued yet</div>
-            <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.5;margin-bottom:0.6rem">The payment is <strong>confirmed and final</strong> — this is paperwork, not money. Record the OR number once the University Cashier issues it; the guest needs it at check-in.</div>
+            <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.5;margin-bottom:0.6rem">The payment is <strong>confirmed and final</strong> — this is paperwork, not money. Record the OR number once the University Cashier issues it; ${cur.payToUse ? 'it does not hold up check-in.' : 'the guest needs it at check-in.'}</div>
             <input id="orNo" placeholder="OR number from the cashier" value="">
             <div style="margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="recordOr()">Record OR</button></div>
           </div>`;
       }
 
+      /* PAY TO USE (2026-10-27): the POS from CEDU is paperwork recorded
+         whenever it arrives — it no longer unlocks payment. */
+      function posBlock() {
+        if (!isHostel() || !cur.payToUse || cur.res === 'pending' || (CLOSED_RES.includes(cur.res) && !cur.pos)) return '';
+        if (cur.pos) return `<div class="br-kvgrid" style="margin-top:0.7rem">${kv('POS', esc(cur.pos) + ' <span class="soft">(CEDU)</span>')}</div>`;
+        return `
+          <div class="br-ovr" style="margin-top:0.7rem">
+            <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.4rem">POS not recorded yet</div>
+            <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.5;margin-bottom:0.6rem">Paperwork from CEDU. Record it whenever it arrives &mdash; it does not hold up payment or check-in.</div>
+            <input id="posNo" placeholder="POS number from CEDU" value="">
+            ${cur.posErr ? `<div style="color:#b23a3a;font-size:0.74rem;margin-top:0.35rem">${esc(cur.posErr)}</div>` : ''}
+            <div style="margin-top:0.6rem"><button class="br-btn" onclick="recordPos()">Record POS</button></div>
+          </div>`;
+      }
+
       function payBody() {
+        /* HOSTEL, PAY TO USE (2026-10-27, DB-DECISIONS #26): payment opens at
+           approval — GCash from Pay now, or cash here at the front desk — and
+           is due by the end of the check-in day. A receipt under review, a
+           paid stay and every other state fall through to the shared panels. */
+        if (isHostel() && cur.payToUse) {
+          if (cur.pay === 'locked') {
+            return banner('bn-gray', 'Payment is locked', 'The guest cannot pay until you approve the ID and the reservation.') +
+              `<div class="br-kvgrid">${kv('Payment timing', 'Pay to use <span class="soft">(opens on approval; due by the end of the check-in day, ' + esc(cur.checkIn) + ')</span>')}</div>`;
+          }
+          /* The GUEST decides how they pay, in Pay now (2026-10-28). Cash received
+             is offered only after they chose the front desk — which also closes
+             GCash for them until they cancel the choice. */
+          if (cur.pay === 'await_gcash') {
+            return banner('bn-amber', 'Payment due before check-in — waiting for the guest',
+                'The guest pays by GCash from Pay now, or chooses to pay cash here at the front desk. Cash received appears once they choose cash. If it is not paid by the end of the check-in day, the beds are released.') +
+              `<div class="br-kvgrid">${kv('Pay by', 'end of ' + esc(cur.checkIn))}${kv('Amount due', esc(cur.total))}${kv('Guest’s plan', 'Not chosen yet &mdash; GCash is open')}</div>`;
+          }
+          if (cur.pay === 'await_cash') {
+            return banner('bn-amber', 'The guest will pay cash at the front desk',
+                'They chose cash in Pay now, so GCash is closed for them. If they cancel that choice, this button goes away and GCash opens again.') +
+              `<div class="br-kvgrid">${kv('Pay by', 'end of ' + esc(cur.checkIn))}${kv('Amount due', esc(cur.total))}</div>
+               <div style="margin-top:0.8rem"><button class="br-btn br-btn-primary" onclick="cashReceived()">Cash received &mdash; ${esc(cur.total)}</button></div>
+               <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.45rem">Press once the cash is in your hand. The stay is marked paid and its System Receipt is issued.</div>`;
+          }
+        }
         /* HOSTEL: the POS gate sits in FRONT of every payment state. Without a
            POS from CEDU the customer literally cannot pay, and the thing being
            waited on is another office — not the customer. */
@@ -900,7 +1057,7 @@ foreach ($brqAll as $b) {
             `<div class="br-kvgrid">${kv('Payment opens', 'the day after the event')}${kv('Due by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
           case 'await_gcash': return banner('bn-amber', 'Awaiting GCash payment', 'The customer was notified. The receipt will be auto-checked the moment it is uploaded.') +
             `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}</div>`;
-          case 'await_cash': return banner('bn-amber', 'Awaiting cash payment at the cashier', 'Confirm here once the cashier records the payment.') +
+          case 'await_cash': return banner('bn-amber', 'Awaiting cash payment at the cashier', 'The customer chose to pay in cash, so GCash is closed for them until they cancel that choice — then this button goes away. Confirm here once the cashier records the payment.') +
             `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}${kv('Where', 'USeP Cashier — Venue Reservations Window', true)}</div>
              <div style="margin-top:0.8rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Record cash payment</button></div>`;
           /* NEITHER of the next two states exists in the database: an uploaded
@@ -918,7 +1075,10 @@ foreach ($brqAll as $b) {
              not quietly expire while a receipt sits here: the customer did their
              part, and letting the slot lapse would punish them for our queue. */
           case 'under_review': return banner('bn-amber', 'Needs manual review — the customer is waiting on you',
-              'The auto-check could not verify everything. Compare the fields against the screenshot; the amount required is shown beside the amount read.') + receiptBlock() +
+              'The auto-check could not verify everything. Compare the fields against the screenshot; the amount required is shown beside the amount read.') +
+            (attemptsUsedUp() ? banner('bn-red', 'This was the customer’s last receipt attempt',
+              'All ' + (cur.attemptsAllowed || 5) + ' GCash attempts are used, so this one came to you whatever the checker said. Confirm it if you find the payment in GCash; if you reject it, you can allow 5 more attempts below.') : '') +
+            receiptBlock() +
             flags(cur.receipt.flags, '#c99a3c') +
             `<div class="br-banner bn-gray" style="margin-top:0.7rem"><div>Slot is held while this is with you
               <span class="s">Pay-by deadline: <strong>${esc(cur.payBy)}</strong>. The customer has already paid and cannot act further — clear this before the deadline, or extend it. Do not let it lapse to overdue.</span></div></div>` +
@@ -944,7 +1104,10 @@ foreach ($brqAll as $b) {
               </div>
             </div>`;
           case 'confirmed': return banner('bn-green', 'Payment confirmed', 'Confirmed by ' + esc(cur.confirmedBy || 'staff') + '. The reference number is permanently locked.') + (cur.receipt ? receiptBlock() : '');
-          case 'paid_cash': return banner('bn-green', 'Paid at the cashier', esc(cur.confirmedBy || 'Recorded by staff') + ' · official receipt issued at the counter.');
+          case 'paid_cash': return isHostel()
+              /* the hostel takes cash at the front desk; its OR comes later from the cashier */
+              ? banner('bn-green', 'Paid in cash at the front desk', esc(cur.confirmedBy || 'Recorded by staff') + ' · the System Receipt is issued; the Official Receipt follows from the University Cashier.')
+              : banner('bn-green', 'Paid at the cashier', esc(cur.confirmedBy || 'Recorded by staff') + ' · official receipt issued at the counter.');
           case 'overdue': return banner('bn-red', 'Payment overdue', 'The pay-by deadline (' + esc(cur.payBy) + ') passed with no valid payment. The slot can be released or the deadline extended.') +
             `<div class="br-kvgrid">${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
           case 'refund_requested':
@@ -976,8 +1139,12 @@ foreach ($brqAll as $b) {
           /* The deadline ran out and the system released the slot itself
              (sp_expire_due_bookings). Nothing is owed and nothing can be paid —
              the dates are already back on sale. */
-          case 'expired': return banner('bn-gray', 'Payment window expired — slot released',
-              'The pay-by deadline (' + esc(cur.payBy) + ') passed with no payment, so the system released the dates. They are bookable again.');
+          case 'expired': return cur.neverApproved
+              /* nobody approved it before its date (2026-10-27): nothing was owed */
+              ? banner('bn-gray', 'Request expired — never approved',
+                  'This request was still waiting for approval when its ' + (cur.kind === 'hostel' ? 'check-in day' : 'start time') + ' arrived, so the system expired it and released the ' + (cur.kind === 'hostel' ? 'beds' : 'date') + '. Nothing was charged.')
+              : banner('bn-gray', 'Payment window expired — slot released',
+                  'The pay-by deadline (' + esc(cur.payBy) + ') passed with no payment, so the system released the dates. They are bookable again.');
           /* Never blank: an unrecognised code still has to name itself, or staff
              are left looking at an empty panel with no way to tell whether the
              booking is fine or the page is broken. */
@@ -1004,7 +1171,7 @@ foreach ($brqAll as $b) {
         return `
           <div style="margin-top:0.85rem">
             ${cur.docs && cur.docs.customer_id
-              ? `<a href="../document-view.php?doc=${cur.docs.customer_id}" target="_blank" rel="noopener" title="Open the full-size ID in a new tab">
+              ? `<a href="../valid-id-view.php?doc=${cur.docs.customer_id}" title="Open the ID">
                    <img src="../document-view.php?doc=${cur.docs.customer_id}" alt="${esc(cur.idLabel)}"
                         style="display:block;width:100%;max-height:260px;object-fit:contain;background:#f4f4f4;border:1px solid var(--vm-border);border-radius:10px">
                  </a>`
@@ -1047,9 +1214,10 @@ foreach ($brqAll as $b) {
             <div>
               <div style="display:flex;flex-wrap:wrap;gap:0.45rem;justify-content:flex-end;margin-bottom:0.6rem">
                 <span class="br-badge ${resBadge(cur.res).c}">${esc(resBadge(cur.res).t)}</span>
-                <span class="br-badge ${payBadge(cur.pay).c}">${esc(payBadge(cur.pay).t)}</span>
+                <span class="br-badge ${payBadge(cur.pay).c}">${esc(cur.payToUse && cur.pay === 'await_gcash' ? 'Payment due before check-in' : payBadge(cur.pay).t)}</span>
               </div>
               <div class="br-actions">${hdrActions()}</div>
+              ${cur.actionError && !cur.attErr ? `<div role="alert" style="color:#b23a3a;font-size:0.78rem;margin-top:0.4rem;text-align:right">${esc(cur.actionError)}</div>` : ''}
             </div>
           </div>
 
@@ -1103,10 +1271,14 @@ foreach ($brqAll as $b) {
             <div>
               <div class="br-card">
                 <div class="br-sec">
-                  <h2 class="br-h2">Payment · ${isHostel()
+                  <h2 class="br-h2">Payment · ${isHostel() && cur.payToUse
+                    ? (cur.pay === 'await_cash' || cur.method === 'cash' && cur.methodChosen ? 'Cash at the front desk' : (!cur.methodChosen ? 'GCash online or cash at the desk' : 'GCash')) + ' <span class="soft">before check-in</span>'
+                    : isHostel()
                     ? (cur.method === 'cash' ? 'Cash to staff' : 'GCash · staff account') + ' <span class="soft">via CEDU</span>'
                     : (cur.method === 'cash' ? 'Cash (walk-in)' : 'GCash')}</h2>
                   ${payBody()}
+                  ${attemptsBlock()}
+                  ${posBlock()}
                   ${orBlock()}
                 </div>
               </div>
@@ -1221,7 +1393,8 @@ foreach ($brqAll as $b) {
               ? cur.discountPct + '% USeP discount applied from ' + cur.idLabel + '. Price locked at ' + cur.total + '.'
               : 'ID accepted but it does not prove USeP affiliation. Full price ' + cur.total + '.' });
           cur.tl.push({ w: now(), x: 'ID + reservation approved',
-            m: cur.pay === 'await_pos'  ? 'Payment stays locked until the POS comes back from CEDU.'
+            m: cur.payToUse ? 'Payment open: GCash online, or cash at the front desk, by the end of ' + cur.checkIn + '.'
+             : cur.pay === 'await_pos'  ? 'Payment stays locked until the POS comes back from CEDU.'
              : cur.pay === 'await_event' ? 'Post-pay booking: payment opens after the last day and is due by ' + cur.payBy + '.'
              : 'Payment unlocked. Pay-by deadline ' + cur.payBy + '.' });
         });
@@ -1236,7 +1409,21 @@ foreach ($brqAll as $b) {
         cur.posErr = null;
         staffAction('record_pos', { pos: val }, function () {
           cur.pos = val;
-          cur.tl.push({ w: now(), x: 'POS received from CEDU', m: val + ' recorded.' + (cur.pay === 'await_event' ? ' This booking post-pays, so payment still opens after check-out.' : ' Payment unlocked for the guest.') });
+          cur.tl.push({ w: now(), x: 'POS received from CEDU', m: val + ' recorded.' + (cur.payToUse ? '' : cur.pay === 'await_event' ? ' This booking post-pays, so payment still opens after check-out.' : ' Payment unlocked for the guest.') });
+        });
+      }
+
+      /* PAY TO USE (2026-10-27): the guest paid cash at the front desk. The
+         stay becomes a cash booking, paid, with its System Receipt. */
+      async function cashReceived() {
+        if (!(await venusepConfirm('Mark ' + cur.total + ' as received in cash? The stay is marked paid and its System Receipt is issued.',
+              { title: 'Cash received?', okLabel: 'Cash received' }))) return;
+        staffAction('cash_received', {}, function (out) {
+          if (out.booking && out.booking.method) cur.method = String(out.booking.method).toLowerCase();
+          cur.methodChosen = true;
+          loadMail();                      /* a receipt was just issued (and maybe emailed) */
+          cur.confirmedBy = 'You · just now';
+          cur.tl.push({ w: now(), x: 'Cash received', m: cur.total + ' paid in cash at the front desk.' });
         });
       }
 
@@ -1256,7 +1443,9 @@ foreach ($brqAll as $b) {
       function checkIn() {
         staffAction('check_in', {}, function () {
           cur.checkedIn = true;
-          cur.tl.push({ w: now(), x: 'Guest checked in', m: 'POS ' + (cur.pos || '—') + ' and OR ' + (cur.or || '—') + ' presented and matched against the valid ID.' });
+          cur.tl.push({ w: now(), x: 'Guest checked in', m: cur.payToUse
+            ? 'Paid stay; guest matched against the valid ID.'
+            : 'POS ' + (cur.pos || '—') + ' and OR ' + (cur.or || '—') + ' presented and matched against the valid ID.' });
         });
       }
 
@@ -1280,7 +1469,10 @@ foreach ($brqAll as $b) {
         const why = 'Rejected by staff after checking GCash — the reference was not found in the Transaction History.';
         staffAction('reject_payment', { note: why }, function () {
           cur.rejectedByStaff = true;      /* a person decided this, not the scanner */
-          cur.rejects = [why + ' (reference freed, record kept for audit)'];
+          /* the server marked the upload under review (the latest) — show it without a reload */
+          const lastUp = (cur.attempts || []).slice(-1)[0];
+          if (lastUp && !lastUp.flags.includes('rejected_by_staff')) { lastUp.flags.push('rejected_by_staff'); lastUp.staffNote = why; }
+          cur.rejects = [why + ' (receipt kept on record; the same receipt cannot be used again)'];
           cur.tl.push({ w: now(), x: 'Receipt rejected', m: 'Payment reopened so the customer can resubmit before the deadline.' });
         });
       }

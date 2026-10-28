@@ -53,6 +53,7 @@ function bookings_query(array $opts = []) {
     if ($pdo === null) {
         return [];
     }
+    venusep_expire_due_bookings();   /* lapse what is due before showing it (includes/db.php) */
 
     $where = [];
     $args  = [];
@@ -68,7 +69,7 @@ function bookings_query(array $opts = []) {
         SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
                b.is_usep_affiliated, b.affiliation_verified,
                b.room_price, b.discount_percent, b.discount_amount, b.total_amount,
-               b.refunds_allowed, b.current_deadline_at, b.submitted_at, b.approved_at,
+               b.refunds_allowed, b.pay_to_use, b.current_deadline_at, b.receipt_attempts_allowed, b.submitted_at, b.approved_at,
                b.completed_at, b.cancelled_at, b.customer_notes, b.staff_notes,
                c.id AS customer_id, c.full_name AS customer_name, c.phone AS customer_phone,
                c.university_id_no, u.email AS customer_email, c.contact_email,
@@ -100,11 +101,16 @@ function bookings_query(array $opts = []) {
                  ORDER BY gr.id DESC LIMIT 1) AS receipt_reference,
                /* The uploaded GCash screenshot's own row id — document-view.php's
                   ?receipt= param. Not the System Receipt (#22); this is the proof
-                  of payment the customer sent, which staff review it against. */
+                  of payment the customer sent, which staff review it against.
+                  Rejected uploads are on record too (DB-DECISIONS #6), so the one
+                  that went through is preferred; a rejected one only when there
+                  is nothing else. */
                (SELECT gr.id FROM gcash_receipts gr WHERE gr.booking_id = b.id
-                 ORDER BY gr.id DESC LIMIT 1) AS gcash_receipt_id,
+                 ORDER BY gr.verdict = 'rejected', gr.id DESC LIMIT 1) AS gcash_receipt_id,
                (SELECT COALESCE(JSON_LENGTH(gr.flags_json), 0) FROM gcash_receipts gr
-                 WHERE gr.booking_id = b.id ORDER BY gr.id DESC LIMIT 1) AS receipt_flags
+                 WHERE gr.booking_id = b.id ORDER BY gr.id DESC LIMIT 1) AS receipt_flags,
+               /* The 5-attempt rule: every upload counts, rejected ones too. */
+               (SELECT COUNT(*) FROM gcash_receipts gr WHERE gr.booking_id = b.id) AS receipt_attempts
           FROM bookings b
           JOIN customers c                      ON c.id = b.customer_id
           LEFT JOIN users u                     ON u.id = c.user_id
@@ -214,9 +220,11 @@ function booking_shape(array $row) {
         'paymentCode'        => $row['payment_status'],
 
         'method'        => $row['payment_method'] === 'cash' ? 'Cash' : 'GCash',
+        'methodCode'    => $row['payment_method'],               // null = not chosen yet (an online hostel stay, 2026-10-27)
         'isUsep'        => (bool) $row['is_usep_affiliated'],
         'usepVerified'  => (bool) $row['affiliation_verified'],
         'refundsAllowed'=> (bool) $row['refunds_allowed'],
+        'payToUse'      => (bool) $row['pay_to_use'],          // hostel: pay before using the bed (2026-10-27)
         'refundStatus'  => $row['refund_status'],
         'refundFiledIso'=> $row['refund_requested_at'] ? date('Y-m-d', strtotime($row['refund_requested_at'])) : null,
         'refundOrPending' => (bool) $row['refund_or_pending'],
@@ -225,6 +233,10 @@ function booking_shape(array $row) {
         'receiptReference'=> (string) $row['receipt_reference'],
         'receiptFlags'    => (int) $row['receipt_flags'],
         'gcashReceiptId'  => $row['gcash_receipt_id'] !== null ? (int) $row['gcash_receipt_id'] : null,
+        /* The 5-attempt rule (DB-DECISIONS #6): uploads made, uploads allowed. */
+        'receiptAttempts'        => (int) $row['receipt_attempts'],
+        'receiptAttemptsAllowed' => (int) $row['receipt_attempts_allowed'],
+        'receiptLimitReached'    => (int) $row['receipt_attempts'] >= (int) $row['receipt_attempts_allowed'],
 
         'pos'           => (string) $row['pos_number'],
         'officialReceipt' => (string) $row['official_receipt_no'],
@@ -246,7 +258,7 @@ function booking_shape(array $row) {
        moment the event STARTS ("pay immediately on approval"), not on a date
        that is already behind us. Thirty-seven bookings displayed a pay-by date
        one day earlier than the one being enforced. */
-    $b['payment'] = payment_policy_for($b['refundsAllowed'], $firstIso ?: date('Y-m-d'), $lastBooked);
+    $b['payment'] = payment_policy_for($b['payToUse'] ? 'pay_to_use' : $b['refundsAllowed'], $firstIso ?: date('Y-m-d'), $lastBooked);
     if (!empty($row['current_deadline_at'])) {
         $ts = strtotime($row['current_deadline_at']);
         $b['payment']['payByTs']    = $ts;
@@ -255,8 +267,40 @@ function booking_shape(array $row) {
         $b['payment']['late']       = $b['payment']['policy'] === 'prepay'
                                         && $ts <= strtotime(($firstIso ?: date('Y-m-d')) . ' 23:59:59');
     }
+
+    /* WHY a released booking was released, in plain words (2026-10-27). A
+       request nobody approved before its date reads "Expired" rather than
+       "Released": nothing was ever held for the customer to lose, and nothing
+       was charged. sp_expire_due_bookings() decides it; this only explains it. */
+    $b['neverApproved'] = $row['reservation_status'] === 'released' && $row['approved_at'] === null;
+    $b['expiryNote']    = null;
+    if ($b['neverApproved']) {
+        $b['bookingStatus']      = 'Expired';
+        $b['bookingStatusStaff'] = 'Request expired (never approved)';
+        $b['expiryNote'] = 'Not approved before your ' . ($b['type'] === 'hostel' ? 'check-in' : 'event')
+                         . ' date, so the request expired. Nothing was charged.';
+    } elseif ($row['reservation_status'] === 'released') {
+        $b['expiryNote'] = 'Not paid by the deadline, so the ' . ($b['type'] === 'hostel' ? 'beds were' : 'date was') . ' released.';
+    }
+
     $b['refundable'] = cb_is_refundable($b);
     return $b;
+}
+
+/* What to tell someone whose venue slot sp_add_venue_slot() refused (45000).
+   The procedure says why; this turns it into a sentence for a person. */
+function venue_slot_refusal_message(PDOException $e) {
+    $m = $e->getMessage();
+    if (stripos($m, 'cleanup gap') !== false) {
+        $gap = venue_cleanup_gap_minutes();
+        return 'That time is too close to another booking on the same day. Bookings need '
+             . ($gap % 60 === 0 ? ($gap / 60) . ' hour' . ($gap === 60 ? '' : 's') : $gap . ' minutes')
+             . ' free before and after them for cleanup. Please pick another time.';
+    }
+    if (stripos($m, 'maintenance') !== false) {
+        return 'The room is closed for maintenance on that date. Please pick another date.';
+    }
+    return 'That slot was taken while the booking was being made. Please pick another time.';
 }
 
 /* The logged-in customer's own bookings. */
@@ -342,6 +386,16 @@ function booking_queue_pay_key(array $b) {
    it stays true as days pass instead of ageing into a hard-coded lie. */
 function booking_queue_action(array $b) {
     $due = $b['payment']['payByLabel'];
+    /* a pay-to-use hostel stay (2026-10-27): paid before the bed is used */
+    if (!empty($b['payToUse']) && $b['paymentCode'] === 'await_cash') {
+        return 'Guest will pay cash at the front desk · by end of ' . $due;
+    }
+    if (!empty($b['payToUse']) && $b['paymentCode'] === 'await_gcash') {
+        return 'Pay before check-in · by end of ' . $due . ' · GCash, or the guest chooses cash';
+    }
+    if (!empty($b['payToUse']) && in_array($b['paymentCode'], ['confirmed', 'paid_cash'], true) && $b['reservationCode'] === 'approved') {
+        return !empty($b['checkedIn']) ? 'Paid · guest checked in' : 'Paid · ready for check-in';
+    }
     switch ($b['paymentCode']) {
         case 'locked':
             return $b['reservationCode'] === 'pending' ? 'Review the submitted ID' : 'Payment locked';
@@ -350,14 +404,16 @@ function booking_queue_action(array $b) {
         case 'await_gcash':    return 'Pay by ' . $due . ' · customer notified';
         case 'await_cash':     return 'Pay at cashier by ' . $due;
         case 'under_review':
-            return $b['receiptVerdict'] === 'accepted'
+            /* the last allowed attempt is with staff — there is no next try */
+            $limit = !empty($b['receiptLimitReached']) ? 'All ' . $b['receiptAttemptsAllowed'] . ' receipt attempts used · ' : '';
+            return $limit . ($b['receiptVerdict'] === 'accepted'
                 ? 'Match ref ' . $b['receiptReference'] . ' in GCash'
-                : $b['receiptFlags'] . ($b['receiptFlags'] == 1 ? ' flag needs' : ' flags need') . ' a human look';
+                : $b['receiptFlags'] . ($b['receiptFlags'] == 1 ? ' flag needs' : ' flags need') . ' a human look');
         case 'overdue':
             return $b['refundsAllowed']
                 ? 'Pre-pay booking · deadline passed ' . $due . ' · slot releasable'
                 : 'Post-pay window ended ' . $due . ' · still payable · follow up';
-        case 'expired':           return 'Never paid · hold released';
+        case 'expired':           return !empty($b['neverApproved']) ? 'Never approved · request expired' : 'Never paid · hold released';
         case 'refund_requested':  return 'All documents in · verify';
         case 'refund_await_or':   return 'Receipts in · OR still to come';
         case 'refund_correction': return 'Returned to the customer · waiting on them';
@@ -623,6 +679,24 @@ function calendar_events($customerId = null) {
     ];
 
     $bookings = $customerId ? bookings_for_customer($customerId) : bookings_all();
+
+    /* A venue booking holds TIMES, not whole days (2026-10-27: several bookings
+       can share a date, with a cleanup gap), so its title says which hours —
+       read from the first day it holds. One query for every booking. */
+    $firstSlot = [];
+    $pdo = venusep_db();
+    if ($pdo !== null) {
+        try {
+            foreach ($pdo->query('SELECT booking_id, slot_date, start_time, end_time FROM venue_booking_slots ORDER BY slot_date, start_time') as $s) {
+                if (!isset($firstSlot[$s['booking_id']])) {
+                    $firstSlot[$s['booking_id']] = date('g:i A', strtotime($s['start_time'])) . '–' . date('g:i A', strtotime($s['end_time']));
+                }
+            }
+        } catch (PDOException $e) {
+            $firstSlot = [];
+        }
+    }
+
     $events = [];
     foreach ($bookings as $b) {
         if (!$b['eventDateIso']) {
@@ -641,10 +715,11 @@ function calendar_events($customerId = null) {
             $end = date('Y-m-d', strtotime($b['endDateIso'] . ' +1 day'));
         }
 
+        $hours = ($b['type'] === 'venue' && isset($firstSlot[$b['id']])) ? $firstSlot[$b['id']] . ' · ' : '';
         $event = [
-            'title'           => $customerId
+            'title'           => $hours . ($customerId
                                     ? $b['eventName']
-                                    : $b['eventName'] . ' · ' . $b['roomName'],
+                                    : $b['eventName'] . ' · ' . $b['roomName']),
             'start'           => $b['eventDateIso'],
             'backgroundColor' => $c[0],
             'borderColor'     => $c[0],
@@ -724,6 +799,47 @@ function booking_document_ids($bookingId) {
     }
 }
 
+/* EVERY GCash upload on a booking, oldest first, flags decoded — rejected ones
+   included (DB-DECISIONS #6). The staff side shows this as the upload history,
+   so a receipt the checker refused is no longer invisible to the people who
+   decide the payment. Ids only for the images: document-view.php serves them. */
+function booking_receipt_attempts($bookingId) {
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return [];
+    }
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT id, attempt_no, reference_number, receiver_number, amount_centavos,
+                    sha256_hash, verdict, flags_json, reviewed_at, override_note, created_at
+               FROM gcash_receipts WHERE booking_id = :b ORDER BY attempt_no, id'
+        );
+        $stmt->execute([':b' => (int) $bookingId]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $flags = json_decode((string) $r['flags_json'], true);
+            $r['flags'] = is_array($flags) ? $flags : [];
+            unset($r['flags_json']);
+            $r['outcome'] = booking_receipt_outcome($r);
+            $out[] = $r;
+        }
+        return $out;
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
+/* What became of one upload, in the customer's words — for "you already
+   uploaded this receipt (attempt 2, rejected by staff: …)". $r is a row of
+   booking_receipt_attempts(), flags decoded. */
+function booking_receipt_outcome(array $r) {
+    if (in_array('rejected_by_staff', $r['flags'], true)) {
+        $why = trim((string) ($r['override_note'] ?? ''));
+        return 'rejected by staff' . ($why !== '' ? ' — "' . $why . '"' : '');
+    }
+    return $r['verdict'] === 'rejected' ? 'rejected by the receipt check' : 'sent to staff for review';
+}
+
 /* The latest GCash receipt on a booking, with its flags decoded. */
 function booking_receipt($bookingId) {
     $pdo = venusep_db();
@@ -783,6 +899,7 @@ function booking_history_events(array $b) {
                 'counter_id_checked'         => 'ID checked in person',
                 'counter_identity_confirmed' => 'Account confirmed by password',
                 'counter_no_email'           => 'No email, receipt printed',
+                'receipt_attempts_allowed'   => 'More receipt attempts allowed',
             ];
             foreach ($stmt->fetchAll() as $t) {
                 $code = (string) $t['action_code'];

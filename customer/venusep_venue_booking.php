@@ -77,6 +77,12 @@ $lpBedCount   = array_sum(array_column($hostelRooms, 'beds'));
 /* Footer facts. Confirm these with the venue office before go-live. */
 $lpOfficeWhere = 'USeP Tagum–Mabini Campus, Apokon, Tagum City';
 $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
+/* COUNTER MODE (staff booking for a walk-in): every link keeps counter=1, and
+   the links that only mean something to a signed-in customer — My bookings,
+   Transaction history, refunds — are hidden, or one click drops staff on the
+   customer login page (2026-10-27). */
+$lpCounter = counter_mode();
+$lpQ = $lpCounter ? '?counter=1' : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -701,11 +707,11 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
           $free    = hostelBedsFree($room, $tonight);
           $mt      = $room['maintenance'];
           $closed  = $mt && $mt['blocks'] && hostelMaintCovers($mt, $tonight); ?>
-        <a class="lp-card lp-hs-card lp-lift" href="hostel-reservation.php?room=<?php echo urlencode($room['id']); ?>">
+        <a class="lp-card lp-hs-card lp-lift" href="hostel-reservation.php?room=<?php echo urlencode($room['id']); ?><?php echo $lpCounter ? '&counter=1' : ''; ?>">
           <?php echo lp_photo_block($room['id'], $crType === 'private' ? 'private' : 'bunk'); ?>
           <div class="lp-card-body">
             <h3><?php echo htmlspecialchars($room['name']); ?></h3>
-            <p class="lp-card-meta"><?php echo (int) $room['beds']; ?> beds &middot; <?php echo usep_price_html((int) $HOSTEL_RATES[$room['cr_type']], $isUsep, ' per head, per night'); ?></p>
+            <p class="lp-card-meta"><?php echo (int) $room['beds']; ?> beds &middot; <?php echo usep_price_html((int) $room['rate'], $isUsep, ' per head, per night'); ?></p>
             <span class="lp-free <?php echo $closed ? 'lp-free-closed' : (!$free ? 'lp-free-no' : 'lp-free-yes'); ?>">
               <i></i>
               <?php
@@ -746,7 +752,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
 <?php endif; ?>
           </div>
         </div>
-        <a class="lp-btn" href="faq.php#after">Read the FAQ</a>
+        <a class="lp-btn" href="faq.php<?php echo $lpQ; ?>#after">Read the FAQ</a>
       </div>
     </div>
   </section>
@@ -768,22 +774,26 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
         <div class="lp-footer-links">
           <a href="#venue-listings">Browse venues</a>
           <a href="#hostel-listings">Hostel beds</a>
+<?php if ($lpCounter): ?>
+          <a href="../admin/calendar.php">Availability calendar</a>
+<?php else: ?>
           <a href="calendar.php">Availability calendar</a>
           <a href="booking-history.php">My bookings</a>
           <a href="transaction-history.php">Transaction history</a>
+<?php endif; ?>
         </div>
       </div>
       <div>
         <h4>Help</h4>
         <div class="lp-footer-links">
-          <a href="faq.php">Frequently asked questions</a>
-          <a href="faq.php">How to pay by GCash</a>
-<?php if ($REFUNDS_ENABLED): ?>
+          <a href="faq.php<?php echo $lpQ; ?>">Frequently asked questions</a>
+          <a href="faq.php<?php echo $lpQ; ?>">How to pay by GCash</a>
+<?php if ($REFUNDS_ENABLED && !$lpCounter): ?>
           <a href="booking-history.php">Request a refund</a>
 <?php else: ?>
-          <a href="faq.php#after">Refund policy</a>
+          <a href="faq.php<?php echo $lpQ; ?>#after">Refund policy</a>
 <?php endif; ?>
-          <a href="faq.php">USeP discount rules</a>
+          <a href="faq.php<?php echo $lpQ; ?>">USeP discount rules</a>
         </div>
       </div>
       <div class="lp-footer-office">
@@ -802,7 +812,7 @@ $lpOfficeHours = 'Monday to Friday, 8:00 AM – 5:00 PM';
     </div>
     <div class="lp-footer-bottom">
       <span>&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</span>
-      <span><a href="faq.php#after">Booking &amp; cancellation policy</a></span>
+      <span><a href="faq.php<?php echo $lpQ; ?>#after">Booking &amp; cancellation policy</a></span>
     </div>
   </div>
 </footer>

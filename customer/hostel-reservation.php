@@ -1,4 +1,4 @@
-<?php require_once __DIR__ . '/../includes/auth.php'; customer_require_login(); /* customers only — guests go to the login page */ ?>
+<?php require_once __DIR__ . '/../includes/auth.php'; booking_page_require_access(); /* a customer booking for themselves, or staff booking for a walk-in at the counter (2026-10-27) */ ?>
 <?php
 /* The hostel's rooms + the availability model live in ONE include, shared with
    the landing page and admin Venue Management, so they cannot drift apart. */
@@ -31,8 +31,10 @@ require_once __DIR__ . '/../includes/room-photos.php';
       excluded, booking is          (a guest cannot leave and come back)
       built AROUND them
     fee x days                    beds x rate/head x nights
-    GCash -> business account     POS from CEDU first, then cash to staff
-                                    or GCash to the STAFF's account
+    GCash -> business account     PAY TO USE (2026-10-27): paid before the
+                                    bed is used — GCash to the STAFF's account
+                                    or cash at the front desk; the POS and OR
+                                    are paperwork that hold nothing up
 
   THE LOAD-BEARING RULE: `beds` is NEVER stored. beds = occupants.length.
   Storing both lets them disagree (beds=3 but 2 people named) and nothing
@@ -44,10 +46,10 @@ require_once __DIR__ . '/../includes/room-photos.php';
     "---------- helpers"         nights, beds-free, gender mix, maintenance
     "---------- actions"         what the buttons call
     "---------- date-picker"     calendar popup
-    "---------- CEDU flow"       ID -> POS wait -> payment -> OR
+    "---------- CEDU flow"       ID -> approval -> payment -> check-in
     "screen: DETAIL"             room page + booking panel (entry)
     "screen: REVIEW"             summary + valid-ID upload
-    "screen: PENDING"            waiting for staff to fetch the POS from CEDU
+    "screen: PENDING"            waiting for approval, then pay before check-in
     "screen: PAYMENT"            cash to staff / GCash to staff account
     "screen: CONFIRMATION"       confirmed + what still has to arrive
     "---------- render"
@@ -56,7 +58,7 @@ require_once __DIR__ . '/../includes/room-photos.php';
     · $hostelRooms       sample rooms (includes/hostel-rooms.php)
     · ACCOUNT            fake logged-in customer
     · $gcAccount         the hostel STAFF's designated GCash account
-    · demoRecordPos()    fake "staff came back from CEDU with the POS"
+    · demoGoPay()        jump to payment once "approved" (demo mode only)
     · demoIssueOr()      fake "cashier issued the Official Receipt"
     · localStorage       stands in for the receipts database
   ================================================================== -->
@@ -73,6 +75,8 @@ require_once __DIR__ . '/../includes/room-photos.php';
 <!-- Pannellum 360 panorama viewer — same lib and same hero treatment as the
      venue page. A hostel room needs it MORE than a hall does: the bunk layout
      and where the CR sits are exactly what a guest wants to look around at. -->
+<link rel="stylesheet" href="../assets/css/confirm-modal.css">
+<script src="../assets/js/confirm-modal.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.7/build/pannellum.css">
 <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.7/build/pannellum.js"></script>
 <!-- Tesseract.js — in-browser OCR for the GCash receipt checker (needs internet) -->
@@ -260,7 +264,10 @@ require_once __DIR__ . '/../includes/room-photos.php';
 </style>
 </head>
 <body>
-<?php $navMode = 'solid'; $navHere = 'hostel'; include __DIR__ . '/../includes/customer-nav.php'; ?>
+<?php $navMode = 'solid'; $navHere = 'hostel';
+/* counter mode draws its own bar (includes/counter-booker.php), like the venue page */
+$navCounterHasOwnBar = true;
+include __DIR__ . '/../includes/customer-nav.php'; ?>
 <div id="app"></div>
 
 <?php
@@ -316,7 +323,7 @@ $mrOthers = array_slice($mrOthers, 0, 4);
         <?php echo mr_pic($r['id'], $r['cr_type'] === 'private' ? 'private' : 'bunk'); ?>
         <div class="bk-more-body">
           <h3><?php echo htmlspecialchars($r['name']); ?></h3>
-          <p class="bk-more-meta"><?php echo (int) $r['beds']; ?> beds &middot; <?php echo usep_price_html((int) $HOSTEL_RATES[$r['cr_type']], $mrUsep, ' per head, per night'); ?></p>
+          <p class="bk-more-meta"><?php echo (int) $r['beds']; ?> beds &middot; <?php echo usep_price_html((int) $r['rate'], $mrUsep, ' per head, per night'); ?></p>
           <span class="bk-more-free <?php echo $closed ? 'is-closed' : (!$free ? 'is-none' : ''); ?>"><i></i><?php
             if ($closed)    echo 'Closed for maintenance tonight';
             elseif (!$free) echo 'No beds free tonight';
@@ -344,23 +351,27 @@ $mrOthers = array_slice($mrOthers, 0, 4);
         <div class="bk-footer-links">
           <a href="venusep_venue_booking.php#venue-listings">Browse venues</a>
           <a href="venusep_venue_booking.php#hostel-listings">Hostel beds</a>
+<?php if (counter_mode()): /* counter mode: staff calendar; no customer-only links (2026-10-27) */ ?>
+          <a href="../admin/calendar.php">Availability calendar</a>
+<?php else: ?>
           <a href="calendar.php">Availability calendar</a>
           <a href="booking-history.php">My bookings</a>
+<?php endif; ?>
         </div>
       </div>
       <div>
         <h4>Help</h4>
         <div class="bk-footer-links">
-          <a href="faq.php">Frequently asked questions</a>
-          <a href="faq.php#gcash">How to pay by GCash</a>
-          <a href="faq.php#after"><?php echo $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy'; ?></a>
-          <a href="faq.php#discount">USeP discount rules</a>
+          <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>">Frequently asked questions</a>
+          <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>#gcash">How to pay by GCash</a>
+          <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>#after"><?php echo $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy'; ?></a>
+          <a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>#discount">USeP discount rules</a>
         </div>
       </div>
     </div>
     <div class="bk-footer-bottom">
       <span>&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</span>
-      <span><a href="faq.php#after">Booking &amp; cancellation policy</a><a href="faq.php">Privacy</a></span>
+      <span><a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>#after">Booking &amp; cancellation policy</a><a href="faq.php<?php echo counter_mode() ? '?counter=1' : ''; ?>">Privacy</a></span>
     </div>
   </div>
 </footer>
@@ -374,15 +385,22 @@ const GCASH_ACCOUNTS = <?php echo json_encode($gcAccounts, JSON_UNESCAPED_SLASHE
    before submitting. ON leaves the hostel's refund text as it was — hostel refund
    REQUESTS are still a separate, undecided flow (venue-only, 2026-09-09). */
 const REFUNDS_ENABLED = <?php echo $REFUNDS_ENABLED ? 'true' : 'false'; ?>;
-/* PAYMENT TIMING follows the same switch (DB-DECISIONS #18); the rule and the
-   date math are shared with every customer page via includes/refund-policy.php.
-   refunds ON  = pre-pay : POS from CEDU after approval, pay before check-in.
-   refunds OFF = post-pay: staff fetch the POS after CHECK-OUT; the guest pays
-                 within PAY_POLICY.graceDays of the check-out day. */
-<?php echo payment_policy_js(); ?>
+/* PAYMENT TIMING: the hostel is PAY TO USE (decided 2026-10-27, DB-DECISIONS
+   #26), whatever the refund switch says — venues still follow it (#18). Payment
+   opens at approval (GCash from Pay now, or cash at the front desk) and is due
+   by the END of the check-in day; unpaid by then, the beds are released. The
+   POS and the OR are paperwork recorded later; neither holds anything up. */
 </script>
+<?php include __DIR__ . '/../includes/counter-booker.php'; /* the counter's "who" step, shared with the venue page */ ?>
 <script>
 /* ---------- data ---------- */
+/* COUNTER MODE (2026-10-27): this same page, driven by staff, for a guest at the
+   front desk — the hostel twin of the venue page's counter. counter_mode()
+   takes the privilege from the STAFF SESSION, never from the URL
+   (includes/auth.php); it submits to admin/booking-create.php, which approves
+   the stay outright. */
+const COUNTER = <?php echo counter_mode() ? 'true' : 'false'; ?>;
+const COUNTER_STAFF = <?php echo json_encode(counter_staff_name(), JSON_UNESCAPED_UNICODE); ?>;
 const NOW = new Date();
 const TODAY = isoOf(NOW);
 
@@ -442,7 +460,9 @@ const ROOM_OK = ROOMS.some(r=>r.id===ROOM_PARAM);
 if(!ROOM_OK) location.replace('venusep_venue_booking.php');
 
 let state = {
-  screen: 'detail',                       // detail | review | pending | payment | done
+  screen: 'detail',                       // detail | who (counter) | review | pending | payment | done
+  booker: Object.assign({}, booker0),     // counter only: who the stay is for (includes/counter-booker.php)
+  counterResult: null,                    // counter only: what booking-create.php answered
   roomId: ROOM_OK ? ROOM_PARAM : ROOMS[0].id,
   tab: 'overview',                        // overview | availability | policies
   /* NOTE: there is no `beds` field. beds = occupants.length, always. The bed
@@ -451,8 +471,7 @@ let state = {
   payMethod: 'gcash',                     // 'gcash' (staff account) | 'cash' (to staff)
   affiliated: isUsepAccount(ACCOUNT.email) ? true : null,   // pre-selected for a USeP account (preview — the ID decides)
   idFile: null,                           // required to submit
-  posNumber: null,                        // null until staff returns from CEDU -> payment LOCKED
-  approved: false,                        // staff approved the ID + booking (post-pay: beds held, nothing to pay yet)
+  approved: false,                        // staff approved the ID + booking -> payment open until the end of check-in day
   orNumber: null,                         // null until the cashier issues it -> post-confirmation only
   agreeExact: false,
   agreeNoRefund: false,                   // "non-refundable" ticked? (required only while refunds are OFF)
@@ -469,7 +488,9 @@ function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,
 function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
 function fmtShort(d){ if(!d) return '—'; return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
 function getRoom(){ return ROOMS.find(r=>r.id===state.roomId) || null; }
-function roomRate(r){ return RATES[r.cr_type]; }
+/* each room's OWN rate (2026-10-27): rates are edited per room now, and the
+   server charges the room's own — a per-CR-type table could show another price */
+function roomRate(r){ return r.rate; }
 function initials(n){ return n.split(' ').map(w=>w[0]).slice(0,2).join(''); }
 
 /* NIGHTS ARE EXCLUSIVE of the check-out date: Aug 1 -> Aug 4 occupies the nights
@@ -613,7 +634,9 @@ function updateReady(){
 }
 function setTab(k){ state.tab=k; render(); }
 function goHome(){ location.href='venusep_venue_booking.php'; }
-function goReview(){ if(derive().ready){ state.screen='review'; window.scrollTo(0,0); render(); } }
+/* At the counter the room, dates and guests are settled first, then we ask who
+   the stay is for — the "who" step sits between detail and review. */
+function goReview(){ if(derive().ready){ state.screen = COUNTER ? 'who' : 'review'; window.scrollTo(0,0); render(); } }
 function backToDetail(){ state.screen='detail'; window.scrollTo(0,0); render(); }
 function setPayMethod(m){ state.payMethod=m; render(); }
 function toggleAgreeExact(el){ state.agreeExact=!!el.checked; render(); }
@@ -673,11 +696,11 @@ function nextDay(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+
 /* ---------- CEDU flow ----------
    The hostel does NOT use the venue's payment path. Money moves:
        customer -> staff -> university cashier
-   and two documents come from other offices: the POS (from CEDU, BEFORE the
-   customer may pay) and the OR (from the cashier, AFTER payment is confirmed).
-   The POS is a real gate — payment stays locked without it. The OR is NOT a
-   payment status: payment is already finished when it arrives. It is tracked
-   as a pending DOCUMENT so nobody thinks the booking is unpaid. */
+   PAY TO USE (2026-10-27): the guest pays BEFORE using the bed — from approval,
+   by GCash to the staff account or in cash at the front desk, by the end of the
+   check-in day. Two documents come from other offices: the POS (CEDU) and the
+   OR (the cashier). Neither is a gate any more; both are paperwork staff
+   record whenever they arrive, so nobody thinks a paid stay is unpaid. */
 function uploadId(input){
   const f=input.files && input.files[0]; if(!f) return;
   if(state.idFile && state.idFile.url){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
@@ -692,7 +715,12 @@ function removeId(){
 }
 /* While refunds are OFF, the guest must acknowledge the stay is final before
    the booking is made — the policy is agreed at booking time, not at payment. */
-function canSubmitRequest(){ return !!state.idFile && state.affiliated !== null && (REFUNDS_ENABLED || state.agreeNoRefund); }
+/* COUNTER: no ID file — staff saw the ID — and affiliation was answered on the
+   "who" step, so what must be true is that the booker is settled. */
+function canSubmitRequest(){
+  if(COUNTER) return counterBookerReady() && (REFUNDS_ENABLED || state.agreeNoRefund);
+  return !!state.idFile && state.affiliated !== null && (REFUNDS_ENABLED || state.agreeNoRefund);
+}
 function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
 /* Submit FOR REAL. The screen advances when the server has a row, so a guest is
    never shown a reference for a stay that does not exist. Beds are assigned by
@@ -714,47 +742,63 @@ async function submitRequest(){
     return { name:o.name, gender: o.gender === 'F' ? 'female' : (o.gender === 'M' ? 'male' : 'other') };
   })));
   fd.append('affiliated', state.affiliated ? '1' : '0');
-  fd.append('method', state.payMethod || 'gcash');
   fd.append('agree_no_refund', state.agreeNoRefund ? '1' : '0');
-  fd.append('id_document', state.idFile.file, state.idFile.name);
+  /* COUNTER: who it is for travels with the stay, and no ID file does — the
+     server re-checks every one of these (admin/booking-create.php).
+     PAY TO USE: the stay is only recorded once the cash is in hand, so staff
+     confirm it first; cancelling saves nothing. Online, no method is sent —
+     the guest chooses GCash or cash when they pay. */
+  if(COUNTER){
+    if(!(await venusepConfirm('Take '+peso(derive().total)+' in cash from the guest now. The stay is booked and marked paid only after you confirm.',
+          { title:'Cash received?', okLabel:'Cash received — book it' }))) return;
+    fd.append('method', 'cash');
+    fd.append('cash_received', '1');
+    const k = state.booker;
+    fd.append('booker_mode', k.mode);
+    if(k.mode==='account') fd.append('customer_id', k.customerId);
+    else { fd.append('walkin_name', k.name.trim()); fd.append('walkin_phone', cleanPhone(k.phone) || ''); fd.append('walkin_address', k.address.trim()); fd.append('walkin_email', k.noEmail ? '' : k.email.trim()); fd.append('walkin_no_email', k.noEmail ? '1' : '0'); }
+    fd.append('id_checked', k.idChecked ? '1' : '0');
+    fd.append('usep_id', k.usepId ? '1' : '0');
+  } else {
+    fd.append('id_document', state.idFile.file, state.idFile.name);
+  }
 
   submitting = true; render();
   try{
-    const res = await fetch('booking-submit.php', { method:'POST', body:fd, credentials:'same-origin' });
+    const res = await fetch(COUNTER ? '../admin/booking-create.php' : 'booking-submit.php', { method:'POST', body:fd, credentials:'same-origin' });
     const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
     if(!out.ok){ submitting=false; state.submitError = out.message || 'Your booking was not submitted.'; render(); return; }
     state.reference = out.reference;          /* the database owns booking identity */
     state.bookingDbId = out.bookingId;
     state.submitError = null;
     state.submitted = true;                   // the form is gone for good
-    state.screen='pending'; state.posNumber=null; window.scrollTo(0,0);
+    /* COUNTER: staff ARE the approver — the stay came back approved */
+    state.screen = COUNTER ? 'done' : 'pending'; window.scrollTo(0,0);
+    if(COUNTER) state.counterResult = out;
   }catch(e){
     state.submitError = 'Could not reach the server, so your booking was not submitted.';
   }
   submitting = false; render();
 }
-/* [SIM] the staff side is not connected — this stands in for a staff member
-   walking to CEDU, getting the POS, and typing its number into the booking. */
-function demoRecordPos(){
-  if(!DEMO_MODE) return;     /* live system: staff record the real POS from CEDU */
-  state.posNumber='POS-'+Math.floor(10000 + Math.random()*90000);
+/* [SIM] the staff side is not connected — these stand in for the hostel staff
+   approving the ID + booking, after which payment is open. */
+function demoApprove(){ if(!DEMO_MODE) return; state.approved=true; window.scrollTo(0,0); render(); }
+function demoGoPay(){
+  if(!DEMO_MODE || !state.approved) return;  /* live system: the guest pays from My Bookings (Pay now) */
   state.screen='payment'; window.scrollTo(0,0); render();
 }
-/* [SIM] post-pay only: staff approve the ID + booking. The beds are held; the
-   POS is fetched after check-out, so payment stays locked. */
-function demoApprove(){ if(!DEMO_MODE) return; state.approved=true; window.scrollTo(0,0); render(); }
-/* This stay's payment timing — the shared rule applied to the dates typed. */
-function payByInfo(){ return payPolicyFor(state.booking.checkIn, state.booking.checkOut); }
+/* PAY TO USE: due by the END of the check-in day (fn_payment_deadline). */
+function payByInfo(){ return { label: state.booking.checkIn ? fmtDate(state.booking.checkIn) : '—' }; }
 function receiptGate(){ return state.payMethod==='cash' ? true : receiptOk(); }
-/* Record the payment FOR REAL. The hostel's extra gate still applies first:
-   payment cannot exist before CEDU has issued the POS. The verdict is then
-   recomputed server-side against this booking's total and the HOSTEL's own
-   GCash account — which is a designated staff account, not a business one, so
-   a receipt paid to a venue account is correctly refused here. */
+/* Record the payment FOR REAL — only once staff approved the stay (the server
+   refuses it otherwise). The verdict is recomputed server-side against this
+   booking's total and the HOSTEL's own GCash account — which is a designated
+   staff account, not a business one, so a receipt paid to a venue account is
+   correctly refused here. */
 let paying = false;
 async function confirmBooking(){
   if(paying) return;
-  if(!state.posNumber) return;              // payment cannot exist before the POS
+  if(!state.approved) return;               // payment opens at approval
   if(!receiptGate()) return;
   const cash = state.payMethod === 'cash';
 
@@ -1109,14 +1153,10 @@ function detailScreen(){
       ${policy('Booking is per bed','You reserve <strong>beds</strong>, not the room. Other guests may book the remaining beds in the same room — unless you book all '+R.beds+', which gives you the whole room. A bed has to be free on <strong>every night</strong> of your stay.')}
       ${policy('Every bed is named','Give the name of the person sleeping in each bed. Staff match these against your valid ID at check-in. The gender mix of the room is shown so you know who you are sharing with — <strong>no bed is reserved by gender</strong>.')}
       ${policy('Nights, not days','A stay is counted in <strong>nights</strong>: check in on the 1st and out on the 4th and that is 3 nights. Your check-out day is not charged. A stay must be <strong>continuous</strong> — if the room is closed for maintenance on any night in your range, those dates cannot be booked at all.')}
-      ${policy('Payment goes through '+CEDU.name,(PAY_POLICY.prepay
-        ? 'After you book, hostel staff request a <strong>POS</strong> from '+CEDU.name+'. <strong>You cannot pay until it arrives</strong> — nothing is wrong and nothing is late while you wait.'
-        : 'You pay <strong>after your stay</strong>, not before. Once you check out, hostel staff request a <strong>POS</strong> from '+CEDU.name+'; payment opens when it arrives and is due within <strong>'+PAY_POLICY.graceDays+' days of your check-out day</strong>. It cannot be paid earlier, and a stay not paid within the window is marked <strong>overdue</strong>.')+' Once it is in, pay cash to the staff or GCash to the designated staff account (send the <strong>exact amount</strong> — a different amount is not confirmed automatically and has to be reviewed by staff).')}
-      ${policy('One full payment','The whole stay is paid at once'+(PAY_POLICY.prepay?', up front':', after check-out')+'. There is no per-night billing and no partial payment.')}
-      ${policy('Your receipts','You get a <strong>VENUSeP System Receipt</strong> once your payment is confirmed, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already confirmed — the booking is not waiting on it.')}
-      ${PAY_POLICY.prepay
-        ? policy('At check-in','Show the staff your <strong>POS</strong> and your <strong>Official Receipt</strong>, plus the valid ID you submitted. Each guest sleeps in the bed booked under their name.')
-        : policy('At check-in','Show the staff the valid ID you submitted. Each guest sleeps in the bed booked under their name. Your POS and Official Receipt come after the stay, once you have paid.')}
+      ${policy('Pay before you check in','The hostel is <strong>pay to use</strong>: your stay must be paid before you get your bed. Once staff approve your booking, pay any time up to your check-in day — <strong>GCash</strong> to the designated staff account from My Bookings (send the <strong>exact amount</strong> — a different amount is not confirmed automatically and has to be reviewed by staff), or <strong>cash at the front desk</strong> when you arrive. A stay not paid by the <strong>end of its check-in day</strong> is released.')}
+      ${policy('One full payment','The whole stay is paid at once, up front. There is no per-night billing and no partial payment.')}
+      ${policy('Your receipts','You get a <strong>VENUSeP System Receipt</strong> once your payment is confirmed, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already paid — the booking is not waiting on it.')}
+      ${policy('At check-in','Show the staff the valid ID you submitted. Check-in needs a <strong>paid</strong> stay: a GCash receipt still being reviewed is confirmed by staff first. Each guest sleeps in the bed booked under their name.')}
       ${!REFUNDS_ENABLED
         ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your dates and guests before you submit and pay. If USeP has to close the room, the hostel office will offer you a <strong>replacement room or new dates</strong> instead; if you cannot accept either, your payment is returned.')
         : policy('Refunds','A refund requires the VENUSeP System Receipt, the GCash Payment Receipt (if you paid by GCash), <strong>and</strong> the Official Receipt. Requests missing any of these cannot be processed.')}`;
@@ -1216,7 +1256,7 @@ function detailScreen(){
             </div>
             <div style="display:flex;align-items:center;gap:0;border:1px solid transparent;border-radius:10px;overflow:hidden;height:38px;background:#fff">
               <button onclick="setBeds(${beds-1})" ${beds<=1?'disabled':''} style="width:36px;height:100%;border:none;background:none;font-size:17px;color:${beds<=1?'#c6c2ba':'#4a463f'};cursor:${beds<=1?'default':'pointer'}">−</button>
-              <span style="min-width:26px;text-align:center;font-size:14px;font-weight:680">${beds}</span>
+              <span style="min-width:26px;text-align:center;font-size:14px;font-weight:680;color:#1c1b19" aria-live="polite">${beds}</span>
               <button onclick="setBeds(${beds+1})" ${beds>=cap?'disabled':''} style="width:36px;height:100%;border:none;background:none;font-size:17px;color:${beds>=cap?'#c6c2ba':'#4a463f'};cursor:${beds>=cap?'default':'pointer'}">+</button>
             </div>
           </div>
@@ -1241,7 +1281,7 @@ function detailScreen(){
               <div style="font-size:24px;font-weight:750;letter-spacing:-.01em;color:#fff">${peso(d.total)}</div>
             </div>
           </div>
-          <div style="font-size:12.5px;color:#d5b8b5;margin-top:4px">Paid in full after the staff get your POS from ${esc(CEDU.name)}.</div>
+          <div style="font-size:12.5px;color:#d5b8b5;margin-top:4px">${COUNTER?'Paid in full, in cash, before the stay is booked.':'Paid in full before you check in.'}</div>
 
           <button id="hbGo" class="bk-go ${d.ready?'on':'off'}" onclick="goReview()" ${d.ready?'':'disabled'} style="margin-top:14px">Continue</button>
           <div id="hbHint" style="font-size:12.5px;color:#d5b8b5;text-align:center;margin-top:10px;min-height:16px">${esc(d.hint)}</div>
@@ -1286,12 +1326,12 @@ function reviewScreen(){
   <main style="max-width:620px;margin:0 auto;padding:34px 24px 72px">
     <button onclick="backToDetail()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">← Back</button>
     <h1 style="margin:0 0 6px;font-size:25px;font-weight:720;letter-spacing:-.01em">Review your booking</h1>
-    <p style="margin:0 0 22px;font-size:14px;color:#7a766f">Check the details, then attach a valid ID. Staff request your POS from ${esc(CEDU.name)} after you submit.</p>
+    <p style="margin:0 0 22px;font-size:14px;color:#7a766f">${COUNTER?'Check the details with the guest, then take the payment.':'Check the details, then attach a valid ID. Once staff approve it, you pay before you check in.'}</p>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
         ${blk('Room', esc(R.name)+' <span style="font-weight:400;color:#8a857d">· '+esc(CR_LABEL[R.cr_type])+'</span>')}
-        ${blk('Booked by', esc(ACCOUNT.name))}
+        ${blk('Booked by', esc(COUNTER ? state.booker.name : ACCOUNT.name))}
         ${blk('Check-in', esc(fmtDate(x.d.b.checkIn)))}
         ${blk('Check-out', esc(fmtDate(x.d.b.checkOut)))}
         ${blk('Stay', esc(x.nightsLabel))}
@@ -1307,9 +1347,19 @@ function reviewScreen(){
         <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
         <span style="color:#1c7a4f;font-weight:640">&minus;${peso(x.d.discountAmount)}</span>
       </div>
-      <div style="font-size:12.5px;color:#a5a19a;line-height:1.5;margin-top:4px">Provisional &mdash; staff confirm the discount from your USeP ID. Payment cannot open until the POS arrives anyway, so it is settled well before you pay.</div>`:''}
+      <div style="font-size:12.5px;color:#a5a19a;line-height:1.5;margin-top:4px">Provisional &mdash; staff confirm the discount from your USeP ID when they approve the booking, before payment opens.</div>`:''}
     </div>
 
+    ${COUNTER ? `
+    <!-- COUNTER: no affiliation question and no upload — the staff member looked
+         at the ID on the "who" step, and that judgement goes in the booking's
+         history with their name (admin/booking-create.php). -->
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px;font-size:13px;line-height:1.7;color:#1c1b19">
+      &check; Valid ID checked in person by <strong>${esc(COUNTER_STAFF)}</strong>${state.booker.usepId?' &middot; <strong>USeP ID</strong>, discount applied':''}<br>
+      ${state.booker.mode==='account'
+        ? '&check; Account confirmed by the guest&rsquo;s password &mdash; <strong>'+esc(state.booker.name)+'</strong>'
+        : '&middot; Walk-in with no account &mdash; <strong>'+esc(state.booker.name)+'</strong> &middot; '+esc(state.booker.phone)+' &middot; pays at the counter'}
+    </div>` : `
     <!-- USeP AFFILIATION — same rule as the venue page: a CLAIM the customer
          makes, proved by a USeP ID and confirmed by staff. The usep.edu.ph
          account is evidence shown to staff, never a grant (includes/pricing.php).
@@ -1337,7 +1387,7 @@ function reviewScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px">
       <div style="font-size:14.5px;font-weight:680;margin-bottom:3px">Valid ID <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">One ID for the person booking. Staff match it at check-in, and ${esc(CEDU.name)} needs it on the POS request.</div>
+      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">One ID for the person booking. Staff check it before approving, and match it at check-in.</div>
       <input type="file" id="idFile" accept="image/png,image/jpeg,image/webp,application/pdf" style="display:none" onchange="uploadId(this)">
       ${idOk?`
         <div style="display:flex;align-items:center;gap:11px;border:1px solid rgba(0,0,0,.12);border-radius:11px;padding:11px 13px;background:#fff">
@@ -1349,7 +1399,7 @@ function reviewScreen(){
           <div style="font-size:13.5px;font-weight:600;color:#4a463f">Tap to upload your valid ID</div>
           <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG, JPG or PDF · school or government ID</div>
         </div>`}
-    </div>
+    </div>`}
 
     ${REFUNDS_ENABLED?'':`
     <div style="background:#fff;border:1px solid ${state.agreeNoRefund?'#d4ebdd':'#f0d9b8'};border-radius:16px;padding:18px;margin-top:14px">
@@ -1361,15 +1411,18 @@ function reviewScreen(){
       </label>
     </div>`}
 
-    <button onclick="submitRequest()" ${(canSubmitRequest()&&!submitting)?'':'disabled'} style="width:100%;height:48px;margin-top:16px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14.5px;font-weight:650;cursor:${(canSubmitRequest()&&!submitting)?'pointer':'not-allowed'};opacity:${canSubmitRequest()?1:.45}">${submitting?'Submitting&hellip;':'Submit booking request'}</button>
-    <div style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px">${!idOk?'Attach a valid ID to continue':!canSubmitRequest()?'Tick that you understand the booking is non-refundable to continue':(PAY_POLICY.prepay?'You cannot pay yet — the POS has to come from '+esc(CEDU.name)+' first.':'Nothing to pay now — payment opens after your stay, once the POS is in from '+esc(CEDU.name)+'.')}</div>
+    <button onclick="submitRequest()" ${(canSubmitRequest()&&!submitting)?'':'disabled'} style="width:100%;height:48px;margin-top:16px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14.5px;font-weight:650;cursor:${(canSubmitRequest()&&!submitting)?'pointer':'not-allowed'};opacity:${canSubmitRequest()?1:.45}">${submitting?'Submitting&hellip;':(COUNTER?'Cash received &mdash; book it ('+peso(x.d.total)+')':'Submit booking request')}</button>
+    <div style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px">${COUNTER?(canSubmitRequest()?'Take the cash first. Nothing is booked until you confirm it is received.':'Tick that the guest understands the booking is non-refundable to continue'):!idOk?'Attach a valid ID to continue':!canSubmitRequest()?'Tick that you understand the booking is non-refundable to continue':'Once staff approve it, pay before you check in &mdash; GCash from My Bookings, or cash at the front desk &mdash; by the end of '+esc(payByInfo().label)+'.'}</div>
   </main>`;
 }
 
-/* ---------- screen: PENDING (waiting on CEDU for the POS) ---------- */
+/* ---------- screen: PENDING (approval, then pay before check-in) ----------
+   PAY TO USE (2026-10-27): no POS to wait for. Staff approve the ID + booking;
+   from then on the guest pays — GCash from My Bookings, or cash at the front
+   desk — by the end of the check-in day, and gets the bed once it is paid. */
 function pendingScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
-  const pb=payByInfo();
+  const due=payByInfo().label;
   const st=(label,status,bg,fg)=>`
     <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(0,0,0,.06)">
       <span style="font-size:13.5px;color:#4a463f">${label}</span>
@@ -1383,20 +1436,17 @@ function pendingScreen(){
         ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1c7a4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
         : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8a5a12" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'}
     </div>
-    <h1 style="margin:0 0 8px;font-size:25px;font-weight:720;letter-spacing:-.01em">${PAY_POLICY.prepay?'Submitted — waiting for your POS':state.approved?'Approved — pay after your stay':'Submitted — awaiting approval'}</h1>
-    <p style="margin:0 auto;max-width:460px;font-size:14.5px;line-height:1.6;color:#4a463f">${PAY_POLICY.prepay
-      ? 'Hostel staff take your booking to <strong>'+esc(CEDU.name)+'</strong> and come back with a <strong>POS</strong>. Payment opens once they have it — there is nothing for you to do until then, and nothing to pay yet.'
-      : state.approved
-        ? 'Your ID and booking are approved and your beds are held. Nothing to pay yet: after you check out, staff fetch your <strong>POS</strong> from '+esc(CEDU.name)+', payment opens, and it is due by <strong>'+pb.label+'</strong>.'
-        : 'Hostel staff review your <strong>ID and booking</strong>. Once approved your beds are held. You pay <strong>after your stay</strong> — staff fetch the POS from '+esc(CEDU.name)+' after check-out, and payment is due within '+pb.grace+' days of your check-out day.'}</p>
+    <h1 style="margin:0 0 8px;font-size:25px;font-weight:720;letter-spacing:-.01em">${state.approved?'Approved — pay before you check in':'Submitted — awaiting approval'}</h1>
+    <p style="margin:0 auto;max-width:460px;font-size:14.5px;line-height:1.6;color:#4a463f">${state.approved
+      ? 'Your beds are held. Pay <strong>'+peso(x.d.total)+'</strong> before you check in: GCash from My Bookings, or cash at the hostel front desk when you arrive. Unpaid by the end of <strong>'+esc(due)+'</strong>, the beds are released.'
+      : 'Hostel staff review your <strong>ID and booking</strong>. Once approved, you pay <strong>'+peso(x.d.total)+'</strong> before you check in — GCash from My Bookings, or cash at the front desk when you arrive.'}</p>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:4px 18px;margin-top:24px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
       ${st('Booking request',state.approved?'Approved':'Received','#e8f2ec','#1c7a4f')}
       ${state.approved?st('Valid ID ('+esc(state.idFile?state.idFile.name:'submitted')+')','Approved','#e8f2ec','#1c7a4f'):st('Valid ID ('+esc(state.idFile?state.idFile.name:'submitted')+')','Under review','#fdf3e6','#8a5a12')}
-      ${PAY_POLICY.prepay?st('POS from '+esc(CEDU.name),'Staff are requesting it','#fdf3e6','#8a5a12'):st('POS from '+esc(CEDU.name),'Requested after check-out','#fff','#6b675f')}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0">
         <span style="font-size:13.5px;color:#4a463f">Payment</span>
-        <span style="padding:4px 11px;border-radius:999px;font-size:12px;background:#fff;border:1px solid rgba(0,0,0,.14);color:#6b675f">${PAY_POLICY.prepay?'Locked until the POS arrives':'Opens '+pb.opensLabel}</span>
+        <span style="padding:4px 11px;border-radius:999px;font-size:12px;background:${state.approved?'#fdf3e6':'#fff'};border:1px solid ${state.approved?'#fdf3e6':'rgba(0,0,0,.14)'};color:${state.approved?'#8a5a12':'#6b675f'}">${state.approved?'Due by the end of '+esc(due):'Opens once approved'}</span>
       </div>
     </div>
 
@@ -1405,26 +1455,24 @@ function pendingScreen(){
         ${blk('Reference', esc(state.reference))}
         ${blk('Room', esc(R.name))}
         ${blk('Stay', esc(x.stayLabel)+' <span style="font-weight:400;color:#8a857d">· '+esc(x.nightsLabel)+'</span>')}
-        ${blk(PAY_POLICY.prepay?'Amount (pay after the POS)':'Amount (pay after your stay)', peso(x.d.total))}
+        ${blk('Amount (before check-in)', peso(x.d.total))}
       </div>
-      ${PAY_POLICY.prepay?'':'<div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">Payment opens <strong>'+pb.opensLabel+'</strong> (your check-out day) once the POS is in, and is due by <strong>'+pb.label+'</strong> — '+pb.grace+' days after check-out. It cannot be paid earlier. Stays not paid by then are marked overdue.</div>'}
+      <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">The hostel is <strong>pay to use</strong>: staff check you in once the stay is paid. A GCash receipt still being reviewed is confirmed first.</div>
     </div>
 
     ${DEMO_MODE ? `
     <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
       <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
-      ${PAY_POLICY.prepay ? `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the staff side is standing in — use this to simulate a staff member coming back from ${esc(CEDU.name)} and recording the POS number.</div>
-      <button onclick="demoRecordPos()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate POS received → unlock payment</button>` : !state.approved ? `
+      ${!state.approved ? `
       <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the staff side is standing in — use this to simulate the hostel staff approving your ID and booking.</div>
       <button onclick="demoApprove()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate staff approval</button>` : `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Payment opens by itself after check-out, once staff record the POS from ${esc(CEDU.name)} — use this to jump there.</div>
-      <button onclick="demoRecordPos()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate: checked out, POS received → unlock payment</button>`}
+      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Payment is open. Use this to go to the payment step, as Pay now in My Bookings would.</div>
+      <button onclick="demoGoPay()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Pay now</button>`}
     </div>` : `
     <!-- Live system: real people do these steps. Say who has it and where the
          answer will appear, rather than ending the screen on nothing. -->
     <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
-      <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the hostel staff now${PAY_POLICY.prepay ? `, and they will fetch the POS from ${esc(CEDU.name)} before payment can open` : ''}. You will see the decision and pay for this stay in <a href="booking-history.php" style="color:#1f1e1e;font-weight:640">My Bookings</a>.</div>
+      <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the hostel staff now. You will see the decision in <a href="booking-history.php" style="color:#1f1e1e;font-weight:640">My Bookings</a> &mdash; pay there with <strong>Pay now</strong>, or bring the cash and your valid ID to the front desk.</div>
     </div>`}
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse other rooms</button>
@@ -1538,10 +1586,10 @@ function paymentScreen(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;padding:14px;border:1px solid rgba(0,0,0,.08);border-radius:12px;background:#fff;margin-bottom:14px">
       ${blk('Pay at', esc(CASH_PAY.where))}
       ${blk('Open', esc(CASH_PAY.hours))}
-      ${blk('Quote your POS', esc(state.posNumber||'—'))}
+      ${blk('Quote your reference', esc(state.reference))}
       ${blk('Exact amount', '<span style="font-size:16px">'+peso(x.d.total)+'</span>')}
       <div style="grid-column:1 / -1;font-size:12.5px;color:#8a857d;line-height:1.5;border-top:1px solid rgba(0,0,0,.06);padding-top:11px">
-        You hand the cash to the hostel staff, who bring it to the ${esc(CASHIER.name)} with your POS. Your Official Receipt comes back from the cashier.
+        Pay the hostel staff when you arrive, by the end of ${esc(payByInfo().label)} &mdash; you get your bed once it is paid. Your Official Receipt comes back from the ${esc(CASHIER.name)} later.
       </div>
     </div>`;
 
@@ -1549,15 +1597,7 @@ function paymentScreen(){
   ${pageHeader()}
   <main style="max-width:620px;margin:0 auto;padding:34px 24px 72px">
     <h1 style="margin:0 0 6px;font-size:25px;font-weight:720;letter-spacing:-.01em">Payment</h1>
-    <p style="margin:0 0 18px;font-size:14px;color:#7a766f">${PAY_POLICY.prepay?'Your POS is in. You can pay now — one full payment for the whole stay.':'Your stay is over and your POS is in. Pay by <strong>'+payByInfo().label+'</strong> — one full payment for the whole stay. After that it is marked overdue.'}</p>
-
-    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;margin-bottom:16px;background:#fff;border:1px solid rgba(0,0,0,.09)">
-      <span style="width:8px;height:8px;border-radius:999px;background:#2f9e63;flex:none"></span>
-      <div style="flex:1">
-        <div style="font-size:13.5px;font-weight:650;color:#1c1b19">POS received from ${esc(CEDU.name)} · ${esc(state.posNumber||'—')}</div>
-        <div style="font-size:12.5px;color:#7a766f;margin-top:1px">Recorded by the hostel staff. Keep this number${PAY_POLICY.prepay?' — you show it at check-in.':' for your records.'}</div>
-      </div>
-    </div>
+    <p style="margin:0 0 18px;font-size:14px;color:#7a766f">Your booking is approved. Pay before you check in, by the end of <strong>${esc(payByInfo().label)}</strong> &mdash; one full payment for the whole stay. Unpaid by then, the beds are released.</p>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-bottom:14px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
@@ -1570,13 +1610,13 @@ function paymentScreen(){
 
     <div style="display:flex;gap:10px;margin-bottom:16px">
       ${methodCard('gcash','GCash','Send to the designated staff account — checked instantly.')}
-      ${methodCard('cash','Cash to staff','Hand it to the hostel front desk with your POS.')}
+      ${methodCard('cash','Cash at the front desk','Pay the hostel staff when you arrive.')}
     </div>
 
     ${cash?cashBody:gcashBody}
 
     <button onclick="confirmBooking()" ${paid?'':'disabled'} style="width:100%;height:48px;margin-top:4px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14.5px;font-weight:650;cursor:${paid?'pointer':'not-allowed'};opacity:${paid?1:.45}">${cash?'I will pay at the front desk':'Confirm payment'}</button>
-    <div style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px">${cash?'Your beds are held until you pay at the front desk.':(paid?'':'Upload a receipt that passes the check to continue')}</div>
+    <div style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px">${cash?'Your beds are held until the end of '+esc(payByInfo().label)+' — pay at the front desk before then.':(paid?'':'Upload a receipt that passes the check to continue')}</div>
   </main>`;
 }
 
@@ -1596,18 +1636,14 @@ function doneScreen(){
     <div style="width:46px;height:46px;border-radius:999px;background:#e8f2ec;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1c7a4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
     </div>
-    <h1 style="margin:0 0 8px;font-size:25px;font-weight:720;letter-spacing:-.01em">${cash?(PAY_POLICY.prepay?'Beds reserved — pay at the front desk':'Pay at the front desk'):(PAY_POLICY.prepay?'Booking confirmed':'Payment confirmed')}</h1>
+    <h1 style="margin:0 0 8px;font-size:25px;font-weight:720;letter-spacing:-.01em">${cash?'Beds held — pay at the front desk':'Payment sent'}</h1>
     <p style="margin:0 auto;max-width:460px;font-size:14.5px;line-height:1.6;color:#4a463f">${cash
-      ? (PAY_POLICY.prepay
-        ? 'Your beds are held. Bring your POS to the hostel front desk and hand the staff '+peso(x.d.total)+'.'
-        : 'Bring your POS to the hostel front desk and hand the staff '+peso(x.d.total)+' by <strong>'+payByInfo().label+'</strong>.')
-      : (PAY_POLICY.prepay
-        ? 'Your payment is verified and your beds are booked. One document is still on its way — see below.'
-        : 'Your payment is verified and your stay is settled. One document is still on its way — see below.')}</p>
+      ? 'Your beds are held until the end of <strong>'+esc(payByInfo().label)+'</strong>. Hand the staff '+peso(x.d.total)+' at the hostel front desk when you arrive — you get your bed once it is paid.'
+      : 'Staff confirm your GCash payment against the hostel account. Once it is confirmed, your stay is paid and you can check in. One document is still on its way — see below.'}</p>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:4px 18px;margin-top:24px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
-      ${st('Payment', cash?'Awaiting cash at the front desk':'Confirmed','#'+(cash?'fdf3e6':'e8f2ec'),'#'+(cash?'8a5a12':'1c7a4f'))}
-      ${st('VENUSeP System Receipt','In My Bookings','#e8f2ec','#1c7a4f')}
+      ${st('Payment', cash?'Awaiting cash at the front desk':'Sent — staff confirm it','#fdf3e6','#8a5a12')}
+      ${st('VENUSeP System Receipt','In My Bookings once confirmed','#fff','#6b675f')}
       ${!cash?st('GCash payment receipt','Yours to keep','#e8f2ec','#1c7a4f'):''}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0">
         <span style="font-size:13.5px;color:#4a463f">Official Receipt (${esc(CASHIER.name)})</span>
@@ -1620,14 +1656,14 @@ function doneScreen(){
       <span style="width:8px;height:8px;border-radius:999px;background:#d9930d;margin-top:5px;flex:none"></span>
       <div>
         <div style="font-size:13.5px;font-weight:650;color:#1c1b19">Your Official Receipt is still coming</div>
-        <div style="font-size:12.5px;color:#7a766f;margin-top:1px">The staff bring your payment to the ${esc(CASHIER.name)}, who issues the OR. We'll email it when it's ready${PAY_POLICY.prepay?' — <strong>you need it at check-in</strong>. This does not affect your booking: it is already '+(cash?'reserved':'paid and confirmed')+'.':' — keep it as your proof of payment.'}</div>
+        <div style="font-size:12.5px;color:#7a766f;margin-top:1px">The staff bring your payment to the ${esc(CASHIER.name)}, who issues the OR. It does not hold up your check-in &mdash; keep it as your proof of payment.</div>
       </div>
     </div>`:''}
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;text-align:left">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
         ${blk('Reference', esc(state.reference))}
-        ${blk('POS number', esc(state.posNumber||'—'))}
+        ${blk('Pay by', 'end of '+esc(payByInfo().label))}
         ${blk('Room', esc(R.name)+' <span style="font-weight:400;color:#8a857d">· '+esc(CR_LABEL[R.cr_type])+'</span>')}
         ${blk('Stay', esc(x.stayLabel)+' <span style="font-weight:400;color:#8a857d">· '+esc(x.nightsLabel)+'</span>')}
         ${blk('Beds', esc(x.bedsLabel))}
@@ -1635,9 +1671,7 @@ function doneScreen(){
       </div>
       ${rosterHtml(state.booking.occupants)}
       <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:12px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">
-        ${PAY_POLICY.prepay
-          ? '<strong style="font-weight:640;color:#4a463f">At check-in:</strong> show the staff your <strong>POS</strong> and your <strong>Official Receipt</strong>, plus the valid ID you submitted. Each guest sleeps in the bed booked under their name.'
-          : '<strong style="font-weight:640;color:#4a463f">Your records:</strong> keep the POS number, your payment receipt and the Official Receipt together — they are your proof that this stay is paid.'}
+        <strong style="font-weight:640;color:#4a463f">At check-in:</strong> show the staff the valid ID you submitted. You get your bed once the stay is paid. Each guest sleeps in the bed booked under their name.
       </div>
     </div>
 
@@ -1648,7 +1682,7 @@ function doneScreen(){
       <button onclick="demoIssueOr()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate OR issued by the cashier</button>
     </div>` : `
     <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
-      <div style="font-size:12.5px;color:#6b675f;line-height:1.6">The ${esc(CASHIER.name)} issues the Official Receipt once the staff hand the money over. It will appear on this stay in <a href="booking-history.php" style="color:#1f1e1e;font-weight:640">My Bookings</a> — you need it at check-in.</div>
+      <div style="font-size:12.5px;color:#6b675f;line-height:1.6">The ${esc(CASHIER.name)} issues the Official Receipt once the staff hand the money over. It will appear on this stay in <a href="booking-history.php" style="color:#1f1e1e;font-weight:640">My Bookings</a>.</div>
     </div>`) : ''}
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Back to venues</button>
@@ -1659,30 +1693,77 @@ function doneScreen(){
 function currentScreen(){
   switch(state.screen){
     case 'detail':  return detailScreen();
+    case 'who':     return whoScreen();          // counter only — includes/counter-booker.php
     case 'review':  return reviewScreen();
     case 'pending': return pendingScreen();
     case 'payment': return paymentScreen();
-    case 'done':    return doneScreen();
+    case 'done':    return COUNTER ? counterDoneScreen() : doneScreen();
   }
   return '';
 }
-/* Redraw, then put the caret back where it was — the bed-name inputs re-render
-   on every keystroke otherwise and typing would jump to the start. */
+
+/* ---------- screen: DONE at the counter ----------
+   PAY TO USE (2026-10-27): the stay was recorded only because the cash was
+   taken — booking-create.php wrote it approved AND paid, with its System
+   Receipt. The guest can check in on the check-in day; the POS and OR are
+   recorded on the booking whenever CEDU and the cashier issue them. */
+function counterDoneScreen(){
+  const x=bookingRows(); const R=x.R; if(!R) return '';
+  const r = state.counterResult || {};
+  const blk2=(label,value)=>`<div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+  const next = state.booking.checkIn===TODAY
+    ? 'Paid. Check the guest in from the booking when they are ready.'
+    : 'Paid. The guest checks in on <strong>'+esc(fmtDate(state.booking.checkIn))+'</strong> with the valid ID you saw.';
+  return `
+  <main style="max-width:620px;margin:0 auto;padding:40px 18px 80px;text-align:center">
+    <div style="width:54px;height:54px;border-radius:999px;background:#eaf6ef;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#1c7a4f">&check;</div>
+    <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px">Stay booked and paid</h1>
+    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">Read the reference out to the guest. ${r.demo?'<strong>Demo mode &mdash; nothing was saved.</strong>':'The beds are held in their name.'}</p>
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:22px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
+        ${blk2('Reference', esc(state.reference))}
+        ${blk2('Booked for', esc(state.booker.name))}
+        ${blk2('Room', esc(R.name))}
+        ${blk2('Stay', esc(x.stayLabel)+' &middot; '+esc(x.nightsLabel))}
+        ${blk2('Beds', esc(x.bedsLabel))}
+        ${blk2('Paid in cash', peso(x.d.total))}
+      </div>
+      <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:12px;font-size:12.5px;color:#4a463f;line-height:1.6">${next} The System Receipt is on the booking${state.booker.mode==='walkin'&&!state.booker.noEmail?' and was emailed to the guest':''}.</div>
+      <div style="font-size:12.5px;color:#8a857d;line-height:1.6;margin-top:8px">
+        ${state.booker.mode==='walkin'
+          ? 'No account, so any refund is handled by staff at the counter.'
+          : 'Linked to <strong>'+esc(state.booker.name)+'</strong>&rsquo;s account &mdash; they also see it in My Bookings.'}
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap">
+      <a href="../admin/booking-request.php?id=${encodeURIComponent(state.reference)}" style="flex:1;min-width:180px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:680;text-decoration:none">Open the booking</a>
+      <a href="hostel-reservation.php?room=${encodeURIComponent(state.roomId)}&counter=1" style="flex:none;height:48px;padding:0 20px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;color:#1c1b19;font-size:14px;font-weight:640;text-decoration:none">Another booking</a>
+    </div>
+    <a href="../admin/Admin_Dashboard.php" style="display:inline-block;margin-top:16px;color:#8a857d;font-size:13px;font-weight:600">Back to the dashboard</a>
+  </main>`;
+}
+/* Redraw, then put the caret back where it was — the bed-name inputs and the
+   counter's "who" fields re-render on every keystroke, and a freshly focused
+   input puts the caret at the START, so typing would come out backwards. */
 function render(){
   const ae=document.activeElement;
   const id=ae&&ae.id?ae.id:null;
   const cls=ae&&ae.className==='bed-name'?[...document.querySelectorAll('.bed-name')].indexOf(ae):-1;
-  const pos=ae&&ae.selectionStart;
-  document.getElementById('app').innerHTML=`<div style="min-height:100vh;background:#fff">${currentScreen()}</div>`;
+  let pos=null, end=null;
+  try{ pos=ae?ae.selectionStart:null; end=ae?ae.selectionEnd:null; }catch(e){}
+  document.getElementById('app').innerHTML=`<div style="min-height:100vh;background:#fff">${COUNTER?counterBar():''}${currentScreen()}</div>`;
   /* re-attach the live 360 node after the innerHTML swap — it is moved, not
      rebuilt, so typing a guest name never reloads the panorama */
   mountGallery();   /* put the photo strip back where the swipe left it */
   if(cls>-1){
     const back=document.querySelectorAll('.bed-name')[cls];
-    if(back){ back.focus(); try{ back.setSelectionRange(pos,pos); }catch(e){} }
+    if(back){ back.focus(); try{ if(pos!=null) back.setSelectionRange(pos,end); }catch(e){} }
   }else if(id){
     const back=document.getElementById(id);
-    if(back && back.focus) back.focus();
+    if(back && back.focus){
+      back.focus();
+      try{ if(pos!=null) back.setSelectionRange(pos,end); }catch(e){}
+    }
   }
 }
 render();

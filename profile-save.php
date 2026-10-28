@@ -290,6 +290,13 @@ if ($action === 'photo') {
         }
     };
     $table = $isCustomer ? 'customers' : 'staff';
+    /* An admin may have no staff row yet (the same case "details" handles
+       above): create it, or the UPDATEs here would match nothing and still
+       report "Photo updated." */
+    if (!$isCustomer) {
+        $pdo->prepare('INSERT INTO staff (user_id, full_name) SELECT id, username FROM users WHERE id = :u
+                       ON DUPLICATE KEY UPDATE user_id = user_id')->execute([':u' => $userId]);
+    }
 
     if (!empty($_POST['remove'])) {
         $clear();

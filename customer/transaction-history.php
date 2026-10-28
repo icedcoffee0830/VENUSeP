@@ -19,7 +19,6 @@ require_once __DIR__ . '/../includes/customer-bookings.php';
 $transactionRows = transaction_rows($customerContact['id']);
 $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
 ?>
-?>
 <!DOCTYPE html>
 <!-- MAP: [0] SHELL CSS · [1] PAGE CSS · [2] HEADER · [3] SIDEBAR ·
      [4] CONTENT (filters, export, table) · [6] SCRIPT (Tabulator).
@@ -94,7 +93,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
       .t-gray  { background: #eef0f2; color: #55606b; }
 
       .th-actions { display: inline-flex; gap: 6px; }
-      .th-act { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: #1f1e1e; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
+      .th-act { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: #1f1e1e; font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
       .th-act:hover { background: #f4f2ee; border-color: #c9c2b6; }
       .th-act.is-disabled { opacity: .5; cursor: not-allowed; }
 
@@ -225,6 +224,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
+    <script src="../assets/js/table-page-size.js"></script>
 
     <!-- [6] PAGE SCRIPT -->
     <script>
@@ -239,13 +239,12 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         const statusBadge = (cell) => `<span class="t-badge ${badgeClass(cell.getValue())}">${cell.getValue()}</span>`;
         const actionButtons = (cell) => {
           const row = cell.getRow().getData();
-          // View — the valid ID submitted with this booking. Always
-          // clickable: an ID is required at every booking (unlike the GCash
-          // receipt, which only exists once payment happens), so there is
-          // always something for valid-id-view.php (root) to show.
-          const viewBtn = `<a class="th-act" href="../valid-id-view.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-eye"></i>View</a>`;
+          // View — the booking and its payment, in a modal over this page
+          // (includes/booking-details-modal.php, 2026-10-27). The valid ID is
+          // a link inside it.
+          const viewBtn = `<button type="button" class="th-act" onclick="openBookingDetails('${encodeURIComponent(row.bookingId)}')"><i class="bi bi-eye"></i>View</button>`;
           const receiptBtn = row.hasReceipt
-            ? `<a class="th-act" href="receipt.php?booking=${encodeURIComponent(row.bookingId)}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i>Receipt</a>`
+            ? `<a class="th-act" href="receipt.php?booking=${encodeURIComponent(row.bookingId)}"><i class="bi bi-receipt"></i>Receipt</a>`
             : `<span class="th-act is-disabled" title="No System Receipt yet — issued once staff confirm payment"><i class="bi bi-receipt"></i>Receipt</span>`;
           const rebookPage = row.type === 'hostel' ? 'hostel-reservation.php' : 'room-reservation.php';
           const rebookBtn = row.roomCode
@@ -257,7 +256,8 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         const table = new Tabulator('#transaction-history-table', {
           data: rows, layout: 'fitDataStretch', placeholder: 'No transactions found.',
           /* every column stays visible; on a phone the table scrolls sideways inside its card */
-          pagination: true, paginationSize: 10, paginationSizeSelector: [10, 25, 50], movableColumns: true,
+          /* the size box is assets/js/table-page-size.js: type a number, or pick 10 / 25 / 50 / All */
+          pagination: true, paginationSize: 10, movableColumns: true,
           initialSort: [{ column: 'transactionDate', dir: 'desc' }],
           columns: [
             { title: 'Transaction ID', field: 'transactionId', minWidth: 150, width: 150 },
@@ -269,7 +269,7 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
             { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150 },
             { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
             { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 290, width: 290, hozAlign: 'center' },
+            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 290, width: 290, hozAlign: 'center', print: false },   /* buttons mean nothing on paper */
           ],
         });
 
@@ -302,8 +302,12 @@ $transactionRowsJson = json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JS
         });
         document.getElementById('export-csv').addEventListener('click', () => table.download('csv', 'my-transactions.csv'));
         document.getElementById('export-json').addEventListener('click', () => table.download('json', 'my-transactions.json'));
-        document.getElementById('print-table').addEventListener('click', () => table.print(false, true));
+        /* Print exactly the rows on the current page; pick "All rows" in the page
+           size to print the whole list. */
+        document.getElementById('print-table').addEventListener('click', () => table.print('visible', true));
+        venusepPageSize(table, [10, 25, 50]);
       });
     </script>
+    <?php include __DIR__ . '/../includes/booking-details-modal.php'; /* "View" */ ?>
   </body>
 </html>

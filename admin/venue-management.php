@@ -1195,7 +1195,7 @@ function vmMaint($m, $today) {
               <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="<?php echo htmlspecialchars($room['id']); ?>" data-delete-name="<?php echo htmlspecialchars($room['name']); ?>">Delete</button>
 <?php endif; ?>
             </div>
-            <span class="vm-price">₱<?php echo number_format($HOSTEL_RATES[$room['cr_type']]); ?>/head</span>
+            <span class="vm-price">₱<?php echo number_format($room['rate']); ?>/head</span>
           </div>
         </div>
 <?php endforeach; ?>

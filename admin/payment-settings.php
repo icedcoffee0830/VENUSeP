@@ -93,6 +93,8 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/index.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
+    <!-- shared VENUSeP modal: the password re-entry for a GCash account change -->
+    <link rel="stylesheet" href="../assets/css/confirm-modal.css" />
 
     <!-- ============================================================
          [0] SHELL CSS — the TEAM header bar + sidebar + layout.
@@ -543,6 +545,7 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
          only; nothing persists and no booking page is affected until
          includes/payment-settings.php is backed by a database.
          ============================================================ -->
+    <script src="../assets/js/confirm-modal.js"></script>
     <script>
       /* The checker compares DIGITS, never the pretty form — so a number is
          valid on its digits alone. 11 digits starting 09 is the PH mobile
@@ -585,7 +588,7 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
         psRestore(card, card.dataset.oldName, card.dataset.oldNumber, false);
       }
 
-      function psSave(btn) {
+      async function psSave(btn) {
         const card = btn.closest('.ps-card');
         const name = card.querySelector('[data-i="name"]').value.trim();
         const raw = card.querySelector('[data-i="number"]').value;
@@ -600,10 +603,12 @@ function rs_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
         /* This is where the venue's money lands, so the server re-asks for the
            password before it will move — same treatment as the refund switch,
            and for a stronger reason: anyone with a borrowed admin session could
-           otherwise point a venue's payments at their own number. */
-        const pw = window.prompt(
-          'Confirm your admin password to change where ' + card.dataset.venue + ' is paid.\n\n' +
-          'Every future payment for this venue will go to ' + psPretty(raw) + ', and receipts will be checked against it.');
+           otherwise point a venue's payments at their own number. The field is
+           a real password input — the browser's prompt() showed it as typed. */
+        const pw = await venusepPrompt(
+          'Every future payment for ' + card.dataset.venue + ' will go to ' + psPretty(raw) + ', and receipts will be checked against it.',
+          { title: 'Change where ' + card.dataset.venue + ' is paid?', label: 'Your admin password', inputType: 'password',
+            autocomplete: 'current-password', okLabel: 'Confirm change', danger: true });
         if (pw === null) return;                /* cancelled — nothing changes */
 
         err.hidden = true;

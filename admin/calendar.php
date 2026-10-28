@@ -166,96 +166,6 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
         margin: 0.2rem 0 1.6rem;
       }
 
-      /* 4) Header Sort UI */
-      .calendar-sort-bar {
-        align-items: center;
-        display: flex;
-        gap: 0.75rem;
-        justify-content: flex-end;
-        margin-left: auto;
-      }
-
-      .calendar-sort-label {
-        color: var(--calendar-muted);
-        font-size: 0.8125rem;
-        font-weight: 600;
-      }
-
-      .calendar-sort-dropdown {
-        position: relative;
-        width: 10rem;
-      }
-
-      .calendar-sort-trigger {
-        background-color: var(--calendar-button-bg);
-        background-image:
-          linear-gradient(45deg, transparent 50%, var(--calendar-button-text) 50%),
-          linear-gradient(135deg, var(--calendar-button-text) 50%, transparent 50%);
-        background-position:
-          calc(100% - 16px) 50%,
-          calc(100% - 11px) 50%;
-        background-repeat: no-repeat;
-        background-size:
-          5px 5px,
-          5px 5px;
-        border: 1px solid var(--calendar-border);
-        border-radius: 8px;
-        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
-        color: var(--calendar-button-text);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        font-size: 0.8125rem;
-        font-weight: 700;
-        height: 2rem;
-        min-width: 0;
-        padding: 0 2.1rem 0 0.85rem;
-        list-style: none;
-        width: 10rem;
-        transition:
-          background-color 0.18s ease,
-          border-color 0.18s ease,
-          box-shadow 0.18s ease;
-      }
-
-      .calendar-sort-trigger::-webkit-details-marker {
-        display: none;
-      }
-
-      .calendar-sort-trigger:hover,
-      .calendar-sort-trigger:focus {
-        background-color: var(--calendar-hover);
-        border-color: #cfcac2;
-        outline: 0;
-      }
-
-      .calendar-sort-menu {
-        background: #ffffff;
-        border: 1px solid var(--calendar-border);
-        border-radius: 8px;
-        box-shadow: 0 6px 18px rgba(16, 24, 40, 0.14);
-        left: 0;
-        list-style: none;
-        margin: 0.35rem 0 0;
-        overflow: hidden;
-        padding: 0;
-        position: absolute;
-        right: 0;
-        top: 100%;
-        z-index: 20;
-      }
-
-      .calendar-sort-option {
-        color: var(--calendar-text);
-        cursor: pointer;
-        font-size: 0.8125rem;
-        padding: 0.45rem 0.75rem;
-      }
-
-      .calendar-sort-option:hover {
-        background: var(--calendar-hover);
-      }
-
       /* 5) Calendar Toolbar */
       #calendar .fc-toolbar.fc-header-toolbar {
         align-items: center;
@@ -456,16 +366,6 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
           flex-direction: column;
         }
 
-        .calendar-sort-bar {
-          align-items: stretch;
-          width: 100%;
-        }
-
-        .calendar-sort-dropdown,
-        .calendar-sort-trigger {
-          width: 100%;
-        }
-
         #calendar .fc-toolbar.fc-header-toolbar {
           align-items: flex-start;
           gap: 0.75rem;
@@ -503,18 +403,6 @@ $calendarEventsJson = json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON
               <div class="calendar-heading-copy">
                 <h1>Calendar</h1>
                 <p>Schedule and manage events</p>
-              </div>
-              <!-- Calendar sorting UI only. Functionality can be added later. -->
-              <div class="calendar-sort-bar">
-                <details class="calendar-sort-dropdown">
-                  <summary class="calendar-sort-trigger">Date</summary>
-                  <ul class="calendar-sort-menu" aria-label="Calendar sort options">
-                    <li class="calendar-sort-option">Date</li>
-                    <li class="calendar-sort-option">Event name</li>
-                    <li class="calendar-sort-option">Status</li>
-                    <li class="calendar-sort-option">Venue</li>
-                  </ul>
-                </details>
               </div>
             </div>
           </div>

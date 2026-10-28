@@ -14,7 +14,8 @@
 
    "View" opens the valid ID submitted with the booking (valid-id-view.php,
    same target as Transaction History's View button). "Request Refund" is
-   real and opens refund-request.php.
+   real and opens refund-request.php. "Pay now" (payment open) and
+   "Payment" (a receipt with staff) open customer/pay.php.
    ================================================================== */
 require_once __DIR__ . '/../includes/customer-bookings.php';
 
@@ -133,7 +134,9 @@ $emptyBookingMessage = 'No booking history found.';
       .badge-overdue { background: #fcecec; color: #b23a3a; }
       .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
       .booking-pay-note.is-overdue { color: #b23a3a; }
-
+      /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
+      .badge-expired, .badge-released { background: #eef0f2; color: #55606b; }
+      .booking-status-note { display: block; margin-top: 4px; max-width: 220px; font-size: 11px; line-height: 1.4; color: var(--muted); }
       /* row actions */
       .booking-actions { display: inline-flex; gap: 6px; }
       .booking-action { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
@@ -141,6 +144,9 @@ $emptyBookingMessage = 'No booking history found.';
       .booking-action[disabled] { opacity: .5; cursor: not-allowed; }
       .booking-action-receipt { border-color: rgba(161,22,38,.35); color: #a11626; }
       .booking-action-receipt:hover { background: #fcf6f4; border-color: #a11626; }
+      /* the one action that moves a booking forward, so it is the filled one */
+      .booking-action-pay { background: #a11626; border-color: #a11626; color: #fff; }
+      .booking-action-pay:hover { background: #7d0f1e; border-color: #7d0f1e; }
 
       /* footer / pagination */
       .booking-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; }
@@ -306,12 +312,25 @@ $emptyBookingMessage = 'No booking history found.';
                               <span class="booking-pay-note is-overdue">was due <?php echo bh_e($booking['payment']['payByLabel']); ?> &middot; can still be paid</span>
                             <?php endif; ?>
                           </td>
-                          <td data-label="Status"><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span></td>
+                          <td data-label="Status"><span class="booking-badge <?php echo bh_badge($booking['bookingStatus']); ?>"><?php echo bh_e($booking['bookingStatus']); ?></span>
+                            <?php if (!empty($booking['expiryNote'])): ?><span class="booking-status-note"><?php echo bh_e($booking['expiryNote']); ?></span><?php endif; ?></td>
                           <td data-label="Actions" class="booking-actions-cell">
                             <div class="booking-actions">
-                              <!-- the valid ID submitted with this booking — same target as Transaction
-                                   History's View button, always clickable (an ID is required at every booking). -->
-                              <a class="booking-action" href="../valid-id-view.php?booking=<?php echo urlencode($booking['bookingId']); ?>" target="_blank" rel="noopener"><i class="bi bi-eye" aria-hidden="true"></i>View</a>
+                              <?php /* Payment is open (or a receipt is with staff): the way back to
+                                       the payment step, customer/pay.php. Before this the booking pages
+                                       only reached payment through demo mode's simulate buttons. */
+                              if (in_array($booking['paymentCode'], ['await_gcash', 'await_cash', 'overdue'], true)): ?>
+                                <a class="booking-action booking-action-pay" href="pay.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
+                                  <i class="bi bi-wallet2" aria-hidden="true"></i>Pay now
+                                </a>
+                              <?php elseif ($booking['paymentCode'] === 'under_review'): ?>
+                                <a class="booking-action" href="pay.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
+                                  <i class="bi bi-hourglass-split" aria-hidden="true"></i>Payment
+                                </a>
+                              <?php endif; ?>
+                              <!-- the booking and its payment, in a modal over this page — same as
+                                   Transaction History's View (includes/booking-details-modal.php) -->
+                              <button type="button" class="booking-action" onclick="openBookingDetails('<?php echo bh_e(rawurlencode($booking['bookingId'])); ?>')"><i class="bi bi-eye" aria-hidden="true"></i>View</button>
                               <?php if (isset($bhReceipts[(int) ($booking['id'] ?? 0)])): ?>
                                 <a class="booking-action booking-action-receipt" href="receipt.php?booking=<?php echo urlencode($booking['bookingId']); ?>">
                                   <i class="bi bi-file-earmark-text" aria-hidden="true"></i>Receipt
@@ -554,5 +573,6 @@ $emptyBookingMessage = 'No booking history found.';
         if (search) search.dispatchEvent(new Event('input'));
       });
     </script>
+    <?php include __DIR__ . '/../includes/booking-details-modal.php'; /* "View" */ ?>
   </body>
 </html>

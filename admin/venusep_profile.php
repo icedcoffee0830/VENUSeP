@@ -30,6 +30,29 @@ $vpEmail = (string) ($vpRow['email'] ?? '');
 $vpPhone = (string) ($vpRow['phone'] ?? '');
 $vpRole  = (string) ($vpRow['position_role'] ?? '');
 $vpEmp   = (string) ($vpRow['employee_no'] ?? '');
+/* THE PROFILE CARD (2026-10-27) — what the left-hand card shows, all from the
+   account itself: the photo or the initials, the name, and the role. It used
+   to read "JD · Product Designer" for everyone. An admin handles every venue;
+   a staff member exactly one (DB-DECISIONS #24), so the role line says which. */
+$vpPhoto   = (string) ($vpRow['photo_path'] ?? '');
+$vpIsAdmin = ($_SESSION['account_type'] ?? '') === 'admin';
+$vpVenue   = '';
+if (!$vpIsAdmin) {
+    try {
+        $vpV = venusep_db_or_fail()->prepare('SELECT v.name FROM staff s JOIN venues v ON v.id = s.venue_id WHERE s.user_id = :u');
+        $vpV->execute([':u' => (int) $_SESSION['user_id']]);
+        $vpVenue = (string) $vpV->fetchColumn();
+    } catch (PDOException $e) {
+        $vpVenue = '';
+    }
+}
+$vpRoleLine = $vpIsAdmin
+    ? 'Administrator' . ($vpRole !== '' ? ' · ' . $vpRole : '') . ' · All venues'
+    : ($vpRole !== '' ? $vpRole : 'Staff') . ($vpVenue !== '' ? ' · ' . $vpVenue : '');
+function vp_initials($name) {
+    $parts = preg_split('/\s+/', trim((string) $name));
+    return strtoupper(mb_substr($parts[0] ?? '', 0, 1) . mb_substr($parts[1] ?? '', 0, 1)) ?: '?';
+}
 $vpCsrf  = csrf_token();
 /* DEMO MODE — the card below is the refund switch's twin (see
    admin/payment-settings.php): same card, same warning window, same password
@@ -94,6 +117,9 @@ $vpTfaLow = $vpTfa !== null && $vpTfa['enabled'] && $vpTfa['codes_left'] <= TFA_
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/index.css" media="print" onload="this.media = 'all'" rel="stylesheet"/>
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/overlayscrollbars@2.11.0/styles/overlayscrollbars.min.css" rel="stylesheet"/>
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <!-- shared VENUSeP modal (the "Remove your photo?" confirm) -->
+  <link rel="stylesheet" href="../assets/css/confirm-modal.css"/>
+  <script src="../assets/js/confirm-modal.js"></script>
   <link href="../assets/css/two-factor.css" rel="stylesheet"/>
 <style>
       :root {
@@ -267,6 +293,13 @@ $vpTfaLow = $vpTfa !== null && $vpTfa['enabled'] && $vpTfa['codes_left'] <= TFA_
       .profile-avatar { width: 70px; height: 70px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 0.75rem; border-radius: 50%; background: #1d1b1b; color: #fff5db; font-size: 1.45rem; font-weight: 800; }
       .profile-card h2 { margin: 0; font-size: 1rem; font-weight: 800; }
       .profile-card p { margin: 0.25rem 0 0; color: #67605a; font-size: 0.78rem; }
+      /* the real card (2026-10-27): photo or initials, email, photo buttons */
+      .profile-avatar-img { object-fit: cover; padding: 0; }
+      .profile-card .profile-card-email { font-size: 0.74rem; color: #8a837c; overflow-wrap: anywhere; }
+      .profile-photo-actions { display: flex; gap: 0.4rem; justify-content: center; margin-top: 0.85rem; }
+      .profile-photo-btn { border: 1px solid var(--venusep-border); background: #fff; border-radius: 8px; padding: 0.32rem 0.7rem; font: inherit; font-size: 0.74rem; font-weight: 600; color: #1d1b1b; cursor: pointer; }
+      .profile-photo-btn:hover { background: #f6f3ef; }
+      .profile-photo-msg { min-height: 1.1em; margin-top: 0.4rem; font-size: 0.74rem; color: #6b675f; }
       .settings-panel { overflow: hidden; }
       .settings-panel-header { padding: 0.9rem 1rem; background: #fff; border-bottom: 1px solid var(--venusep-border); }
       .settings-panel-header h2 { margin: 0; font-size: 0.95rem; font-weight: 800; }
@@ -468,9 +501,22 @@ $vpTfaLow = $vpTfa !== null && $vpTfa['enabled'] && $vpTfa['codes_left'] <= TFA_
         </div>
         <section class="profile-layout">
           <aside class="profile-card">
-            <div aria-hidden="true" class="profile-avatar">JD</div>
-            <h2><?php echo vp_e($vpName ?: "Staff"); ?></h2>
-            <p>Product Designer</p>
+            <?php if ($vpPhoto !== ''): ?>
+              <img class="profile-avatar profile-avatar-img" id="vpAvatar" src="../<?php echo vp_e($vpPhoto); ?>" alt="Your profile picture">
+            <?php else: ?>
+              <div aria-hidden="true" class="profile-avatar" id="vpAvatar"><?php echo vp_e(vp_initials($vpName)); ?></div>
+            <?php endif; ?>
+            <h2 id="vpCardName"><?php echo vp_e($vpName ?: 'Staff'); ?></h2>
+            <p><?php echo vp_e($vpRoleLine); ?></p>
+            <?php if ($vpEmail !== ''): ?><p class="profile-card-email"><?php echo vp_e($vpEmail); ?></p><?php endif; ?>
+            <!-- the picture this person chose to show — profile-save.php action=photo
+                 (stored under assets/, never an ID or a receipt) -->
+            <div class="profile-photo-actions">
+              <input type="file" id="vpPhotoInput" accept="image/png,image/jpeg,image/webp" hidden>
+              <button type="button" class="profile-photo-btn" onclick="document.getElementById('vpPhotoInput').click()"><?php echo $vpPhoto !== '' ? 'Change photo' : 'Add photo'; ?></button>
+              <button type="button" class="profile-photo-btn" id="vpPhotoRemove"<?php echo $vpPhoto !== '' ? '' : ' hidden'; ?>>Remove</button>
+            </div>
+            <div class="profile-photo-msg" id="vpPhotoMsg" aria-live="polite"></div>
           </aside>
           <article class="settings-panel">
             <div class="settings-panel-header">
@@ -539,9 +585,77 @@ $vpTfaLow = $vpTfa !== null && $vpTfa['enabled'] && $vpTfa['codes_left'] <= TFA_
                   .then(function (res) {
                     out.style.color = res.ok ? '#1c7a4f' : '#b23a3a';
                     out.textContent = res.message || (res.ok ? 'Saved.' : 'Nothing was saved.');
-                    if (res.ok) { const h = document.querySelector('.settings-identity h2, aside h2'); if (h) h.textContent = name; }
+                    if (res.ok) {
+                      /* the card follows the saved name at once — initials too,
+                         unless a photo stands in for them */
+                      document.getElementById('vpCardName').textContent = name;
+                      const av = document.getElementById('vpAvatar');
+                      if (av && av.tagName !== 'IMG') av.textContent = vpInitials(name);
+                    }
                   })
                   .catch(function () { out.style.color = '#b23a3a'; out.textContent = 'Could not reach the server.'; });
+              });
+            })();
+
+            function vpInitials(name) {
+              const p = String(name || '').trim().split(/\s+/);
+              return ((p[0] || '').charAt(0) + (p[1] || '').charAt(0)).toUpperCase() || '?';
+            }
+
+            /* The profile picture — profile-save.php action=photo, which validates
+               it as a real image (same rules as room photos). The card swaps to
+               the new picture without a reload. */
+            (function () {
+              const input = document.getElementById('vpPhotoInput');
+              const remove = document.getElementById('vpPhotoRemove');
+              const msg = document.getElementById('vpPhotoMsg');
+              if (!input) return;
+              const CSRF = <?php echo json_encode($vpCsrf); ?>;
+              function show(photo) {
+                const old = document.getElementById('vpAvatar');
+                let el;
+                if (photo) {
+                  el = document.createElement('img');
+                  el.className = 'profile-avatar profile-avatar-img';
+                  el.alt = 'Your profile picture';
+                  el.src = '../' + photo + '?v=' + Date.now();      // a new file under the same name
+                } else {
+                  el = document.createElement('div');
+                  el.className = 'profile-avatar';
+                  el.setAttribute('aria-hidden', 'true');
+                  el.textContent = vpInitials(document.getElementById('vpCardName').textContent);
+                }
+                el.id = 'vpAvatar';
+                old.replaceWith(el);
+                remove.hidden = !photo;
+                document.querySelector('.profile-photo-btn').textContent = photo ? 'Change photo' : 'Add photo';
+              }
+              function send(body, busy) {
+                body.append('csrf', CSRF);
+                body.append('action', 'photo');
+                msg.style.color = '#6b675f'; msg.textContent = busy;
+                return fetch('../profile-save.php', { method: 'POST', body: body, credentials: 'same-origin' })
+                  .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+                  .then(function (res) {
+                    msg.style.color = res.ok ? '#1c7a4f' : '#b23a3a';
+                    msg.textContent = res.message || (res.ok ? 'Saved.' : 'Nothing was changed.');
+                    if (res.ok) show(res.photo);
+                  })
+                  .catch(function () { msg.style.color = '#b23a3a'; msg.textContent = 'Could not reach the server.'; });
+              }
+              input.addEventListener('change', function () {
+                const file = input.files && input.files[0];
+                input.value = '';
+                if (!file) return;
+                const body = new FormData();
+                body.append('photo', file, file.name);
+                send(body, 'Uploading…');
+              });
+              remove.addEventListener('click', async function () {
+                if (!(await venusepConfirm('Your initials will show instead.', { title: 'Remove your photo?', okLabel: 'Remove', danger: true }))) return;
+                const body = new FormData();
+                body.append('remove', '1');
+                send(body, 'Removing…');
               });
             })();
           </script>

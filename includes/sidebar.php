@@ -39,6 +39,7 @@ if ($portal === 'customer') {
     ['Reports',             'Quarterly_Reports.php',           'bi-bar-chart'],
     ['Payment Settings',    'payment-settings.php',            'bi-wallet2'],
     ['FAQ Management',      'faq-management.php',              'bi-question-circle'],   /* admin-added FAQ entries (2026-09-18) */
+    ['Backup & Restore',    'backup-restore.php',              'bi-database-check'],    /* staff: back up; admins: download / restore (2026-10-27) */
     ['Settings',            'venusep_profile.php',             'bi-gear'],
     ['Log Out',             'logout.php',                      'bi-box-arrow-right'],   /* ends the session */
   ];

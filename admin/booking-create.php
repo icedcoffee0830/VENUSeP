@@ -3,7 +3,9 @@
    COUNTER BOOKING — the ONLY way staff create a booking for a walk-in.
 
    POST (from the booking page in counter mode, includes/auth.php)
-     csrf, type=venue, room=<room_code>, method=gcash|cash,
+     csrf, type=venue|hostel, room=<room_code>, method=gcash|cash,
+     hostel: check_in, check_out, occupants=<json [{name,gender}]> (2026-10-27),
+             cash_received=1 — the stay is only recorded once the cash is taken
      event_name, date_start, date_end, attendees, times=<json>,
      agree_no_refund=0|1,
      booker_mode=account|walkin,
@@ -96,11 +98,8 @@ $roomCode = (string) ($_POST['room'] ?? '');
 $usepId   = !empty($_POST['usep_id']) ? 1 : 0;
 $method   = (isset($_POST['method']) && $_POST['method'] === 'cash') ? 'cash' : 'gcash';
 
-if ($type !== 'venue') {
-    /* Hostel counter bookings are the next piece of work: they need the
-       occupant roster, bed assignment and the POS chain. Refusing clearly beats
-       half-creating one. */
-    bc_reply(400, ['ok' => false, 'message' => 'Counter bookings currently cover venues only.']);
+if (!in_array($type, ['venue', 'hostel'], true)) {
+    bc_reply(400, ['ok' => false, 'message' => 'Invalid request.']);
 }
 if (!preg_match('/^[a-zA-Z0-9_-]{1,40}$/', $roomCode)) {
     bc_reply(400, ['ok' => false, 'message' => 'Invalid room.']);
@@ -179,8 +178,11 @@ if ($bookerMode === 'account') {
 /* ---- the room, and the rate THIS server believes in ---- */
 try {
     $roomStmt = $pdo->prepare(
-        "SELECT r.id, r.room_type, r.is_active, erd.attendee_capacity, erd.fee_per_day
-           FROM rooms r LEFT JOIN event_room_details erd ON erd.room_id = r.id
+        "SELECT r.id, r.venue_id, r.room_type, r.is_active, erd.attendee_capacity, erd.fee_per_day,
+                hrd.rate_per_head_per_night
+           FROM rooms r
+           LEFT JOIN event_room_details erd  ON erd.room_id = r.id
+           LEFT JOIN hostel_room_details hrd ON hrd.room_id = r.id
           WHERE r.room_code = :c"
     );
     $roomStmt->execute([':c' => $roomCode]);
@@ -189,13 +191,232 @@ try {
     error_log('VENUSeP booking-create (room): ' . $e->getMessage());
     bc_reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
 }
-if (!$room || !$room['is_active'] || $room['room_type'] !== 'event') {
+if (!$room || !$room['is_active'] || $room['room_type'] !== ($type === 'hostel' ? 'hostel' : 'event')) {
     bc_reply(404, ['ok' => false, 'message' => 'That room is not available for booking.']);
+}
+/* Staff take counter bookings for THEIR venue only (2026-10-27); admins for any. */
+if (!staff_may_handle_venue($room['venue_id'])) {
+    bc_reply(403, ['ok' => false, 'message' => 'This room belongs to another venue. Only that venue\'s staff or an administrator can book it at the counter.']);
 }
 
 $refundsAllowed = refunds_enabled() ? 1 : 0;
 if (!$refundsAllowed && empty($_POST['agree_no_refund'])) {
     bc_reply(400, ['ok' => false, 'message' => 'The customer must confirm they understand the booking is non-refundable.']);
+}
+
+/* =====================================================================
+   HOSTEL AT THE COUNTER (2026-10-27) — the twin of the venue path below:
+   same booker rules, same ID judgement, approved on the spot through
+   sp_approve_booking(). What a stay needs on top: a named guest per bed,
+   one exact bed per guest for every night (sp_assign_bed), and no lead time
+   — a guest may check in today (DB-DECISIONS #18).
+   PAY TO USE (decided 2026-10-27, DB-DECISIONS #26): the stay is NOT recorded
+   unless it is paid. Staff take the cash first ("Cash received"), and the
+   stay is written approved and paid_cash, with its payment row and System
+   Receipt — even for a future date. Cash only: a guest who wants GCash books
+   online. The POS and OR are recorded later, whenever CEDU and the Cashier
+   issue them; neither holds anything up.
+   sp_assign_bed opens its own transaction, so — exactly like
+   customer/booking-submit.php — the stay is written and committed first,
+   then the beds, then the approval and the payment; a step that fails
+   removes the stay, so it never exists unpaid.
+   ===================================================================== */
+if ($type === 'hostel') {
+    if (($_POST['cash_received'] ?? '') !== '1') {
+        bc_reply(400, ['ok' => false, 'message' => 'Take the payment first: a stay is only booked once the cash is received.']);
+    }
+    $method = 'cash';
+    $checkIn  = (string) ($_POST['check_in'] ?? '');
+    $checkOut = (string) ($_POST['check_out'] ?? '');
+    $occupants = json_decode((string) ($_POST['occupants'] ?? '[]'), true);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $checkIn) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $checkOut) || $checkOut <= $checkIn) {
+        bc_reply(400, ['ok' => false, 'message' => 'Check-out must be after check-in.']);
+    }
+    if ($checkIn < date('Y-m-d')) {
+        bc_reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
+    }
+    if (!is_array($occupants) || !$occupants || count($occupants) > 20) {
+        bc_reply(400, ['ok' => false, 'message' => 'Name at least one guest.']);
+    }
+    $guests = [];
+    foreach ($occupants as $o) {
+        $n = trim((string) ($o['name'] ?? ''));
+        $g = (string) ($o['gender'] ?? '');
+        if ($n === '') {
+            bc_reply(400, ['ok' => false, 'message' => 'Every bed needs a named guest.']);
+        }
+        $guests[] = ['name' => mb_substr($n, 0, 190), 'gender' => in_array($g, ['male', 'female', 'other'], true) ? $g : 'other'];
+    }
+    $nights = (int) round((strtotime($checkOut) - strtotime($checkIn)) / 86400);
+    /* per head, per night, from the room's own rate; the discount applies now —
+       staff have seen the ID */
+    $roomPrice = (float) $room['rate_per_head_per_night'] * count($guests) * $nights;
+    $pct       = $usepId ? (float) venusep_discount_percent() : 0.0;
+    $discount  = round($roomPrice * $pct) / 100;
+    $total     = $roomPrice - $discount;
+    $stayLabel = count($guests) . ' bed' . (count($guests) === 1 ? '' : 's') . ' · ' . $nights . ' night' . ($nights === 1 ? '' : 's');
+
+    require_once __DIR__ . '/../includes/demo-mode.php';
+    if (demo_mode_on()) {
+        $policy = payment_policy_for('pay_to_use', $checkIn, $checkOut);
+        $row = demo_add_booking([
+            'type' => 'hostel', 'customerId' => $customerId, 'customerName' => $bookerName,
+            'customerEmail' => '', 'customerPhone' => (string) ($_POST['walkin_phone'] ?? ''),
+            'isWalkIn' => true, 'isUsep' => (bool) $usepId, 'usepVerified' => (bool) $usepId,
+            'roomCode' => $roomCode, 'roomName' => $roomCode, 'venueName' => '',
+            'eventName' => $stayLabel, 'eventDateIso' => $checkIn, 'endDateIso' => $checkOut,
+            'roomPrice' => $roomPrice, 'discountPercent' => $pct, 'amount' => $total,
+            'method' => 'Cash',
+            'reservationCode' => 'approved', 'paymentCode' => 'paid_cash',
+            'refundsAllowed' => (bool) $refundsAllowed, 'payToUse' => true, 'refundable' => false,
+            'payment' => $policy, 'beds' => count($guests), 'nights' => $nights, 'days' => 0,
+        ]);
+        bc_reply(200, ['ok' => true, 'demo' => true, 'bookingId' => $row['id'],
+            'reference' => $row['bookingId'], 'payBy' => $policy['payByLabel'], 'paid' => true,
+            'message' => 'Stay booked and paid (demo mode — nothing was saved).']);
+    }
+
+    /* ---- 1. the stay itself ---- */
+    $bookingId = 0;
+    $removeStay = function () use ($pdo, &$bookingId, &$customerId, $isNewWalkIn) {
+        if ($bookingId) {
+            $pdo->prepare('DELETE FROM bookings WHERE id = :b')->execute([':b' => $bookingId]);
+        }
+        if ($isNewWalkIn && $customerId) {
+            $pdo->prepare('DELETE FROM customers WHERE id = :c AND user_id IS NULL')->execute([':c' => $customerId]);
+        }
+    };
+    try {
+        $pdo->beginTransaction();
+        if ($isNewWalkIn) {
+            $pdo->prepare('INSERT INTO customers (user_id, full_name, phone, contact_email, address) VALUES (NULL, :n, :p, :e, :a)')
+                ->execute([':n' => $bookerName, ':p' => $phone, ':e' => $contactEmail !== '' ? $contactEmail : null,
+                           ':a' => $address !== '' ? $address : null]);
+            $customerId = (int) $pdo->lastInsertId();
+        }
+        $pdo->prepare(
+            "INSERT INTO bookings
+                (customer_id, room_id, booking_type, reservation_status, payment_status,
+                 payment_method, is_usep_affiliated, affiliation_verified,
+                 room_price, discount_percent, discount_amount, total_amount,
+                 refunds_allowed, updated_by_user_id)
+             VALUES (:c, :r, 'hostel', 'pending', 'locked', :m, :a, :av, :rp, :dp, :da, :t, :ra, :u)"
+        )->execute([
+            ':c' => $customerId, ':r' => $room['id'], ':m' => $method, ':a' => $usepId, ':av' => $usepId,
+            ':rp' => $roomPrice, ':dp' => $pct, ':da' => $discount, ':t' => $total,
+            ':ra' => $refundsAllowed, ':u' => $actor,
+        ]);
+        $bookingId = (int) $pdo->lastInsertId();
+        $pdo->prepare('INSERT INTO hostel_booking_details (booking_id, check_in_date, check_out_date, checked_in) VALUES (:b, :i, :o, 0)')
+            ->execute([':b' => $bookingId, ':i' => $checkIn, ':o' => $checkOut]);
+        $occIns = $pdo->prepare('INSERT INTO hostel_occupants (booking_id, full_name, gender, is_primary_guest) VALUES (:b, :n, :g, :p)');
+        $occIds = [];
+        foreach ($guests as $i => $o) {
+            $occIns->execute([':b' => $bookingId, ':n' => $o['name'], ':g' => $o['gender'], ':p' => $i === 0 ? 1 : 0]);
+            $occIds[] = (int) $pdo->lastInsertId();
+        }
+        $pdo->prepare('UPDATE bookings SET current_deadline_at = fn_payment_deadline(:b) WHERE id = :b2')
+            ->execute([':b' => $bookingId, ':b2' => $bookingId]);
+        $pdo->commit();
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        error_log('VENUSeP booking-create (hostel): ' . $e->getMessage());
+        bc_reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
+    }
+
+    /* ---- 2. one exact bed per guest, free on EVERY night ---- */
+    try {
+        $free = $pdo->prepare(
+            'SELECT hb.id FROM hostel_beds hb
+              WHERE hb.room_id = :r AND hb.is_active = 1
+                AND NOT EXISTS (SELECT 1 FROM bed_reservation_nights n
+                                 WHERE n.bed_id = hb.id AND n.released_at IS NULL
+                                   AND n.night_date >= :i AND n.night_date < :o)
+              ORDER BY hb.display_order, hb.id LIMIT 1'
+        );
+        $assign = $pdo->prepare('CALL sp_assign_bed(:b, :o, :bed)');
+        foreach ($occIds as $occId) {
+            $free->execute([':r' => $room['id'], ':i' => $checkIn, ':o' => $checkOut]);
+            $bedId = $free->fetchColumn();
+            if ($bedId === false) {
+                throw new RuntimeException('no_bed');
+            }
+            $assign->execute([':b' => $bookingId, ':o' => $occId, ':bed' => (int) $bedId]);
+            $assign->closeCursor();
+        }
+    } catch (Throwable $e) {
+        $removeStay();
+        bc_reply(409, ['ok' => false,
+            'message' => ($e instanceof PDOException && stripos($e->getMessage(), 'maintenance') !== false)
+                ? 'The room is closed for maintenance during that stay. Pick other dates.'
+                : 'There are not enough free beds for every night of that stay. Pick other dates or fewer beds.']);
+    }
+
+    /* ---- 3. the evidence, the approval, the cash, the receipt email ---- */
+    $queued = null;
+    try {
+        $pdo->beginTransaction();
+        $tl = $pdo->prepare('INSERT INTO booking_timeline (booking_id, action_code, performed_by_user_id, note) VALUES (:b, :a, :u, :n)');
+        $tl->execute([':b' => $bookingId, ':a' => 'counter_created', ':u' => $actor,
+            ':n' => 'Walk-in stay booked at the front desk for ' . $bookerName . '.']);
+        $tl->execute([':b' => $bookingId, ':a' => 'counter_id_checked', ':u' => $actor,
+            ':n' => $usepId
+                ? 'Valid USeP ID inspected in person; ' . (int) $pct . '% affiliate discount applied.'
+                : 'Valid ID inspected in person; no affiliate discount.']);
+        if ($bookerMode === 'account') {
+            $tl->execute([':b' => $bookingId, ':a' => 'counter_identity_confirmed', ':u' => $actor,
+                ':n' => 'Customer confirmed the account by entering their password at the counter.']);
+        }
+        if ($walkinNoEmail) {
+            $tl->execute([':b' => $bookingId, ':a' => 'counter_no_email', ':u' => $actor,
+                ':n' => 'Guest has no email: nothing is emailed; the System Receipt is printed at the counter.']);
+        }
+        $ap = $pdo->prepare('CALL sp_approve_booking(:b, :u)');
+        $ap->execute([':b' => $bookingId, ':u' => $actor]);
+        $ap->closeCursor();
+        /* the cash staff took before pressing the button: paid, with its
+           payment row and System Receipt, in this same transaction */
+        $receiptId = payment_confirm($pdo, $bookingId, $actor, 'Cash received at the counter.', true);
+        if ($receiptId === null) {
+            throw new RuntimeException('no receipt was issued');
+        }
+        /* One email, not two: the System Receipt already names the stay, the
+           dates and the reference, and a "how to pay" email would be wrong. */
+        if ($contactEmail !== '') {
+            try {
+                $queued = queue_walkin_receipt($pdo, $bookingId, $receiptId, $actor);
+            } catch (\Throwable $mailErr) {
+                if ($mailErr instanceof PDOException) {
+                    throw $mailErr;
+                }
+                error_log('VENUSeP walk-in receipt email for booking ' . $bookingId . ': ' . $mailErr->getMessage());
+            }
+        }
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        error_log('VENUSeP booking-create (hostel approve + payment): ' . $e->getMessage());
+        $removeStay();
+        bc_reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created and nothing was charged.']);
+    }
+
+    if ($bookerMode === 'account') {
+        unset($_SESSION['counter_proof'][$customerId]);
+    }
+    if ($queued !== null) {
+        mail_send($pdo, $queued);
+    }
+    $after = $pdo->prepare('SELECT submitted_at, current_deadline_at FROM bookings WHERE id = :b');
+    $after->execute([':b' => $bookingId]);
+    $row = $after->fetch();
+    bc_reply(200, [
+        'ok'        => true,
+        'bookingId' => $bookingId,
+        'reference' => booking_reference($bookingId, $row['submitted_at']),
+        'payBy'     => $row['current_deadline_at'] ? date('M j, Y', strtotime($row['current_deadline_at'])) : '—',
+        'paid'      => true,
+        'message'   => 'Stay booked and paid.',
+    ]);
 }
 
 /* ---- the days being asked for ---- */
@@ -378,7 +599,7 @@ try {
     }
     bc_reply($e->getCode() === '45000' ? 409 : 500, ['ok' => false,
         'message' => $e->getCode() === '45000'
-            ? 'That slot was taken while the booking was being made. Pick another time.'
+            ? venue_slot_refusal_message($e)
             : 'Something went wrong, so nothing was created.']);
 }
 

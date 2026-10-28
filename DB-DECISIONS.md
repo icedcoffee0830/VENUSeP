@@ -45,6 +45,22 @@ bookings.payment_status     -> FK payment_statuses.code
   - Online customer → has a `user_id` (a login in `users`).
   - **Walk-in → `customers` row with `user_id = NULL`** (no login).
 - `bookings.customer_id` → `customers.id` in both cases.
+- **Hostel stays at the counter (decided and built 2026-10-27).** These work like venue
+  counter bookings (`admin/booking-create.php`, `type=hostel`):
+  - account holders confirm their identity with their password; walk-ins with no
+    account pay at the counter;
+  - staff confirm they inspected the ID, and the stay is approved on the spot;
+  - each guest is named and gets an exact bed for every night;
+  - there's no lead time, so check-in can be today.
+  - ~~The POS step is kept: with refunds on, a stay waits in `await_pos`, and a
+    same-day stay goes to cash at the desk (#18). With refunds off, it's paid after the
+    stay.~~ **Replaced the same day by pay to use (#26):** the stay is only recorded
+    once the cash is taken ("Cash received"), and it is written approved and paid.
+  - The "who is this for" step lives in `includes/counter-booker.php`, shared by both
+    booking pages.
+  - In counter mode, every link keeps `counter=1`, and customer-only links (My bookings,
+    Transaction history, refunds) are hidden. The calendar link goes to the staff
+    calendar.
 
 ## 5. GCash accounts
 - **One GCash account per venue**, admin/staff-managed. Every room under a venue uses that venue's account.
@@ -57,6 +73,41 @@ bookings.payment_status     -> FK payment_statuses.code
 - Amount AND account correct, reference clean → **accepted**.
 - **5-attempt rule (minutes):** after 5 receipt submissions, staff force manual review and note it rejected.
 - ⚠️ Consequence for the app (not the DB): the built client checker currently auto-rejects on a *single* mismatch — its verdict logic needs realigning to the above. That's a UI/app change, done later.
+- **Built 2026-10-26** (migration 05, `customer/payment-submit.php`):
+  - **Every upload is recorded**, rejected ones included, with its image and attempt number.
+    Staff see the whole upload history on the booking. A rejected upload has no payment row.
+  - **Duplicates** are judged against receipts that were **not** rejected (generated
+    `active_reference` / `active_sha256` columns, each UNIQUE). A rejected upload stays on
+    record but blocks nothing, so one misread never burns a genuine receipt's reference.
+  - **5 attempts per booking** (`bookings.receipt_attempts_allowed`); every upload counts.
+    An upload whose reference number cannot be read at all is **not** counted.
+  - The **5th** goes to staff for manual review **whatever its verdict** (flag
+    `attempt_limit_reached`, noted in the timeline). A **6th** is refused and not recorded.
+  - The count **never resets** on its own. Staff may **"Allow 5 more attempts"**, only once
+    all are used and payment is open again, with a **required note** written to the timeline.
+  - **Staff rejection keeps the receipt blocked** (decided 2026-10-26). "Reject payment" leaves
+    the checker's verdict as it was, so the reference and image stay taken everywhere. It
+    records who decided, when and why on the receipt (`reviewed_by_user_id`, `reviewed_at`,
+    `override_note`, flag `rejected_by_staff`).
+  - **Masked receivers (2026-10-27).** Some GCash receipts hide the number
+    (`+63 9•••••2358`) and the name (`FR••••S RO•••E H.`). OCR reads the dots
+    as letters, e.g. `+63 Deceee2358` and `FReeeeS ROeeekE H.`, so a genuine
+    receipt was flagged "receiver mismatch".
+    - **Number** (browser and `ps_number_matches()` on the server): any
+      non-digit counts as a hidden digit, and only the visible digits are
+      compared. When OCR merged or split the dots, only the visible ends are
+      compared. At least 4 visible digits are needed to say "match".
+    - **Name** (browser only): the capital-letter runs are the evidence, and
+      stray lowercase letters count as dots.
+    - Staff still confirm every payment.
+  - **Re-sending this booking's own earlier receipt** (same image, or same reference number)
+    is refused **without counting an attempt** and without being recorded. The customer is
+    told which attempt it was and what became of it. `customer/pay.php` warns before sending.
+    A receipt from **another** booking still counts as a rejected duplicate.
+- **"Pay now"** (`customer/pay.php`, built 2026-10-26): Booking History links every booking
+  awaiting payment to its own payment page. Before it, the booking pages reached payment only
+  through demo mode's simulate buttons, so a real customer could never upload a receipt.
+  While demo mode is on, payments on **real** bookings are refused (nothing is written).
 
 ## 7. Hostel beds — exact-bed model
 - **Customer picks which specific bed** (UI catches up later). Keep `hostel_beds` + `bed_reservations` + `bed_reservation_nights`.
@@ -70,10 +121,38 @@ bookings.payment_status     -> FK payment_statuses.code
 - The DB sets a **time per day**, not one time for the whole stay.
 - `venue_booking_slots` (one row per day, each with its own `start_time`/`end_time`) is authoritative.
 - **Drop the single `start_time`/`end_time` from `venue_booking_details`** (keep `event_name`, `start_date`, `end_date`, `attendee_count`, `purpose`).
+- **Same day, different time (decided and built 2026-10-27, migration 09).** A venue room
+  can take several bookings on one date. Each keeps a **cleanup gap** before and after it:
+  `system_settings.venue_cleanup_gap_minutes`, which is 60.
+  - `sp_add_venue_slot` enforces the gap. The booking page reads the same setting: a
+    booked date stays pickable and is marked "partly booked", hours inside the gap are
+    greyed out, and a clash names the free windows.
+  - Pricing stays **per day**. All venue rooms are covered; hostel beds are unaffected.
+  - Both calendars show each venue booking's hours.
+  - **Fixed at the same time:** a booking counted as "held" only while its payment
+    deadline was in the future. That let a **paid** pre-pay booking be booked over on its
+    event day. Lapsed holds are released by expiry instead (#18).
 
 ## 9. Amenities
 - Amenities **and** attributes (the tap-able icon chips) are **hard-coded in PHP** → **remove the `amenities` and `room_amenities` tables.**
-- "At a glance" facts (rate, bookable hours, best-for, catering, accessibility) are **not** amenities — a separate thing. *(Open: keep them hard-coded per room, or make them editable room columns. See Open Items.)*
+- "At a glance" facts (rate, bookable hours, best-for, catering, accessibility) are **not** amenities — a separate thing.
+- **Decided and built 2026-10-27 (migration 10): every room detail is editable.**
+  - Best-for, catering and accessibility are now room columns (`rooms.best_for` /
+    `catering` / `accessibility`). NULL falls back to the old `$ROOM_GLANCE` text, and
+    bookable hours stay the booking page's own (7 AM – 10 PM).
+  - The room forms (`admin/room-form.php`, `admin/hostel-room-form.php`) load and save
+    everything they show, through `admin/room-save.php`: capacity, rate, description,
+    the maintenance window, and for hostel rooms the beds, comfort-room type and
+    check-in/out times.
+  - Rules that protect existing bookings:
+    - a new rate reaches **new** bookings only;
+    - lowering capacity names the upcoming bookings now over it, and keeps them;
+    - beds with upcoming guests can't be removed (beds are retired, never deleted);
+    - a room moves venue only with no upcoming live bookings, and only to the same
+      venue type;
+    - a closed window names the bookings inside it and cancels nothing.
+  - Hostel prices are shown from each room's **own** rate. Before, a per-comfort-room
+    table could show a different price than the server charged.
 
 ## 10. system_settings — kept and improved
 - **Keep the table.** It's the home for tunable, staff-editable config.
@@ -209,6 +288,49 @@ snapshotted). No second setting.
   *Completed · Payment due*.
 - Not built: notifications when a payment window opens. The customer sees it
   on booking history and the booking page.
+- **The hostel no longer follows this table (2026-10-27, #26).** Every hostel stay
+  booked since migration 11 is *pay to use*, whatever the switch says. The table
+  and the same-day rule below now apply to venues, and to hostel stays booked
+  before migration 11.
+- **Same-day hostel check-in (decided and built 2026-10-27, migration 06).**
+  The hostel no longer has the 12-hour advance rule. A guest checks in and
+  uses the room at once, so only a past check-in date is refused. Venues are
+  unchanged: USeP Venues has no lead time, and Bahay Alumni keeps 12 hours.
+  - While refunds are **on**, a same-day stay has no time for the POS from
+    CEDU. It is booked as **cash**, `sp_approve_booking` approves it straight
+    to `await_cash` (skipping `await_pos`), and it is paid at the **front desk
+    on arrival**.
+  - The deadline (`fn_payment_deadline`) is the **end of the check-in day**.
+    It used to be 2 PM, which expired a booking made after 2 PM the moment it
+    was made.
+  - "Same-day" is decided again at approval, so a stay that reaches its
+    check-in day while still pending takes the same route.
+  - **Payment at the desk is cash only**, as at the venue cashier. A guest who
+    wants GCash pays online in advance from Pay now, and staff confirm the
+    upload as usual. Staff never record a GCash payment by hand.
+- **Unapproved requests expire on their date (decided and built 2026-10-27,
+  migration 07).** A request nobody approved becomes released / expired when
+  its booking begins (`fn_request_expiry`). The same rule applies to both
+  refund policies:
+  - a venue expires at its first slot's start time;
+  - a hostel stay expires at the end of its check-in day.
+
+  Before this, a post-pay request never expired, and a pre-pay one expired a
+  day early at a payment deadline it could not meet. Customers see
+  **"Expired"** with the reason ("not approved before your event date, nothing
+  was charged"). Staff see "Request expired (never approved)", and approving
+  one is refused.
+  - **Fixed at the same time:** the "unpaid pre-pay hold" rule used to release
+    **paid** and under-review bookings on their event day, because their
+    day-before deadline had passed. It now releases only bookings still
+    waiting for payment.
+  - **The rules now actually run.** The app calls `sp_expire_due_bookings()`
+    before every booking or availability read
+    (`venusep_expire_due_bookings()`, once per request, skipped in demo mode).
+    Before, it ran only when someone made a new booking.
+
+  - While refunds are **off**, nothing changes: the stay is paid after
+    check-out, as before.
 
 ## 19. Admin-managed FAQs — 2026-09-18
 EVERY question on the customer FAQ page lives in the database, so admins and
@@ -412,6 +534,180 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
 - **Built in four rounds, all done 2026-10-05:** (1) sign-in and sign-up; (2) profile
   "Set a password", "Connect / Disconnect Google", and the counter message for Google-only
   accounts; (3) forgot password; (4) remember me (15 days).
+
+## 24. Staff handle only their own venue — decided and built 2026-10-27 (migration 08)
+- **Every staff account belongs to exactly one venue** (`staff.venue_id`). There are no
+  unassigned staff:
+  - creating a staff account requires a venue;
+  - Staff Management offers no "Unassigned";
+  - `trg_staff_venue_required_ins` / `_upd` refuse a staff row without a venue.
+  - Migration 08 needs no preparation. Before adding the triggers, it places any staff
+    account with no venue (or no staff profile row) in the first active venue, and
+    prints who it placed so an admin can move them in Staff Management.
+  - **Migration 13 (2026-10-28) is data, not structure.** It adds the team's new staff
+    and admin accounts (jakemerson, macocase, francishubero) to every copy of the system:
+    - the same passwords (the hashes are copied);
+    - **no** two-step verification secret, so an admin sets up their own at first
+      sign-in;
+    - matched by email and venue code; an existing account is left alone.
+
+    It was generated from Francis's database. Accounts added later need a new migration.
+  Admins have no venue and handle every venue.
+- **Enforced on the server now** (`staff_venue_scope()` / `staff_may_handle_venue()` in
+  `includes/auth.php`). A staff member is refused (403) when they act on another venue's
+  booking: approve, reject, payments, POS/OR, refunds, check-in (`booking-action.php`),
+  counter bookings (`booking-create.php`), and email resends (`booking-emails.php`).
+  The scope is re-read from the database on every request, so a move takes effect on the
+  next click.
+- **Not yet filtered:** lists and read-only views (queues, booking detail, documents) still
+  show every venue. The staff UI will filter them with the same function.
+- **Admins can create admins (2026-10-27).** The register page (`admin/admin-register.php`)
+  offers Staff or Administrator.
+  - An administrator gets no venue.
+  - Creating one needs the **creator's own password** (`register-submit.php`
+    `kind=admin`). It uses the same `users.reauth_*` lockout as the refund switch and
+    the GCash accounts, so it is one shared budget.
+  - The new admin sets up two-step verification at their first sign-in, through
+    `admin-login.php`'s existing enrolment step.
+  - Staff cannot create either kind of account.
+- **Assigned Staff on the venue form is real.** "Add Staff" *moves* someone from their
+  current venue, after a confirmation, and saves together with the venue. Only an admin
+  may move staff. Nobody can be removed into "no venue". A venue may have no staff, in
+  which case only admins handle its bookings.
+
+## 25. Backup & restore — decided and built 2026-10-27 (no migration)
+- **One file per backup:** `venusep-backup-YYYYMMDD-HHMMSS-<kind>.tar.gz`, kind `manual`,
+  `pre-restore` or `uploaded`. It holds:
+  - `database.sql`: mysqldump with routines, triggers and events, `--single-transaction`,
+    so bookings keep working while it runs;
+  - `private/`: IDs, receipts and the mail log (everything in the private folder except
+    the backups themselves);
+  - `photos/rooms`, `photos/covers`, `photos/avatars`;
+  - `manifest.json`: app, kind, who made it, when, and the **layout version** (the
+    highest `venusep_migration_NN.sql`).
+
+  Not in it: the code (it is in git) and the Gmail / Google secrets.
+- **Kept outside the web root** in `<private folder>/backups`. The newest 10 are kept;
+  older ones are pruned. A `.json` beside each archive lets the list load without opening
+  it.
+- **Who may do what** (`admin/backup-action.php`, the only door to `includes/backup.php`):
+  - staff and admins: **Back up now**;
+  - admins only: Download, Delete and Restore, including restoring an uploaded file.
+
+  Reason: a backup carries every ID and password hash, and a restore rewinds every account.
+- **A restore:**
+  - asks for the admin's own password, under the shared `users.reauth_*` lockout;
+  - refuses a backup whose layout version differs from the system's;
+  - refuses an archive with any file outside `database.sql`, `manifest.json`, `private/`
+    and the three photo folders;
+  - makes a **safety copy** (`pre-restore`) first, and does not restore without one;
+  - imports the database, then replaces the file folders;
+  - **signs everyone out**: it empties `remember_tokens` and deletes the PHP session files.
+- **Automatic daily backups: on hold.** `backup_create()` is ready for a scheduled task
+  when it is wanted.
+
+## 26. The hostel is pay to use — decided and built 2026-10-27 (migration 11)
+A guest pays **before** using the bed. Unlike a venue, the payment doesn't wait. This
+applies whatever the refund switch says; venues still follow #18.
+- **`bookings.pay_to_use`** is a snapshot like `refunds_allowed`. `trg_bookings_type_ins`
+  sets it on every new hostel booking. The hostel stays booked before migration 11
+  keep their old route (2 upcoming post-pay stays on 2026-10-27).
+- **Online:**
+  - the guest sends a request, and staff check the ID and discount as before;
+  - no payment method is chosen at booking (`payment_method` is NULL);
+  - `sp_approve_booking` opens payment at once (`await_gcash`, or `await_cash` if cash
+    was chosen), with no POS wait;
+  - the guest pays by GCash from Pay now, or in cash at the front desk on arrival;
+  - payment is due by the **end of the check-in day** (`fn_payment_deadline`);
+  - `sp_expire_due_bookings` releases a stay still unpaid then. A paid stay, or one
+    with a receipt under review, is never touched, and none is ever marked "overdue".
+- **Counter** (`admin/booking-create.php`): the stay is **not recorded unless paid**.
+  - The last step is "Cash received — book it", behind a confirmation. It creates the
+    stay already approved and `paid_cash`, with its payment row and System Receipt, in
+    one transaction, even for a future date.
+  - If anything fails, the stay is removed and nothing is charged.
+  - It takes cash only; a guest who wants GCash books online.
+  - The amount isn't typed; it is the total shown.
+  - A walk-in with an email gets the System Receipt email only.
+- **Front desk, for an online stay:** "Cash received" (`booking-action.php`
+  `cash_received`) makes the stay a cash booking and marks it paid. It is refused while
+  a GCash receipt is under review: staff confirm or reject that first.
+- **The guest chooses cash, and can take it back (2026-10-28).**
+  - "Cash received" is shown, and allowed by the server, only once the guest has
+    chosen "Cash — hostel front desk" in Pay now (`await_cash`).
+  - While that choice stands, GCash is closed for the guest. The option is
+    disabled, and `payment-submit.php` refuses an upload.
+  - The guest can press "Cancel cash payment" (`method=cancel_cash`). The stay goes
+    back to `await_gcash`, with no method chosen, GCash opens again, and "Cash
+    received" disappears.
+  - A staff page opened before the cancel is refused and redraws without the button.
+  - A cancel is refused once staff have recorded the cash.
+  - Both choices are written to the booking's timeline.
+  - **Venues work the same way (2026-10-28).**
+    - A customer who chose "Cash — at the office" can cancel it. That includes cash
+      picked when the booking was made.
+    - GCash stays closed until they cancel.
+    - A cancelled venue booking goes back to GCash; a hostel stay goes back to no method
+      chosen.
+    - Staff can no longer record a payment while a booking is waiting on GCash with no
+      receipt (`confirm_payment` from `await_gcash` is refused). So a "Record cash
+      payment" click on a page loaded before the cancel is refused, and the page redraws
+      without the button. Staff never record a GCash payment by hand (#18).
+  - `payment_confirm()` in `includes/system-receipt.php` is now the one way a payment
+    is confirmed, shared by both paths.
+- **Check-in is refused until the stay is paid** (`confirmed` / `paid_cash`). A receipt
+  still under review is not paid.
+- **The whole stay is paid at once.**
+- **The POS and the OR are paperwork:** staff record them whenever CEDU and the Cashier
+  issue them, and neither holds up payment or check-in. The staff page has a "Record
+  POS" box for this.
+- **Wording:** the hostel page, Pay now, the staff page and the queue now say "pay
+  before you check in". The two built-in "How do I pay for a hostel bed?" FAQs were
+  rewritten; an answer an admin had already edited is left alone.
+- Tests: `tests/hostel_pay_to_use_db_test.php`.
+
+## 27. In-app notifications — decided and built 2026-10-28 (migration 12)
+A bell with an unread count sits in both shared top bars, so it appears on every signed-in
+page:
+- `includes/header.php`: admin and staff pages, and the customer account pages;
+- `includes/customer-nav.php`: landing, venue list, booking pages and FAQ, plus staff in
+  counter mode.
+
+Notifications are in-app only; nothing is emailed.
+- **The `notifications` table is everyone's inbox:** one row per person per event. The
+  wording isn't stored; `includes/notifications.php` writes it when the bell is shown.
+- **Who writes them:**
+  - booking status changes: `trg_booking_timeline_notify` on the timeline row the
+    status-change trigger already writes, so every page is covered;
+  - a new online request: `customer/booking-submit.php`;
+  - staff/admin accounts: `register-submit.php`, `admin/staff-save.php` and
+    `admin/venue-save.php` (staff moved).
+
+  All go through `sp_notify_customer` / `sp_notify_venue_staff` / `sp_notify_admins`.
+  **Nobody is notified of their own action.** Walk-ins (no login), counter bookings and
+  demo bookings produce none.
+- **Who sees what:**
+  - customers: their own bookings (approved, rejected, payment open, receipt rejected
+    with the reason, payment confirmed, expired or released, refund decided);
+  - staff of the booking's venue, and every admin: work to do (new request, receipt
+    uploaded, guest chose or cancelled cash, refund requested);
+  - admins: staff/admin accounts created, suspended, reactivated or moved. There is no
+    "deleted": the system never deletes accounts.
+- **"About to expire" reminders** (an unapproved request within 24 hours of its date) are
+  worked out live, not stored. They show at the top for the venue's staff and admins,
+  and disappear once the request is handled.
+- **Unread until clicked.** A click marks the notification read and opens it:
+  - Pay now while payment is open;
+  - otherwise Booking History with that booking's details window (`?view=`);
+  - for staff, the booking's page;
+  - for account events, Staff Management.
+
+  "Mark all as read" clears the lot. The bell checks `notifications.php` about once a
+  minute, paused while the tab is in the background.
+- **Read notifications older than 90 days are deleted;** unread ones are kept.
+- **Not done:** notifications for venue and room detail changes (dropped: it would need
+  its own log table).
+- Tests: `tests/notifications_db_test.php`.
 
 ---
 

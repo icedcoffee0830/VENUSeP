@@ -4,7 +4,7 @@
 
    POST  csrf, action=update|set_venue|set_active, user_id
      update:     full_name, email, employee_no, position_role, phone[, venue_id]
-     set_venue:  venue_id (empty = unassigned)
+     set_venue:  venue_id (required for a staff account — no unassigned staff)
      set_active: active=0|1
    Replies with JSON.
 
@@ -48,16 +48,33 @@ function ss_reply($status, array $data) {
     exit;
 }
 
-function ss_resolve_venue(PDO $pdo, $raw) {
+/* Tell the other admins (2026-10-28). A failure costs a notification, never
+   the change itself. */
+require_once __DIR__ . '/../includes/notifications.php';
+function ss_notify(PDO $pdo, $kind, $actor, array $detail) {
+    try {
+        notify_admins($pdo, $kind, (int) $actor, $detail);
+    } catch (PDOException $e) {
+        error_log('VENUSeP staff-save (notify): ' . $e->getMessage());
+    }
+}
+
+/* $required: a STAFF account must have a venue (decided 2026-10-27) — they
+   handle only that venue's bookings, so "Unassigned" would mean handling
+   nothing. Only an admin row may be left without one. */
+function ss_resolve_venue(PDO $pdo, $raw, $required = true) {
     if ($raw !== null && !is_scalar($raw)) {
-        ss_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue or Unassigned.']);
+        ss_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue.']);
     }
     $raw = trim((string) $raw);
     if ($raw === '') {
+        if ($required) {
+            ss_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Every staff member must handle a venue. Choose one.']);
+        }
         return ['id' => null, 'name' => 'Unassigned'];
     }
     if (!ctype_digit($raw) || (int) $raw < 1) {
-        ss_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue or Unassigned.']);
+        ss_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue.']);
     }
     $stmt = $pdo->prepare('SELECT id, name FROM venues WHERE id = :id');
     $stmt->execute([':id' => (int) $raw]);
@@ -93,7 +110,7 @@ if ($pdo === null) {
 }
 
 $row = $pdo->prepare(
-    'SELECT u.id, u.email, u.account_type, u.is_active, s.user_id AS staff_user_id
+    'SELECT u.id, u.email, u.account_type, u.is_active, s.user_id AS staff_user_id, s.venue_id AS old_venue_id
        FROM users u
        LEFT JOIN staff s ON s.user_id = u.id
       WHERE u.id = :u'
@@ -109,8 +126,9 @@ if (!in_array($user['account_type'], ['admin', 'staff'], true)) {
 }
 
 /* ---------------------------------------------------------------------
-   VENUE ASSIGNMENT — categorisation only. It does not change what this
-   account may see or do elsewhere in the admin portal.
+   VENUE ASSIGNMENT — which venue's bookings this staff member handles
+   (2026-10-27: staff_may_handle_venue() in includes/auth.php refuses the
+   rest). Required: there are no unassigned staff.
    --------------------------------------------------------------------- */
 if ($action === 'set_venue') {
     if ($user['account_type'] !== 'staff') {
@@ -126,6 +144,9 @@ if ($action === 'set_venue') {
     } catch (PDOException $e) {
         error_log('VENUSeP staff-save (set_venue): ' . $e->getMessage());
         ss_reply(500, ['ok' => false, 'message' => 'Something went wrong, so the venue was not changed.']);
+    }
+    if ((int) $user['old_venue_id'] !== (int) $venue['id']) {
+        ss_notify($pdo, 'staff_moved', $actor, ['email' => $user['email'], 'venue' => $venue['name']]);
     }
     ss_reply(200, ['ok' => true, 'venue_id' => $venue['id'], 'venue' => $venue['name'],
         'message' => 'Venue assignment updated.']);
@@ -160,7 +181,7 @@ if ($action === 'update') {
         if ($user['account_type'] !== 'staff' && $venueRaw !== '' && $venueRaw !== null) {
             ss_reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Venue assignments apply to staff accounts.']);
         }
-        $venue = ss_resolve_venue($pdo, $venueRaw);
+        $venue = ss_resolve_venue($pdo, $venueRaw, $user['account_type'] === 'staff');
     }
 
     try {
@@ -205,6 +226,10 @@ if ($action === 'update') {
         error_log('VENUSeP staff-save (update): ' . $e->getMessage());
         ss_reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was saved.']);
     }
+    if ($venueGiven && $user['account_type'] === 'staff' && $venue['id'] !== null
+        && (int) $user['old_venue_id'] !== (int) $venue['id']) {
+        ss_notify($pdo, 'staff_moved', $actor, ['email' => $email, 'venue' => $venue['name']]);
+    }
     ss_reply(200, ['ok' => true, 'message' => 'Account updated.']);
 }
 
@@ -242,6 +267,10 @@ if ($action === 'set_active') {
     } catch (PDOException $e) {
         error_log('VENUSeP staff-save (set_active): ' . $e->getMessage());
         ss_reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
+    }
+    if ((int) $user['is_active'] !== $active) {
+        ss_notify($pdo, $active ? 'account_reactivated' : 'account_suspended', $actor,
+            ['email' => $user['email'], 'role' => $user['account_type']]);
     }
     ss_reply(200, ['ok' => true, 'active' => $active,
         'message' => $active ? 'Account reactivated.' : 'Account suspended. They can no longer sign in.']);

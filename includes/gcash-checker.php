@@ -54,7 +54,7 @@
    ============================================================ */
 
 /* ---- duplicate store — a LOCAL HINT ONLY, no longer the record.
-        The real gates are uq_gcash_reference and uq_gcash_file_hash in the
+        The real gates are uq_gcash_active_reference and uq_gcash_active_file in the
         database, enforced across EVERY booking by customer/payment-submit.php.
         This store is per-browser and forgets everything on another machine,
         which is exactly why it could never be the record; what it still buys
@@ -72,6 +72,16 @@ function gcRemember(rec){
 function gcUsedRef(ref){ return !!ref && gcStore().some(r=>r.ref===ref); }
 function gcUsedSha(sha){ return !!sha && gcStore().some(r=>r.sha===sha); }
 function clearGcashHistory(){ localStorage.removeItem(GC_STORE_KEY); removeReceipt(); }
+
+/* ---- THIS booking's own earlier uploads, from the database. A page that has
+        them (customer/pay.php) defines gcPriorUploads() -> [{no, sha, ref,
+        outcome}]; the booking pages do not, and this finds nothing there.
+        Sending one again is refused by payment-submit.php WITHOUT counting an
+        attempt; this says so before the receipt is even read. ---- */
+function gcPrior(sha, ref){
+  if(typeof gcPriorUploads!=='function') return null;
+  return gcPriorUploads().find(u=>(sha && u.sha===sha) || (ref && u.ref===ref)) || null;
+}
 
 /* ---- digit-field OCR cleanup (per-field whitelist analog):
    letters Tesseract commonly confuses for digits, fixed ONLY inside
@@ -99,21 +109,41 @@ function numberMatchesMasked(receiptNumber, expectedNumber){
   if(receiptNumber==null || String(receiptNumber).trim()==='') return null;
   const expected=String(expectedNumber).replace(/\D+/g,'');
   if(expected.length!==11) return null;               // business number misconfigured — never fail customers on it
-  let r=String(receiptNumber).replace(/[•xX#]/g,'*').replace(/[^0-9*]/g,'');
-  if(r.startsWith('63') && r.length===12) r='0'+r.slice(2);   // +63 9xx… → 09xx…
-  if(r.length===10 && r[0]==='9') r='0'+r;
-  if(r.length!==11) return null;
-  let visible=0;
-  for(let i=0;i<11;i++){
-    if(r[i]==='*') continue;
-    if(r[i]!==expected[i]) return false;
-    visible++;
+  /* Compare the NATIONAL part — the ten characters after +63 / 63 / 0,
+     "9xxxxxxxxx". GCash hides middle digits with dots, and OCR reads those
+     dots as almost anything ("+63 9•••••2358" came back as "+63 Deceee2358",
+     2026-10-27), so EVERY non-digit counts as a hidden digit. Spaces and
+     dashes are layout, not characters. */
+  let s=String(receiptNumber).replace(/[\s\-]+/g,'');
+  if(/^\+?63/.test(s)) s=s.replace(/^\+?63/,'');
+  else if(s[0]==='0') s=s.slice(1);
+  const r=s.replace(/[^0-9]/g,'*');
+  const exp=expected.slice(1);
+  if(r.length===10){
+    let visible=0;
+    for(let i=0;i<10;i++){
+      if(r[i]==='*') continue;
+      if(r[i]!==exp[i]) return false;
+      visible++;
+    }
+    return visible>=4 ? true : null;
   }
-  return visible>=4 ? true : null;
+  /* OCR merged or split the dots, so positions no longer line up — judge the
+     visible ENDS only: the leading and trailing runs of digits. */
+  const lead=(r.match(/^\d+/)||[''])[0], tail=(r.match(/\d+$/)||[''])[0];
+  if(lead===r) return null;                           // all digits, wrong length: a misread, not a mismatch
+  if(lead && !exp.startsWith(lead)) return false;
+  if(tail && !exp.endsWith(tail)) return false;
+  return (lead.length+tail.length)>=4 ? true : null;
 }
 function maskedNameMatches(maskedName, expectedName){
   if(maskedName==null || String(maskedName).trim()==='') return null;
-  const runs=String(maskedName).match(/[a-z]+/gi)||[];  // visible letter-runs, e.g. "MI....A J.. J." → [MI,A,J,J]
+  /* visible letter-runs, e.g. "MI....A J.. J." → [MI,A,J,J]. GCash prints a
+     masked name in CAPITALS, and OCR reads the hiding dots as stray lowercase
+     letters ("FR••••S" → "FReeeeS"), so when capitals are present only the
+     capital runs are evidence. */
+  const mn=String(maskedName);
+  const runs=(/[A-Z]/.test(mn) ? mn.match(/[A-Z]+/g) : mn.match(/[a-z]+/gi))||[];
   const letters=String(expectedName).toLowerCase().replace(/[^a-z]/g,'');
   if(!letters || !runs.length) return null;
   let total=0, cursor=0;
@@ -191,7 +221,13 @@ function parseReceiptText(text){
   }else{
     const amountPos=lower.indexOf('amount');
     const head=amountPos!==-1?text.slice(0,amountPos):text;
-    if((m=head.match(/(\+?63\s?9[0-9*•xX#\s]{7,13}|\b09[0-9*•xX#]{4,9})/))) out.receiverNumber=m[1].trim();
+    /* "+63" then ANY run of characters on that line: the hidden digits come
+       out of OCR as letters or punctuation (numberMatchesMasked() reads them
+       as hidden). Cut after the last digit so trailing words are not taken. */
+    if((m=head.match(/(\+[ \t]?63[ \t]?[0-9A-Za-z*•#.°·\- \t]{6,18}|\b09[0-9*•xX#]{4,9})/))){
+      const n=m[1].replace(/[^0-9]+$/,'').trim();
+      if(/\d{2,}$/.test(n)) out.receiverNumber=n;
+    }
   }
 
   /* 6. Receiver names (masked "MI....A J.. J." + short display name) */
@@ -201,7 +237,10 @@ function parseReceiptText(text){
     if(/amount/i.test(line)) break;                     // names live above the money rows
     if(stop.test(line)) continue;
     if(!/^[A-Za-z.•* ]{2,40}$/.test(line)) continue;    // a name line, possibly masked — no digits
-    if(out.receiverNameMasked==null && /\.\.|[•*]/.test(line)){ out.receiverNameMasked=line; continue; }
+    /* masked: dots or bullets — or capitals with stray lowercase INSIDE a word
+       ("FReeeeS"), which is how OCR returns GCash's bullets. A normal name
+       ("Ramon T.") never has a lowercase run between two capitals. */
+    if(out.receiverNameMasked==null && (/\.\.|[•*]/.test(line) || /[A-Z][a-z]+[A-Z]/.test(line))){ out.receiverNameMasked=line; continue; }
     if(out.receiverNameShort==null && line.split(/\s+/).length<=3 && line.length<=24) out.receiverNameShort=line;
   }
   return out;
@@ -226,6 +265,10 @@ const GC_LABELS={
   amounts_inconsistent:'"Amount" and "Total Amount Sent" differ on the same receipt (possible edit).',
   low_confidence:'OCR was not confident reading this image — staff will double-check it.',
   ocr_unavailable:'The OCR engine could not load (internet required) — staff will verify manually.',
+  attempt_limit_reached:'This was the last receipt attempt allowed for this booking — staff review it now.',
+  already_uploaded_file:'You already uploaded this exact image for this booking.',
+  already_uploaded_ref:'You already uploaded a receipt with this reference number for this booking.',
+  rejected_by_staff:'Staff checked this receipt and rejected it.',
 };
 
 /* ---- checker.php port: the verdict engine ---- */
@@ -241,9 +284,13 @@ function evaluateReceipt(input, expectedCentavos){
 
   /* G1 — exact same file submitted before (blocks even if unreadable) */
   if(input.sha && gcUsedSha(input.sha)) reasons.push('duplicate_file');
+  /* G0 — this booking's OWN earlier upload: checkReceipt() skips the OCR for
+     it, so there is no text to judge and "unreadable" would be wrong. */
+  let prior=input.sha ? gcPrior(input.sha, null) : null;
+  if(prior) reasons.push('already_uploaded_file');
 
   if(text.trim().length<20){
-    flags.push('unreadable');
+    if(!prior) flags.push('unreadable');
   }else{
     /* G2 — must plausibly BE a GCash receipt before anything else */
     if(parsed.likeness<2) reasons.push('not_gcash_receipt');
@@ -252,6 +299,7 @@ function evaluateReceipt(input, expectedCentavos){
     /* G3 — duplicate reference number (strongest anti-reuse gate) */
     if(parsed.ref!=null){
       if(gcUsedRef(parsed.ref)) reasons.push('duplicate_ref');
+      if(!prior && (prior=gcPrior(null, parsed.ref))) reasons.push('already_uploaded_ref');
       if(parsed.ref.length!==13) flags.push('ref_format');
     }else flags.push('ref_unreadable');
 
@@ -306,7 +354,7 @@ function evaluateReceipt(input, expectedCentavos){
   const status = (ur.length || bothWrong) ? 'rejected'
                : (bothRight && !uf.length) ? 'accepted'
                : 'manual_review';
-  return { status, parsed, flags:uf, reasons:ur, sha:input.sha||'',
+  return { status, parsed, flags:uf, reasons:ur, sha:input.sha||'', prior,
            confidence:input.confidence!=null?Math.round(input.confidence):null,
            textExcerpt:text.trim().slice(0,900) };
 }
@@ -408,6 +456,11 @@ async function checkReceipt(input){
     const sha=await sha256Hex(buf);
     const {img,url}=await gcLoadImage(file);
     state.ocr.thumb=url;
+
+    if(gcPrior(sha, null)){                          // this booking's own earlier upload — nothing to read
+      state.ocr.rec=evaluateReceipt({text:'', sha}, expectedC);
+      state.ocr.phase='done'; render(); return;
+    }
 
     if(typeof Tesseract==='undefined'){             // offline → same manual-review path as the PHP fallback
       state.ocr.rec=evaluateReceipt({text:'', sha, preFlags:['ocr_unavailable']}, expectedC);

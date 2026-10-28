@@ -16,4 +16,4 @@ Route::get('/customer/hostel-reservation', Customer\HostelReservationController:
    runs without Laravel's CSRF middleware and checks the token in the controller. */
 Route::match(['get', 'post'], '/customer/booking-submit', Customer\BookingSubmitController::class)
     ->withoutMiddleware(ValidateCsrfToken::class)->name('customer.booking-submit');
-Route::get('/customer/calendar', PendingController::class)->name('customer.calendar');
+Route::get('/customer/calendar', Customer\CalendarController::class)->middleware('customer')->name('customer.calendar');

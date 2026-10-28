@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\CatalogDeleteController;
 use App\Http\Controllers\Admin\RoomPhotosApiController;
 use App\Http\Controllers\Admin\RoomSaveController;
 use App\Http\Controllers\Admin\RoomToggleActiveController;
+use App\Http\Controllers\Admin\VenueManagementController;
 use App\Http\Controllers\Admin\VenuePhotoApiController;
 use App\Http\Controllers\Admin\VenueSaveController;
 use App\Http\Controllers\PendingController;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Route;
    Every route below starts as a PendingController placeholder (501 "not ported yet").
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
-Route::get('/admin/venue-management', PendingController::class)->name('admin.venue-management');
+Route::get('/admin/venue-management', VenueManagementController::class)->middleware('staff')->name('admin.venue-management');
 Route::get('/admin/venue-form', PendingController::class)->name('admin.venue-form');
 Route::get('/admin/room-form', PendingController::class)->name('admin.room-form');
 Route::get('/admin/hostel-room-form', PendingController::class)->name('admin.hostel-room-form');

@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
 Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
-Route::get('/admin/booking-request', PendingController::class)->name('admin.booking-request');
+Route::get('/admin/booking-request', Admin\BookingRequestController::class)->middleware('staff')->name('admin.booking-request');
 /* JSON endpoint: answers 401 / 400 JSON itself (the old order), so it checks the CSRF token itself too. */
 Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)
     ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-action');

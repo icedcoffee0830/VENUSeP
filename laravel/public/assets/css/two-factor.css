@@ -1,0 +1,120 @@
+/* Two-step verification (DB-DECISIONS #20). Loaded by both sign-in pages and both
+   profile pages; everything is scoped under .auth-card / .auth-hero (sign-in) or
+   .tfa-panel (profiles) so it cannot leak into the rest of either page. */
+
+[data-tfa-panel] [hidden], .auth-card .tfa-error[hidden], .auth-card .tfa-hint[hidden] { display: none !important; }
+
+/* ---------------- sign-in: the crimson panel's trail ---------------- */
+.auth-trail { list-style: none; margin: 34px 0 0; padding: 0; display: grid; gap: 14px; }
+.auth-trail li { display: flex; align-items: center; gap: 14px; font-size: 15px; font-weight: 600; color: rgba(242,208,203,.62); }
+.auth-trail-mark { flex: none; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  border: 1.5px solid rgba(242,208,203,.34); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.auth-trail li.is-done { color: #f2d0cb; }
+.auth-trail li.is-done .auth-trail-mark { background: rgba(255,255,255,.14); border-color: transparent; color: #fff; font-size: 15px; }
+.auth-trail li.is-current { color: #fff; }
+.auth-trail li.is-current .auth-trail-mark { border-color: #ffd166; color: #ffd166; box-shadow: 0 0 0 4px rgba(255,209,102,.12); }
+
+/* ---------------- sign-in: the card ---------------- */
+.auth-card ::selection { background: rgba(161,22,38,.16); color: #120809; }
+.auth-card input { caret-color: #a11626; }
+.auth-card .btn-auth:focus-visible, .auth-card .tfa-mini:focus-visible, .auth-card .tfa-text-btn:focus-visible,
+.auth-card .form-check-input:focus-visible { outline: 3px solid rgba(161,22,38,.35); outline-offset: 3px; }
+.auth-card .tfa-code input { font-size: 18px; font-weight: 700; letter-spacing: .2em; font-variant-numeric: tabular-nums; }
+.auth-card .tfa-code input::placeholder { letter-spacing: .2em; }
+.auth-card .tfa-hint { margin: 8px 6px 20px; font-size: 13px; line-height: 1.5; color: #6e6a64; }
+.auth-card .tfa-hint i { color: #a11626; margin-right: 4px; }
+.auth-card .tfa-error { display: flex; gap: 8px; align-items: flex-start; margin: 8px 6px 18px; font-size: 13px; line-height: 1.45; color: #b23a3a; font-weight: 600; }
+.auth-card .tfa-error.is-ready, .tfa-panel .tfa-message.is-ready { color: #1c7a4f; }   /* the lock has run out */
+.auth-card .tfa-cancel { margin: 18px 0 0; text-align: center; }
+.auth-card .tfa-text-btn { border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: #6e6a64;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.auth-card .tfa-text-btn:hover { color: #a11626; }
+.auth-card .tfa-app-note { margin: 0 0 16px; text-align: center; font-size: 13px; color: #6e6a64; line-height: 1.5; }
+.auth-card .tfa-app-note strong, .auth-card .auth-subtitle strong { color: #120809; }
+.auth-card .tfa-qr { width: 184px; height: 184px; margin: 0 auto; padding: 12px; background: #fff; border: 1.5px solid #d9d4cc; border-radius: 18px; }
+.auth-card .tfa-qr svg { display: block; width: 100%; height: 100%; }
+.auth-card .tfa-key-label { margin: 18px 0 6px; font-size: 12.5px; font-weight: 600; color: #6e6a64; text-align: center; }
+.auth-card .tfa-key-row { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; border: 1.5px solid #d9d4cc; border-radius: 14px; }
+.auth-card .tfa-key { flex: 1; min-width: 0; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 14px; font-weight: 600; letter-spacing: .06em;
+  color: #120809; user-select: all; word-break: break-word; line-height: 1.5; }
+.auth-card .tfa-mini { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1.5px solid #d9d4cc;
+  background: #fff; color: #120809; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: border-color .18s, color .18s; }
+.auth-card .tfa-mini:hover { border-color: #a11626; color: #a11626; }
+.auth-card .tfa-tip { margin: 10px 4px 0; font-size: 12.5px; color: #6e6a64; line-height: 1.5; text-align: center; }
+.auth-card .tfa-rule { border: 0; border-top: 1px solid #eee8e1; margin: 22px 0 18px; }
+.auth-card .tfa-field-label { display: block; margin: 0 0 8px 6px; font-size: 13px; font-weight: 700; color: #120809; }
+.auth-card .tfa-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin: 0; padding: 18px 22px; list-style: none;
+  border: 1.5px solid #d9d4cc; border-radius: 18px; background: #fff;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 15px; font-weight: 600; letter-spacing: .05em; color: #120809;
+  font-variant-numeric: tabular-nums; user-select: all; }
+.auth-card .tfa-code-actions { display: flex; gap: 10px; justify-content: center; margin: 14px 0 20px; }
+.auth-card .tfa-confirm { display: flex; gap: 10px; align-items: flex-start; margin: 0 4px 16px; font-size: 13.5px; line-height: 1.45; color: #120809; cursor: pointer; }
+.auth-card .tfa-confirm .form-check-input { margin-top: 2px; flex: none; }
+.auth-card .btn-auth[disabled] { background: #d8c9cb; color: #fff; box-shadow: none; cursor: not-allowed; transform: none; }
+
+@media (max-width: 860px) {
+  .auth-trail { display: none; }
+  .auth-card .tfa-qr { width: 164px; height: 164px; }
+  .auth-card .tfa-codes { gap: 8px 14px; padding: 14px 16px; font-size: 14px; }
+}
+@media (max-width: 360px) { .auth-card .tfa-codes { grid-template-columns: 1fr; } }
+
+/* ---------------- profiles: shared panel pieces ---------------- */
+.tfa-panel ::selection { background: rgba(161,22,38,.16); }
+.tfa-panel input { caret-color: #a11626; }
+.tfa-panel .tfa-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tfa-panel .tfa-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .03em; }
+.tfa-panel .tfa-chip-on { background: #eaf6ef; color: #1c7a4f; }
+.tfa-panel .tfa-chip-off { background: #f1efec; color: #6e6a64; }
+.tfa-panel .tfa-facts { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; padding: 0; list-style: none; font-size: .84rem; color: #3b3834; }
+.tfa-panel .tfa-facts li { display: inline-flex; align-items: center; gap: 7px; }
+.tfa-panel .tfa-facts i { color: #6e6a64; }
+.tfa-panel .tfa-facts strong { font-variant-numeric: tabular-nums; }
+.tfa-panel .tfa-warn { display: flex; gap: 9px; align-items: flex-start; margin: 14px 0 0; padding: 10px 13px; border-radius: 10px; background: #fdf3e6; color: #8a5a12;
+  font-size: .84rem; font-weight: 600; line-height: 1.45; }
+.tfa-panel .tfa-block { margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0efec; }
+.tfa-panel .tfa-setup { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 22px; align-items: start; }
+.tfa-panel .tfa-qr { width: 168px; height: 168px; padding: 11px; border: 1px solid #dccfcc; border-radius: 14px; background: #fff; }
+.tfa-panel .tfa-qr svg { display: block; width: 100%; height: 100%; }
+.tfa-panel .tfa-steps { margin: 0 0 12px; padding-left: 1.15rem; font-size: .86rem; line-height: 1.6; }
+.tfa-panel .tfa-steps li + li { margin-top: 2px; }
+.tfa-panel .tfa-key-label { margin: 0 0 5px; font-size: .78rem; font-weight: 700; color: #6e6a64; }
+.tfa-panel .tfa-key { display: block; padding: 8px 12px; border: 1px dashed #dccfcc; border-radius: 10px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: .86rem; font-weight: 600; letter-spacing: .06em; user-select: all; word-break: break-word; }
+.tfa-panel .tfa-inline { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 14px; }
+.tfa-panel .tfa-inline label { display: block; font-size: .8rem; font-weight: 700; margin-bottom: 6px; }
+.tfa-panel .tfa-field { flex: 0 1 240px; }
+.tfa-panel .tfa-field input { width: 100%; }
+.tfa-panel .tfa-code-input { font-size: 1rem; font-weight: 700; letter-spacing: .18em; font-variant-numeric: tabular-nums; }
+.tfa-panel .tfa-code-input[type="password"] { letter-spacing: normal; }
+.tfa-panel .tfa-message { margin: 10px 0 0; font-size: .82rem; font-weight: 600; line-height: 1.45; }
+.tfa-panel .tfa-message:empty { margin: 0; }   /* stays in the page so screen readers still hear it when it fills */
+.tfa-panel .tfa-message.is-bad { color: #b23a3a; }
+.tfa-panel .tfa-message.is-good { color: #1c7a4f; }
+.tfa-panel .tfa-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 22px; margin: 0; padding: 14px 18px; list-style: none; max-width: 420px;
+  border: 1px solid #dccfcc; border-radius: 12px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92rem; font-weight: 600;
+  letter-spacing: .05em; user-select: all; }
+.tfa-panel .tfa-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.tfa-panel .tfa-confirm { display: flex; gap: 9px; align-items: flex-start; margin: 14px 0 0; font-size: .86rem; line-height: 1.45; cursor: pointer; }
+.tfa-panel .tfa-confirm input { width: 16px; height: 16px; margin-top: 2px; accent-color: #a11626; flex: none; }
+.tfa-panel button:focus-visible, .tfa-panel input:focus-visible { outline: 3px solid rgba(161,22,38,.3); outline-offset: 2px; }
+
+/* admin settings card (sits in the Demo Mode card's shape; dm-* classes come from the page) */
+.tfa-panel.dm-card .tfa-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.tfa-panel.dm-card .tfa-pill-on { background: #e7f5ee; color: #1c7a4f; }
+.tfa-panel.dm-card .tfa-btn-primary { background: #a11626; border-color: #a11626; color: #fff; }
+.tfa-panel.dm-card .tfa-btn-primary:hover { background: #7d0f1e; border-color: #7d0f1e; }
+.tfa-panel.dm-card .dm-btn { display: inline-flex; align-items: center; gap: .4rem; font: inherit; font-size: .82rem; font-weight: 650; }
+.tfa-panel.dm-card .tfa-warn { max-width: 62ch; padding: .55rem .75rem; border-radius: 8px; font-size: .8rem; margin-top: .75rem; }
+.tfa-panel.dm-card .tfa-block { margin-top: .8rem; padding-top: .8rem; }
+.tfa-panel.dm-card .dm-meta { display: flex; flex-wrap: wrap; gap: .3rem 1.3rem; color: #6b675f; font-size: .78rem; }
+.tfa-panel.dm-card .dm-meta strong { color: #1f1e1e; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tfa-panel.dm-card .tfa-field input { border: 1px solid #d8d4cc; border-radius: 8px; font: inherit; padding: .45rem .65rem; }
+.tfa-panel.dm-card .tfa-field input:focus { outline: none; border-color: #a11626; box-shadow: 0 0 0 3px rgba(161,22,38,.14); }
+
+@media (max-width: 767.98px) {
+  .tfa-panel .tfa-setup { grid-template-columns: 1fr; }
+  .tfa-panel .tfa-qr { margin: 0 auto; }
+  .tfa-panel .tfa-field { flex-basis: 100%; }
+}
+@media (max-width: 360px) { .tfa-panel .tfa-codes { grid-template-columns: 1fr; } }

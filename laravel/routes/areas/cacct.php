@@ -18,4 +18,4 @@ Route::get('/receipt-pdf', Customer\ReceiptPdfController::class)->name('root.rec
 Route::get('/customer/refund-request', Customer\RefundRequestController::class)->middleware('customer')->name('customer.refund-request');
 Route::match(['get', 'post'], '/customer/refund-submit', Customer\RefundSubmitController::class)->withoutMiddleware(ValidateCsrfToken::class)->name('customer.refund-submit');
 Route::get('/customer/transaction-history', Customer\TransactionHistoryController::class)->middleware('customer')->name('customer.transaction-history');
-Route::get('/customer/faq', PendingController::class)->name('customer.faq');
+Route::get('/customer/faq', Customer\FaqController::class)->name('customer.faq');

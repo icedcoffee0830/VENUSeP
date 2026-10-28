@@ -13,7 +13,13 @@
    The valid ID, the uploaded GCash receipt and the System Receipt are LINKS
    inside it: their own pages already serve them, with their own permission
    checks (valid-id-view.php, document-view.php, receipt.php).
+
+   LARAVEL: the links are route() URLs. "System Receipt" goes to the staff
+   receipt page on an admin page (route admin.*) and to the customer's own
+   receipt page everywhere else — the old relative "receipt.php" did the same
+   by resolving against admin/ or customer/.
    ===================================================================== */
+$bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route('customer.receipt');
 ?>
 <style>
   .bdm-overlay { position: fixed; inset: 0; z-index: 2500; display: flex; align-items: center; justify-content: center; padding: 18px;
@@ -77,8 +83,8 @@
       const m = d.money;
       const when = d.when.map(w => kv(w.label, w.value)).join('');
       /* same tab (2026-10-28): each page has its own Back */
-      const links = [`<a class="bdm-link" href="../valid-id-view.php?booking=${encodeURIComponent(d.reference)}">Valid ID</a>`];
-      if (d.hasReceipt) links.push(`<a class="bdm-link" href="receipt.php?booking=${encodeURIComponent(d.reference)}">System Receipt</a>`);
+      const links = [`<a class="bdm-link" href="<?php echo e(route('root.valid-id-view')); ?>?booking=${encodeURIComponent(d.reference)}">Valid ID</a>`];
+      if (d.hasReceipt) links.push(`<a class="bdm-link" href="<?php echo e($bdmReceiptUrl); ?>?booking=${encodeURIComponent(d.reference)}">System Receipt</a>`);
       return `
         <div class="bdm-head">
           <div>
@@ -103,7 +109,7 @@
             <div class="bdm-row bdm-total"><span>Total</span><span>${e(m.total)}</span></div>
             <div class="bdm-grid" style="margin-top:10px">${kv('Method', m.method)}${kv('Status', m.paymentStatus)}${kv('Pay by', m.payBy)}${kv('Paid on', m.paidOn)}</div>
             ${d.gcash ? `<div class="bdm-gcash" style="margin-top:12px">
-                <a href="../valid-id-view.php?receipt=${d.gcash.imageId}" title="Open the uploaded receipt"><img src="../document-view.php?receipt=${d.gcash.imageId}" alt="GCash receipt"
+                <a href="<?php echo e(route('root.valid-id-view')); ?>?receipt=${d.gcash.imageId}" title="Open the uploaded receipt"><img src="<?php echo e(route('root.document-view')); ?>?receipt=${d.gcash.imageId}" alt="GCash receipt"
                    onerror="this.closest('a').outerHTML='<span class=&quot;bdm-noimg&quot;>Image not on file</span>'"></a>
                 <div class="bdm-grid" style="flex:1">${kv('GCash reference', d.gcash.reference)}${kv('Amount on receipt', d.gcash.amount)}${kv('Receipt check', d.gcash.check)}</div>
               </div>` : ''}
@@ -127,7 +133,7 @@
       overlay.addEventListener('mousedown', function (ev) { if (ev.target === overlay) close(); });
       overlay.addEventListener('click', function (ev) { if (ev.target.closest('[data-bdm-close]')) close(); });
       const mine = overlay;
-      fetch('../booking-details.php?booking=' + encodeURIComponent(ref), { credentials: 'same-origin' })
+      fetch(<?php echo json_encode(route('root.booking-details') . '?booking='); ?> + encodeURIComponent(ref), { credentials: 'same-origin' })
         .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
         .then(function (res) {
           if (overlay !== mine) return;                       // closed meanwhile

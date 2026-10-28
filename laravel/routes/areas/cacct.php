@@ -15,5 +15,5 @@ Route::get('/customer/receipt', PendingController::class)->name('customer.receip
 Route::get('/receipt-pdf', PendingController::class)->name('root.receipt-pdf');
 Route::get('/customer/refund-request', PendingController::class)->name('customer.refund-request');
 Route::match(['get', 'post'], '/customer/refund-submit', PendingController::class)->name('customer.refund-submit');
-Route::get('/customer/transaction-history', PendingController::class)->name('customer.transaction-history');
+Route::get('/customer/transaction-history', Customer\TransactionHistoryController::class)->middleware('customer')->name('customer.transaction-history');
 Route::get('/customer/faq', PendingController::class)->name('customer.faq');

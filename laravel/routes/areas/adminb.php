@@ -3,7 +3,7 @@
 use App\Http\Controllers\Admin\CounterCustomerController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\FaqController;
-use App\Http\Controllers\PendingController;
+use App\Http\Controllers\Admin\StaffController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
@@ -11,9 +11,11 @@ use Illuminate\Support\Facades\Route;
    Every route below starts as a PendingController placeholder (501 "not ported yet").
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
-Route::get('/admin/staff', PendingController::class)->name('admin.staff');
-Route::match(['get', 'post'], '/admin/staff-save', PendingController::class)->name('admin.staff-save');
-Route::get('/admin/admin-register', PendingController::class)->name('admin.admin-register');
+Route::middleware('staff:admin')->get('/admin/staff', [StaffController::class, 'index'])->name('admin.staff');
+/* JSON for the page's JS: own admin-only 403/400 JSON (no redirecting middleware, own CSRF check). */
+Route::match(['get', 'post'], '/admin/staff-save', [StaffController::class, 'save'])
+    ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.staff-save');
+Route::middleware('staff:admin')->get('/admin/admin-register', [StaffController::class, 'register'])->name('admin.admin-register');
 Route::middleware('staff')->get('/admin/customer-management', [CustomerController::class, 'index'])->name('admin.customer-management');
 /* JSON for the page's JS: own 403/400 JSON (no redirecting middleware, own CSRF check). */
 Route::match(['get', 'post'], '/admin/customer-save', [CustomerController::class, 'save'])

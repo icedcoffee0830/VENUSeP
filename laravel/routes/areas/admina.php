@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Admin;
-use App\Http\Controllers\PendingController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
@@ -16,8 +15,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/admin/dashboard', Admin\DashboardController::class)->middleware('staff')->name('admin.dashboard');
 Route::get('/admin/reports', Admin\ReportsController::class)->middleware('staff')->name('admin.reports');
 Route::match(['get', 'post'], '/notifications', Admin\NotificationsController::class)->name('root.notifications');   // guards itself (JSON 401)
-Route::get('/admin/backup-restore', PendingController::class)->name('admin.backup-restore');
-Route::match(['get', 'post'], '/admin/backup-action', PendingController::class)->name('admin.backup-action');
+Route::get('/admin/backup-restore', Admin\BackupRestoreController::class)->middleware('staff')->name('admin.backup-restore');
+Route::match(['get', 'post'], '/admin/backup-action', Admin\BackupActionController::class)->withoutMiddleware(ValidateCsrfToken::class)->name('admin.backup-action');
 Route::match(['get', 'post'], '/admin/demo-mode-switch', Admin\DemoModeSwitchController::class)->withoutMiddleware(ValidateCsrfToken::class)->name('admin.demo-mode-switch');
 Route::match(['get', 'post'], '/admin/refund-switch', Admin\RefundSwitchController::class)->withoutMiddleware(ValidateCsrfToken::class)->name('admin.refund-switch');
 Route::get('/admin/payment-settings', Admin\PaymentSettingsController::class)->middleware('staff')->name('admin.payment-settings');

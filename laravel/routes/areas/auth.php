@@ -16,8 +16,8 @@ Route::get('/customer/customer-register', Auth\CustomerRegisterController::class
 /* JSON endpoints: their own CSRF check with the old JSON reply (Auth\LegacyCsrf). */
 Route::match(['get', 'post'], '/register-submit', Auth\RegisterSubmitController::class)->name('root.register-submit')
     ->withoutMiddleware(ValidateCsrfToken::class);
-Route::match(['get', 'post'], '/customer/forgot-password', PendingController::class)->name('customer.forgot-password');
-Route::match(['get', 'post'], '/customer/reset-password', PendingController::class)->name('customer.reset-password');
+Route::match(['get', 'post'], '/customer/forgot-password', [Auth\PasswordResetController::class, 'forgot'])->name('customer.forgot-password');
+Route::match(['get', 'post'], '/customer/reset-password', [Auth\PasswordResetController::class, 'reset'])->name('customer.reset-password');
 Route::match(['get', 'post'], '/customer/google-start', PendingController::class)->name('customer.google-start');
 Route::match(['get', 'post'], '/customer/google-callback', PendingController::class)->name('customer.google-callback');
 Route::match(['get', 'post'], '/customer/logout', [Auth\LogoutController::class, 'customer'])->name('customer.logout');

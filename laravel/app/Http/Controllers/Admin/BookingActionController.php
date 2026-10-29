@@ -149,6 +149,8 @@ class BookingActionController extends Controller
                 'method'     => $after['method'],          /* Cash received turns a stay into a cash booking */
                 'attempts'        => $after['receiptAttempts'],
                 'attemptsAllowed' => $after['receiptAttemptsAllowed'],
+                /* the timeline as a reload would show it: real time, real actor */
+                'tl'              => booking_history_events($after),
             ] : null,
         ]);
     }

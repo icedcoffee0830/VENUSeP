@@ -235,6 +235,8 @@
             cur.total = out.booking.total;
             cur.discountPct = out.booking.discount;
             cur.payBy = out.booking.payBy;
+            /* the timeline exactly as a reload shows it — real time, real actor */
+            if (out.booking.tl) cur.tl = out.booking.tl;
           }
           if (typeof onOk === 'function') onOk(out);
           acting = false; render(); return true;
@@ -382,9 +384,6 @@
         if (rec) gcRemember(rec);        /* consume ref + file hash only once the refund really landed */
         cur.pay = 'refunded'; cur.confirmedBy = 'You · just now';
         cur.payoutOpen = false; cur.payoutErr = null;
-        cur.tl.push({ w: now(), x: 'Refund completed', m: 'Sent to ' + to + (refNo ? ' (GCash ref ' + refNo + ')' : "")
-          + (payoutVerified() ? ', receipt verified.' : ', recorded without a verified receipt: ' + note)
-          + ' The booking is now closed and its date released.' });
         state.ocr = null;
         render();
       }
@@ -667,7 +666,6 @@
         staffAction('allow_receipt_attempts', { note: note }, function (out) {
           if (out.booking && out.booking.attemptsAllowed) cur.attemptsAllowed = out.booking.attemptsAllowed;
           cur.attNote = '';
-          cur.tl.push({ w: now(), x: 'More receipt attempts allowed', m: '5 more GCash receipt attempts: ' + note });
         });
       }
 
@@ -1092,8 +1090,6 @@
           </div></div>`;
       }
 
-      /* demo actions — update statuses + timeline in-page (no persistence) */
-      function now() { return 'Jul 14, 2026 — You (staff)'; }
       /* Recompute and LOCK the price at approval. DB-DECISIONS #2: the booking
          stores the % it received, so changing the live rate later never rewrites
          it. The rate the customer was quoted at booking is the rate they get. */
@@ -1107,15 +1103,6 @@
       function approveIdRes(withDiscount) {
         staffAction('approve', { discount: withDiscount ? '1' : '0' }, function () {
           cur.idStatus = 'approved';
-          cur.tl.push({ w: now(), x: 'Affiliation ' + (withDiscount ? 'confirmed' : 'not confirmed'),
-            m: withDiscount
-              ? cur.discountPct + '% USeP discount applied from ' + cur.idLabel + '. Price locked at ' + cur.total + '.'
-              : 'ID accepted but it does not prove USeP affiliation. Full price ' + cur.total + '.' });
-          cur.tl.push({ w: now(), x: 'ID + reservation approved',
-            m: cur.payToUse ? 'Payment open: GCash online, or cash at the front desk, by the end of ' + cur.checkIn + '.'
-             : cur.pay === 'await_pos'  ? 'Payment stays locked until the POS comes back from CEDU.'
-             : cur.pay === 'await_event' ? 'Post-pay booking: payment opens after the last day and is due by ' + cur.payBy + '.'
-             : 'Payment unlocked. Pay-by deadline ' + cur.payBy + '.' });
         });
       }
 
@@ -1128,7 +1115,6 @@
         cur.posErr = null;
         staffAction('record_pos', { pos: val }, function () {
           cur.pos = val;
-          cur.tl.push({ w: now(), x: 'POS received from CEDU', m: val + ' recorded.' + (cur.payToUse ? '' : cur.pay === 'await_event' ? ' This booking post-pays, so payment still opens after check-out.' : ' Payment unlocked for the guest.') });
         });
       }
 
@@ -1142,7 +1128,6 @@
           cur.methodChosen = true;
           loadMail();                      /* a receipt was just issued (and maybe emailed) */
           cur.confirmedBy = 'You · just now';
-          cur.tl.push({ w: now(), x: 'Cash received', m: cur.total + ' paid in cash at the front desk.' });
         });
       }
 
@@ -1154,7 +1139,6 @@
         if (!val) return;
         staffAction('record_or', { or: val }, function () {
           cur.or = val;
-          cur.tl.push({ w: now(), x: 'Official Receipt recorded', m: val + ' issued by the University Cashier. Needed at check-in.' });
         });
       }
 
@@ -1162,25 +1146,17 @@
       function checkIn() {
         staffAction('check_in', {}, function () {
           cur.checkedIn = true;
-          cur.tl.push({ w: now(), x: 'Guest checked in', m: cur.payToUse
-            ? 'Paid stay; guest matched against the valid ID.'
-            : 'POS ' + (cur.pos || '—') + ' and OR ' + (cur.or || '—') + ' presented and matched against the valid ID.' });
         });
       }
 
       function rejectRequest() {
-        staffAction('reject', { note: 'Reservation released back to availability.' }, function () {
-          cur.tl.push({ w: now(), x: 'Request rejected', m: 'Held dates released back to availability. Customer notified.' });
-        });
+        staffAction('reject', { note: 'Reservation released back to availability.' });
       }
 
       function confirmPay() {
-        const cash = cur.method === 'cash';
         staffAction('confirm_payment', {}, function () {
           loadMail();                      /* a receipt was just issued (and maybe emailed) */
           cur.confirmedBy = 'You · just now';
-          cur.tl.push({ w: now(), x: cash ? 'Cash payment recorded' : 'Payment confirmed',
-            m: cash ? 'Recorded at the cashier.' : 'Reference matched in GCash Transaction History. Reference locked.' });
         });
       }
 
@@ -1192,7 +1168,6 @@
           const lastUp = (cur.attempts || []).slice(-1)[0];
           if (lastUp && !lastUp.flags.includes('rejected_by_staff')) { lastUp.flags.push('rejected_by_staff'); lastUp.staffNote = why; }
           cur.rejects = [why + ' (receipt kept on record; the same receipt cannot be used again)'];
-          cur.tl.push({ w: now(), x: 'Receipt rejected', m: 'Payment reopened so the customer can resubmit before the deadline.' });
         });
       }
       /* Take back a rejection STAFF made and return the receipt to where it was —
@@ -1204,7 +1179,6 @@
         cur.pay = cur.prevPay || 'under_review';
         cur.rejectedByStaff = false;
         cur.rejects = []; cur.resubmitBy = null;   /* the 48-hour window dies with the rejection */
-        cur.tl.push({ w: now(), x: 'Rejection withdrawn', m: 'Staff took the rejection back; the receipt is under review again.' });
         render();
       }
       function overrideConfirm() {
@@ -1212,18 +1186,15 @@
         cur.ovrNote = (document.getElementById('ovrNote') || {}).value || '';
         if (!cur.ovrRef.trim() || !cur.ovrNote.trim()) { cur.ovrErr = 'Both the verified reference number and a note are required.'; render(); return; }
         cur.ovrErr = ''; cur.pay = 'confirmed'; cur.confirmedBy = 'You (override) · just now';
-        cur.tl.push({ w: now(), x: 'Override — payment confirmed manually', m: 'Verified ref ' + cur.ovrRef.trim() + ' in GCash. Note: ' + cur.ovrNote.trim() + ' (Auto-check verdict kept on record.)' });
         render();
       }
       function releaseSlot() {
         cur.res = 'released';
-        cur.tl.push({ w: now(), x: 'Slot released', m: 'Payment deadline passed; the dates are bookable again. Customer notified.' });
         render();
       }
       function extendDeadline() {
         cur.pay = cur.method === 'cash' ? 'await_cash' : 'await_gcash';
         cur.payBy = 'Jul 16, 2026 (extended +48 h)';
-        cur.tl.push({ w: now(), x: 'Deadline extended 48 hours', m: 'New pay-by: Jul 16, 2026. Customer notified.' });
         render();
       }
       /* NOT a denial. A paperwork problem hands the request back with a bounded
@@ -1268,13 +1239,11 @@
         if (deny) {
           cur.pay = 'refund_denied';
           cur.denyReason = msg;
-          cur.tl.push({ w: now(), x: 'Refund denied', m: msg + '. Final — the customer would need to book again. The booking itself is unaffected.' });
         } else {
           cur.pay = 'refund_correction';
           cur.refund = cur.refund || {};
           cur.refund.stage = 'Returned for correction';
           cur.refund.docs = 'Returned to the customer: ' + msg;
-          cur.tl.push({ w: now(), x: 'Returned for correction', m: msg + ' · 48 hours to resubmit. Not a denial — the booking is unaffected.' });
         }
         cur.actionMode = null; cur.actNote = ""; cur.actReason = ""; cur.actErr = null;
         render();
@@ -1310,7 +1279,7 @@
           const res = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' });
           const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });
           if (!out.ok) { cur.outcomeError = out.message || 'Nothing was recorded.'; return false; }
-          if (out.booking) { cur.res = out.booking.res; cur.pay = out.booking.pay; }
+          if (out.booking) { cur.res = out.booking.res; cur.pay = out.booking.pay; if (out.booking.tl) cur.tl = out.booking.tl; }
           return true;
         } catch (e) {
           cur.outcomeError = 'Could not reach the server, so nothing was recorded.';

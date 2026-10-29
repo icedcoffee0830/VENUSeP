@@ -13,8 +13,8 @@ use Illuminate\Http\Request;
 
    EMAIL ME goes to the account's OWN address, read from the database, never
    from the request; at most one copy per receipt every 5 minutes. The POST
-   redirects back to a state URL (Post/Redirect/Get). A stale token redirects
-   to &failed=1 as before (Laravel's CSRF middleware is lifted on this route).
+   redirects back to a state URL (Post/Redirect/Get). A stale token now gets
+   Laravel's 419 page (it used to redirect to &failed=1).
 
    Someone else's booking, or a booking with no receipt yet: 404.
    ================================================================== */
@@ -55,9 +55,6 @@ class ReceiptController
         $rcSelf = route('customer.receipt', ['booking' => $rcRef]);
 
         if ($request->isMethod('post') && $request->input('action') === 'email') {
-            if (!csrf_valid($request->input('_token'))) {
-                return redirect($rcSelf . '&failed=1', 303);
-            }
             $rcState = 'failed';
             if (receipt_copy_sent_recently($rcPdo, (int) $rcReceipt['id'])) {
                 $rcState = 'recent';

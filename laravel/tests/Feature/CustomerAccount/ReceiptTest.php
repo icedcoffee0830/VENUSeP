@@ -85,15 +85,6 @@ class ReceiptTest extends TestCase
         }
     }
 
-    public function test_a_stale_token_redirects_to_failed(): void
-    {
-        $self = route('customer.receipt', ['booking' => $this->ref(self::BOOKING)]);
-        $this->actingAsCustomer('customer@gmail.com')
-            ->post($self, ['_token' => 'stale', 'action' => 'email'])
-            ->assertStatus(303)->assertRedirect($self . '&failed=1');
-        $this->assertSame(0, DB::table('email_outbox')->where('receipt_id', $this->receiptId)->count());
-    }
-
     public function test_pdf_for_the_owner_with_the_old_headers(): void
     {
         $res = $this->actingAsCustomer('customer@gmail.com')

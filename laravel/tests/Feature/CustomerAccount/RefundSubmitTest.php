@@ -25,14 +25,13 @@ class RefundSubmitTest extends TestCase
         ];
     }
 
-    public function test_get_guest_and_stale_token_get_the_old_json(): void
+    public function test_get_and_guest_get_the_old_json(): void
     {
         $this->get(route('customer.refund-submit'))->assertStatus(405)->assertHeader('Allow', 'POST')
             ->assertExactJson(['ok' => false, 'message' => 'Use POST.']);
         $this->post(route('customer.refund-submit'), ['booking' => 'VB-2026-036', 'action' => 'withdraw'])
             ->assertStatus(401)->assertExactJson(['ok' => false, 'message' => 'Your session has ended. Log in again.']);
-        $this->asRafael()->post(route('customer.refund-submit'), ['_token' => 'old', 'booking' => 'VB-2026-036', 'action' => 'withdraw'])
-            ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
+        // an expired token: Laravel's CSRF check + the 419 handler in bootstrap/app.php (SkeletonTest)
     }
 
     public function test_validation_failures(): void

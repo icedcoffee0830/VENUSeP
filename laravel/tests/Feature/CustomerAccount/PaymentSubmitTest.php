@@ -41,13 +41,6 @@ class PaymentSubmitTest extends TestCase
             ->assertStatus(401)->assertExactJson(['ok' => false, 'message' => 'Your session has ended. Log in again.']);
     }
 
-    public function test_a_stale_token_gets_the_page_expired_json(): void
-    {
-        $this->asCustomerWithToken()
-            ->post(route('customer.payment-submit'), ['_token' => 'wrong', 'booking' => 'VB-2026-020', 'method' => 'cash'])
-            ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
-    }
-
     public function test_someone_elses_booking_is_not_found(): void
     {
         $this->asCustomerWithToken()

@@ -25,8 +25,8 @@ use PDOException;
    counted upload is recorded with its attempt number (DB-DECISIONS #6);
    nothing here confirms a payment — the best outcome is 'under_review'.
 
-   CSRF: Laravel's middleware is lifted on this route (routes/areas/cacct.php)
-   so the old order and JSON stay: 405 -> 401 -> 400 "page has expired".
+   CSRF: Laravel's middleware checks _token; an expired page gets the old
+   400 JSON from the 419 handler in bootstrap/app.php.
    ===================================================================== */
 class PaymentSubmitController
 {
@@ -44,9 +44,6 @@ class PaymentSubmitController
         }
         if (!customer_logged_in()) {
             return self::reply(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
-        }
-        if (!csrf_valid($request->input('_token', $request->header('X-CSRF-TOKEN')))) {
-            return self::reply(400, ['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
         }
 
         $ref        = (string) $request->input('booking', '');

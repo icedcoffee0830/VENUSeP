@@ -299,15 +299,18 @@ function tfa_verify(PDO $pdo, int $userId, string $input): array
    admin_require_login() / customer_logged_in() treat it as logged out.
    --------------------------------------------------------------------- */
 
+/* LARAVEL: these helpers use Laravel's session (session()), never $_SESSION.
+   "session_regenerate_id(true); $_SESSION = [];" is flush() + regenerate(true)
+   (a new id, the old one destroyed, a new CSRF token). */
 function tfa_pending_start(int $userId, string $side, string $mode, array $extra = []): void
 {
-    $setup = $_SESSION['tfa_setup'] ?? null;   // a scanned-but-unconfirmed key must survive a fresh sign-in
-    session_regenerate_id(true);
-    $_SESSION = [];
+    $setup = session('tfa_setup');   // a scanned-but-unconfirmed key must survive a fresh sign-in
+    session()->flush();
+    session()->regenerate(true);
     if ($setup !== null) {
-        $_SESSION['tfa_setup'] = $setup;
+        session(['tfa_setup' => $setup]);
     }
-    $_SESSION['tfa_pending'] = ['user_id' => $userId, 'side' => $side, 'mode' => $mode, 'at' => time()] + $extra;
+    session(['tfa_pending' => ['user_id' => $userId, 'side' => $side, 'mode' => $mode, 'at' => time()] + $extra]);
 }
 
 /* ---------------------------------------------------------------------
@@ -325,7 +328,7 @@ const TFA_SETUP_REUSE = 1800;
    2FA was turned on or moved ELSEWHERE must never be able to replace that phone. */
 function tfa_setup_current(int $userId, ?string $enabledAt = null): ?string
 {
-    $s = $_SESSION['tfa_setup'] ?? null;
+    $s = session('tfa_setup');
     if (!is_array($s) || (int) ($s['user_id'] ?? 0) !== $userId
         || ($s['state'] ?? null) !== $enabledAt
         || time() - (int) ($s['at'] ?? 0) > TFA_SETUP_REUSE) {
@@ -340,14 +343,14 @@ function tfa_setup_secret(int $userId, ?string $enabledAt = null): string
     $secret = tfa_setup_current($userId, $enabledAt);
     if ($secret === null) {
         $secret = totp_new_secret();
-        $_SESSION['tfa_setup'] = ['user_id' => $userId, 'state' => $enabledAt, 'secret' => $secret, 'at' => time()];
+        session(['tfa_setup' => ['user_id' => $userId, 'state' => $enabledAt, 'secret' => $secret, 'at' => time()]]);
     }
     return $secret;
 }
 
 function tfa_setup_clear(): void
 {
-    unset($_SESSION['tfa_setup']);
+    session()->forget('tfa_setup');
 }
 
 /* How the account appears in the authenticator app (totp_uri() labels it this way).
@@ -366,7 +369,7 @@ function tfa_mismatch_message(string $account): string
 
 function tfa_pending(string $side): ?array
 {
-    $pending = $_SESSION['tfa_pending'] ?? null;
+    $pending = session('tfa_pending');
     if (!is_array($pending)) {
         return null;
     }
@@ -374,7 +377,7 @@ function tfa_pending(string $side): ?array
         return null;   // belongs to the other side — leave it alone
     }
     if (time() - (int) ($pending['at'] ?? 0) > TFA_PENDING_TTL) {
-        unset($_SESSION['tfa_pending']);
+        session()->forget('tfa_pending');
         return null;
     }
     return $pending;
@@ -382,12 +385,19 @@ function tfa_pending(string $side): ?array
 
 function tfa_pending_update(array $changes): void
 {
-    $_SESSION['tfa_pending'] = $changes + ($_SESSION['tfa_pending'] ?? []);
+    session(['tfa_pending' => $changes + (session('tfa_pending') ?? [])]);
 }
 
 function tfa_pending_clear(): void
 {
-    unset($_SESSION['tfa_pending']);
+    session()->forget('tfa_pending');
+}
+
+/* LARAVEL: header('Location') + exit becomes a thrown redirect, which Laravel
+   turns into the response (the session is still saved). */
+function tfa_redirect_now(string $url): void
+{
+    throw new \Illuminate\Http\Exceptions\HttpResponseException(redirect($url));
 }
 
 /* ---------------------------------------------------------------------
@@ -411,29 +421,26 @@ function tfa_after_password(PDO $pdo, int $userId, string $side, string $account
         $finish();
     }
     tfa_pending_start($userId, $side, $tfa['enabled'] ? 'verify' : 'enroll', $extra + ['email' => $email]);
-    header('Location: ' . $self);   // PRG: the code step is a fresh GET; set-up takes its key from tfa_setup_secret()
-    exit;
+    tfa_redirect_now($self);   // PRG: the code step is a fresh GET; set-up takes its key from tfa_setup_secret()
 }
 
 /* One POSTed step (tfa_step = code | enroll_confirm | codes_done | cancel).
-   Returns [loginError, tfaError] for the page; success calls $finish($pending). */
+   Returns [loginError, tfaError] for the page; success calls $finish($pending).
+   LARAVEL: the CSRF token is checked by Laravel's middleware before this runs
+   (the old csrf_valid() line and its "This page expired" reply are gone). */
 function tfa_login_step(PDO $pdo, string $side, string $self, callable $finish): array
 {
     $pending = tfa_pending($side);
     if ($pending === null) {
         return ['Your sign-in timed out. Enter your password again.', ''];
     }
-    if (!csrf_valid($_POST['csrf'] ?? null)) {
-        return ['', 'This page expired. Try again.'];
-    }
     $uid  = (int) $pending['user_id'];
-    $step = (string) ($_POST['tfa_step'] ?? '');
-    $code = (string) ($_POST['code'] ?? '');
+    $step = (string) request()->input('tfa_step', '');
+    $code = (string) request()->input('code', '');
 
     if ($step === 'cancel' && $pending['mode'] !== 'codes') {   // no way out once 2FA is on
         tfa_pending_clear();
-        header('Location: ' . $self);
-        exit;
+        tfa_redirect_now($self);
     }
     if ($step === 'code' && $pending['mode'] === 'verify') {
         $result = tfa_verify($pdo, $uid, $code);
@@ -461,11 +468,10 @@ function tfa_login_step(PDO $pdo, string $side, string $self, callable $finish):
         /* 'at' restarts: saving the codes gets its own TFA_PENDING_TTL, rather than
            whatever was left after installing the app and scanning. */
         tfa_pending_update(['mode' => 'codes', 'codes' => $codes, 'at' => time()]);
-        header('Location: ' . $self);   // a refresh must not re-submit the code
-        exit;
+        tfa_redirect_now($self);   // a refresh must not re-submit the code
     }
     if ($step === 'codes_done' && $pending['mode'] === 'codes') {
-        if (empty($_POST['saved'])) {
+        if (empty(request()->input('saved'))) {
             return ['', 'Tick the box to confirm you saved your recovery codes.'];
         }
         $finish($pending);

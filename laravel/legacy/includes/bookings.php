@@ -203,6 +203,7 @@ function booking_shape(array $row) {
 
         'bookingDate'   => date('F j, Y', strtotime($row['submitted_at'])),
         'bookingDateIso'=> date('Y-m-d', strtotime($row['submitted_at'])),
+        'submittedAt'   => (string) $row['submitted_at'],           // the full timestamp: the date alone reads as 12:00 AM
 
         'roomPrice'     => (float) $row['room_price'],
         'discountPercent' => (float) $row['discount_percent'],
@@ -873,7 +874,7 @@ function booking_history_events(array $b) {
     $pdo = venusep_db();
     $events = [];
     $events[] = [
-        'w' => date('M j · g:i A', strtotime($b['bookingDateIso'])) . ' — Customer',
+        'w' => date('M j · g:i A', strtotime($b['submittedAt'])) . ' — Customer',
         'x' => 'Booking submitted',
         'm' => $b['type'] === 'hostel'
                  ? $b['beds'] . ' bed' . ($b['beds'] == 1 ? '' : 's') . ' for ' . $b['nights'] . ' night' . ($b['nights'] == 1 ? '' : 's') . ', all guests named.'

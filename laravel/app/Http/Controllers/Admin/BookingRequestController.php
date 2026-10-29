@@ -129,7 +129,7 @@ class BookingRequestController extends Controller
             'total'     => $b['amount'],
             'payBy'     => $b['payment']['payByLabel'],
             'method'    => strtolower($b['method']),
-            'submitted' => date('M j, Y · g:i A', strtotime($b['bookingDateIso'])),
+            'submitted' => date('M j, Y · g:i A', strtotime($b['submittedAt'])),
             'res'       => $b['reservationCode'],
             'pay'       => $b['paymentCode'],
             'neverApproved' => $b['neverApproved'],   /* expired before anyone approved it (2026-10-27) */

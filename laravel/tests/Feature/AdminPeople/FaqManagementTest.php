@@ -73,6 +73,33 @@ class FaqManagementTest extends TestCase
         $this->post(route('admin.faq-save'), ['action' => 'bogus'])->assertRedirect(route('admin.faq-management') . '?msg=action');
     }
 
+    /* Moving a question to another section by editing it: it kept its old position
+       number, so it shared a sort_order with a row of the new section and the
+       Up/Down arrows could not order the two. It now goes to the end of the new section. */
+    public function test_editing_a_question_into_another_section_puts_it_last_there(): void
+    {
+        $this->actingAsStaff();
+        $this->post(route('admin.faq-save'), ['action' => 'add', 'section' => 'cash', 'policy' => 'any',
+            'question' => 'Section move test?', 'answer' => 'x']);
+        $id = DB::table('faqs')->where('question', 'Section move test?')->value('id');
+        try {
+            $this->post(route('admin.faq-save'), ['action' => 'edit', 'id' => $id, 'section' => 'after', 'policy' => 'any',
+                'question' => 'Section move test?', 'answer' => 'y'])
+                ->assertRedirect(route('admin.faq-management') . '?msg=saved&show=any#after');
+            $row = DB::table('faqs')->where('id', $id)->first();
+            $this->assertSame('after', $row->section_key);
+            $othersMax = (int) DB::table('faqs')->where('section_key', 'after')->where('id', '<>', $id)->max('sort_order');
+            $this->assertSame($othersMax + 1, (int) $row->sort_order);
+
+            // an edit that stays in its section keeps its place
+            $this->post(route('admin.faq-save'), ['action' => 'edit', 'id' => $id, 'section' => 'after', 'policy' => 'any',
+                'question' => 'Section move test?', 'answer' => 'z']);
+            $this->assertSame($othersMax + 1, (int) DB::table('faqs')->where('id', $id)->value('sort_order'));
+        } finally {
+            DB::table('faqs')->where('id', $id)->delete();
+        }
+    }
+
     public function test_toggle_twice_and_move_round_trip(): void
     {
         $this->actingAsStaff();

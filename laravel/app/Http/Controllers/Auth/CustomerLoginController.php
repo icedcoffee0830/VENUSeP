@@ -31,6 +31,9 @@ class CustomerLoginController
         /* One sentence left by another page (the Google callback, mostly), shown once. */
         $loginNotice = is_string(session('login_notice')) ? session('login_notice') : '';
         session()->forget('login_notice');
+        /* Bug 2: disabled while signed in (customer_session_heal() left this), or
+           the right password on a disabled account (below). */
+        $accountDisabled = (bool) session()->pull('customer_disabled_notice', false);
 
         $post = $request->request;
         $tfaError = '';
@@ -116,6 +119,9 @@ class CustomerLoginController
                     $loginError = google_enabled()
                         ? 'This account uses Google sign-in. Use Continue with Google below.'
                         : 'This account uses Google sign-in, which is not set up on this server yet.';
+                } elseif ($customer && !$customer['is_active'] && password_verify($password, (string) $customer['password_hash'])) {
+                    /* Only AFTER the password checked out, so this reveals nothing to a stranger. */
+                    $accountDisabled = true;
                 } elseif (!$customer || !$customer['is_active'] || !password_verify($password, $customer['password_hash'])) {
                     // One generic message so the page does not reveal whether an email exists.
                     $loginError = 'Invalid email or password.';
@@ -150,7 +156,7 @@ class CustomerLoginController
         $gsTerms = !empty($post->get('terms'));
 
         $response = response()->view('auth.customer-login', compact(
-            'loginError', 'loginNotice', 'tfaView', 'tfaCsrf', 'tfaError', 'tfaLock', 'pending',
+            'loginError', 'loginNotice', 'accountDisabled', 'tfaView', 'tfaCsrf', 'tfaError', 'tfaLock', 'pending',
             'googleSignup', 'googleErrors', 'googleOn', 'gsName', 'gsPhone', 'gsTerms'
         ));
         if ($tfaView !== 'password') {

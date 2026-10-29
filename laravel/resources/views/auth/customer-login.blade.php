@@ -84,6 +84,7 @@
             <p class="auth-subtitle">Sign in to book venues and hostel beds.</p>
           </div>
           @if ($loginNotice !== '')<p class="auth-notice" role="status">{{ $loginNotice }}</p>@endif
+          @if ($accountDisabled)<p class="auth-notice" id="accountDisabledNotice" role="alert"><strong>Account disabled.</strong> This account has been disabled, so it can&rsquo;t sign in. If you think this is a mistake, contact the venue office.</p>@endif
 
           <!-- the form below is unchanged: same names, same POST, same PHP error output -->
           <form id="customerLoginForm" action="" method="post" novalidate data-auth-form="login">
@@ -119,6 +120,14 @@
     </main>
     @if ($tfaView !== 'password')
     <script src="{{ asset('assets/js/two-factor.js') }}"></script>
+    @endif
+    @if ($accountDisabled)
+    {{-- Bug 2: the site's own alert modal; the notice in the card stays after it is closed --}}
+    <link rel="stylesheet" href="{{ asset('assets/css/confirm-modal.css') }}" />
+    <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
+    <script>
+      venusepAlert('This account has been disabled, so it can’t sign in. If you think this is a mistake, contact the venue office.', { title: 'Account disabled' });
+    </script>
     @endif
 
     <!-- Client-side validation; authentication is performed server-side by PHP. -->

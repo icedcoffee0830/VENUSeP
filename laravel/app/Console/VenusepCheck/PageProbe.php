@@ -120,8 +120,25 @@ final class PageProbe
             : (in_array('warn', $levels, true) ? 'warn' : 'ok'));
     }
 
+    /* Workers run in parallel; on Windows two of them compiling the same Blade
+       view at once makes one rename() fail with "Access is denied" — a race in
+       the checker, not a fault of the page (a real server compiles it once).
+       Such a 500 is retried once; any other failure is reported as it is. */
     /** @return array{0: \Symfony\Component\HttpFoundation\Response, 1: string} */
     private static function handle(string $url, array $session): array
+    {
+        $result = self::handleOnce($url, $session);
+        $e = $result[0]->exception ?? null;
+        if ($e instanceof \Throwable && str_contains($e->getMessage(), 'rename(') && str_contains($e->getMessage(), 'Access is denied')) {
+            usleep(300_000);
+            $result = self::handleOnce($url, $session);
+        }
+
+        return $result;
+    }
+
+    /** @return array{0: \Symfony\Component\HttpFoundation\Response, 1: string} */
+    private static function handleOnce(string $url, array $session): array
     {
         $store = app('session')->driver();
         $store->flush();

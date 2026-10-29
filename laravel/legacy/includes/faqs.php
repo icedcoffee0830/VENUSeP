@@ -36,9 +36,11 @@
    the customer page says the FAQ is temporarily unavailable.
    ===================================================================== */
 require_once __DIR__ . '/db.php';
-include_once __DIR__ . '/hostel-rooms.php';                                    /* $HOSTEL_RATES, $HOSTEL_CR_LABEL */
-ob_start(); include_once __DIR__ . '/pricing.php'; ob_end_clean();             /* $DISCOUNT_PERCENT (its JS block is not needed here) */
-require_once __DIR__ . '/refund-policy.php';                                   /* $REFUNDS_ENABLED, $POSTPAY_GRACE_DAYS */
+/* Laravel: through legacy(), so the files' variables reach the registry (and
+   this file's scope) — a bare include here would hide them from later callers. */
+extract(legacy('hostel-rooms'));                                               /* $HOSTEL_RATES, $HOSTEL_CR_LABEL */
+ob_start(); extract(legacy('pricing')); ob_end_clean();                        /* $DISCOUNT_PERCENT (its JS block is not needed here) */
+extract(legacy('refund-policy'));                                              /* $REFUNDS_ENABLED, $POSTPAY_GRACE_DAYS */
 
 /* [section_key => label], in display order. Empty when the DB is unreachable. */
 function faq_sections()
@@ -101,7 +103,9 @@ function faqs_by_section($includeHidden = false, $policy = null)
 /* The live values a question may quote. Escaped here, once. */
 function faq_placeholders()
 {
-    global $DISCOUNT_PERCENT, $POSTPAY_GRACE_DAYS, $HOSTEL_RATES, $HOSTEL_CR_LABEL;
+    /* Laravel: those files' variables live in legacy()'s registry, not in globals */
+    extract(array_intersect_key(legacy('hostel-rooms', 'refund-policy'),
+        array_flip(['DISCOUNT_PERCENT', 'POSTPAY_GRACE_DAYS', 'HOSTEL_RATES', 'HOSTEL_CR_LABEL'])));
     $peso = function ($n) { return '&#8369;' . number_format((int) $n); };
     return [
         '{discount}'      => (int) $DISCOUNT_PERCENT . '%',           /* "20%" — the sign is part of the value */
@@ -147,9 +151,12 @@ function faq_answer_html($answer, $forEditor = false)
     $flushPara();
     $flushList();
     $html = preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $html);
-    $html = preg_replace_callback('/\[([^\]]+)\]\(([^)\s]+)\)/', function ($m) {
+    $html = preg_replace_callback('/\[([^\]]+)\]\(([^)\s]+)\)/', function ($m) use ($forEditor) {
         $url = $m[2];
         $safe = preg_match('#^(https?://|[a-z0-9_./-]+\.php(\?[^"<>]*)?(\#[a-z0-9-]+)?|\#[a-z0-9-]+)$#i', $url);
+        if ($safe && !$forEditor) {
+            $url = faq_link_url($url);   /* Laravel: stored "page.php" links -> the page's route */
+        }
         return $safe ? '<a href="' . $url . '">' . $m[1] . '</a>' : $m[1];
     }, $html);
     $values = faq_placeholders();
@@ -159,4 +166,19 @@ function faq_answer_html($answer, $forEditor = false)
         }
     }
     return strtr($html, $values);
+}
+
+/* Laravel: the answers store the old relative page links ("booking-history.php",
+   "faq.php#gcash", "../customer/booking-history.php") — a customer page each. On
+   display they become that page's route; the editor keeps the stored form so a
+   save round-trips it. A page with no route keeps its name without ".php". */
+function faq_link_url($url)
+{
+    if (!preg_match('#^(?:[a-z0-9_./-]*/)?([a-z0-9_-]+)\.php(\?[^"<>\#]*)?(\#[a-z0-9-]+)?$#i', $url, $p)) {
+        return $url;                                     /* http(s):// or a bare #anchor */
+    }
+    $renames = ['venusep_venue_booking' => 'customer.venues'];
+    $name = isset($renames[$p[1]]) ? $renames[$p[1]] : 'customer.' . $p[1];
+    $base = \Illuminate\Support\Facades\Route::has($name) ? route($name) : $p[1];
+    return $base . (isset($p[2]) ? $p[2] : '') . (isset($p[3]) ? $p[3] : '');
 }

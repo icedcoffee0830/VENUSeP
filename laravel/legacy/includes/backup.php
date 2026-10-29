@@ -53,7 +53,9 @@ function backup_dir() {
 /* The layout version: the highest venusep_migration_NN.sql in the project. */
 function backup_schema_version() {
     $max = 0;
-    foreach (glob(dirname(__DIR__) . '/venusep_migration_*.sql') ?: [] as $f) {
+    /* LARAVEL: the migration files sit in the project root, one level above
+       laravel/ (read only). */
+    foreach (glob(dirname(base_path()) . '/venusep_migration_*.sql') ?: [] as $f) {
         if (preg_match('/_(\d+)\.sql$/', $f, $m)) {
             $max = max($max, (int) $m[1]);
         }
@@ -63,19 +65,22 @@ function backup_schema_version() {
 
 /* What a backup carries besides the database: [name in the archive => folder]. */
 function backup_file_sets() {
-    $root = dirname(__DIR__);
+    /* LARAVEL: the photos are served from laravel/public/assets. */
     return [
         'private'        => doc_root(),
-        'photos/rooms'   => $root . '/assets/img/venues/rooms',
-        'photos/covers'  => $root . '/assets/img/venues/covers',
-        'photos/avatars' => $root . '/assets/img/avatars',
+        'photos/rooms'   => public_path('assets/img/venues/rooms'),
+        'photos/covers'  => public_path('assets/img/venues/covers'),
+        'photos/avatars' => public_path('assets/img/avatars'),
     ];
 }
 
 /* mysqldump / mysql from XAMPP's own mysql/bin (or VENUSEP_MYSQL_BIN). */
 function backup_mysql_bin($tool) {
     $env = getenv('VENUSEP_MYSQL_BIN');
-    $dir = $env ?: dirname(dirname(dirname(__DIR__))) . '/mysql/bin';   // .../htdocs/VENUSeP/includes -> XAMPP root
+    /* LARAVEL: the XAMPP root is found from PHP itself (php/php.exe on the
+       command line, apache/bin/httpd.exe under Apache) — the app folder can
+       now sit at any depth under htdocs. */
+    $dir = $env ?: dirname(dirname(PHP_BINARY)) . '/mysql/bin';
     $p = rtrim($dir, '/\\') . '/' . $tool . (DIRECTORY_SEPARATOR === '\\' ? '.exe' : '');
     return is_file($p) ? $p : null;
 }
@@ -356,9 +361,16 @@ function backup_sign_everyone_out() {
     if ($pdo !== null) {
         try { $pdo->exec('DELETE FROM remember_tokens'); } catch (PDOException $e) { /* the table may predate migration 04 */ }
     }
-    $sp = session_save_path() ?: ini_get('session.save_path');
-    $sp = $sp ? preg_replace('/^\d+;/', '', $sp) : sys_get_temp_dir();
-    foreach (glob(rtrim($sp, '/\\') . '/sess_*') ?: [] as $f) {
-        @unlink($f);
+    /* LARAVEL: the sessions are Laravel's (config/session.php), not PHP's
+       sess_* files — clear whichever store is in use. */
+    $driver = config('session.driver');
+    if ($driver === 'file') {
+        foreach (glob(rtrim(config('session.files'), '/\\') . '/*') ?: [] as $f) {
+            if (is_file($f) && basename($f) !== '.gitignore') {
+                @unlink($f);
+            }
+        }
+    } elseif ($driver === 'database' && $pdo !== null) {
+        try { $pdo->exec('DELETE FROM ' . config('session.table', 'sessions')); } catch (PDOException $e) { /* no sessions table */ }
     }
 }

@@ -292,7 +292,7 @@
             <span class="hide-md"><div class="r-main">${esc(r.room)}</div><div class="r-sub">${esc(r.venue)}</div></span>
             <span class="hide-md r-main">${esc(r.dates)}</span>
             <span class="hide-md"><span class="br-badge ${RES[r.res].c}">${RES[r.res].t}</span></span>
-            <span><span class="br-badge ${PAY[r.pay].c}">${PAY[r.pay].t}</span></span>
+            <span><span class="br-badge ${PAY[r.pay].c}">${r.pay === 'paid_cash' ? esc(r.payLabel) : PAY[r.pay].t}</span></span>
             <span class="hide-md r-act ${r.cls}">${esc(actLabel(r))}</span>
             <span class="r-chev">&rsaquo;</span>
           </a>`).join('') || '<div style="padding:1.2rem;color:#8a857d;font-size:.85rem">No requests match.</div>';

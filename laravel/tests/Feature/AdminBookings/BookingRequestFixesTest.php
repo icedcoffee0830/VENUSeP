@@ -69,6 +69,23 @@ class BookingRequestFixesTest extends TestCase
         $this->assertStringEndsWith(' — admin@gmail.com', $tl[0]['w']);   // the admin has no staff profile: the email names them
     }
 
+    /* Bug 8: a hostel stay paid at the front desk read "Paid at cashier" (the
+       University Cashier is the venues' cash window, DB-DECISIONS #26). */
+    public function test_hostel_cash_is_labelled_paid_at_the_front_desk(): void
+    {
+        [, $hostelRef] = $this->seedHostelBooking('approved', 'paid_cash', 'cash', false, true);
+        [, $venueRef] = $this->seedVenueBooking('r1', 'approved', 'paid_cash', 'cash');
+        $this->actingAsAdmin();
+        $label = fn ($ref) => $this->get(route('root.booking-details', ['booking' => $ref]))->assertOk()->json('details.money.paymentStatus');
+        $this->assertSame('Paid at the front desk', $label($hostelRef));
+        $this->assertSame('Paid at cashier', $label($venueRef));
+
+        $this->get(route('admin.booking-requests'))->assertOk()
+            ->assertSee('"id":"' . $hostelRef . '"', false)->assertSee('"pay":"paid_cash","payLabel":"Paid at the front desk"', false)
+            ->assertSee("r.pay === 'paid_cash' ? esc(r.payLabel)", false);
+        $this->page($hostelRef)->assertSee("cur.pay === 'paid_cash') return \"Paid at the front desk\";", false);
+    }
+
     public function test_the_page_has_no_fake_timeline_stamp(): void
     {
         [, $ref] = $this->seedVenueBooking('r1');

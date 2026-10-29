@@ -184,6 +184,13 @@
       /* Last line of defence: a code with no badge must still open the page. */
       function resBadge(code) { return RES[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
       function payBadge(code) { return PAY[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
+      /* The header's payment wording. The hostel is paid before the bed is used,
+         and takes its cash at the front desk, not the University Cashier (#26). */
+      function payText() {
+        if (cur.payToUse && cur.pay === 'await_gcash') return 'Payment due before check-in';
+        if (cur.kind === 'hostel' && cur.pay === 'paid_cash') return {!! json_encode(HOSTEL_PAID_CASH_LABEL) !!};
+        return payBadge(cur.pay).t;
+      }
 
       /* A refund claim that is still OPEN — staff can still decide it. All four
          map to the same panel and the same three outcomes; the difference
@@ -931,7 +938,7 @@
             <div>
               <div style="display:flex;flex-wrap:wrap;gap:0.45rem;justify-content:flex-end;margin-bottom:0.6rem">
                 <span class="br-badge ${resBadge(cur.res).c}">${esc(resBadge(cur.res).t)}</span>
-                <span class="br-badge ${payBadge(cur.pay).c}">${esc(cur.payToUse && cur.pay === 'await_gcash' ? 'Payment due before check-in' : payBadge(cur.pay).t)}</span>
+                <span class="br-badge ${payBadge(cur.pay).c}">${esc(payText())}</span>
               </div>
               <div class="br-actions">${hdrActions()}</div>
               ${cur.actionError && !cur.attErr ? `<div role="alert" style="color:#b23a3a;font-size:0.78rem;margin-top:0.4rem;text-align:right">${esc(cur.actionError)}</div>` : ''}

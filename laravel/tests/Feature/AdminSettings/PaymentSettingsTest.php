@@ -39,6 +39,20 @@ class PaymentSettingsTest extends TestCase
             ->assertSee('Only the administrator can change this')->assertDontSee('id="rsModal"', false);
     }
 
+    /* The GCash save is admin-only on the server, so staff get no Edit button that
+       could only ever end in "Only an administrator can change where a venue is paid". */
+    public function test_staff_get_no_gcash_edit_button(): void
+    {
+        $page = $this->actingAsStaff()->get(route('admin.payment-settings'))->assertOk()->assertSee('Mika J Juarez');
+        $this->assertDoesNotMatchRegularExpression('#<div class="ps-foot">\s*<button[^>]*psEdit#', $page->getContent());
+    }
+
+    public function test_admin_gets_the_gcash_edit_buttons(): void
+    {
+        $this->actingAsAdmin()->get(route('admin.payment-settings'))->assertOk()
+            ->assertSeeInOrder(['<div class="ps-foot">', '<button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>'], false);
+    }
+
     public function test_saved_flash(): void
     {
         $this->actingAsAdmin()->get(route('admin.payment-settings', ['refunds' => 'saved']))->assertOk()

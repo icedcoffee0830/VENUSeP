@@ -239,7 +239,11 @@
                 </div>
 
                 <div class="ps-foot">
-                  <button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>
+                  @if ($rsIsAdmin)
+                    <button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>
+                  @else
+                    <span class="rs-lock"><i class="bi bi-lock-fill" aria-hidden="true"></i>Only the administrator can change this</span>
+                  @endif
                 </div>
               </div>
 @endforeach

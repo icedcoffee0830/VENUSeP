@@ -34,4 +34,12 @@ class CalendarTest extends TestCase
         $this->assertGreaterThan(0, $mine);
         $this->assertNotEmpty($events);
     }
+
+    /* It opened on September 2026 for everyone (a mockup leftover), so a
+       customer's upcoming bookings were a month or more away from view. */
+    public function test_the_calendar_opens_on_the_current_month(): void
+    {
+        $this->actingAsCustomer()->get(route('customer.calendar'))->assertOk()
+            ->assertDontSee("initialDate: '", false);
+    }
 }

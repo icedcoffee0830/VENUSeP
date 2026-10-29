@@ -18,12 +18,6 @@ class RoomToggleActiveTest extends VenuesTestCase
             ->assertStatus(405)->assertHeader('Allow', 'POST')->assertJson(['error' => 'method']);
     }
 
-    public function test_a_bad_token_gets_the_old_expired_page_json(): void
-    {
-        $this->actingAsStaff()->withCsrf()->post(route('admin.room-toggle-active'), ['_token' => 'wrong', 'room_id' => 'r1'])
-            ->assertStatus(400)->assertJson(['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
-    }
-
     public function test_staff_flip_a_room_off_and_on_again(): void
     {
         $this->actingAsStaff();

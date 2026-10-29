@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
-/* Shared bits for the venues-area tests. The JSON endpoints check the CSRF
-   token themselves (old 400 JSON), so a test puts a known token in the
-   session and posts it back as `_token`. Anything a test creates (rooms,
-   venues, uploaded files under public/assets) is removed again. */
+/* Shared bits for the venues-area tests. Posts carry `_token` like the pages'
+   scripts do (Laravel skips its CSRF check under phpunit; the expired-page
+   reply is covered by SkeletonTest). Anything a test creates (rooms, venues,
+   uploaded files under public/assets) is removed again. */
 abstract class VenuesTestCase extends TestCase
 {
     protected const TOKEN = 'venues-test-token';

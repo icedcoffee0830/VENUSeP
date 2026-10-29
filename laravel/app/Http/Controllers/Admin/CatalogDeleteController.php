@@ -36,7 +36,6 @@ class CatalogDeleteController extends Controller
         }
         session(['account_type' => $accountRow['account_type']]);
 
-        $this->requireCsrfJson($request);
         $post = $request->request;
         if ((string) $post->get('confirm', '') !== 'delete') {
             $this->reply(400, ['ok' => false, 'error' => 'confirmation', 'message' => 'Deletion was not confirmed.']);

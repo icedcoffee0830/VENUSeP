@@ -6,11 +6,10 @@ use Illuminate\Support\Facades\DB;
 
 class RoomSaveTest extends VenuesTestCase
 {
-    public function test_guest_401_get_405_and_a_bad_token(): void
+    public function test_guest_401_and_get_405(): void
     {
         $this->post(route('admin.room-save'))->assertStatus(401)->assertJson(['error' => 'not_logged_in']);
         $this->actingAsStaff()->get(route('admin.room-save'))->assertStatus(405);
-        $this->withCsrf()->post(route('admin.room-save'), ['_token' => 'nope'])->assertStatus(400)->assertJson(['error' => 'csrf']);
     }
 
     public function test_validation_failures_answer_as_before(): void

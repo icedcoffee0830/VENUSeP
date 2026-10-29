@@ -49,7 +49,6 @@ class VenuePhotoApiController extends Controller
                 ->header('Cache-Control', 'no-store')->header('Allow', 'GET, POST'));
         }
 
-        $this->requireCsrfJson($request);
 
         switch ($action) {
             case 'upload':

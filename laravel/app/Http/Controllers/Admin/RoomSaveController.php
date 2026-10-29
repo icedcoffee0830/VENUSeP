@@ -160,7 +160,6 @@ class RoomSaveController extends Controller
     {
         $this->requirePost($request);
         $this->requireStaffJson();
-        $this->requireCsrfJson($request);
 
         extract(legacy('db', 'amenities', 'bookings'));   /* amenity_keys_clean(), $AMENITY_GROUPS*, booking_reference() */
         $post = $request->request;

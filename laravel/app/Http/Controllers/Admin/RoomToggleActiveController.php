@@ -31,7 +31,6 @@ class RoomToggleActiveController extends Controller
     {
         $this->requirePost($request);
         $this->requireStaffJson();
-        $this->requireCsrfJson($request);
 
         $roomCode = trim((string) $request->request->get('room_id', ''));
         if (!preg_match('/^[A-Za-z0-9_-]{1,40}$/', $roomCode)) {

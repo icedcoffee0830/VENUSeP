@@ -30,8 +30,7 @@ class VenueSaveController extends Controller
     {
         $this->requirePost($request);
         $this->requireStaffJson();
-        $this->requireCsrfJson($request);
-        legacy('db');
+        legacy('db', 'auth');   /* admin_is_admin() */
 
         $post = $request->request;
         $venueId = (string) ($post->get('venue_id') ?? '');

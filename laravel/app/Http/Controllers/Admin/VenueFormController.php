@@ -13,7 +13,7 @@ class VenueFormController extends Controller
 {
     public function __invoke(Request $request)
     {
-        legacy('venue-photos');
+        legacy('auth', 'venue-photos');   /* admin_is_admin() */
 
         $id = (string) ($request->query('id') ?? '');
         $venueId = $id !== '' && ctype_digit($id) ? (int) $id : 0;

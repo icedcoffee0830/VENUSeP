@@ -12,9 +12,9 @@ use Illuminate\Http\Request;
    keeps that shape by throwing the response; a try block that catches
    Throwable must rethrow HttpResponseException first.
 
-   CSRF: these routes skip Laravel's token middleware and check here, in the
-   old order (401 "session ended" first, then the old 400 "page has expired"
-   JSON the pages' scripts show). The token is Laravel's own (`_token`). */
+   CSRF: Laravel's token check runs on every POST (the pages' scripts send
+   `_token`); bootstrap/app.php turns its 419 into the old 400 "page has
+   expired" / 401 "session ended" JSON. */
 trait RepliesJson
 {
     protected function reply(int $status, array $data): never
@@ -29,15 +29,6 @@ trait RepliesJson
     {
         if (!session()->has('user_id') || !in_array(session('account_type'), ['admin', 'staff'], true)) {
             $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
-        }
-    }
-
-    protected function requireCsrfJson(Request $request): void
-    {
-        legacy('auth');   /* csrf_valid() */
-        $token = $request->input('_token') ?: $request->header('X-CSRF-TOKEN');
-        if (!csrf_valid($token)) {
-            $this->reply(400, ['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
         }
     }
 

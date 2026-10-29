@@ -57,7 +57,6 @@ class RoomPhotosApiController extends Controller
                 ->header('Cache-Control', 'no-store')->header('Allow', 'GET, POST'));
         }
 
-        $this->requireCsrfJson($request);
 
         $uploaderId = (int) session('user_id');
 

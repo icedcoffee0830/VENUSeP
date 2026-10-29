@@ -62,6 +62,12 @@ that need a receipt or uploaded file the test data doesn't have — expected).
 
 Demo logins are the same as the old site. Admin accounts ask for an authenticator code.
 
+**Easiest: double-click `C:
+mp5\htdocs\VENUSeP-laravelun-tests.bat`.** It checks MySQL is up, runs the page checker, then the browser flow tester, prints a PASS/problems summary and opens both HTML reports. From cmd you can add flow-tester options: `run-tests.bat --headed` (watch the browser) or `run-tests.bat --only=venue-booking-to-receipt`. The page checker currently reports 2 "failing" = the known FAQ-editor link (see §7) — expected.
+
+The browser flow tester on its own: `C:
+mp5\php\php.exe artisan venusep:flows` (`--headed` to watch). It resets its own database (`venusep_laravel_flows`), serves the app on port 8120, sets every demo account's password to `FlowTest#2026` IN THAT COPY ONLY, and writes a report with a screenshot per step to `laravel\storage\appenusep-flows\`. How to add a flow: the "Flow tester" section of `LARAVEL-PORT.md`.
+
 ## 4. How the Laravel app is built (the parts that surprise people)
 
 - **The old `includes/` files run unchanged** from `laravel/legacy/includes/`. Two of them are
@@ -83,7 +89,7 @@ Demo logins are the same as the old site. Admin accounts ask for an authenticato
 
 ## 5. What was happening when the limit hit
 
-1. **Flow tester (branch `lv-flows`) — IN PROGRESS, nothing committed when this was written.**
+1. **Flow tester — base DONE and merged into `laravel` (2026-10-30): flow 1 "venue booking → receipt" passes all 12 steps (~40 s). Three more flows were being built in parallel when this was updated** — branches `lv-flows-hostel`, `lv-flows-refund`, `lv-flows-admin` (worktrees `VENUSeP-laravel-helperslows-hostel|flows-refund|flows-admin`, each with its own database `venusep_laravel_flows_<name>` and port 8121/8122/8123). Check `git log laravel..lv-flows-hostel` etc.: whatever is committed there passed or is in progress; merge each into `laravel` once its flow passes twice in a row (`artisan venusep:flows --db=venusep_laravel_flows_<name> --port=812x --only=<flow>`). Original plan for reference:
    Aron asked for a tester that walks through whole *processes* in a real browser, not just
    page loads. Planned command: `php artisan venusep:flows` (option `--headed` to watch).
    It resets `venusep_laravel_flows`, serves the app on port **8120**, drives Edge with

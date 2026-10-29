@@ -396,7 +396,7 @@ body {
          caller is admin or staff. That check lives there, not here — this is
          a convenience, not a boundary. */
       const customerAction = function (body, onOk) {
-        body.append('csrf', CSRF);
+        body.append('_token', CSRF);   /* Laravel's CSRF check reads _token (the old field was csrf) */
         return fetch(@json(route('admin.customer-save')), { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
           .then(function (res) {

@@ -15,7 +15,9 @@ class DashboardController
         $adRows = booking_queue_rows();
 
         /* Today's bookings, money collected this quarter, the venue list —
-           tiles fall back to zero rather than to a lie. */
+           tiles fall back to zero rather than to a lie. "In use today" = today
+           is one of the booking's days: a venue's days are inclusive, a hostel
+           stay's nights end the morning of check-out — not only the first day. */
         $adToday = 0; $adRevenue = 0.0; $adVenues = [];
         try {
             $adPdo = venusep_db_or_fail();
@@ -23,7 +25,8 @@ class DashboardController
                 "SELECT COUNT(*) FROM bookings b
                    LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
                    LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
-                  WHERE COALESCE(vd.start_date, hd.check_in_date) = CURDATE()
+                  WHERE (CURDATE() BETWEEN vd.start_date AND vd.end_date
+                         OR (hd.check_in_date <= CURDATE() AND hd.check_out_date > CURDATE()))
                     AND b.reservation_status IN ('approved', 'completed')"
             )->fetchColumn();
             /* Money COLLECTED this quarter — an unpaid booking inflates nothing. */

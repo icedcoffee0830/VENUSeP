@@ -27,10 +27,9 @@ use PDOException;
    THE DISCOUNT IS APPLIED HERE, not at booking time (DB-DECISIONS #3), and
    SNAPSHOTTED onto the booking (#2).
 
-   The route is outside Laravel's CSRF middleware ON PURPOSE: the old
-   endpoint answered 401 / 400 JSON in that order, and the page's script
-   shows those messages. The token is still checked, here, against the same
-   session token (_token field or X-CSRF-TOKEN header).
+   CSRF: Laravel's own check (the page sends X-CSRF-TOKEN / _token); an
+   expired token on this script request comes back as the old 400 JSON
+   (bootstrap/app.php).
    ===================================================================== */
 class BookingActionController extends Controller
 {
@@ -51,9 +50,6 @@ class BookingActionController extends Controller
         $sessionType = session('account_type');
         if (!session()->has('user_id') || !in_array($sessionType, ['admin', 'staff'], true)) {
             $this->reply(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
-        }
-        if (!csrf_valid($this->tokenOf($request))) {
-            $this->reply(400, ['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
         }
 
         $actor  = (int) session('user_id');

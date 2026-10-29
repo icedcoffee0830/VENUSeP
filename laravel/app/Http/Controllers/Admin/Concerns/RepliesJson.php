@@ -14,10 +14,4 @@ trait RepliesJson
             response()->json($data, $status, ['Cache-Control' => 'no-store'] + $headers)
         );
     }
-
-    /* The page's session token, from the form field or the fetch header. */
-    private function tokenOf(\Illuminate\Http\Request $request): ?string
-    {
-        return $request->post('_token') ?? $request->header('X-CSRF-TOKEN');
-    }
 }

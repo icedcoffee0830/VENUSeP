@@ -17,8 +17,9 @@ use Illuminate\Http\Request;
          -> { ok, email: {...} }
 
    Bodies are never returned. Resend only touches an email of THIS booking
-   that failed (or has sat unsent for 5 minutes). Outside Laravel's CSRF
-   middleware like booking-action, so the old 401-then-400 JSON order holds.
+   that failed (or has sat unsent for 5 minutes).
+   CSRF: Laravel's own check; an expired token comes back as the old 400
+   JSON (bootstrap/app.php).
    ===================================================================== */
 class BookingEmailsController extends Controller
 {
@@ -33,9 +34,6 @@ class BookingEmailsController extends Controller
             $this->reply(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
         }
         $beIsPost = $request->isMethod('post');
-        if ($beIsPost && !csrf_valid($this->tokenOf($request))) {
-            $this->reply(400, ['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
-        }
 
         $beBookingId = booking_id_from_reference($beIsPost ? ($request->post('booking') ?? '') : ($request->query('booking') ?? ''));
         $pdo = venusep_db();

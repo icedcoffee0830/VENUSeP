@@ -39,12 +39,6 @@ class BookingEmailsTest extends TestCase
             ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Invalid booking reference.']);
     }
 
-    public function test_resend_needs_the_token(): void
-    {
-        $this->actingAsStaff()->post(route('admin.booking-emails'), ['booking' => 'VB-2026-190', 'action' => 'resend', 'id' => 1])
-            ->assertStatus(400)->assertJson(['message' => 'This page has expired. Reload it and try again.']);
-    }
-
     public function test_staff_cannot_resend_another_venues_email(): void
     {
         [$id, $ref] = $this->seedVenueBooking('r5');

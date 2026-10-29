@@ -12,13 +12,10 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
 Route::get('/admin/booking-request', Admin\BookingRequestController::class)->middleware('staff')->name('admin.booking-request');
-/* The staff JSON endpoints answer 401 / 400 JSON themselves (the old order), so
-   they check the CSRF token themselves too (_token field or X-CSRF-TOKEN header). */
-Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)
-    ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-action');
+/* The staff JSON endpoints answer 401 JSON themselves (no redirecting middleware). */
+Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)->name('admin.booking-action');
 Route::match(['get', 'post'], '/admin/booking-create', PendingController::class)->name('admin.booking-create');
-Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsController::class)
-    ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-emails');
+Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsController::class)->name('admin.booking-emails');
 Route::get('/admin/calendar', PendingController::class)->name('admin.calendar');
 Route::get('/admin/receipt', Admin\ReceiptController::class)->middleware('staff')->name('admin.receipt');
 Route::get('/admin/transaction-history', Admin\TransactionHistoryController::class)->middleware('staff')->name('admin.transaction-history');

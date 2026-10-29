@@ -210,7 +210,7 @@ function mail_build(array $row, array $config): PHPMailer
     /* The logo travels inside the email: a link to this server would not
        load for anyone outside it, and most mail apps block remote images. */
     if (strpos((string) $row['body_html'], 'cid:venusep-logo') !== false) {
-        $mail->addEmbeddedImage(__DIR__ . '/../assets/img/receipt-logo.png', 'venusep-logo', 'venusep.png', PHPMailer::ENCODING_BASE64, 'image/png');
+        $mail->addEmbeddedImage(public_path('assets/img/receipt-logo.png'), 'venusep-logo', 'venusep.png', PHPMailer::ENCODING_BASE64, 'image/png');
     }
     return $mail;
 }

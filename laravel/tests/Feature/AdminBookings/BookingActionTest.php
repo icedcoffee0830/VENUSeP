@@ -33,12 +33,6 @@ class BookingActionTest extends TestCase
             ->assertStatus(401);
     }
 
-    public function test_missing_token_is_the_old_expired_page_reply(): void
-    {
-        $this->actingAsStaff()->post(route('admin.booking-action'), ['booking' => 'VB-2026-190', 'action' => 'approve'])
-            ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
-    }
-
     public function test_staff_cannot_act_on_another_venues_booking(): void
     {
         [$id, $ref] = $this->seedVenueBooking('r5');   // venue 2

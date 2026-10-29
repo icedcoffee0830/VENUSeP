@@ -89,7 +89,7 @@ mp5\php\php.exe artisan venusep:flows` (`--headed` to watch). It resets its own 
 
 ## 5. What was happening when the limit hit
 
-1. **Flow tester — base DONE and merged into `laravel` (2026-10-30): flow 1 "venue booking → receipt" passes all 12 steps (~40 s). Three more flows were being built in parallel when this was updated** — branches `lv-flows-hostel`, `lv-flows-refund`, `lv-flows-admin` (worktrees `VENUSeP-laravel-helperslows-hostel|flows-refund|flows-admin`, each with its own database `venusep_laravel_flows_<name>` and port 8121/8122/8123). Check `git log laravel..lv-flows-hostel` etc.: whatever is committed there passed or is in progress; merge each into `laravel` once its flow passes twice in a row (`artisan venusep:flows --db=venusep_laravel_flows_<name> --port=812x --only=<flow>`). Original plan for reference:
+1. **Flow tester — DONE (2026-10-30).** All four process flows are merged into `laravel` and pass: venue booking → receipt (12 steps), hostel + walk-in counter (22), refund + rejected receipt (12), admin settings (11) — 57 steps, about 3 minutes, via `run-tests.bat` or `artisan venusep:flows`. The admin flow found a real regression from the port (Staff/Customer Management sent the CSRF token under the old `csrf` name, so Suspend etc. failed) — fixed and verified. The branches `lv-flows*` and their worktrees can be deleted. What each flow does, for reference (original plan):
    Aron asked for a tester that walks through whole *processes* in a real browser, not just
    page loads. Planned command: `php artisan venusep:flows` (option `--headed` to watch).
    It resets `venusep_laravel_flows`, serves the app on port **8120**, drives Edge with

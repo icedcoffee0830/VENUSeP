@@ -3,7 +3,6 @@
 use App\Http\Controllers;
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\PendingController;
-use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 /* Area: abook — see the ownership table in LARAVEL-PORT.md.
@@ -12,9 +11,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
 Route::get('/admin/booking-request', Admin\BookingRequestController::class)->middleware('staff')->name('admin.booking-request');
-/* The staff JSON endpoints answer 401 JSON themselves (no redirecting middleware). */
+/* The staff JSON endpoints answer 401 / 403 JSON themselves (no redirecting middleware). */
 Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)->name('admin.booking-action');
-Route::match(['get', 'post'], '/admin/booking-create', PendingController::class)->name('admin.booking-create');
+Route::match(['get', 'post'], '/admin/booking-create', Admin\BookingCreateController::class)->name('admin.booking-create');
 Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsController::class)->name('admin.booking-emails');
 Route::get('/admin/calendar', Admin\CalendarController::class)->middleware('staff')->name('admin.calendar');
 Route::get('/admin/receipt', Admin\ReceiptController::class)->middleware('staff')->name('admin.receipt');

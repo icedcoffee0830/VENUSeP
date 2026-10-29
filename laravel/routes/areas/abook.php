@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers;
+use App\Http\Controllers\Admin;
 use App\Http\Controllers\PendingController;
 use Illuminate\Support\Facades\Route;
 
@@ -7,14 +9,16 @@ use Illuminate\Support\Facades\Route;
    Every route below starts as a PendingController placeholder (501 "not ported yet").
    Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
 
-Route::get('/admin/booking-requests', PendingController::class)->name('admin.booking-requests');
-Route::get('/admin/booking-request', PendingController::class)->name('admin.booking-request');
-Route::match(['get', 'post'], '/admin/booking-action', PendingController::class)->name('admin.booking-action');
-Route::match(['get', 'post'], '/admin/booking-create', PendingController::class)->name('admin.booking-create');
-Route::match(['get', 'post'], '/admin/booking-emails', PendingController::class)->name('admin.booking-emails');
-Route::get('/admin/calendar', PendingController::class)->name('admin.calendar');
-Route::get('/admin/receipt', PendingController::class)->name('admin.receipt');
-Route::get('/admin/transaction-history', PendingController::class)->name('admin.transaction-history');
-Route::get('/booking-details', PendingController::class)->name('root.booking-details');
-Route::get('/document-view', PendingController::class)->name('root.document-view');
-Route::get('/valid-id-view', PendingController::class)->name('root.valid-id-view');
+Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
+Route::get('/admin/booking-request', Admin\BookingRequestController::class)->middleware('staff')->name('admin.booking-request');
+/* The staff JSON endpoints answer 401 / 403 JSON themselves (no redirecting middleware). */
+Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)->name('admin.booking-action');
+Route::match(['get', 'post'], '/admin/booking-create', Admin\BookingCreateController::class)->name('admin.booking-create');
+Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsController::class)->name('admin.booking-emails');
+Route::get('/admin/calendar', Admin\CalendarController::class)->middleware('staff')->name('admin.calendar');
+Route::get('/admin/receipt', Admin\ReceiptController::class)->middleware('staff')->name('admin.receipt');
+Route::get('/admin/transaction-history', Admin\TransactionHistoryController::class)->middleware('staff')->name('admin.transaction-history');
+/* Used by customers AND staff: each answers a 404 (never a redirect, never 403) to anyone else. */
+Route::get('/booking-details', Controllers\BookingDetailsController::class)->name('root.booking-details');
+Route::get('/document-view', Controllers\DocumentViewController::class)->name('root.document-view');
+Route::get('/valid-id-view', Controllers\ValidIdViewController::class)->name('root.valid-id-view');

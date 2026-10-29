@@ -1,0 +1,544 @@
+{{-- Ported from customer/customer-profile.php — the session customer's own record; saves to profile-save. --}}
+@extends('layouts.customer')
+@section('title', 'My Profile')
+@section('active', 'Profile')
+@section('body-class', 'customer-profile-page')
+@push('head')
+    <link rel="stylesheet" href="{{ asset('assets/css/two-factor.css') }}" />
+@endpush
+@push('styles')
+    <!-- [0] the lines of this page's old shell CSS that differ from the layout's -->
+    <style>
+      :root { --danger: #b23a3a; --ok: #1c7a4f; }
+    </style>
+
+    <!-- [1] PAGE CSS — profile page, self-contained in the team palette -->
+    <style>
+      .profile-container { padding: 22px 0 0; } /* 26px effective top, matches other pages */
+      .profile-page-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+      .profile-page-header p { color: var(--muted); font-size: 13px; margin: 4px 0 20px; }
+
+      .profile-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+
+      /* summary card */
+      .profile-summary { background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04); padding: 24px 20px; text-align: center; }
+      .profile-summary .profile-avatar { width: 84px; height: 84px; margin: 0 auto 14px; border-radius: 50%; background: var(--black); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 800; }
+      .profile-summary h2 { font-size: 1.1rem; font-weight: 800; margin: 0; }
+      .profile-role { color: var(--muted); font-size: .85rem; margin: 2px 0 10px; }
+      .profile-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; background: #eaf6ef; color: var(--ok); font-size: 11px; font-weight: 600; }
+      .profile-meta { text-align: left; margin: 18px 0 16px; padding: 16px 0 0; border-top: 1px solid #f0efec; display: grid; gap: 12px; }
+      .profile-meta div { display: grid; gap: 2px; }
+      .profile-meta dt { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+      .profile-meta dd { margin: 0; font-size: .86rem; word-break: break-word; }
+
+      /* right column sections */
+      .profile-details { display: grid; gap: 16px; }
+      .profile-section { background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04); padding: 20px 22px; }
+      .profile-section-header h2 { font-size: 1rem; font-weight: 700; margin: 0; }
+      .profile-section-header p { color: var(--muted); font-size: .82rem; margin: 3px 0 16px; }
+
+      .profile-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+      .profile-form-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .profile-form-group.full-width { grid-column: 1 / -1; }
+      .profile-form-group label { font-size: .8rem; font-weight: 700; }
+
+      .form-control { width: 100%; min-height: 42px; padding: 10px 13px; border: 1px solid #d7d7d7; border-radius: 10px; font: inherit; font-size: .9rem; background: #fff; color: var(--black); }
+      .form-control:focus { outline: none; border-color: var(--black); box-shadow: 0 0 0 3px rgba(31,30,30,.08); }
+      .profile-form-group.is-invalid .form-control,
+      .profile-form-group.is-invalid .input-group { border-color: var(--danger); }
+
+      /* password field with icon + toggle */
+      .input-group { display: flex; align-items: center; border: 1px solid #d7d7d7; border-radius: 10px; background: #fff; overflow: hidden; }
+      .input-group:focus-within { border-color: var(--black); box-shadow: 0 0 0 3px rgba(31,30,30,.08); }
+      .input-group-text { display: inline-flex; align-items: center; justify-content: center; width: 40px; align-self: stretch; color: var(--muted); }
+      .input-group .form-control { border: 0; border-radius: 0; box-shadow: none; }
+      .profile-password-toggle { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 12px; align-self: stretch; }
+
+      .profile-validation { min-height: 1em; color: var(--danger); font-size: .72rem; }
+      .profile-success { display: block; margin-top: 10px; color: var(--ok); font-size: .82rem; font-weight: 600; }
+
+      .profile-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+      .btn-profile { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 10px 18px; border-radius: 10px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font: inherit; font-size: .84rem; font-weight: 700; cursor: pointer; text-decoration: none; transition: .18s; }
+      .btn-profile:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .btn-profile-primary { background: var(--black); border-color: var(--black); color: #fff; }
+      .btn-profile-primary:hover { background: #000; border-color: #000; }
+      .btn-profile-danger { color: var(--danger); border-color: #e4b1b1; }
+      .btn-profile[disabled] { opacity: .5; cursor: not-allowed; }
+
+      .form-check-input { width: 16px; height: 16px; accent-color: var(--black); flex: none; }
+
+      .account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+      /* ways of signing in (#23): password + Google, then the controls for each */
+      .signin-notice { margin: 0 0 14px; padding: 10px 13px; border-radius: 10px; background: #fcf6f4; border: 1px solid #efe0db; color: #4a4440; font-size: .84rem; line-height: 1.5; }
+      .signin-methods { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+      .signin-methods li { display: flex; align-items: center; gap: 10px; font-size: .88rem; }
+      .signin-methods li > svg, .signin-methods li > .bi { width: 16px; height: 16px; flex: none; color: var(--muted); }
+      .signin-methods .signin-name { flex: 1; font-weight: 600; }
+      .signin-state { font-size: .76rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #f1efeb; color: var(--muted); }
+      .signin-state.is-on { background: #e7f4ec; color: #1c7a4f; }
+      .signin-note { color: var(--muted); font-size: .84rem; margin: 0 0 4px; line-height: 1.5; }
+      .signin-google { margin-top: 20px; padding-top: 18px; border-top: 1px solid #efebe6; }
+      .signin-google h3 { font-size: .9rem; font-weight: 700; margin: 0 0 4px; }
+      .btn-profile svg { width: 16px; height: 16px; flex: none; }
+      .google-confirm { margin-top: 12px; max-width: 420px; }
+      .google-confirm[hidden], .btn-profile[hidden] { display: none; }   /* .btn-profile's inline-flex would otherwise win over [hidden] */
+
+      @media (max-width: 960px) {
+        .profile-layout { grid-template-columns: 1fr; }
+        .profile-form-grid { grid-template-columns: 1fr; }
+      }
+    
+      /* ==================================================================
+         LIGHT GLASS. The page behind the cards is the crimson gradient
+         (painted by includes/header.php). Cards are near-white but not
+         solid: they blur what is behind them, so a hint of the crimson
+         bleeds through and the edge glows — while the content inside stays
+         dark-on-light, the readable choice for long forms and tables.
+         Only colours change here — no layout, no markup.
+         ================================================================== */
+      .profile-page-header h1 { color: #fff; }
+      .profile-page-header p { color: #e9d0cd; }
+
+      .profile-summary, .profile-section {
+        background: rgba(255,255,255,.90);
+        -webkit-backdrop-filter: blur(18px) saturate(1.15); backdrop-filter: blur(18px) saturate(1.15);
+        border: 1px solid rgba(255,255,255,.6);
+        box-shadow: 0 18px 44px rgba(10,4,5,.30), inset 0 1px 0 rgba(255,255,255,.9);
+      }
+      .profile-meta { border-top-color: rgba(31,30,30,.1); }
+
+      /* fields: white on the tinted card, crimson focus */
+      .form-control, .input-group { background: #fff; border-color: #dccfcc; }
+      .form-control:focus, .input-group:focus-within { border-color: #a11626; box-shadow: 0 0 0 3px rgba(161,22,38,.14); }
+      .form-check-input { accent-color: #a11626; }
+
+      /* avatar + primary buttons: crimson */
+      .profile-summary .profile-avatar { background: #a11626; color: #fff; box-shadow: 0 8px 20px rgba(138,18,34,.3); }
+      .btn-profile { background: rgba(255,255,255,.7); }
+      .btn-profile:hover { background: #fff; border-color: #c9b9b6; }
+      .btn-profile.btn-profile-primary { background: #a11626; border-color: #a11626; color: #fff; }
+      .btn-profile.btn-profile-primary:hover { background: #7d0f1e; border-color: #7d0f1e; }
+          /* type floor (readability): nothing on the page below 12px */
+      .profile-meta dt { font-size: 12px; }
+          /* ---- white page (desktop + phone): the cards sit on white, no crimson wash ---- */
+      body { background: #fff !important; }
+      .app-main { background: #fff !important; }
+      .profile-page-header h1 { color: #1f1e1e; }
+      .profile-page-header p { color: #6e6a64; }
+      .profile-summary, .profile-section { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      .profile-summary, .profile-section { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+      /* phone: cards edge to edge — the details get the width */
+      @media (max-width: 767.98px) {
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+      }
+    </style>
+@endpush
+@section('content')
+      <!-- [4] PAGE CONTENT -->
+      <main class="app-main">
+        <div class="app-content">
+          <div class="container-fluid">
+            <div class="profile-container">
+              <header class="profile-page-header">
+                <h1>My Profile</h1>
+                <p>View and update your account information.</p>
+              </header>
+
+              <div class="profile-layout">
+                <aside class="profile-summary" aria-labelledby="profileSummaryName">
+@if ($customerProfile['photo'] !== '')
+                  <img class="profile-avatar" id="profileAvatar" src="{{ asset($customerProfile['photo']) }}"
+                       alt="{{ $customerProfile['name'] }}" style="object-fit:cover">
+@else
+                  @php
+                    /* first two words' initials — the SAME rule as the booking-page
+                       header (initials() there), so "Juan Miguel Dela Cruz" -> "JM".
+                       Derived, so the avatar can never drift from the name. */
+                    $cpParts = preg_split('/\s+/', trim($customerProfile['name']));
+                    $cpIni = '';
+                    foreach (array_slice($cpParts, 0, 2) as $cpW) $cpIni .= substr($cpW, 0, 1);
+                  @endphp
+                  <div class="profile-avatar" id="profileAvatar" aria-label="{{ $customerProfile['name'] }} initials">{{ strtoupper($cpIni) }}</div>
+@endif
+                  <h2 id="profileSummaryName">{{ $customerProfile['name'] }}</h2>
+                  <p class="profile-role">Customer</p>
+                  <span class="profile-status"><i class="bi bi-check-circle" aria-hidden="true"></i>Active</span>
+                  <dl class="profile-meta">
+                    <div><dt>Email</dt><dd>{{ $customerProfile['email'] }}</dd></div>
+                    <div><dt>Contact Number</dt><dd>{{ $customerProfile['phone'] }}</dd></div>
+                    <div><dt>Address</dt><dd>{{ $customerProfile['address'] }}</dd></div>
+                    <div><dt>Member Since</dt><dd>{{ $customerProfile['memberSince'] }}</dd></div>
+                  </dl>
+                  <!-- Profile picture only. Sensitive documents go to booking_documents,
+                       outside the web root, behind document-view.php. -->
+                  <input type="file" id="avatarInput" accept="image/png,image/jpeg,image/webp" hidden>
+                  <button class="btn-profile" type="button" onclick="document.getElementById('avatarInput').click()"><i class="bi bi-camera" aria-hidden="true"></i>Change Photo</button>
+@if ($customerProfile['photo'] !== '')
+                  <button class="btn-profile" type="button" id="avatarRemove"><i class="bi bi-trash" aria-hidden="true"></i>Remove</button>
+@endif
+                  <div class="profile-validation" id="avatarMessage" aria-live="polite"></div>
+                </aside>
+
+                <div class="profile-details">
+                  <section class="profile-section" aria-labelledby="personalInformationTitle">
+                    <div class="profile-section-header"><h2 id="personalInformationTitle">Personal Information</h2><p>Keep your contact details up to date.</p></div>
+                    <form id="customerProfileForm" action="" method="post" novalidate>
+                      <div class="profile-form-grid">
+                        <div class="profile-form-group"><label for="fullName">Full Name</label><input class="form-control" id="fullName" name="full_name" type="text" autocomplete="name" value="{{ $customerProfile['name'] }}" aria-describedby="fullNameValidation" required><small class="profile-validation" id="fullNameValidation" aria-live="polite"></small></div>
+                        <div class="profile-form-group"><label for="email">Email Address</label><input class="form-control" id="email" name="email" type="email" autocomplete="email" value="{{ $customerProfile['email'] }}" aria-describedby="emailValidation" required><small class="profile-validation" id="emailValidation" aria-live="polite"></small></div>
+                        <div class="profile-form-group"><label for="contactNumber">Contact Number</label><input class="form-control" id="contactNumber" name="contact_number" type="tel" autocomplete="tel" value="{{ $customerProfile['phone'] }}" aria-describedby="contactNumberValidation" required><small class="profile-validation" id="contactNumberValidation" aria-live="polite"></small></div>
+                        <div class="profile-form-group"><label for="universityId">USeP ID number <span style="font-weight:400;color:#8a857d">(optional)</span></label><input class="form-control" id="universityId" name="university_id_no" type="text" value="{{ $customerProfile['universityId'] }}" placeholder="e.g. 2023-00412"><small class="profile-validation">Staff check your uploaded ID against this when applying the USeP discount.</small></div>
+                        <div class="profile-form-group full-width"><label for="address">Address</label><input class="form-control" id="address" name="address" type="text" autocomplete="street-address" value="{{ $customerProfile['address'] }}" required></div>
+                      </div>
+                      <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-check2" aria-hidden="true"></i>Save Changes</button><button class="btn-profile" type="reset">Cancel</button></div>
+                      <small class="profile-success" id="profileSuccessMessage" aria-live="polite"></small>
+                    </form>
+                  </section>
+
+                  <section class="profile-section" aria-labelledby="accountSecurityTitle">
+                    <div class="profile-section-header"><h2 id="accountSecurityTitle">Account Security</h2><p>{!! $cpHasPassword
+                        ? 'Use a strong password that you do not reuse elsewhere.'
+                        : 'You sign in with Google. Add a password to also sign in with your email.' !!}</p></div>
+                    @if ($cpNotice !== '')<p class="signin-notice" role="status">{{ $cpNotice }}</p>@endif
+                    <ul class="signin-methods" aria-label="Ways you can sign in">
+                      <li><i class="bi bi-key" aria-hidden="true"></i><span class="signin-name">Email and password</span><span class="signin-state{!! $cpHasPassword ? ' is-on' : '' !!}">{!! $cpHasPassword ? 'Set' : 'Not set' !!}</span></li>
+                      <li>{!! file_get_contents(public_path('assets/img/google-g.svg')) !!}<span class="signin-name">Google</span><span class="signin-state{!! $cpHasGoogle ? ' is-on' : '' !!}">{!! $cpHasGoogle ? 'Connected' : 'Not connected' !!}</span></li>
+                    </ul>
+                    @if (!$cpHasPassword && !$cpReauthOk)
+                    <!-- SET A FIRST PASSWORD, step 1: a fresh trip to the linked Google account
+                         is the proof (there is no current password to ask for). -->
+                    <p class="signin-note">To set a password, first confirm it&rsquo;s you with Google. You then have 10 minutes to choose one.</p>
+                    <div class="profile-actions" style="margin-top:10px"><a class="btn-profile btn-profile-primary" href="{{ route('customer.google-start', ['purpose' => 'reauth']) }}"><i class="bi bi-shield-check" aria-hidden="true"></i>Confirm with Google</a></div>
+                    @else
+                    <form id="customerPasswordForm" action="" method="post" novalidate>
+                      <div class="profile-form-grid">
+                        @if ($cpHasPassword)
+                        <div class="profile-form-group full-width"><label for="currentPassword">Current Password</label><div class="input-group"><span class="input-group-text"><i class="bi bi-lock" aria-hidden="true"></i></span><input class="form-control" id="currentPassword" name="current_password" type="password" autocomplete="current-password" aria-describedby="currentPasswordValidation"><button class="profile-password-toggle" type="button" data-profile-password-toggle="currentPassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div><small class="profile-validation" id="currentPasswordValidation" aria-live="polite"></small></div>
+                        @endif
+                        <div class="profile-form-group"><label for="newPassword">New Password</label><div class="input-group"><span class="input-group-text"><i class="bi bi-lock" aria-hidden="true"></i></span><input class="form-control" id="newPassword" name="new_password" type="password" autocomplete="new-password" minlength="8" aria-describedby="newPasswordValidation"><button class="profile-password-toggle" type="button" data-profile-password-toggle="newPassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div><small class="profile-validation" id="newPasswordValidation" aria-live="polite"></small></div>
+                        <div class="profile-form-group"><label for="confirmNewPassword">Confirm New Password</label><div class="input-group"><span class="input-group-text"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><input class="form-control" id="confirmNewPassword" name="confirm_new_password" type="password" autocomplete="new-password" aria-describedby="confirmNewPasswordValidation"><button class="profile-password-toggle" type="button" data-profile-password-toggle="confirmNewPassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div><small class="profile-validation" id="confirmNewPasswordValidation" aria-live="polite"></small></div>
+                      </div>
+                      <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-shield-check" aria-hidden="true"></i>{!! $cpHasPassword ? 'Update Password' : 'Set Password' !!}</button></div>
+                      <small class="profile-success" id="passwordSuccessMessage" aria-live="polite"></small>
+                    </form>
+                    @endif
+
+                    @if ($cpHasGoogle || $cpGoogleOn)
+                    <!-- GOOGLE (#23). Connecting and disconnecting both re-ask the password
+                         (profile-save.php); connecting then goes to Google and back. -->
+                    <div class="signin-google" data-google-panel>
+                      <h3>Sign in with Google</h3>
+                      @if ($cpHasGoogle && $cpHasPassword)
+                      <p class="signin-note">Disconnecting leaves you signing in with your email and password only.</p>
+                      <div class="profile-actions" style="margin-top:10px"><button class="btn-profile btn-profile-danger" type="button" data-google-action="google_unlink" data-google-go="Disconnect Google">{!! file_get_contents(public_path('assets/img/google-g.svg')) !!}Disconnect Google</button></div>
+                      @elseif ($cpHasGoogle)
+                      <p class="signin-note">Google is your only way to sign in, so it cannot be disconnected until you set a password.</p>
+                      @else
+                      <p class="signin-note">Connect your Google account to sign in with one click. Any Google account you own works; it does not have to use this email.</p>
+                      <div class="profile-actions" style="margin-top:10px"><button class="btn-profile" type="button" data-google-action="google_link_begin" data-google-go="Continue to Google">{!! file_get_contents(public_path('assets/img/google-g.svg')) !!}Connect Google</button></div>
+                      @endif
+                      <div class="google-confirm" hidden>
+                        <div class="profile-form-group"><label for="googlePassword">Confirm with your password</label><div class="input-group"><span class="input-group-text"><i class="bi bi-lock" aria-hidden="true"></i></span><input class="form-control" id="googlePassword" type="password" autocomplete="current-password" aria-describedby="googlePasswordMessage"><button class="profile-password-toggle" type="button" data-profile-password-toggle="googlePassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div><small class="profile-validation" id="googlePasswordMessage" aria-live="polite"></small></div>
+                        <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="button" data-google-go-button>Continue</button><button class="btn-profile" type="button" data-google-cancel>Cancel</button></div>
+                      </div>
+                    </div>
+                    @endif
+                  </section>
+
+                  <!-- TWO-STEP VERIFICATION (DB-DECISIONS #20). Optional for customers. Driven by
+                       assets/js/two-factor.js against profile-save.php; every step is re-checked there. -->
+                  @php($cpTfaOn = $cpTfa !== null && $cpTfa['enabled'])
+                  @php($cpTfaLow = $cpTfaOn && $cpTfa['codes_left'] <= TFA_CODES_LOW)
+                  <section class="profile-section tfa-panel" aria-labelledby="twoStepTitle" data-tfa-panel data-endpoint="{{ route('root.profile-save') }}" data-csrf="{{ $cpCsrf }}">
+                    <div class="profile-section-header">
+                      <div class="tfa-head">
+                        <h2 id="twoStepTitle">Two-step verification</h2>
+                        @if ($cpTfa !== null)
+                        <span class="tfa-chip {!! $cpTfaOn ? 'tfa-chip-on' : 'tfa-chip-off' !!}">{!! $cpTfaOn ? '<i class="bi bi-check2" aria-hidden="true"></i>On' : 'Off' !!}</span>
+                        @endif
+                      </div>
+                      <p>{!! $cpTfaOn
+                          ? 'You enter a code from your phone each time you sign in.'
+                          : 'Ask for a 6-digit code from your phone after your password, so a stolen password alone cannot open your account.' !!}</p>
+                    </div>
+                    @if ($cpTfa === null)
+                    <p class="tfa-message is-bad">Two-step verification settings cannot be loaded right now. Reload the page to try again.</p>
+                    @else
+                    @if ($cpTfaOn)
+                    <ul class="tfa-facts">
+                      <li><i class="bi bi-calendar-check" aria-hidden="true"></i>Turned on {{ date('j M Y', strtotime((string) $cpTfa['enabled_at'])) }}</li>
+                      <li><i class="bi bi-life-preserver" aria-hidden="true"></i><span><strong>{!! (int) $cpTfa['codes_left'] !!}</strong> of {!! TFA_RECOVERY_CODE_COUNT !!} recovery codes left</span></li>
+                    </ul>
+                    @if ($cpTfaLow)
+                    <p class="tfa-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>{!! (int) $cpTfa['codes_left'] === 1 ? 'Only 1 recovery code left.' : 'Only ' . (int) $cpTfa['codes_left'] . ' recovery codes left.' !!} Make new ones now, so losing your phone does not lock you out.</span></p>
+                    @endif
+                    @endif
+                    <div class="profile-actions"{!! $cpTfaOn ? '' : ' style="margin-top:0"' !!} data-tfa-actions>
+                      @if ($cpTfaOn)
+                      <button class="btn-profile" type="button" data-tfa-action="move" data-tfa-ask="Current code or recovery code" data-tfa-go="Continue"><i class="bi bi-phone" aria-hidden="true"></i>Move to a new phone</button>
+                      <button class="btn-profile{!! $cpTfaLow ? ' btn-profile-primary' : '' !!}" type="button" data-tfa-action="codes" data-tfa-ask="Current code or recovery code" data-tfa-go="Make new codes"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>New recovery codes</button>
+                      <button class="btn-profile btn-profile-danger" type="button" data-tfa-action="disable" data-tfa-ask="Current code or recovery code" data-tfa-go="Turn off">Turn off</button>
+                      @elseif (!$cpHasPassword)
+                      <!-- turning it on confirms with the password, which a Google-only account does not have yet (#23) -->
+                      <p class="signin-note">Set a password first (Account Security, above), then you can turn this on.</p>
+                      @else
+                      <button class="btn-profile btn-profile-primary" type="button" data-tfa-action="begin" data-tfa-ask="Your password" data-tfa-go="Continue"><i class="bi bi-shield-lock" aria-hidden="true"></i>Turn on</button>
+                      @endif
+                    </div>
+
+                    @php(tfa_view_panel_steps($cpTfaOn, $customerProfile['email'], ['btn' => 'btn-profile', 'primary' => 'btn-profile btn-profile-primary', 'input' => 'form-control tfa-code-input']))
+                    @endif
+                  </section>
+
+                  <section class="profile-section" aria-labelledby="accountActionsTitle">
+                    <div class="profile-section-header"><h2 id="accountActionsTitle">Account Actions</h2><p>Manage access to your VENUSeP account.</p></div>
+                    <div class="account-actions"><a class="btn-profile" href="{{ route('customer.logout') }}"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>Log Out</a><!-- [SIM] deactivate not built --><button class="btn-profile btn-profile-danger" type="button" disabled title="Account deactivation is under development"><i class="bi bi-person-x" aria-hidden="true"></i>Deactivate Account</button></div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+@endsection
+@push('scripts')
+    <!-- [6] PAGE SCRIPT — validation + show/hide password (front-end only) -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const setFieldError = function (field, messageId, message) {
+          const group = field.closest('.profile-form-group');
+          if (group) group.classList.toggle('is-invalid', Boolean(message));
+          field.setAttribute('aria-invalid', message ? 'true' : 'false');
+          const el = document.getElementById(messageId);
+          if (el) el.textContent = message;
+        };
+
+        document.querySelectorAll('[data-profile-password-toggle]').forEach(function (toggle) {
+          toggle.addEventListener('click', function () {
+            const input = document.getElementById(toggle.dataset.profilePasswordToggle);
+            if (!input) return;
+            const showing = input.type === 'password';
+            input.type = showing ? 'text' : 'password';
+            toggle.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+            toggle.setAttribute('aria-pressed', showing ? 'true' : 'false');
+            const icon = toggle.querySelector('i');
+            if (icon) { icon.classList.toggle('bi-eye', !showing); icon.classList.toggle('bi-eye-slash', showing); }
+          });
+        });
+
+        const CSRF = @json($cpCsrf);
+
+        /* ---- profile picture ----
+           A PICTURE ONLY. It is stored under assets/, which the web server
+           hands to anyone with the URL — right for a photo someone chose to
+           show, and the reason IDs and receipts go somewhere else entirely
+           (booking_documents, outside the web root, behind document-view.php). */
+        const avatarInput = document.getElementById('avatarInput');
+        const avatarMsg = document.getElementById('avatarMessage');
+        const sendAvatar = function (body) {
+          avatarMsg.textContent = 'Uploading…';
+          fetch(@json(route('root.profile-save')), { method: 'POST', body: body, credentials: 'same-origin' })
+            .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+            .then(function (res) {
+              avatarMsg.textContent = res.message || '';
+              /* Reload so the header chip and the summary both pick it up
+                 rather than only the one element we happen to know about. */
+              if (res.ok) window.setTimeout(function () { window.location.reload(); }, 600);
+            })
+            .catch(function () { avatarMsg.textContent = 'Could not reach the server.'; });
+        };
+        if (avatarInput) {
+          avatarInput.addEventListener('change', function () {
+            if (!avatarInput.files || !avatarInput.files[0]) return;
+            const body = new FormData();
+            body.append('_token', CSRF);
+            body.append('action', 'photo');
+            body.append('photo', avatarInput.files[0], avatarInput.files[0].name);
+            avatarInput.value = '';
+            sendAvatar(body);
+          });
+        }
+        const avatarRemove = document.getElementById('avatarRemove');
+        if (avatarRemove) {
+          avatarRemove.addEventListener('click', function () {
+            const body = new FormData();
+            body.append('_token', CSRF);
+            body.append('action', 'photo');
+            body.append('remove', '1');
+            sendAvatar(body);
+          });
+        }
+
+        const profileForm = document.getElementById('customerProfileForm');
+        if (profileForm) {
+          const profileFields = [
+            ['fullName', 'fullNameValidation', 'Please enter your full name.'],
+            ['email', 'emailValidation', 'Please enter a valid email address.'],
+            ['contactNumber', 'contactNumberValidation', 'Please enter your contact number.'],
+            ['address', 'addressValidation', 'Please enter your address.'],
+          ];
+          profileForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            let hasError = false;
+            profileFields.forEach(function (cfg) {
+              const field = document.getElementById(cfg[0]);
+              if (!field) return;
+              let message = '';
+              if (cfg[0] === 'email') message = field.value.trim() && field.checkValidity() ? '' : cfg[2];
+              else message = field.value.trim() ? '' : cfg[2];
+              setFieldError(field, cfg[1], message);
+              hasError = hasError || Boolean(message);
+            });
+            if (hasError) { document.getElementById('profileSuccessMessage').textContent = ''; return; }
+
+            /* Save FOR REAL. The per-field checks above stay for fast feedback;
+               the server repeats them and owns the one the browser cannot
+               answer — whether the new email is already another account's. */
+            const body = new FormData(profileForm);
+            body.append('_token', CSRF);
+            body.append('action', 'details');
+            const out = document.getElementById('profileSuccessMessage');
+            out.textContent = 'Saving…';
+            fetch(@json(route('root.profile-save')), { method: 'POST', body: body, credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+              .then(function (res) {
+                if (!res.ok) {
+                  out.textContent = '';
+                  const map = { full_name: ['fullName', 'fullNameValidation'], email: ['email', 'emailValidation'],
+                                contact_number: ['contactNumber', 'contactNumberValidation'] };
+                  const t = res.field && map[res.field];
+                  if (t) { const f = document.getElementById(t[0]); setFieldError(f, t[1], res.message); f.focus(); }
+                  else { out.textContent = res.message || 'Nothing was saved.'; }
+                  return;
+                }
+                out.textContent = res.message;
+                /* Repaint the summary card beside the form — leaving the old
+                   name there after a rename would look like the save failed. */
+                document.getElementById('profileSummaryName').textContent = document.getElementById('fullName').value.trim();
+              })
+              .catch(function () { out.textContent = 'Could not reach the server, so nothing was saved.'; });
+          });
+          profileForm.querySelectorAll('input').forEach(function (field) {
+            field.addEventListener('input', function () { setFieldError(field, field.getAttribute('aria-describedby'), ''); });
+          });
+          profileForm.addEventListener('reset', function () {
+            window.setTimeout(function () {
+              profileFields.forEach(function (cfg) { const f = document.getElementById(cfg[0]); if (f) setFieldError(f, cfg[1], ''); });
+              document.getElementById('profileSuccessMessage').textContent = '';
+            }, 0);
+          });
+        }
+
+        const passwordForm = document.getElementById('customerPasswordForm');
+        const cur0 = document.getElementById('currentPassword');
+        if (passwordForm) {
+          passwordForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            const cur = document.getElementById('currentPassword');   // absent when SETTING a first password (#23)
+            const nw = document.getElementById('newPassword');
+            const cf = document.getElementById('confirmNewPassword');
+            const any = Boolean((cur && cur.value) || nw.value || cf.value);
+            const curErr = cur && any && !cur.value ? 'Please enter your current password.' : '';
+            const nwErr = any && !nw.value ? 'Please enter a new password.' : (nw.value && nw.value.length < 8 ? 'New password must be at least 8 characters.' : '');
+            const cfErr = any && !cf.value ? 'Please confirm your new password.' : (nw.value !== cf.value ? 'New passwords must match.' : '');
+            if (cur) setFieldError(cur, 'currentPasswordValidation', curErr);
+            setFieldError(nw, 'newPasswordValidation', nwErr);
+            setFieldError(cf, 'confirmNewPasswordValidation', cfErr);
+            if (curErr || nwErr || cfErr || !any) return;
+
+            /* The CURRENT password is verified server-side — a session alone
+               must never be enough to change the credential that created it,
+               or anyone at an unlocked machine could lock the owner out. */
+            const body = new FormData(passwordForm);
+            body.append('_token', CSRF);
+            body.append('action', 'password');
+            const out = document.getElementById('passwordSuccessMessage');
+            out.textContent = 'Saving…';
+            fetch(@json(route('root.profile-save')), { method: 'POST', body: body, credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+              .then(function (res) {
+                if (!res.ok) {
+                  out.textContent = '';
+                  const map = { current_password: [cur, 'currentPasswordValidation'],
+                                new_password: [nw, 'newPasswordValidation'],
+                                confirm_new_password: [cf, 'confirmNewPasswordValidation'] };
+                  const t = res.field && map[res.field];
+                  if (t && t[0]) { setFieldError(t[0], t[1], res.message); t[0].focus(); }
+                  else { out.textContent = res.message || 'Your password was not changed.'; }
+                  /* The Google confirmation ran out: reload, which offers it again. */
+                  if (res.reauth) window.setTimeout(function () { window.location.reload(); }, 2500);
+                  return;
+                }
+                out.textContent = res.message;
+                passwordForm.reset();
+                /* A FIRST password changes what this section offers (Change, Disconnect). */
+                if (!cur) window.setTimeout(function () { window.location.reload(); }, 1500);
+              })
+              .catch(function () { out.textContent = 'Could not reach the server, so your password was not changed.'; });
+          });
+          ['currentPassword', 'newPassword', 'confirmNewPassword'].forEach(function (id) {
+            const field = document.getElementById(id);
+            if (!field) return;
+            field.addEventListener('input', function () {
+              if (cur0) setFieldError(cur0, 'currentPasswordValidation', '');
+              setFieldError(document.getElementById('newPassword'), 'newPasswordValidation', '');
+              setFieldError(document.getElementById('confirmNewPassword'), 'confirmNewPasswordValidation', '');
+              document.getElementById('passwordSuccessMessage').textContent = '';
+            });
+          });
+        }
+
+        /* ---- Google (#23): Connect / Disconnect, each after re-typing the password.
+           The server re-checks everything; connecting then leaves for Google. ---- */
+        const googlePanel = document.querySelector('[data-google-panel]');
+        const googleBox = googlePanel && googlePanel.querySelector('.google-confirm');
+        if (googleBox) {
+          const pw = document.getElementById('googlePassword');
+          const msg = document.getElementById('googlePasswordMessage');
+          const go = googlePanel.querySelector('[data-google-go-button]');
+          const starters = googlePanel.querySelectorAll('[data-google-action]');
+          let action = null;
+          const close = function () {
+            googleBox.hidden = true; pw.value = ''; setFieldError(pw, 'googlePasswordMessage', '');
+            starters.forEach(function (b) { b.hidden = false; });
+          };
+          starters.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              action = btn.dataset.googleAction;
+              go.textContent = btn.dataset.googleGo;
+              btn.hidden = true;
+              googleBox.hidden = false;
+              pw.focus();
+            });
+          });
+          googlePanel.querySelector('[data-google-cancel]').addEventListener('click', close);
+          pw.addEventListener('input', function () { setFieldError(pw, 'googlePasswordMessage', ''); });
+          pw.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go.click(); } });
+          go.addEventListener('click', function () {
+            if (!pw.value) { setFieldError(pw, 'googlePasswordMessage', 'Enter your password.'); pw.focus(); return; }
+            const body = new FormData();
+            body.append('_token', CSRF);
+            body.append('action', action);
+            body.append('password', pw.value);
+            go.disabled = true;
+            msg.textContent = '';
+            fetch(@json(route('root.profile-save')), { method: 'POST', body: body, credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+              .then(function (res) {
+                if (res.ok && res.redirect) { window.location.href = res.redirect; return; }   // off to Google
+                go.disabled = false;
+                if (!res.ok) { setFieldError(pw, 'googlePasswordMessage', res.message || 'Nothing was changed.'); pw.focus(); return; }
+                msg.style.color = 'var(--ok)';
+                msg.textContent = res.message;
+                window.setTimeout(function () { window.location.reload(); }, 1500);
+              })
+              .catch(function () { go.disabled = false; setFieldError(pw, 'googlePasswordMessage', 'Could not reach the server, so nothing was changed.'); });
+          });
+        }
+      });
+    </script>
+    <script src="{{ asset('assets/js/vendor/qrcode-generator-1.4.4.js') }}"></script>
+    <script src="{{ asset('assets/js/two-factor.js') }}"></script>
+@endpush

@@ -19,5 +19,5 @@ Route::match(['get', 'post'], '/customer/google-start', [Auth\GoogleController::
 Route::match(['get', 'post'], '/customer/google-callback', [Auth\GoogleController::class, 'callback'])->name('customer.google-callback');
 Route::match(['get', 'post'], '/customer/logout', [Auth\LogoutController::class, 'customer'])->name('customer.logout');
 Route::get('/admin/profile', PendingController::class)->name('admin.profile');
-Route::get('/customer/customer-profile', PendingController::class)->name('customer.customer-profile');
-Route::match(['get', 'post'], '/profile-save', PendingController::class)->name('root.profile-save');
+Route::get('/customer/customer-profile', Auth\CustomerProfileController::class)->name('customer.customer-profile')->middleware('customer');
+Route::match(['get', 'post'], '/profile-save', Auth\ProfileSaveController::class)->name('root.profile-save');

@@ -14,13 +14,21 @@
    functions and views, and require_once never runs a file twice — so each file
    is loaded in a scope pre-seeded with every variable loaded before it, and what
    it defines is kept for the rest of the request. Always load legacy files
-   through this function, never with a bare include/require. */
+   through this function, never with a bare include/require.
+
+   An ARRAY argument seeds variables the old page set before its include,
+   e.g. admin/venue-management.php's `$vrIncludeInactive = true;`:
+   legacy(['vrIncludeInactive' => true], 'venue-rooms'). */
 if (!function_exists('legacy')) {
-    function legacy(string ...$names): array
+    function legacy(string|array ...$names): array
     {
         static $vars = [];
         static $loaded = [];
         foreach ($names as $name) {
+            if (is_array($name)) {
+                $vars = array_merge($vars, $name);
+                continue;
+            }
             $file = base_path('legacy/includes/' . $name . '.php');
             if (isset($loaded[$file])) {
                 continue;

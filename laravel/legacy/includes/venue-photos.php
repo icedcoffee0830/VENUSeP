@@ -13,7 +13,7 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/room-photos.php';
 
-define('VENUE_PHOTO_DIR', __DIR__ . '/../assets/img/venues/covers');
+define('VENUE_PHOTO_DIR', public_path('assets/img/venues/covers'));   // Laravel: the public/ copy of assets/
 define('VENUE_PHOTO_WEB_BASE', '../assets/img/venues/covers');   // relative from admin/ and customer/ (both one level deep)
 
 function vp_ensure_dir() {

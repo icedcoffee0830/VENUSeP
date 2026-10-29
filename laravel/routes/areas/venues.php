@@ -1,19 +1,30 @@
 <?php
 
-use App\Http\Controllers\PendingController;
+use App\Http\Controllers\Admin\CatalogDeleteController;
+use App\Http\Controllers\Admin\HostelRoomFormController;
+use App\Http\Controllers\Admin\RoomFormController;
+use App\Http\Controllers\Admin\RoomPhotosApiController;
+use App\Http\Controllers\Admin\RoomSaveController;
+use App\Http\Controllers\Admin\RoomToggleActiveController;
+use App\Http\Controllers\Admin\VenueFormController;
+use App\Http\Controllers\Admin\VenueManagementController;
+use App\Http\Controllers\Admin\VenuePhotoApiController;
+use App\Http\Controllers\Admin\VenueSaveController;
 use Illuminate\Support\Facades\Route;
 
 /* Area: venues — see the ownership table in LARAVEL-PORT.md.
-   Every route below starts as a PendingController placeholder (501 "not ported yet").
-   Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
+   Every page of this area is ported; KEEP the names and URLs: other areas link to them. */
 
-Route::get('/admin/venue-management', PendingController::class)->name('admin.venue-management');
-Route::get('/admin/venue-form', PendingController::class)->name('admin.venue-form');
-Route::match(['get', 'post'], '/admin/venue-save', PendingController::class)->name('admin.venue-save');
-Route::match(['get', 'post'], '/admin/venue-photo-api', PendingController::class)->name('admin.venue-photo-api');
-Route::get('/admin/room-form', PendingController::class)->name('admin.room-form');
-Route::get('/admin/hostel-room-form', PendingController::class)->name('admin.hostel-room-form');
-Route::match(['get', 'post'], '/admin/room-save', PendingController::class)->name('admin.room-save');
-Route::match(['get', 'post'], '/admin/room-photos-api', PendingController::class)->name('admin.room-photos-api');
-Route::match(['get', 'post'], '/admin/room-toggle-active', PendingController::class)->name('admin.room-toggle-active');
-Route::match(['get', 'post'], '/admin/catalog-delete', PendingController::class)->name('admin.catalog-delete');
+Route::get('/admin/venue-management', VenueManagementController::class)->middleware('staff')->name('admin.venue-management');
+Route::get('/admin/venue-form', VenueFormController::class)->middleware('staff')->name('admin.venue-form');
+Route::get('/admin/room-form', RoomFormController::class)->middleware('staff')->name('admin.room-form');
+Route::get('/admin/hostel-room-form', HostelRoomFormController::class)->middleware('staff')->name('admin.hostel-room-form');
+
+/* The JSON endpoints answer exactly as the old scripts did: their own 401
+   "session ended" JSON (no redirecting guard) — see Concerns\RepliesJson. */
+Route::match(['get', 'post'], '/admin/venue-save', VenueSaveController::class)->name('admin.venue-save');
+Route::match(['get', 'post'], '/admin/venue-photo-api', VenuePhotoApiController::class)->name('admin.venue-photo-api');
+Route::match(['get', 'post'], '/admin/room-save', RoomSaveController::class)->name('admin.room-save');
+Route::match(['get', 'post'], '/admin/room-photos-api', RoomPhotosApiController::class)->name('admin.room-photos-api');
+Route::match(['get', 'post'], '/admin/room-toggle-active', RoomToggleActiveController::class)->name('admin.room-toggle-active');
+Route::match(['get', 'post'], '/admin/catalog-delete', CatalogDeleteController::class)->name('admin.catalog-delete');

@@ -61,7 +61,7 @@ export default {
 
     await step('Fills in event, a free future date, hours and attendees', async () => {
       const page = s.cust;
-      const room = await dbOne(`SELECT id, attendee_capacity FROM rooms WHERE room_code = ?`, [ROOM_CODE]);
+      const room = await dbOne(`SELECT r.id, e.attendee_capacity FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = ?`, [ROOM_CODE]);
       // the first day from two weeks out with nothing held in this room and no maintenance
       const d = new Date(); d.setDate(d.getDate() + 14);
       for (let i = 0; i < 60; i++, d.setDate(d.getDate() + 1)) {

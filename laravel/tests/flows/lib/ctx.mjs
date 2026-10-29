@@ -198,7 +198,9 @@ export function makeCtx({ cfg, browser, flow, record }) {
       const peso = Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const r = String(ref);
       const refShown = `${r.slice(0, 4)} ${r.slice(4, 7)} ${r.slice(7)}`;
-      const dt = when.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }).replace(' at ', ' ');
+      // "Oct 30, 2026 4:32 PM" — the form the checker reads (no comma after the year)
+      const dt = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' '
+        + when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       const row = (k, v) => `<div style="display:flex;justify-content:space-between;margin:14px 0"><span>${k}</span><span>${v}</span></div>`;
       return drawPng('gcash-receipt', `
         <div id="fx" style="width:520px;padding:40px 36px;background:#fff;color:#111;font:500 26px Arial">

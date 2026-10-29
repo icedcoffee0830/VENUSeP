@@ -187,7 +187,9 @@ class PaymentSubmitController
         $claimNumber   = (string) $request->input('receiver_number', '');
         $claimName     = (string) $request->input('receiver_name', '');
         $claimCentavos = (string) $request->input('amount_centavos', '') !== '' ? (int) $request->input('amount_centavos') : null;
-        $claimWhen     = (string) $request->input('receipt_datetime', '');
+        /* The browser's OCR date text; one PHP cannot parse is "no date", not 1970. */
+        $claimWhenTs   = strtotime((string) $request->input('receipt_datetime', ''));
+        $claimWhen     = $claimWhenTs === false ? null : date('Y-m-d H:i:s', $claimWhenTs);
         $confidence    = (string) $request->input('confidence', '') !== '' ? (float) $request->input('confidence') : null;
         $clientFlags   = json_decode((string) $request->input('flags', '[]'), true);
         if (!is_array($clientFlags)) { $clientFlags = []; }
@@ -312,7 +314,7 @@ class PaymentSubmitController
                 ':p' => $paymentId, ':b' => $id, ':n' => $lastNo + 1, ':f' => $path,
                 ':o' => mb_substr((string) $file->getClientOriginalName(), 0, 255),
                 ':r' => $claimRef, ':rn' => mb_substr($claimName, 0, 150), ':rnum' => mb_substr($claimNumber, 0, 30),
-                ':amt' => $claimCentavos, ':when' => $claimWhen !== '' ? date('Y-m-d H:i:s', strtotime($claimWhen)) : null,
+                ':amt' => $claimCentavos, ':when' => $claimWhen,
                 ':sha' => $sha, ':conf' => $confidence, ':v' => $verdict,
                 ':flags' => json_encode($flags),
                 ':txt' => mb_substr((string) $request->input('text_excerpt', ''), 0, 2000),

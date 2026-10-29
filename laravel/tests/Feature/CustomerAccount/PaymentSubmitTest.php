@@ -4,6 +4,7 @@ namespace Tests\Feature\CustomerAccount;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /* customer/payment-submit — the JSON endpoint pay.blade.php posts to. Writes
@@ -102,12 +103,42 @@ class PaymentSubmitTest extends TestCase
             // stored in the Laravel storage copy of the private folder, never the real one
             $this->assertFileExists(storage_path('app/venusep-private/' . $receipt->file_path));
         } finally {
-            foreach (DB::table('gcash_receipts')->where('booking_id', self::BOOKING)->get() as $r) {
-                @unlink(storage_path('app/venusep-private/' . $r->file_path));
-            }
-            DB::table('gcash_receipts')->where('booking_id', self::BOOKING)->delete();
-            DB::table('payments')->where('booking_id', self::BOOKING)->where('payment_record_status', 'under_review')->delete();
-            DB::table('bookings')->where('id', self::BOOKING)->update(['payment_status' => 'overdue', 'payment_method' => 'gcash']);
+            $this->undoGcashUploads();
+        }
+    }
+
+    /* A GCash upload with these OCR claims (the matching account and amount by default). */
+    private function postGcash(array $claims = []): TestResponse
+    {
+        return $this->asCustomerWithToken()->post(route('customer.payment-submit'), $claims + [
+            '_token' => 'test-token', 'booking' => $this->ref(self::BOOKING), 'method' => 'gcash',
+            'receipt' => $this->receiptPng(),
+            'ref' => '9' . str_pad((string) random_int(0, 999999999999), 12, '0', STR_PAD_LEFT),
+            'receiver_name' => 'RA***N V.', 'receiver_number' => '+63 918 334 5566', 'amount_centavos' => '900000',
+            'receipt_datetime' => 'Oct 28, 2026 10:15 AM', 'confidence' => '91', 'flags' => '[]',
+        ]);
+    }
+
+    private function undoGcashUploads(): void
+    {
+        foreach (DB::table('gcash_receipts')->where('booking_id', self::BOOKING)->get() as $r) {
+            @unlink(storage_path('app/venusep-private/' . $r->file_path));
+        }
+        DB::table('gcash_receipts')->where('booking_id', self::BOOKING)->delete();
+        DB::table('payments')->where('booking_id', self::BOOKING)->where('payment_record_status', 'under_review')->delete();
+        DB::table('bookings')->where('id', self::BOOKING)->update(['payment_status' => 'overdue', 'payment_method' => 'gcash']);
+    }
+
+    /* The browser sends whatever date text its OCR matched; PHP cannot parse every
+       shape the browser can (or an OCR typo like "Febuary"). That must be stored as
+       "no date", not as strtotime(false) = 1 Jan 1970. */
+    public function test_an_unparseable_receipt_date_is_stored_as_no_date(): void
+    {
+        try {
+            $this->postGcash(['receipt_datetime' => 'Febuary 28, 2026 4:32 PM'])->assertOk();
+            $this->assertNull(DB::table('gcash_receipts')->where('booking_id', self::BOOKING)->value('receipt_datetime'));
+        } finally {
+            $this->undoGcashUploads();
         }
     }
 }

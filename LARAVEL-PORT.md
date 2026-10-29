@@ -239,3 +239,85 @@ in a browser; filter buttons per result) and `.json`. Results:
 Each request gets a fresh session. Pages may still write while being viewed (e.g.
 `sp_expire_due_bookings`) — another reason it only runs against the Laravel copies.
 Exit codes: 0 no failures, 1 failures, 2 refused / bad option / database unreachable.
+
+## Flow tester (`php artisan venusep:flows`)
+
+`venusep:check` loads pages one by one; the flow tester walks whole **processes** in a real
+browser (Edge, else Chrome) the way a person would: register, book, upload an ID, staff approve,
+pay by GCash, staff confirm, open the receipt. Each step is screenshotted and checked against the
+database.
+
+```
+cd laravel
+C:\xamp5\php\php.exe artisan venusep:flows              # every flow
+C:\xamp5\php\php.exe artisan venusep:flows --headed     # watch it: visible browser, slowed down
+C:\xamp5\php\php.exe artisan venusep:flows --only=venue-booking-to-receipt
+```
+
+| option | what it does |
+|---|---|
+| `--only=a,b` | only these flows (flow name or file name) |
+| `--headed` | visible browser, slow motion |
+| `--keep` | leave the server running (its own console window) and the database as the last flow left it; sign in with password `FlowTest#2026` |
+| `--reuse` | use a server already listening on `--port` (start it yourself with `DB_DATABASE=<the flows db>`) |
+| `--db=venusep_laravel_flows` | the database. **Refused** unless the name starts with `venusep_laravel_flows` or `venusep_laravel_test` (never `venusep`, never `venusep_laravel`). It must exist with `utf8mb4_unicode_ci`. |
+| `--port=8120` | where it starts `php artisan serve --no-reload` (with `DB_DATABASE` set for that process). 8000 is refused. |
+| `--snapshot=` | the SQL loaded before each flow (default `FLOWS_SNAPSHOT`, else `C:/xamp5/htdocs/VENUSeP-laravel-helpers/_tools/venusep_snapshot.sql`) |
+
+Before **every flow** the database is re-loaded from the snapshot and every account with a
+password gets `FlowTest#2026` (`admin@gmail.com` and `staff@gmail.com` also have authenticator
+keys; the harness types the current code). Flows never see each other's rows.
+
+Output: a live progress list, then a table (flow → step → PASS/FAIL/SKIPPED, time, error) and
+`laravel/storage/app/venusep-flows/<timestamp>/report.html` — one card per step with its
+screenshot, JavaScript errors, console errors, failed network requests and notes —
+plus `report.json`, the PNGs and the generated fixture images. Exit code 0 = all passed,
+1 = a step failed (or no browser / no flow matched), 2 = refused or bad option.
+Needs Node and a Playwright package already on the machine (the global `@playwright/cli` has
+one); it installs and downloads nothing. The GCash OCR loads Tesseract from a CDN: offline, a
+receipt still goes to manual review, which the flow follows.
+
+### Adding a flow — one file, nothing else
+
+Drop `laravel/tests/flows/flows/<name>.mjs`; it is discovered automatically (flows run in file-name
+order, each on a freshly reset database). Shape:
+
+```js
+export default {
+  name: 'hostel-walk-in',                 // used by --only (defaults to the file name)
+  title: 'Hostel walk-in at the counter',
+  settings: { refunds_enabled: '1' },     // optional: system_settings rows to set after the reset
+  async run(ctx) {
+    await ctx.step('Staff sign in', async () => {
+      ctx.state.staff = await ctx.loginStaff('staff@gmail.com');
+    });
+    await ctx.step('…', async () => { /* drive the page, then check */ });
+  },
+};
+```
+
+`ctx` helpers (`tests/flows/lib/ctx.mjs`):
+
+- `step(title, fn, {timeout})` — runs `fn`, screenshots the page it returns (or the page that was
+  used last), records pass/fail. After a failure the remaining steps are recorded as skipped, so
+  put all work INSIDE steps. Default timeout 90 s.
+- `loginCustomer(email)`, `loginStaff(email)`, `loginAdmin(email)` — each opens a NEW browser
+  context (a separate person), fills the real sign-in form, types the authenticator code when the
+  account asks for one, and returns the signed-in `page`. `newPage(label)` = a fresh guest.
+  A TOTP code is used once per 30 s per account; a second sign-in of the same account waits.
+- `expect.ok / equal / match` (values), `await expect.visible(locator)`, `await expect.text(page, textOrRegExp)`,
+  `await expect.url(page, regexp)` — failures read as sentences in the report. `fail(msg)` too.
+- `await db(sql, params)` / `await dbOne(sql, params)` — READ-ONLY checks (one SELECT, run in a
+  read-only transaction on the flows database; anything else is refused).
+- `await fixtures.idImage(name)` → path of a PNG ID card; `await fixtures.gcashReceipt({ amount,
+  name, number, ref })` → a "Sent via GCash" PNG the in-browser OCR reads (13-digit `ref`, unique
+  per receipt). Both are drawn in the browser (this PHP has no GD).
+- `url(path)`, `password`, `uniq` (run id, for unique emails/names), `state` (share pages and
+  values between steps), `note(text)` (shown under the step), `sleep(ms)`.
+
+Find selectors in the views (`resources/views/...`): prefer ids, roles and visible text. A real app
+bug that blocks a step stays a failing step — report it, do not change app code for the flow.
+Harness pieces: `app/Console/Commands/VenusepFlows.php` (the command),
+`app/Console/Commands/VenusepFlowsTool.php` + `app/Console/VenusepFlows/FlowsDb.php` (reset / SELECT /
+TOTP, flows databases only), `tests/flows/run.mjs` + `lib/` (runner, ctx, report).
+Tests: `php artisan test --filter=FlowsHarness`.

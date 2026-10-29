@@ -83,6 +83,29 @@ class StaffVenueScopeTest extends VenuesTestCase
         $this->assertSame($cover, DB::table('venues')->where('id', 2)->value('cover_photo'));
     }
 
+    /* These JSON routes have no page guard, so the account is re-read here: a
+       suspended account's open session is refused, and an admin demoted to
+       staff is held to their venue on the next request. */
+    public function test_a_suspended_or_demoted_account_is_re_read_from_the_database(): void
+    {
+        $active = (int) DB::table('rooms')->where('room_code', 'r1')->value('is_active');
+        DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 0]);
+        try {
+            $this->actingAsStaff();
+            $this->postForm('admin.room-toggle-active', ['room_id' => 'r1'])
+                ->assertStatus(401)->assertJson(['ok' => false, 'error' => 'not_logged_in']);
+            $this->assertSame($active, (int) DB::table('rooms')->where('room_code', 'r1')->value('is_active'));
+        } finally {
+            DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 1]);
+        }
+
+        /* the session still says "admin", the database says "staff" */
+        $id = DB::table('users')->where('email', 'staff@gmail.com')->value('id');
+        $this->withSession(['user_id' => (int) $id, 'account_type' => 'admin', 'tfa_passed' => true]);
+        $this->postForm('admin.room-toggle-active', ['room_id' => 'r5'])
+            ->assertStatus(403)->assertJson(['error' => 'forbidden']);
+    }
+
     public function test_staff_cannot_rename_another_venue(): void
     {
         $this->actingAsStaff();

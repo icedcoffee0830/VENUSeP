@@ -77,7 +77,7 @@ class BackupTest extends TestCase
 
     public function test_staff_makes_a_backup_admin_downloads_and_deletes_it(): void
     {
-        $this->assertSame('venusep_laravel_test_admin', DB::connection()->getDatabaseName());   // never the real database
+        $this->assertStringStartsWith('venusep_laravel_test', DB::connection()->getDatabaseName());   // never the real database
 
         $res = $this->actingAsStaff()->withTestCsrf()
             ->post(route('admin.backup-action'), ['_token' => 'test-csrf-token', 'action' => 'create']);

@@ -47,6 +47,29 @@ class PaymentSettingsTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('#<div class="ps-foot">\s*<button[^>]*psEdit#', $page->getContent());
     }
 
+    /* A venue added in Venue Management has no GCash account; it must still get a
+       card, or its account could never be set (gcash-account-save handles a first one). */
+    public function test_a_venue_without_an_account_gets_a_card_and_can_be_set_up(): void
+    {
+        $name = 'Admina Test Hall ' . bin2hex(random_bytes(3));
+        $venueId = DB::table('venues')->insertGetId(['venue_code' => strtoupper(str_replace(' ', '-', $name)),
+            'name' => $name, 'venue_type' => 'event', 'description' => 'test', 'is_active' => 1]);
+        $this->useKnownAdminPassword();
+        try {
+            $this->actingAsAdmin()->withTestCsrf()->get(route('admin.payment-settings'))->assertOk()
+                ->assertSee('data-venue="' . $name . '"', false)
+                ->assertSee('No GCash account yet: customers cannot pay this venue by GCash until one is set.');
+
+            $this->post(route('admin.gcash-account-save'), ['_token' => 'test-csrf-token', 'venue' => $name,
+                'account_name' => 'Test Payee', 'mobile_number' => '0917 000 1111', 'password' => $this->pw])
+                ->assertOk()->assertJson(['ok' => true, 'number' => '09170001111', 'previous' => null]);
+            $this->assertSame(1, DB::table('gcash_accounts')->where('venue_id', $venueId)->where('is_active', 1)->whereNull('valid_until')->count());
+        } finally {
+            DB::table('gcash_accounts')->where('venue_id', $venueId)->delete();
+            DB::table('venues')->where('id', $venueId)->delete();
+        }
+    }
+
     public function test_admin_gets_the_gcash_edit_buttons(): void
     {
         $this->actingAsAdmin()->get(route('admin.payment-settings'))->assertOk()

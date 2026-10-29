@@ -220,7 +220,7 @@
         <div class="app-content">
           <div class="container-fluid">
             <div class="ps-grid" id="psGrid">
-@foreach ($gcAccounts as $venue => $acct)
+@foreach ($psCards as $venue => $acct)
 @php $isHostel = $venue === 'USeP Hostel'; @endphp
               <div class="ps-card" data-venue="{{ $venue }}">
                 <div class="ps-venue">

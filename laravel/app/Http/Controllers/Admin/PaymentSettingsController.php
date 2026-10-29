@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use Illuminate\Http\Request;
+use PDO;
 use PDOException;
 
 /* Payment Settings (was admin/payment-settings.php). Route middleware: staff
@@ -47,8 +48,25 @@ class PaymentSettingsController
         }
         $rsJustSaved = $request->query('refunds') === 'saved';
 
+        /* An active venue with no current account (one just added in Venue
+           Management) still gets a card — otherwise nobody could ever set where
+           it is paid, and its customers could never pay by GCash. */
+        $psCards = $gcAccounts;
+        try {
+            foreach (venusep_db()->query(
+                "SELECT v.name FROM venues v
+                  WHERE v.is_active = 1
+                    AND NOT EXISTS (SELECT 1 FROM gcash_accounts g
+                                     WHERE g.venue_id = v.id AND g.is_active = 1 AND g.valid_until IS NULL)
+                  ORDER BY v.id"
+            )->fetchAll(PDO::FETCH_COLUMN) as $psVenue) {
+                $psCards[$psVenue] = ['name' => '', 'number' => '',
+                    'note' => 'No GCash account yet: customers cannot pay this venue by GCash until one is set.'];
+            }
+        } catch (PDOException $e) { /* the venues that have one still show */ }
+
         return view('admin.payment-settings', compact(
-            'gcAccounts', 'POSTPAY_GRACE_DAYS', 'rsDetails', 'rsDbOk', 'rsEnabled', 'rsIsAdmin', 'rsCsrf',
+            'psCards', 'POSTPAY_GRACE_DAYS', 'rsDetails', 'rsDbOk', 'rsEnabled', 'rsIsAdmin', 'rsCsrf',
             'rsStayRefundable', 'rsOpenRefunds', 'rsLockSeconds', 'rsJustSaved'
         ));
     }

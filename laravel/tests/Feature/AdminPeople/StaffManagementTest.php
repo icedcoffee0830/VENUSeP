@@ -88,15 +88,15 @@ class StaffManagementTest extends TestCase
         $this->assertSame(1, (int) DB::table('users')->where('id', 1)->value('is_active'));
     }
 
-    public function test_the_last_active_admin_cannot_be_suspended(): void
+    public function test_a_suspended_admin_cannot_suspend_the_last_active_admin(): void
     {
-        /* staff-save never re-reads the ACTOR (old behaviour), so with the actor's own row
-           inactive, admin 75 is the only active admin left — the count guard answers. */
+        /* Since 2026-10-29 staff-save re-reads the ACTOR: with the actor's own row inactive
+           it refuses before the last-admin count guard (which stays as a backstop). */
         $this->actingAsAdmin()->withSession(['_token' => 'tok']);
         DB::table('users')->where('id', 1)->update(['is_active' => 0]);
         try {
             $this->post_(['action' => 'set_active', 'user_id' => 75, 'active' => '0'])
-                ->assertStatus(409)->assertJson(['message' => 'This is the last active administrator. Suspending it would lock everyone out of the settings that only an administrator can change.']);
+                ->assertStatus(403)->assertJson(['message' => 'Only an administrator can manage staff accounts.']);
             $this->assertSame(1, (int) DB::table('users')->where('id', 75)->value('is_active'));
         } finally {
             DB::table('users')->whereIn('id', [1, 75])->update(['is_active' => 1]);

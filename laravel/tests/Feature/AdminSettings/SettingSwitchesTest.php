@@ -29,7 +29,7 @@ class SettingSwitchesTest extends TestCase
         $this->get(route('admin.discount-save'))->assertStatus(405)->assertJson(['error' => 'method']);
         $this->post(route('admin.discount-save'))->assertStatus(401)
             ->assertExactJson(['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
-        $this->actingAsStaff()->withTestCsrf()->post(route('admin.discount-save'), ['_token' => 'bad'])
+        $this->actingAsAdmin()->withTestCsrf()->post(route('admin.discount-save'), ['_token' => 'bad'])
             ->assertStatus(400)->assertJson(['error' => 'csrf']);
         $this->post(route('admin.discount-save'), ['_token' => 'test-csrf-token', 'percent' => '101', 'reason' => 'x'])
             ->assertStatus(400)->assertJson(['error' => 'bad_percent', 'message' => 'Enter a whole number from 0 to 100.']);
@@ -37,13 +37,13 @@ class SettingSwitchesTest extends TestCase
             ->assertStatus(400)->assertJson(['error' => 'no_reason']);
     }
 
-    public function test_staff_changes_the_discount_and_history_is_written(): void
+    public function test_admin_changes_the_discount_and_history_is_written(): void   // admin-only since 2026-10-29 (BugFixesTest)
     {
         $old = $this->setting('discount_percent');
         $new = $old === '15' ? '16' : '15';
         $before = DB::table('system_settings_history')->where('setting_key', 'discount_percent')->count();
 
-        $this->actingAsStaff()->withTestCsrf()
+        $this->actingAsAdmin()->withTestCsrf()
             ->post(route('admin.discount-save'), ['_token' => 'test-csrf-token', 'percent' => $new, 'reason' => 'test run'])
             ->assertOk()->assertExactJson(['ok' => true, 'percent' => (int) $new, 'previous' => (int) $old]);
         $this->assertSame($new, $this->setting('discount_percent'));

@@ -1122,7 +1122,7 @@
         body.append('check_out_time', document.getElementById('roomCheckOut').value);
         body.append('description', document.getElementById('roomDesc').value);
         body.append('maintenance', JSON.stringify(mtv));
-        body.append('amenities', JSON.stringify(selectedAmenities()));
+        body.append('amenities', JSON.stringify(window.selectedAmenities()));
         body.append('_token', VM_CSRF);
         fetch({!! json_encode(route('admin.room-save')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
@@ -1204,12 +1204,13 @@
           }).join('');
         }
 
-        function selectedAmenities() {
+        /* On window, like room-form: the Save handler lives in another script scope */
+        window.selectedAmenities = function () {
           return Array.prototype.slice
             .call(document.querySelectorAll('#vmAmenityPool .vm-chip.selected'))
             .map(function (c) { return c.getAttribute('data-amenity'); })
             .filter(Boolean);
-        }
+        };
 
         buildAmenities();
 

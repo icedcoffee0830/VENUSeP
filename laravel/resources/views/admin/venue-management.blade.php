@@ -355,6 +355,7 @@ function vmMaint($m, $today) {
       .vm-setting-copy p { margin: 0; font-size: 0.82rem; line-height: 1.55; color: #6b675f; max-width: 60ch; }
       .vm-setting-act { flex: none; }
       .vm-setting-form { display: flex; flex-wrap: wrap; gap: 0.9rem 1.2rem; align-items: flex-end; padding: 1rem 1.35rem 1.1rem; border-top: 1px solid var(--vm-border); background: #fff; }
+      .vm-setting-form[hidden], .vm-setting-msg[hidden] { display: none; }   /* display:flex above would beat the hidden attribute */
       .vm-setting-field { display: flex; flex-direction: column; gap: 0.3rem; }
       .vm-setting-field-wide { flex: 1 1 320px; min-width: 0; }
       .vm-setting-field label { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #8a857d; }
@@ -808,9 +809,11 @@ function vmMaint($m, $today) {
             <div class="vm-setting-title">USeP discount rate <span class="vm-loc-badge">Admin only</span></div>
             <p>For USeP students, faculty and employees, once staff verify their USeP ID. Changing it affects <strong>new bookings only</strong> &mdash; existing bookings keep the rate they were quoted. <strong>0%</strong> switches the discount off.</p>
           </div>
+          @if (admin_is_admin()) {{-- the rate is admin-only; staff see it, not the button --}}
           <div class="vm-setting-act">
             <button class="vm-btn vm-btn-primary" type="button" id="dcOpen" onclick="dcToggle(true)">Change rate</button>
           </div>
+          @endif
         </div>
 
         <form class="vm-setting-form" id="dcForm" hidden onsubmit="return false">

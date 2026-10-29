@@ -74,7 +74,7 @@ class BookingSubmitController extends Controller
 
         /* ---- the room, and the rate THIS server believes in ---- */
         $roomStmt = $pdo->prepare(
-            "SELECT r.id, r.room_type, r.is_active, v.name AS venue_name,
+            "SELECT r.id, r.name, r.room_type, r.is_active, v.name AS venue_name,
                     erd.attendee_capacity, erd.fee_per_day,
                     hrd.rate_per_head_per_night
                FROM rooms r

@@ -43,6 +43,7 @@ class GcashAccountSaveController
         $acctName  = trim((string) ($request->input('account_name') ?? ''));
         $digits    = preg_replace('/\D+/', '', (string) ($request->input('mobile_number') ?? ''));
         $note      = trim((string) ($request->input('note') ?? ''));
+        $noteSent  = $request->has('note');   /* Payment Settings sends no note: keep the current one */
         $password  = (string) ($request->input('password') ?? '');
 
         if ($venueName === '') {
@@ -129,7 +130,7 @@ class GcashAccountSaveController
             /* Nothing to do if neither field moved — avoids filling the history with
                rows that record no change. */
             $cur = $pdo->prepare(
-                'SELECT id, account_name, mobile_number FROM gcash_accounts
+                'SELECT id, account_name, mobile_number, note FROM gcash_accounts
                   WHERE venue_id = :v AND is_active = 1 AND valid_until IS NULL'
             );
             $cur->execute([':v' => $venueId]);
@@ -150,7 +151,7 @@ class GcashAccountSaveController
                  VALUES (:v, :n, :m, :o, :u)'
             )->execute([
                 ':v' => $venueId, ':n' => $acctName, ':m' => $digits,
-                ':o' => $note !== '' ? mb_substr($note, 0, 500) : null,
+                ':o' => $noteSent ? ($note !== '' ? mb_substr($note, 0, 500) : null) : ($current['note'] ?? null),
                 ':u' => (int) session('user_id'),
             ]);
 

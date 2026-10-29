@@ -14,7 +14,8 @@ class HostelRoomFormController extends Controller
 {
     public function __invoke(Request $request)
     {
-        extract(legacy('venues', 'room-photos', 'hostel-rooms', 'amenities'));
+        /* a DISABLED room can be edited too (Venue Management links to it) */
+        extract(legacy(['hrIncludeInactive' => true], 'venues', 'room-photos', 'hostel-rooms', 'amenities'));
 
         $roomId = $request->query('id') ?? '';
         $roomFormRoom = null;

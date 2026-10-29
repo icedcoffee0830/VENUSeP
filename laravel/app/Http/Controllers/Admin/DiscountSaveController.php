@@ -36,6 +36,10 @@ class DiscountSaveController
         if (!session()->has('user_id') || !in_array($sessionType, ['admin', 'staff'], true)) {
             return $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
         }
+        /* The rate is admin-only (decided 2026-10-29), like the refund switch. */
+        if ($sessionType !== 'admin') {
+            return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the administrator can change the discount rate.']);
+        }
         if (!$this->csrfOk($request)) {
             return $this->reply(400, ['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
         }

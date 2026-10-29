@@ -165,6 +165,15 @@ class StaffController
             return $this->reply(503, ['ok' => false, 'message' => 'The database is unreachable, so nothing was saved.']);
         }
 
+        /* The SESSION says admin; the DATABASE decides. A suspended (or demoted) admin's
+           open session must not keep managing staff until some page throws them out. */
+        $me = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :u');
+        $me->execute([':u' => $actor]);
+        $me = $me->fetch();
+        if (!$me || !(bool) $me['is_active'] || $me['account_type'] !== 'admin') {
+            return $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can manage staff accounts.']);
+        }
+
         $row = $pdo->prepare(
             'SELECT u.id, u.email, u.account_type, u.is_active, s.user_id AS staff_user_id, s.venue_id AS old_venue_id
                FROM users u

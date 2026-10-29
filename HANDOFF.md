@@ -228,3 +228,25 @@ git worktree list
 If you are a Claude session continuing this: the flow-tester helper may be resumable from the
 original session; otherwise start a new one in the `lv-flows` worktree with §5 as its brief,
 and keep committing after every step so a usage limit never loses work.
+
+## 10. Night 2 (2026-10-30) — IN PROGRESS: bug fixing + bug hunting (Laravel only)
+
+Aron's decisions and the agents' rules: `C:\xamp5\htdocs\VENUSeP-laravel-helpers\_tools\NIGHT-BRIEF.md`.
+Google sign-in now WORKS in the Laravel copy (git-ignored `laravel/legacy/includes/google-config.php`
+filled in by Aron; redirect URI `http://localhost:8000/customer/google-callback` added in Google Cloud;
+open the site as `localhost:8000`, not 127.0.0.1).
+
+7 agents, each in its own helper worktree/branch (started from `laravel` at f498aba):
+abook (booking-request bugs 4,6,7,8,9,10 + the §7 fake actions), auth (bugs 1,2,5),
+and bug hunters cbook, cacct, venues, admina, adminb. Flow DBs `venusep_laravel_flows_<area>`,
+ports 8121-8127.
+
+**If the usage limit stopped them — how to resume:**
+1. For each worktree in `C:\xamp5\htdocs\VENUSeP-laravel-helpers\<area>`: `git log --oneline f498aba..HEAD`
+   (finished fixes) and `git status` (half-done work, not committed — finish it or discard it).
+2. In each, run `C:/xamp5/php/php.exe artisan test` from `laravel/`; merge only green branches into
+   `laravel` (`git merge lv-<area>` in `C:\xamp5\htdocs\VENUSeP-laravel`), one at a time, re-running
+   the tests after each merge.
+3. Restart unfinished areas with the brief (same prompt shape: area, worktree, DB, port, task list).
+4. At the end: `run-tests.bat` + full `artisan test` green, then write the morning report here
+   (fixed / choices made where docs were silent / needs Aron / cross-area bugs).

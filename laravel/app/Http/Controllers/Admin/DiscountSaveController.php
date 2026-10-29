@@ -66,6 +66,17 @@ class DiscountSaveController
         try {
             $pdo->beginTransaction();
 
+            /* The session's role is not proof: a suspended or demoted admin keeps
+               it until their next page load. Re-read the account, as the refund
+               switch does. */
+            $me = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :id');
+            $me->execute([':id' => (int) session('user_id')]);
+            $me = $me->fetch();
+            if (!$me || !(bool) $me['is_active'] || $me['account_type'] !== 'admin') {
+                $pdo->rollBack();
+                return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the administrator can change the discount rate.']);
+            }
+
             /* FOR UPDATE: two admins saving at once must not interleave, or the
                history would record an "old value" that was never current. */
             $cur = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'discount_percent' FOR UPDATE");

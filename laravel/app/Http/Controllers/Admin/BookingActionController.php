@@ -169,6 +169,17 @@ class BookingActionController extends Controller
         $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
     }
 
+    /* An action that changes no status (paperwork, arrival, the attempt
+       allowance): the trigger never sees it, so its timeline row is written here. */
+    private function timeline(PDO $pdo, int $bookingId, string $code, int $actor, string $note, ?array $meta = null): void
+    {
+        $pdo->prepare(
+            'INSERT INTO booking_timeline (booking_id, action_code, performed_by_user_id, note, metadata_json)
+             VALUES (:b, :c, :u, :n, :m)'
+        )->execute([':b' => $bookingId, ':c' => $code, ':u' => $actor, ':n' => $note,
+                    ':m' => $meta !== null ? json_encode($meta) : null]);
+    }
+
     /* What each action would have produced in demo mode, so the screen still moves. */
     private function demoReply(string $action, string $ref): never
     {
@@ -280,10 +291,12 @@ class BookingActionController extends Controller
             if ($pos === '') {
                 $this->reply(400, ['ok' => false, 'message' => 'Enter the POS number.']);
             }
+            $pdo->beginTransaction();
             $pdo->prepare(
                 'UPDATE hostel_booking_details SET pos_number = :p, pos_recorded_at = NOW() WHERE booking_id = :b'
             )->execute([':p' => mb_substr($pos, 0, 100), ':b' => $bookingId]);
-            /* Payment only opens now if this booking pre-pays. */
+            /* Payment only opens now if this booking pre-pays — the status change
+               writes the timeline itself; otherwise the POS is paperwork, logged here. */
             if ($bk['refunds_allowed'] && !$bk['pay_to_use'] && $bk['payment_status'] === 'await_pos') {
                 $this->setActor($pdo, $actor, 'POS ' . $pos . ' recorded; payment unlocked.');
                 $pdo->prepare(
@@ -292,7 +305,10 @@ class BookingActionController extends Controller
                       WHERE id = :b2"
                 )->execute([':b' => $bookingId, ':u' => $actor, ':b2' => $bookingId]);
                 $this->clearActor($pdo);
+            } else {
+                $this->timeline($pdo, $bookingId, 'pos_recorded', $actor, 'POS ' . $pos . ' recorded (CEDU).');
             }
+            $pdo->commit();
             break;
 
         /* ---- HOSTEL: the University Cashier issued the Official Receipt.
@@ -305,10 +321,13 @@ class BookingActionController extends Controller
             if ($or === '') {
                 $this->reply(400, ['ok' => false, 'message' => 'Enter the Official Receipt number.']);
             }
+            $pdo->beginTransaction();
             $pdo->prepare(
                 'UPDATE hostel_booking_details SET official_receipt_no = :o, official_receipt_recorded_at = NOW()
                   WHERE booking_id = :b'
             )->execute([':o' => mb_substr($or, 0, 100), ':b' => $bookingId]);
+            $this->timeline($pdo, $bookingId, 'or_recorded', $actor, 'Official Receipt ' . $or . ' recorded (University Cashier).');
+            $pdo->commit();
             break;
 
         /* ---- HOSTEL: the guest arrived. PAY TO USE (2026-10-27): no bed until paid. ---- */
@@ -323,9 +342,12 @@ class BookingActionController extends Controller
                         ? 'Not paid yet. The guest chose to pay cash at the front desk — take it first (Cash received).'
                         : 'Not paid yet. The guest pays before using the bed — by GCash in Pay now, or by choosing cash at the front desk there.')]);
             }
+            $pdo->beginTransaction();
             $pdo->prepare(
                 'UPDATE hostel_booking_details SET checked_in = 1, checked_in_at = NOW() WHERE booking_id = :b'
             )->execute([':b' => $bookingId]);
+            $this->timeline($pdo, $bookingId, 'checked_in', $actor, 'Guest checked in.');
+            $pdo->commit();
             break;
 
         /* ---- HOSTEL, PAY TO USE: the guest paid CASH at the front desk. ---- */
@@ -427,13 +449,9 @@ class BookingActionController extends Controller
             $pdo->beginTransaction();
             $pdo->prepare('UPDATE bookings SET receipt_attempts_allowed = :n, updated_by_user_id = :u WHERE id = :b')
                 ->execute([':n' => $newAllowed, ':u' => $actor, ':b' => $bookingId]);
-            /* Not a status change, so the timeline trigger would not see it — written here. */
-            $pdo->prepare(
-                "INSERT INTO booking_timeline (booking_id, action_code, performed_by_user_id, note, metadata_json)
-                 VALUES (:b, 'receipt_attempts_allowed', :u, :n, :m)"
-            )->execute([':b' => $bookingId, ':u' => $actor,
-                        ':n' => '5 more GCash receipt attempts (now ' . $newAllowed . ' in total): ' . $note,
-                        ':m' => json_encode(['allowed_before' => (int) $a['receipt_attempts_allowed'], 'allowed_after' => $newAllowed])]);
+            $this->timeline($pdo, $bookingId, 'receipt_attempts_allowed', $actor,
+                '5 more GCash receipt attempts (now ' . $newAllowed . ' in total): ' . $note,
+                ['allowed_before' => (int) $a['receipt_attempts_allowed'], 'allowed_after' => $newAllowed]);
             $pdo->commit();
             break;
         }

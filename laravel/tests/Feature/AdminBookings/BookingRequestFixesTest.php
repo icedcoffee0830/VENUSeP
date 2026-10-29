@@ -50,6 +50,25 @@ class BookingRequestFixesTest extends TestCase
         $this->assertSame($this->pageRow($ref)['tl'], $tl);
     }
 
+    /* Bug 6: recording the POS or the OR wrote nothing to booking_timeline, so
+       neither survived a reload. Check-in had the same gap. */
+    public function test_pos_or_and_check_in_are_in_the_timeline_after_a_reload(): void
+    {
+        [$id, $ref] = $this->seedHostelBooking('approved', 'paid_cash', 'cash', false, true);
+        DB::table('hostel_booking_details')->where('booking_id', $id)->update(['check_in_date' => now()->toDateString(),
+            'check_out_date' => now()->addDay()->toDateString()]);
+        $this->actingAsAdmin();
+        foreach ([['record_pos', 'pos' => 'POS-123'], ['record_or', 'or' => 'OR-456'], ['check_in']] as $a) {
+            $this->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => array_shift($a)] + $a)->assertOk();
+        }
+
+        $tl = array_slice($this->pageRow($ref)['tl'], -3);
+        $this->assertSame(['POS recorded', 'Official Receipt recorded', 'Guest checked in'], array_column($tl, 'x'));
+        $this->assertSame(['POS POS-123 recorded (CEDU).', 'Official Receipt OR-456 recorded (University Cashier).', 'Guest checked in.'],
+            array_column($tl, 'm'));
+        $this->assertStringEndsWith(' — admin@gmail.com', $tl[0]['w']);   // the admin has no staff profile: the email names them
+    }
+
     public function test_the_page_has_no_fake_timeline_stamp(): void
     {
         [, $ref] = $this->seedVenueBooking('r1');

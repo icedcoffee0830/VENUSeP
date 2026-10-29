@@ -219,6 +219,9 @@ class BookingActionController extends Controller
                 if (!empty($demoAfter['payToUse']) && !in_array($pay, ['confirmed', 'paid_cash'], true)) {
                     $this->reply(409, ['ok' => false, 'message' => 'Not paid yet. The guest pays before using the bed.']);
                 }
+                if ($demoAfter['eventDateIso'] > date('Y-m-d')) {
+                    $this->reply(409, ['ok' => false, 'message' => 'Too early: check-in opens on ' . date('M j, Y', strtotime($demoAfter['eventDateIso'])) . ', the first night of the stay.']);
+                }
                 break;
             case 'record_or':
             case 'allow_receipt_attempts': break;   // documents, arrival and the attempt allowance change no status
@@ -341,6 +344,14 @@ class BookingActionController extends Controller
                     : ($bk['payment_status'] === 'await_cash'
                         ? 'Not paid yet. The guest chose to pay cash at the front desk — take it first (Cash received).'
                         : 'Not paid yet. The guest pays before using the bed — by GCash in Pay now, or by choosing cash at the front desk there.')]);
+            }
+            /* Not before the stay begins (Aron, 2026-10-30): the bed is booked from the check-in date. */
+            $stay = $pdo->prepare('SELECT check_in_date, check_in_date > CURDATE() AS early FROM hostel_booking_details WHERE booking_id = :b');
+            $stay->execute([':b' => $bookingId]);
+            $stay = $stay->fetch();
+            if ($stay && $stay['early']) {
+                $this->reply(409, ['ok' => false,
+                    'message' => 'Too early: check-in opens on ' . date('M j, Y', strtotime($stay['check_in_date'])) . ', the first night of the stay.']);
             }
             $pdo->beginTransaction();
             $pdo->prepare(

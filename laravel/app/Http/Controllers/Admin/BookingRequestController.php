@@ -171,6 +171,7 @@ class BookingRequestController extends Controller
                 'pos'       => $b['pos'] !== '' ? $b['pos'] : null,
                 'or'        => $b['officialReceipt'] !== '' ? $b['officialReceipt'] : null,
                 'checkedIn' => $b['checkedIn'],
+                'checkInOpen' => $b['eventDateIso'] <= date('Y-m-d'),   /* not before the first night (2026-10-30) */
                 /* pay before using the bed (2026-10-27, DB-DECISIONS #26) */
                 'payToUse'  => $b['payToUse'],
                 'methodChosen' => $b['methodCode'] !== null,

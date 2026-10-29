@@ -548,6 +548,13 @@
           </div>`;
       }
 
+      /* Not before the first night of the stay (Aron, 2026-10-30) — the server refuses it too. */
+      function checkInAction() {
+        return cur.checkInOpen
+          ? `<button class="br-btn br-btn-primary" onclick="checkIn()">Check the guest in</button>`
+          : `<span class="none">Paid &mdash; check-in opens on ${esc(cur.checkIn)}</span>`;
+      }
+
       /* which buttons make sense right now (reservation-level, in the header) */
       function hdrActions() {
         /* A finished booking is a RECORD, not a task. Most bookings in the
@@ -575,7 +582,7 @@
            paperwork for later and holds nothing up. */
         if (cur.kind === 'hostel' && cur.payToUse && cur.res === 'approved' && !cur.checkedIn) {
           if (cur.pay === 'confirmed' || cur.pay === 'paid_cash') {
-            return `<button class="br-btn br-btn-primary" onclick="checkIn()">Check the guest in</button>`;
+            return checkInAction();
           }
           /* Cash received only once the GUEST chose the front desk in Pay now
              (2026-10-28); if they cancel that, it goes away again. */
@@ -587,7 +594,7 @@
            OR in hand, because that is what the guest is asked to show. */
         if (cur.kind === 'hostel' && cur.pay === 'confirmed' && !cur.checkedIn) {
           return cur.or
-            ? `<button class="br-btn br-btn-primary" onclick="checkIn()">Check the guest in</button>`
+            ? checkInAction()
             : `<span class="none">Record the OR before check-in — the guest has to show it</span>`;
         }
         if (cur.kind === 'hostel' && cur.checkedIn) return `<span class="none">Guest checked in &check;</span>`;

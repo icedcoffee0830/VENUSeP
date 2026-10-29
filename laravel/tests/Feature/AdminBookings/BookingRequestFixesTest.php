@@ -86,6 +86,23 @@ class BookingRequestFixesTest extends TestCase
         $this->page($hostelRef)->assertSee("cur.pay === 'paid_cash') return \"Paid at the front desk\";", false);
     }
 
+    /* Bug 9: a paid stay could be checked in days before its check-in date. */
+    public function test_check_in_only_from_the_check_in_date(): void
+    {
+        [$id, $ref] = $this->seedHostelBooking('approved', 'paid_cash', 'cash', false, true);   // check-in 400+ days out
+        $this->assertFalse($this->pageRow($ref)['checkInOpen']);
+        $this->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => 'check_in'])
+            ->assertStatus(409)->assertJson(['ok' => false])
+            ->assertJsonPath('message', fn ($m) => str_starts_with($m, 'Too early: check-in opens on '));
+        $this->assertSame(0, (int) DB::table('hostel_booking_details')->where('booking_id', $id)->value('checked_in'));
+
+        DB::table('hostel_booking_details')->where('booking_id', $id)->update(['check_in_date' => now()->toDateString(),
+            'check_out_date' => now()->addDay()->toDateString()]);
+        $this->assertTrue($this->pageRow($ref)['checkInOpen']);
+        $this->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => 'check_in'])->assertOk();
+        $this->assertSame(1, (int) DB::table('hostel_booking_details')->where('booking_id', $id)->value('checked_in'));
+    }
+
     public function test_the_page_has_no_fake_timeline_stamp(): void
     {
         [, $ref] = $this->seedVenueBooking('r1');

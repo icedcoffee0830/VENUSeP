@@ -148,6 +148,30 @@ Aron said to record these, not change code. Each is in BOTH the old site and the
    (old site: `http://localhost/VENUSeP/customer/google-callback.php`; Laravel:
    `http://localhost:8000/customer/google-callback`, browse via `localhost`). Aron is trying this.
 
+### Smaller bugs the browser flow tester found (2026-10-30) — NOT fixed, none blocks a flow
+
+All on the staff side, in both sites. File paths are the Laravel copy.
+
+4. **Fake date on new timeline entries.** After "Approve", "Confirm payment" etc. on
+   `admin/booking-request`, the entry the page adds says "Jul 14, 2026 — You (staff)" until a
+   reload — a mockup leftover: `function now() { return 'Jul 14, 2026 — You (staff)'; }` in
+   `resources/views/admin/booking-request.blade.php` (~line 1096). Same root as the still-open
+   "client-only actions" item in §7.
+5. **Staff are shown as "Administrator".** The header name/initials are placeholder text
+   (`$hdName` in `resources/views/partials/header.blade.php`, from the old `includes/header.php`),
+   and the sidebar lists admin-only pages (Payment Settings, Backup & Restore…) to staff. Not
+   checked whether those pages actually let staff in.
+6. **POS and OR leave no trace in the history.** Recording the POS or the OR on a pay-to-use
+   (hostel) booking writes nothing to `booking_timeline`, so after a reload neither appears.
+7. **"Submitted" time shows 12:00 AM.** `app/Http/Controllers/Admin/BookingRequestController.php`
+   ~line 132 builds the time from a date-only field.
+8. **Hostel cash label.** A hostel stay paid at the front desk is labelled "Paid at cashier".
+9. **Check-in allowed days early.** "Check the guest in" is offered (and accepted by the server)
+   as soon as a stay is paid, even days before the check-in date. Possibly intended — ask Aron.
+10. **Rejecting a receipt asks no reason.** "Reject receipt" always sends the fixed text
+    "reference not found in the Transaction History", which the customer then sees. Maybe fine;
+    ask Aron if staff should type a reason.
+
 ## 7. Open items and decisions
 
 - **Not pushed.** Push `laravel` (and `bugfixes`) only when Aron says so — teammates still

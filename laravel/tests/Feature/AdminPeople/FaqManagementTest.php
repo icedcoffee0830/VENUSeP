@@ -100,6 +100,21 @@ class FaqManagementTest extends TestCase
         }
     }
 
+    /* A second click on Delete (or another admin deleting it first) is not a "built-in"
+       refusal, and saving or hiding a question that is gone is not "saved". */
+    public function test_a_question_that_no_longer_exists_says_so(): void
+    {
+        $this->actingAsStaff();
+        foreach (['delete', 'toggle'] as $action) {
+            $this->post(route('admin.faq-save'), ['action' => $action, 'id' => 999999])
+                ->assertRedirect(route('admin.faq-management') . '?msg=missing');
+        }
+        $this->post(route('admin.faq-save'), ['action' => 'edit', 'id' => 999999, 'section' => 'cash', 'policy' => 'any',
+            'question' => 'Gone?', 'answer' => 'x'])
+            ->assertRedirect(route('admin.faq-management') . '?msg=missing');
+        $this->assertNull(DB::table('faqs')->where('question', 'Gone?')->first());
+    }
+
     public function test_toggle_twice_and_move_round_trip(): void
     {
         $this->actingAsStaff();

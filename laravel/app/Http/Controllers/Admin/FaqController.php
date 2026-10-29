@@ -128,13 +128,18 @@ class FaqController
                 case 'toggle':
                     $stmt = $pdo->prepare("UPDATE faqs SET is_active = NOT is_active, updated_by_user_id = :u WHERE id = :id");
                     $stmt->execute([':u' => $userId, ':id' => $id]);
-                    return $this->back('toggled');
+                    return $this->back($stmt->rowCount() ? 'toggled' : 'missing');   /* NOT is_active always changes a row that exists */
 
                 case 'delete':
                     /* built-ins ship with the system: hide them, never delete them */
                     $stmt = $pdo->prepare("DELETE FROM faqs WHERE id = :id AND is_builtin = 0");
                     $stmt->execute([':id' => $id]);
-                    return $this->back($stmt->rowCount() ? 'deleted' : 'builtin');
+                    if ($stmt->rowCount()) {
+                        return $this->back('deleted');
+                    }
+                    $left = $pdo->prepare("SELECT 1 FROM faqs WHERE id = :id");
+                    $left->execute([':id' => $id]);
+                    return $this->back($left->fetchColumn() ? 'builtin' : 'missing');   /* gone already: a second click, or another admin */
 
                 case 'restore':
                     $stmt = $pdo->prepare("UPDATE faqs SET question = default_question, answer = default_answer, updated_by_user_id = :u

@@ -18,6 +18,8 @@ class SkeletonTest extends TestCase
         Route::middleware(['web', 'booking.access'])->get('/_t/booking', fn () => 'booking ok');
         Route::middleware(['web', 'staff'])->get('/_t/admin-layout', fn () => view('_skeleton.admin-page'));
         Route::middleware(['web', 'customer'])->get('/_t/customer-layout', fn () => view('_skeleton.customer-page'));
+        /* Laravel skips its CSRF check under phpunit, so the expired-page reply is exercised directly */
+        Route::middleware(['web'])->post('/_t/expired', fn () => throw new \Illuminate\Session\TokenMismatchException());
         Route::middleware('web')->get('/_t/nav', fn () => view('_skeleton.nav-page'));
         Route::middleware('web')->get('/_t/legacy', function () {
             legacy('db', 'pricing', 'bookings');
@@ -99,5 +101,14 @@ class SkeletonTest extends TestCase
             ->assertSee(route('customer.booking-history'), false)->assertSee(route('customer.logout'), false);
         $this->flushSession();
         $this->actingAsStaff()->get('/_t/nav?counter=1')->assertOk()->assertSee(route('admin.dashboard'), false);
+    }
+
+    public function test_an_expired_page_gets_the_old_json_replies(): void
+    {
+        $this->actingAsStaff()->post('/_t/expired', [], ['Accept' => '*/*'])->assertStatus(400)
+            ->assertJson(['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
+        $this->flushSession();
+        $this->post('/_t/expired', [], ['Accept' => '*/*'])->assertStatus(401)->assertJson(['ok' => false, 'error' => 'not_logged_in']);
+        $this->post('/_t/expired', [], ['Accept' => 'text/html'])->assertStatus(419);   // a form post: Laravel's page
     }
 }

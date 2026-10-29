@@ -16,7 +16,7 @@ Route::get('/admin/booking-request', Admin\BookingRequestController::class)->mid
 Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)->name('admin.booking-action');
 Route::match(['get', 'post'], '/admin/booking-create', PendingController::class)->name('admin.booking-create');
 Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsController::class)->name('admin.booking-emails');
-Route::get('/admin/calendar', PendingController::class)->name('admin.calendar');
+Route::get('/admin/calendar', Admin\CalendarController::class)->middleware('staff')->name('admin.calendar');
 Route::get('/admin/receipt', Admin\ReceiptController::class)->middleware('staff')->name('admin.receipt');
 Route::get('/admin/transaction-history', Admin\TransactionHistoryController::class)->middleware('staff')->name('admin.transaction-history');
 /* Used by customers AND staff: each answers a 404 (never a redirect, never 403) to anyone else. */

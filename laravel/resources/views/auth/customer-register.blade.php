@@ -270,7 +270,7 @@
             const submitBtn = form.querySelector('button[type="submit"]');
             if (submitBtn) submitBtn.disabled = true;
             const body = new FormData(form);
-            body.append('csrf', CSRF);
+            body.append('_token', CSRF);
             body.append('kind', 'customer');
             fetch(@json(route('root.register-submit')), { method: 'POST', body: body, credentials: 'same-origin' })
               .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })

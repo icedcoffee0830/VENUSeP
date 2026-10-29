@@ -166,7 +166,7 @@
     };
     var post = function (fields) {
       var body = new URLSearchParams(fields);
-      body.set('csrf', csrf);
+      body.set('_token', csrf);   // LARAVEL: the field ValidateCsrfToken reads
       say('');
       msg.textContent = 'Checking…';
       busy(true);

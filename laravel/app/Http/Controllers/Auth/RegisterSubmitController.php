@@ -12,8 +12,6 @@ use PDOException;
    See the old file's header for the full reasoning; the rules are unchanged. */
 class RegisterSubmitController
 {
-    use LegacyCsrf;
-
     /* rg_reply(): the JSON reply, ending the request (thrown, like the old exit). */
     private function reply(int $status, array $data): never
     {
@@ -32,9 +30,7 @@ class RegisterSubmitController
                     ->header('Allow', 'POST')->header('Cache-Control', 'no-store')
             );
         }
-        if (!$this->legacyCsrfValid($request)) {
-            $this->reply(400, ['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
-        }
+        /* The CSRF token is checked by Laravel (an expired page gets the old JSON reply, bootstrap/app.php). */
 
         $post = $request->request;
         $kindRaw = (string) $post->get('kind', '');

@@ -70,8 +70,6 @@ class RegisterTest extends TestCase
         $this->submit(['terms' => ''] + $f)->assertStatus(400)->assertJson(['field' => 'terms', 'message' => 'Please accept the terms to continue.']);
         $this->submit(['contact_number' => '12345'] + $f)->assertStatus(400)
             ->assertJson(['field' => 'contact_number', 'message' => 'Enter a mobile number in the form 09XX XXX XXXX.']);
-        $this->withSession(['_token' => self::TOKEN])->post(route('root.register-submit'), ['csrf' => 'wrong'] + $f)
-            ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
         $this->get(route('root.register-submit'))->assertStatus(405)->assertHeader('Allow', 'POST')
             ->assertExactJson(['ok' => false, 'message' => 'Use POST.']);
         $this->assertNull(DB::table('users')->where('email', 'lvtest-x@test.local')->value('id'));

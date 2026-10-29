@@ -86,6 +86,60 @@ class BookingSubmitTest extends TestCase
         $this->assertSame($before, DB::table('bookings')->count());
     }
 
+    private function hostelPost(array $over = []): array
+    {
+        $in = date('Y-m-d', strtotime('+1 day'));
+        return $over + [
+            '_token' => 'test-token', 'type' => 'hostel', 'room' => 'h1', 'affiliated' => '0', 'agree_no_refund' => '1',
+            'check_in' => $in, 'check_out' => date('Y-m-d', strtotime($in . ' +1 day')),
+            'occupants' => json_encode([['name' => 'Guest One', 'gender' => 'male']]),
+            'id_document' => $this->idFile(),
+        ];
+    }
+
+    /* The page only offers 7:00 AM - 10:00 PM in half hours; the server held
+       whatever it was sent (an all-night 00:00-23:59, or 25:99). */
+    public function test_venue_hours_outside_the_bookable_window_are_refused(): void
+    {
+        $before = DB::table('bookings')->count();
+        $day = date('Y-m-d', strtotime('+' . random_int(400, 1400) . ' days'));
+        foreach ([['05:00', '09:00'], ['20:00', '23:30'], ['00:00', '23:59'], ['08:00', '25:99']] as [$s, $e]) {
+            $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
+                'date_start' => $day, 'date_end' => $day,
+                'times' => json_encode([$day => ['start' => $s, 'end' => $e]]),
+            ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Set valid hours for ' . $day . '.']);
+        }
+        $this->assertSame($before, DB::table('bookings')->count());
+    }
+
+    /* "2027-02-30" passed the yyyy-mm-dd pattern and reached the database. */
+    public function test_a_date_that_does_not_exist_is_refused(): void
+    {
+        $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
+            'date_start' => '2030-02-30', 'date_end' => '2030-02-30',
+            'times' => json_encode(['2030-02-30' => ['start' => '08:00', 'end' => '12:00']]),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Pick valid reservation dates.']);
+        $this->asCustomer()->post(route('customer.booking-submit'), $this->hostelPost([
+            'check_in' => date('Y', strtotime('+1 year')) . '-02-30', 'check_out' => date('Y', strtotime('+1 year')) . '-03-02',
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Check-out must be after check-in.']);
+    }
+
+    /* The pages stop a range at 366 days/nights; the server looped over
+       whatever it was sent — years of slots or bed-nights in one request. */
+    public function test_a_range_longer_than_366_days_is_refused(): void
+    {
+        $before = DB::table('bookings')->count();
+        $start = date('Y-m-d', strtotime('+' . random_int(400, 1400) . ' days'));
+        $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
+            'date_start' => $start, 'date_end' => date('Y-m-d', strtotime($start . ' +366 days')),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A booking can cover at most 366 days.']);
+        $in = date('Y-m-d', strtotime('+1 day'));
+        $this->asCustomer()->post(route('customer.booking-submit'), $this->hostelPost([
+            'check_in' => $in, 'check_out' => date('Y-m-d', strtotime($in . ' +367 days')),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A stay can be at most 366 nights.']);
+        $this->assertSame($before, DB::table('bookings')->count());
+    }
+
     public function test_get_is_refused_with_the_old_json(): void
     {
         $this->get(route('customer.booking-submit'))->assertStatus(405)
@@ -111,7 +165,7 @@ class BookingSubmitTest extends TestCase
         $today = date('Y-m-d', strtotime('-1 day'));   /* already past: well inside 12 hours */
         $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
             'room' => 'r1', 'date_start' => $today, 'date_end' => $today,
-            'times' => json_encode([$today => ['start' => '22:00', 'end' => '23:00']]),
+            'times' => json_encode([$today => ['start' => '21:00', 'end' => '22:00']]),
         ]))->assertStatus(409)->assertJson(['ok' => false, 'message' => 'Bookings must start at least 12 hours from now.']);
     }
 

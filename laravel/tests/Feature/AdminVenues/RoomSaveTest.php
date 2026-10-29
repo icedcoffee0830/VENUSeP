@@ -14,7 +14,7 @@ class RoomSaveTest extends VenuesTestCase
 
     public function test_validation_failures_answer_as_before(): void
     {
-        $this->actingAsStaff();
+        $this->actingAsAdmin();
         $this->postForm('admin.room-save', ['room_id' => 'r1', 'name' => '', 'venue' => 'Bahay Alumni', 'room_type' => 'event'])
             ->assertStatus(400)->assertJson(['error' => 'bad_name', 'message' => 'Enter a room name (up to 150 characters).']);
         $this->postForm('admin.room-save', ['room_id' => 'r1', 'name' => 'X', 'venue' => '', 'room_type' => 'event'])
@@ -68,7 +68,7 @@ class RoomSaveTest extends VenuesTestCase
 
     public function test_a_new_hostel_room_gets_its_beds_and_the_count_can_change(): void
     {
-        $this->actingAsStaff();
+        $this->actingAsAdmin();
         $res = $this->postForm('admin.room-save', [
             'room_id' => '', 'name' => 'Port Test Dorm', 'venue' => 'USeP Hostel', 'room_type' => 'hostel',
             'beds' => '4', 'rate' => '350', 'cr_type' => 'private', 'check_in_time' => '14:00', 'check_out_time' => '11:00',

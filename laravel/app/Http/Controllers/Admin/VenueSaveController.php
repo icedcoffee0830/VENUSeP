@@ -121,6 +121,7 @@ class VenueSaveController extends Controller
             if (!$venue->fetch()) {
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Venue not found.']);
             }
+            $this->requireVenueScope($venueId, 'venue');   /* #24: staff change only their own venue */
 
             $pdo->beginTransaction();
             $pdo->prepare('UPDATE venues SET name = :name, description = :description WHERE id = :id')

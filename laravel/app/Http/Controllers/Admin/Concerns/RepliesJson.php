@@ -33,6 +33,18 @@ trait RepliesJson
         }
     }
 
+    /* STAFF HANDLE ONLY THEIR OWN VENUE (DB-DECISIONS #24): the catalog writes
+       (rooms, venues, their photos) are refused for another venue's things, the
+       same way booking-action refuses another venue's bookings. Admins pass. */
+    protected function requireVenueScope($venueId, string $what = 'room'): void
+    {
+        legacy('auth');
+        if (!staff_may_handle_venue($venueId)) {
+            $this->reply(403, ['ok' => false, 'error' => 'forbidden',
+                'message' => 'This ' . $what . ' belongs to another venue. Only that venue\'s staff or an administrator can change it.']);
+        }
+    }
+
     protected function requirePost(Request $request): void
     {
         if (!$request->isMethod('post')) {

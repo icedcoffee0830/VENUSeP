@@ -264,6 +264,10 @@ class RoomSaveController extends Controller
                 $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Unknown location.']);
             }
 
+            /* the venue the room is (or will be) filed under must be the staff
+               member's own (#24); an edit also checks the venue it is in now, below */
+            $this->requireVenueScope($venueRow['id']);
+
             if ($isNewRoom) {
                 /* The room must suit the venue (trg_rooms_type_ins enforces the same
                    rule at the database; catching it here gives a sentence). */
@@ -345,12 +349,13 @@ class RoomSaveController extends Controller
                     'message' => 'Room created as ' . $newCode . '. You can add its photos now.']);
             }
 
-            $room = $pdo->prepare('SELECT id, room_type FROM rooms WHERE room_code = :code');
+            $room = $pdo->prepare('SELECT id, room_type, venue_id FROM rooms WHERE room_code = :code');
             $room->execute([':code' => $roomCode]);
             $roomRow = $room->fetch();
             if (!$roomRow) {
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
             }
+            $this->requireVenueScope($roomRow['venue_id']);
             if ($roomRow['room_type'] !== $roomType) {
                 $this->reply(409, ['ok' => false, 'error' => 'wrong_type', 'message' => 'This room does not match the form that submitted it.']);
             }

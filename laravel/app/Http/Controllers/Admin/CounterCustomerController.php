@@ -73,7 +73,9 @@ class CounterCustomerController
                   ORDER BY c.full_name
                   LIMIT 10"
             );
-            $like = '%' . $q . '%';
+            /* what was typed is matched literally: "%%%" or "___" are not three
+               characters of a name, they would match every customer */
+            $like = '%' . addcslashes($q, '%_\\') . '%';
             $stmt->execute([':like' => $like, ':like2' => $like]);
 
             $out = [];

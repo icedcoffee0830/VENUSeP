@@ -21,7 +21,7 @@
         ['Booking Management',  route('admin.booking-requests'),       'bi-calendar-check'],
         ['Transaction History', route('admin.transaction-history'),    'bi-receipt'],
         ['Calendar',            route('admin.calendar'),               'bi-calendar-event'],
-        ['Staff Management',    route('admin.staff'),                  'bi-people'],
+        ['Staff Management',    route('admin.staff'),                  'bi-people', 'admin'],   /* admins only (staff:admin) */
         ['Customer Management', route('admin.customer-management'),    'bi-person-badge'],
         ['Reports',             route('admin.reports'),                'bi-bar-chart'],
         ['Payment Settings',    route('admin.payment-settings'),       'bi-wallet2'],
@@ -30,6 +30,8 @@
         ['Settings',            route('admin.profile'),                'bi-gear'],
         ['Log Out',             route('admin.logout'),                 'bi-box-arrow-right'],   /* ends the session */
       ];
+  /* a 4th column 'admin' = an admin-only page: staff are not shown the link (Bug 5) */
+  $items = array_filter($items, fn ($i) => ($i[3] ?? '') !== 'admin' || session('account_type') === 'admin');
 @endphp
 <style>
   /* crimson to black, continuous with the header. */

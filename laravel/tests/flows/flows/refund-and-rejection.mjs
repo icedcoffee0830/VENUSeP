@@ -270,10 +270,12 @@ export default {
       s.payoutRef = ref13(3);
       const payout = await receiptFile('refund-payout', { amount: s.total, name: s.name, number: PHONE, ref: s.payoutRef });
       await page.locator('#gcFile').setInputFiles(payout);
-      const verdict = page.getByText(/^(Receipt verified|Receipt needs a closer look|This receipt does not match)$/).first();
+      const VERDICT = /Receipt verified|Receipt needs a closer look|This receipt does not match/;
+      const verdict = page.locator('.br-ovr .br-banner').filter({ hasText: VERDICT }).first();
       await expect.visible(verdict, 'the payout receipt check never finished', 120_000);
-      s.payoutVerdict = (await verdict.textContent()).trim();
-      ctx.note('payout receipt verdict: ' + s.payoutVerdict);
+      const verdictText = (await verdict.textContent()).trim();
+      s.payoutVerdict = verdictText.match(VERDICT)[0];
+      ctx.note('payout receipt verdict: ' + verdictText);
       if (s.payoutVerdict !== 'Receipt verified') {
         await page.locator('#payoutNote').fill('Flow test: payout found in the GCash history.');
       }

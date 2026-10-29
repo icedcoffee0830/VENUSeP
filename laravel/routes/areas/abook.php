@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers;
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\PendingController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -11,15 +12,17 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
 Route::get('/admin/booking-request', Admin\BookingRequestController::class)->middleware('staff')->name('admin.booking-request');
-/* JSON endpoint: answers 401 / 400 JSON itself (the old order), so it checks the CSRF token itself too. */
+/* The staff JSON endpoints answer 401 / 400 JSON themselves (the old order), so
+   they check the CSRF token themselves too (_token field or X-CSRF-TOKEN header). */
 Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)
     ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-action');
 Route::match(['get', 'post'], '/admin/booking-create', PendingController::class)->name('admin.booking-create');
 Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsController::class)
-    ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-emails');   /* JSON; checks its own token, like booking-action */
+    ->withoutMiddleware(ValidateCsrfToken::class)->name('admin.booking-emails');
 Route::get('/admin/calendar', PendingController::class)->name('admin.calendar');
 Route::get('/admin/receipt', Admin\ReceiptController::class)->middleware('staff')->name('admin.receipt');
 Route::get('/admin/transaction-history', Admin\TransactionHistoryController::class)->middleware('staff')->name('admin.transaction-history');
-Route::get('/booking-details', \App\Http\Controllers\BookingDetailsController::class)   /* its own 404 JSON is the guard */->name('root.booking-details');
-Route::get('/document-view', PendingController::class)->name('root.document-view');
-Route::get('/valid-id-view', PendingController::class)->name('root.valid-id-view');
+/* Used by customers AND staff: each answers a 404 (never a redirect, never 403) to anyone else. */
+Route::get('/booking-details', Controllers\BookingDetailsController::class)->name('root.booking-details');
+Route::get('/document-view', Controllers\DocumentViewController::class)->name('root.document-view');
+Route::get('/valid-id-view', Controllers\ValidIdViewController::class)->name('root.valid-id-view');

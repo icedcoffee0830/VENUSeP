@@ -104,7 +104,45 @@ Demo logins are the same as the old site. Admin accounts ask for an authenticato
    tests. To bring them into the old site: in `C:\xamp5\htdocs\VENUSeP`, run
    `git merge bugfixes` (or push the branch and open a PR).
 
-## 6. Open items and decisions
+## 6. Bugs reported by Aron (2026-10-30) — NOT fixed yet
+
+Aron said to record these, not change code. Each is in BOTH the old site and the Laravel copy
+(the port copied behaviour exactly), so fix both, like the `bugfixes` branch did.
+
+1. **Counter mode: the VENUSeP logo drops staff out of counter mode.**
+   Counter mode is the face-to-face booking screen staff use at the counter (`?counter=1` on the
+   booking pages, staff session). Clicking the logo in the top bar goes to the customer landing
+   page **without** `?counter=1`, so the booking pages then ask for a customer login.
+   Cause: the logo link in the customer nav is hard-coded — old `includes/customer-nav.php:131`
+   (`href="venusep_venue_booking.php"`), Laravel `laravel/legacy/includes/customer-nav.php:131`
+   (`route('customer.venues')`). The menu links already add `$navCounterQ` (`?counter=1`, line 47);
+   the logo should too (e.g. use `$navHome`/the landing URL + `$navCounterQ`). Aron's intent:
+   counter mode stays separate from customer sign-in and keeps staff in counter mode while
+   navigating on site. Check every other link in that nav in counter mode as well.
+
+2. **A disabled customer gets no message.**
+   (a) Signing in with the CORRECT password on a disabled account shows the generic
+   "Invalid email or password." (old `customer/customer-login.php:140-142`, same in Laravel
+   `app/Http/Controllers/Auth/CustomerLoginController.php`). Aron wants a modal/notice saying the
+   account is disabled. Keep the generic message for a wrong password (so the page doesn't reveal
+   which emails exist) — show the disabled notice only after the password checked out.
+   (b) A customer disabled WHILE signed in is logged out silently on their next click
+   (`customer_session_heal()` in `auth.php`) — it should show the same notice on the login page
+   (the staff side already does this with `?suspended=1`).
+
+3. **Google sign-in "hasn't been added".**
+   The code IS in both sites (Francis's PR #21; ported in the Laravel copy with tests). What's
+   missing is the settings file with the Google client id/secret: `includes/google-config.php`
+   (old site) / `laravel/legacy/includes/google-config.php` (Laravel). It is git-ignored on
+   purpose (it holds the secret), so it exists only on the machine where it was made — it is NOT
+   on Aron's laptop for either site. Without it the button stays hidden / says "not set up".
+   To enable: get the id/secret (Google Cloud → project "VENUSeP" → Google Auth Platform →
+   Clients, or ask Francis), copy `includes/google-config.example.php` to the path above, fill
+   it in, and make `redirect_uri` match an Authorized redirect URI in that client exactly
+   (old site: `http://localhost/VENUSeP/customer/google-callback.php`; Laravel:
+   `http://localhost:8000/customer/google-callback`, browse via `localhost`). Aron is trying this.
+
+## 7. Open items and decisions
 
 - **Not pushed.** Push `laravel` (and `bugfixes`) only when Aron says so — teammates still
   build features in the plain-PHP site, and any feature they add there must be ported too.
@@ -126,7 +164,7 @@ Demo logins are the same as the old site. Admin accounts ask for an authenticato
 - **Before go-live:** mail `base_url` must point at the Laravel site (reset links use it);
   uploaded profile photos land in `laravel/public/assets/img/avatars` (not git-ignored yet).
 
-## 7. Traps (each one cost time)
+## 8. Traps (each one cost time)
 
 - **MySQL must be shut down cleanly.** Turning the laptop off with MySQL running corrupted the
   system tables once (2026-10-04). Use XAMPP's Stop button or
@@ -147,7 +185,7 @@ Demo logins are the same as the old site. Admin accounts ask for an authenticato
   with `rename(...): Access is denied` while compiling a Blade view. The auto-tester retries
   once; it is not a bug in the page.
 
-## 8. Check the live state (run these first)
+## 9. Check the live state (run these first)
 
 ```
 cd C:\xamp5\htdocs\VENUSeP-laravel

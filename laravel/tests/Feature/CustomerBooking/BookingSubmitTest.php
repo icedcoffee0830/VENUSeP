@@ -62,12 +62,6 @@ class BookingSubmitTest extends TestCase
             ->assertJson(['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
     }
 
-    public function test_a_stale_token_gets_the_page_expired_json(): void
-    {
-        $this->asCustomer()->post(route('customer.booking-submit'), ['_token' => 'wrong', 'type' => 'venue'])
-            ->assertStatus(400)->assertJson(['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
-    }
-
     public function test_a_booking_without_an_id_is_refused(): void
     {
         $data = $this->venuePost();

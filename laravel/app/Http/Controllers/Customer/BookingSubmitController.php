@@ -14,7 +14,7 @@ use Throwable;
    customer creates a booking.
 
    POST (multipart, because the ID comes with it)
-     _token (or the old csrf), type=venue|hostel, room=<room_code>,
+     _token (Laravel's CSRF check), type=venue|hostel, room=<room_code>,
      affiliated=0|1, method=gcash|cash, agree_no_refund=0|1
      venue:  event_name, date_start, date_end, attendees, times=<json>
      hostel: check_in, check_out, occupants=<json [{name,gender}]>
@@ -33,9 +33,8 @@ use Throwable;
    THE POLICY IS SNAPSHOTTED. refunds_allowed copies the live switch at the
    moment of booking and never changes again (DB-DECISIONS #18).
 
-   The route runs WITHOUT Laravel's CSRF middleware so the old answers keep
-   their old order and shape (405, then 401 JSON, then the 400 "page has
-   expired" JSON the booking pages show) — the token is checked below.
+   An expired token is answered by Laravel's CSRF check, which bootstrap/app.php
+   turns into the old 400 "page has expired" JSON (401 when signed out).
    ===================================================================== */
 class BookingSubmitController extends Controller
 {
@@ -53,10 +52,6 @@ class BookingSubmitController extends Controller
         }
         if (!customer_logged_in()) {
             return self::reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
-        }
-        $token = $request->post('_token') ?? $request->post('csrf') ?? $request->header('X-CSRF-TOKEN');
-        if (!csrf_valid($token)) {
-            return self::reply(400, ['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
         }
 
         $customerId = (int) session('customer_id');

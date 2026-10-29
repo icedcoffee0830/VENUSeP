@@ -104,6 +104,9 @@ $AMENITY_LABELS = [
   'reading_light_per_bed'  => 'Reading light per bed',
   'lounge_access'          => 'Communal lounge access',
 ];
+/* Laravel: legacy() loads this file inside a function, so a top-level variable is
+   not a PHP global — publish the ones the functions below read with `global`. */
+$GLOBALS['AMENITY_LABELS'] = $AMENITY_LABELS;
 
 /* How the room form groups the picker. 47 chips in one undifferentiated
    pile is unusable; grouped, an admin scans the heading they need. A key
@@ -191,6 +194,7 @@ $ROOM_GLANCE = [
   'r7' => ['bestFor' => 'Council sessions · MOA signings · Meetings',    'catering' => 'In-house catering',           'accessible' => 'Wheelchair accessible'],
   'r8' => ['bestFor' => 'Orientations · Trainings · Org events',         'catering' => 'Outside catering allowed',    'accessible' => 'Wheelchair accessible'],
 ];
+$GLOBALS['ROOM_GLANCE'] = $ROOM_GLANCE;   /* Laravel: see $GLOBALS['AMENITY_LABELS'] above */
 
 function room_glance($roomCode) {
   global $ROOM_GLANCE;

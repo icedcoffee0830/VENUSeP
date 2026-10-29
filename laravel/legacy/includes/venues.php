@@ -41,6 +41,9 @@ foreach ($stmt as $row) {
   $venuesById[(int) $row['id']] = $row['name'];
   $venues[] = $row['name'];
 }
+/* Laravel: legacy() loads this file inside a function, so publish the variable
+   venueIdForName() reads with `global`. */
+$GLOBALS['venuesById'] = $venuesById;
 
 /* Render a custom-dropdown option list from $venues, marking $current as the
    summary. Shared by both room forms so they can never list different venues.

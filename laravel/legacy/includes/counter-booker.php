@@ -58,7 +58,7 @@ function searchCustomers(v){
   state.booker.searching = true; render();
   searchTimer = setTimeout(async function(){
     try{
-      const res = await fetch('../admin/customer-search.php?q=' + encodeURIComponent(v.trim()), { credentials:'same-origin' });
+      const res = await fetch(<?php echo json_encode(route('admin.customer-search')); ?> + '?q=' + encodeURIComponent(v.trim()), { credentials:'same-origin' });
       const out = await res.json().catch(function(){ return { ok:false, results:[] }; });
       state.booker.results = out.ok ? out.results : [];
     }catch(e){ state.booker.results = []; }
@@ -80,8 +80,8 @@ async function verifyBooker(){
   if(!pw){ state.booker.error='Ask the customer to type their password.'; render(); return; }
   state.booker.error=''; render();
   try{
-    const body = new URLSearchParams({ csrf: CSRF, customer_id: state.booker.customerId, password: pw });
-    const res = await fetch('../admin/customer-verify.php', { method:'POST', body:body, credentials:'same-origin' });
+    const body = new URLSearchParams({ csrf: CSRF, _token: CSRF, customer_id: state.booker.customerId, password: pw });
+    const res = await fetch(<?php echo json_encode(route('admin.customer-verify')); ?>, { method:'POST', body:body, credentials:'same-origin' });
     const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
     state.booker.verified = !!out.ok;
     state.booker.error = out.ok ? '' : (out.message || 'That password did not match.');
@@ -122,7 +122,7 @@ function counterBar(){
   return `<div style="position:sticky;top:0;z-index:60;background:#1f1e1e;color:#fff;padding:9px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px">
     <strong style="letter-spacing:.06em;font-size:11.5px;text-transform:uppercase;background:#a11626;padding:3px 8px;border-radius:999px">Counter booking</strong>
     <span style="opacity:.85">Booking on behalf of a walk-in &middot; staff: <strong>${esc(COUNTER_STAFF)}</strong></span>
-    <a href="../admin/Admin_Dashboard.php" style="margin-left:auto;color:#ffd166;font-weight:600;text-decoration:none">Leave counter mode</a>
+    <a href="<?php echo route('admin.dashboard'); ?>" style="margin-left:auto;color:#ffd166;font-weight:600;text-decoration:none">Leave counter mode</a>
   </div>`;
 }
 

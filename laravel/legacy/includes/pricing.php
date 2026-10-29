@@ -64,6 +64,10 @@ function venusep_discount_percent() {
 
 $DISCOUNT_PERCENT = venusep_discount_percent();
 $USEP_MAIL_DOMAIN = 'usep.edu.ph';
+/* Laravel: legacy() loads this file inside a function, so publish the two
+   variables the helpers below read with `global`. */
+$GLOBALS['DISCOUNT_PERCENT'] = $DISCOUNT_PERCENT;
+$GLOBALS['USEP_MAIL_DOMAIN'] = $USEP_MAIL_DOMAIN;
 
 /* PHP twins of the JS helpers below. The listing page renders its prices in
    PHP, so it needs the same rule server-side — and it must be THE SAME rule,

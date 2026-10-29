@@ -26,6 +26,7 @@ class VenueManagementTest extends VenuesTestCase
             ->assertSee('admin\\/room-toggle-active', false)
             ->assertSee('data-toggle-id="r3"', false)
             ->assertDontSee('data-delete-entity="', false)           // delete is admin-only
+            ->assertSee('const DISCOUNT_PERCENT = ', false)          // pricing.php's script, now inside the page
             ->assertSee('Change history');
     }
 

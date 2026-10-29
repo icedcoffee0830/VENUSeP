@@ -26,11 +26,16 @@ class VenueManagementController extends Controller
     {
         /* Staff have to be able to see a disabled room here to turn it back on, so
            this page (and only this page) asks the shared includes for every room,
-           not just the ones customers can currently see. */
+           not just the ones customers can currently see.
+           pricing.php echoes its <script> (DISCOUNT_PERCENT, priceWithDiscount())
+           when loaded; the old page printed it before <!DOCTYPE>. Captured here and
+           printed in the page head instead of ahead of the response headers. */
+        ob_start();
         extract(legacy(
             ['vrIncludeInactive' => true, 'hrIncludeInactive' => true],
             'venues', 'venue-rooms', 'hostel-rooms', 'room-photos', 'venue-photos', 'pricing'
         ));
+        $pricingScript = ob_get_clean();
 
         /* Venue cards must start from venues, not rooms: a newly created venue has no
            rooms yet and still belongs on this page. LEFT JOINs keep that venue in the
@@ -86,6 +91,7 @@ class VenueManagementController extends Controller
             'vmStaffByVenue' => $vmStaffByVenue,
             'dcHistory' => $dcHistory,
             'dcCsrf' => csrf_token(),
+            'pricingScript' => $pricingScript,
         ]);
     }
 }

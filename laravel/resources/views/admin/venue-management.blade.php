@@ -80,6 +80,7 @@ function vmMaint($m, $today) {
 @endphp
 
 @push('head')
+{!! $pricingScript !!}
     <link rel="stylesheet" href="{{ asset('assets/css/confirm-modal.css') }}" />
 @endpush
 

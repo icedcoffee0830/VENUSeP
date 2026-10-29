@@ -153,7 +153,7 @@ function faq_answer_html($answer, $forEditor = false)
     $html = preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $html);
     $html = preg_replace_callback('/\[([^\]]+)\]\(([^)\s]+)\)/', function ($m) use ($forEditor) {
         $url = $m[2];
-        $safe = preg_match('#^(https?://|[a-z0-9_./-]+\.php(\?[^"<>]*)?(\#[a-z0-9-]+)?|\#[a-z0-9-]+)$#i', $url);
+        $safe = preg_match('#^(https?://[^"<>]+|[a-z0-9_./-]+\.php(\?[^"<>]*)?(\#[a-z0-9-]+)?|\#[a-z0-9-]+)$#i', $url);
         if ($safe && !$forEditor) {
             $url = faq_link_url($url);   /* Laravel: stored "page.php" links -> the page's route */
         }

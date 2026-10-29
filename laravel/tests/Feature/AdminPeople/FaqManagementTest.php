@@ -115,6 +115,25 @@ class FaqManagementTest extends TestCase
         $this->assertNull(DB::table('faqs')->where('question', 'Gone?')->first());
     }
 
+    /* The answer format allows "[text](page.php)" and http(s) links (faqs.php). Typed
+       HTML stays text on the customer page, and no other scheme becomes a link. */
+    public function test_answers_link_http_pages_and_never_run_typed_html(): void
+    {
+        $id = DB::table('faqs')->insertGetId(['section_key' => 'cash', 'question' => 'Link test <b>q</b>?', 'policy' => 'any', 'sort_order' => 99,
+            'answer' => "See [the USeP site](https://www.usep.edu.ph/about) or [bad](javascript:alert(1)).\n<script>alert(2)</script> <img src=x onerror=alert(3)>"]);
+        try {
+            $this->get(route('customer.faq'))->assertOk()
+                ->assertSee('<a href="https://www.usep.edu.ph/about">the USeP site</a>', false)
+                ->assertDontSee('href="javascript:', false)
+                ->assertDontSee('<script>alert(2)', false)
+                ->assertDontSee('<img src=x', false)
+                ->assertDontSee('<b>q</b>', false)
+                ->assertSee('&lt;script&gt;alert(2)&lt;/script&gt;', false);
+        } finally {
+            DB::table('faqs')->where('id', $id)->delete();
+        }
+    }
+
     public function test_toggle_twice_and_move_round_trip(): void
     {
         $this->actingAsStaff();

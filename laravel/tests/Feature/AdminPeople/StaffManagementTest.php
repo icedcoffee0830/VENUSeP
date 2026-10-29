@@ -136,6 +136,23 @@ class StaffManagementTest extends TestCase
         }
     }
 
+    /* users.email is varchar(190) and the connection is not in strict mode: a longer
+       (still valid) address used to be cut to 190 characters and saved as "updated". */
+    public function test_update_refuses_an_email_longer_than_the_column(): void
+    {
+        $this->actingAsAdmin()->withSession(['_token' => 'tok']);
+        $origEmail = DB::table('users')->where('id', 74)->value('email');
+        $long = str_repeat('a', 64) . '@' . str_repeat('b', 60) . '.' . str_repeat('c', 60) . '.co.ph';   // 193 characters
+        $this->assertNotFalse(filter_var($long, FILTER_VALIDATE_EMAIL));
+        try {
+            $this->post_(['action' => 'update', 'user_id' => 74, 'full_name' => 'Maco Case', 'email' => $long])
+                ->assertStatus(400)->assertExactJson(['ok' => false, 'field' => 'email', 'message' => 'Enter a valid email address.']);
+            $this->assertSame($origEmail, DB::table('users')->where('id', 74)->value('email'));
+        } finally {
+            DB::table('users')->where('id', 74)->update(['email' => $origEmail]);
+        }
+    }
+
     public function test_update_validates_and_saves(): void
     {
         $this->actingAsAdmin()->withSession(['_token' => 'tok']);

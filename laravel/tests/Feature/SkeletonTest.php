@@ -29,6 +29,7 @@ class SkeletonTest extends TestCase
                 'row_is_array' => is_array($pdo->query('SELECT 1 AS one')->fetch()),
                 'gap' => venue_cleanup_gap_minutes(),
                 'php_tz' => date_default_timezone_get(),
+                'global_seen' => (function () { legacy('refund-policy'); global $REFUNDS_ENABLED; return isset($REFUNDS_ENABLED); })(),
             ]);
         });
     }
@@ -89,7 +90,7 @@ class SkeletonTest extends TestCase
     public function test_legacy_bridge_gives_the_old_connection_settings(): void
     {
         $this->get('/_t/legacy')->assertOk()->assertJson([
-            'tz' => '+08:00', 'row_is_array' => true, 'php_tz' => 'Asia/Manila',
+            'tz' => '+08:00', 'row_is_array' => true, 'php_tz' => 'Asia/Manila', 'global_seen' => true,
         ]);
     }
 

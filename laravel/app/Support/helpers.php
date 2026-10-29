@@ -26,13 +26,19 @@ if (!function_exists('legacy')) {
                 continue;
             }
             $loaded[$file] = true;
-            $vars = (static function (array $__seed, string $__file): array {
+            $defined = (static function (array $__seed, string $__file): array {
                 extract($__seed, EXTR_SKIP);
                 require_once $__file;
                 $defined = get_defined_vars();
                 unset($defined['__seed'], $defined['__file']);
                 return $defined;
             })($vars, $file);
+            /* merge, don't replace: a legacy() call INSIDE the file has already added its own */
+            $vars = array_merge($vars, $defined);
+            /* the old files also read these as globals (`global $DISCOUNT_PERCENT;`, $GLOBALS[...]) */
+            foreach ($defined as $key => $value) {
+                $GLOBALS[$key] = $value;
+            }
         }
         return $vars;
     }

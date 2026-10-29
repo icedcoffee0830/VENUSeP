@@ -99,6 +99,12 @@ class BookingSubmitController extends Controller
         if (!$idFile instanceof UploadedFile || !$idFile->isValid()) {
             return self::reply(400, ['ok' => false, 'message' => 'A valid ID is required to submit a booking.']);
         }
+        /* ...and it must be a file doc_store() will keep (type, size, a real image),
+           checked BEFORE anything is written — else the slot was held with no ID. */
+        $idError = '';
+        if (doc_validate($idFile->getPathname(), $idFile->getClientOriginalName(), $idError) === null) {
+            return self::reply(400, ['ok' => false, 'message' => $idError]);
+        }
 
         /* The policy snapshot — read once, stored on the booking, never re-read. */
         $refundsAllowed = refunds_enabled() ? 1 : 0;

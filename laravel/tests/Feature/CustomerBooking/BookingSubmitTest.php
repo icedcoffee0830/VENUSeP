@@ -50,6 +50,42 @@ class BookingSubmitTest extends TestCase
         ];
     }
 
+    private function idFileFrom(string $name, string $bytes): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'vid');
+        file_put_contents($path, $bytes);
+        return new UploadedFile($path, $name, null, null, true);
+    }
+
+    /* The ID is checked BEFORE anything is written: a wrong file used to create
+       the booking anyway — the slot held, staff left with a request and no ID. */
+    public function test_an_id_that_is_not_an_image_or_pdf_is_refused_and_nothing_is_written(): void
+    {
+        $before = DB::table('bookings')->count();
+        $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
+            'id_document' => $this->idFileFrom('id.txt', 'just some text'),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Upload a JPG, PNG, WEBP or PDF.']);
+        $this->assertSame($before, DB::table('bookings')->count());
+    }
+
+    public function test_a_renamed_file_posing_as_an_image_is_refused(): void
+    {
+        $before = DB::table('bookings')->count();
+        $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
+            'id_document' => $this->idFileFrom('id.png', 'MZ not really a png'),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'That file is not a valid image.']);
+        $this->assertSame($before, DB::table('bookings')->count());
+    }
+
+    public function test_an_id_over_8mb_is_refused(): void
+    {
+        $before = DB::table('bookings')->count();
+        $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
+            'id_document' => $this->idFileFrom('id.pdf', str_repeat('x', 8 * 1024 * 1024 + 1)),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'That file is larger than 8MB.']);
+        $this->assertSame($before, DB::table('bookings')->count());
+    }
+
     public function test_get_is_refused_with_the_old_json(): void
     {
         $this->get(route('customer.booking-submit'))->assertStatus(405)

@@ -261,7 +261,9 @@
                                   <i class="bi bi-file-earmark-text" aria-hidden="true"></i>Receipt
                                 </a>
                               @endif
-                              @if ($booking['refundable'])
+                              {{-- also on a row whose refund is open or returned: the script
+                                   below turns it into "Withdraw request" / "Fix and resubmit" --}}
+                              @if ($booking['refundable'] || in_array($booking['refundStatus'], ['requested', 'under_review', 'returned_for_correction'], true))
                                 <a class="booking-action booking-action-refund" href="{{ route('customer.refund-request', ['booking' => $booking['bookingId']]) }}">
                                   <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Request Refund
                                 </a>
@@ -463,16 +465,18 @@
           if (!row || !rec) return;
           const link = row.querySelector('.booking-action-refund');
 
-          /* Open on staff -> the customer can pull it back. */
-          if (rec.status === 'requested' || rec.status === 'under_review' || rec.status === 'approved') {
+          /* Open on staff, not yet decided -> the customer can pull it back (the
+             same states refund-submit accepts a withdrawal from). */
+          if (rec.status === 'requested' || rec.status === 'under_review') {
             action(row, 'booking-action-withdraw', 'bi-x-circle', 'Withdraw request', function () { withdraw(ref); });
           /* Returned for correction is PAPERWORK, not a denial — they fix it. */
           } else if (rec.status === 'returned_for_correction') {
             action(row, 'booking-action-fix', 'bi-arrow-counterclockwise', 'Fix and resubmit', null,
               @json(route('customer.refund-request')) + '?booking=' + encodeURIComponent(ref));
-          /* Closed: denied, paid out, or pulled. Nothing left to offer, and a
-             "Request Refund" button on a refunded booking would be a trap. */
-          } else if (link) {
+          /* Approved, denied or paid out: nothing left to offer, and a "Request
+             Refund" button on a refunded booking would be a trap. A WITHDRAWN
+             request keeps the button the server decided on: they may file again. */
+          } else if (link && rec.status !== 'withdrawn') {
             link.remove();
           }
         });

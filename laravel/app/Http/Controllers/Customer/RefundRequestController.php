@@ -37,7 +37,9 @@ class RefundRequestController
             $refusal = $requestedRef === ''
                 ? 'No booking was selected. Open a booking from your history and choose "Request Refund".'
                 : 'We could not find booking ' . $requestedRef . ' on your account.';
-        } elseif (!cb_is_refundable($booking)) {
+        } elseif (!cb_is_refundable($booking) && $booking['refundStatus'] !== 'returned_for_correction') {
+            /* (returned for correction = paperwork to fix, not a new request: the
+               form opens to resubmit it, and refund-submit checks that state.) */
             $ref = $booking['bookingId'];
             if ($booking['paymentStatus'] === 'Refunded') {
                 $refusal = 'Booking ' . $ref . ' has already been refunded, so there is nothing left to request. If the amount never reached you, contact the venue office with your reference.';

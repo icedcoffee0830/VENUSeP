@@ -34,6 +34,20 @@ if (!defined('HOSTEL_PAID_CASH_LABEL')) {
     define('HOSTEL_PAID_CASH_LABEL', 'Paid at the front desk');
 }
 
+/* Why staff reject a GCash receipt (Aron, 2026-10-30). The customer reads the
+   reason; "Other" must be explained in the note. One list for the staff page
+   and the server that checks it. */
+if (!function_exists('receipt_reject_reasons')) {
+    function receipt_reject_reasons() {
+        return [
+            'Reference number not found in the Transaction History',
+            'Amount doesn\'t match',
+            'Receipt image is unreadable',
+            'Other',
+        ];
+    }
+}
+
 /* The customer-facing reference for a booking. Shared by both portals so a
    customer quoting "VB-2026-142" and a staff member searching for it are
    talking about the same row. */

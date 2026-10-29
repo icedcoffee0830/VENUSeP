@@ -799,7 +799,7 @@
              decision about how a rejected receipt should be recorded, which is a
              separate question from this page rendering. */
           case 'auto_pass': return banner('bn-green', 'All automatic checks passed', 'Exact amount · correct receiver · fresh reference · genuine receipt markers.') + receiptBlock() +
-            `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="rejectPay()">Reject after GCash check</button></div>
+            `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="openRejectPay()">Reject after GCash check</button></div>` + rejectPayPanel() + `
              <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.55rem">Find the reference number in the business GCash Transaction History before confirming.</div>`;
           /* Manual review is now the COMMON path, not a rarity — so it has to say
              out loud that the customer is waiting on US. The pay-by deadline must
@@ -813,7 +813,7 @@
             flags(cur.receipt.flags, '#c99a3c') +
             `<div class="br-banner bn-gray" style="margin-top:0.7rem"><div>Slot is held while this is with you
               <span class="s">Pay-by deadline: <strong>${esc(cur.payBy)}</strong>. The customer has already paid and cannot act further — clear this before the deadline, or extend it. Do not let it lapse to overdue.</span></div></div>` +
-            `<div style="display:flex;gap:0.5rem;margin-top:0.7rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="rejectPay()">Reject receipt</button></div>`;
+            `<div style="display:flex;gap:0.5rem;margin-top:0.7rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="openRejectPay()">Reject receipt</button></div>` + rejectPayPanel();
           /* WHO rejected it matters, and matters more now the scanner rejects
              less: after DB-DECISIONS #6 most rejections are a staff decision, and
              labelling those "auto-rejected" told staff the machine did something
@@ -1174,9 +1174,53 @@
         });
       }
 
+      /* REJECT A RECEIPT (Aron, 2026-10-30): staff pick why from a short list,
+         plus a note — required for "Other". The customer reads the result, in
+         the same words the server stores (reason — note). */
+      const REJECT_REASONS = {!! json_encode(receipt_reject_reasons(), JSON_UNESCAPED_UNICODE) !!};
+      function rejectMessage() {
+        const note = (cur.rejNote || '').trim();
+        if (!cur.rejReason) return '';
+        return cur.rejReason === 'Other' ? note : cur.rejReason + (note ? ' — ' + note : '');
+      }
+      function rejectPayPanel() {
+        if (!cur.rejOpen) return '';
+        const msg = rejectMessage();
+        return `<div class="br-ovr">
+            <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">Reject this receipt</div>
+            <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.55;margin-bottom:0.8rem">Payment reopens so the customer can upload another receipt before the deadline. This one stays on record and cannot be used again. Be plain about why: they read it.</div>
+            <div class="br-fld">
+              <label for="rejReason">Why is it being rejected</label>
+              <select id="rejReason" onchange="readRejectPay(); render()">
+                <option value="">Choose a reason…</option>
+                ${REJECT_REASONS.map(r => `<option${cur.rejReason === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="br-fld">
+              <label for="rejNote">Note to the customer ${cur.rejReason === 'Other' ? '(required)' : '(optional)'}</label>
+              <textarea id="rejNote" rows="2" placeholder="e.g. the amount sent was ₱500 short.">${esc(cur.rejNote || '')}</textarea>
+            </div>
+            ${msg ? `<div class="br-preview">The customer will see: <b>${esc(msg)}</b></div>` : ''}
+            ${cur.rejErr ? `<div role="alert" style="color:#b23a3a;font-size:0.74rem;margin-bottom:0.55rem">${esc(cur.rejErr)}</div>` : ''}
+            <div style="display:flex;gap:0.5rem">
+              <button class="br-btn br-btn-primary" onclick="rejectPay()">Reject and tell the customer</button>
+              <button class="br-btn" onclick="cur.rejOpen = false; render()">Cancel</button>
+            </div>
+          </div>`;
+      }
+      function openRejectPay() { cur.rejOpen = true; cur.rejErr = null; render(); }
+      function readRejectPay() {
+        const r = document.getElementById('rejReason'), n = document.getElementById('rejNote');
+        if (r) cur.rejReason = r.value;
+        if (n) cur.rejNote = n.value;
+      }
       function rejectPay() {
-        const why = 'Rejected by staff after checking GCash — the reference was not found in the Transaction History.';
-        staffAction('reject_payment', { note: why }, function () {
+        readRejectPay();
+        if (!cur.rejReason) { cur.rejErr = 'Choose a reason — the customer sees it.'; render(); return; }
+        if (cur.rejReason === 'Other' && !(cur.rejNote || '').trim()) { cur.rejErr = 'Write the reason in the note — the customer sees it.'; render(); return; }
+        const why = rejectMessage();
+        staffAction('reject_payment', { reason: cur.rejReason, note: (cur.rejNote || '').trim() }, function () {
+          cur.rejOpen = false; cur.rejReason = ''; cur.rejNote = ''; cur.rejErr = null;
           cur.rejectedByStaff = true;      /* a person decided this, not the scanner */
           /* the server marked the upload under review (the latest) — show it without a reload */
           const lastUp = (cur.attempts || []).slice(-1)[0];

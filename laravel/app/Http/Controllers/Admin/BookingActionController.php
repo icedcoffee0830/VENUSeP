@@ -412,9 +412,15 @@ class BookingActionController extends Controller
 
         /* ---- The receipt was wrong. Only the payment goes back. ---- */
         case 'reject_payment':
-            if ($note === '') {
+            /* A reason from the list, plus an optional note — required for "Other". */
+            $reason = trim((string) ($request->post('reason') ?? ''));
+            if (!in_array($reason, receipt_reject_reasons(), true)) {
                 $this->reply(400, ['ok' => false, 'message' => 'A reason is required — the customer reads it.']);
             }
+            if ($reason === 'Other' && $note === '') {
+                $this->reply(400, ['ok' => false, 'message' => 'Write the reason in the note — the customer reads it.']);
+            }
+            $note = $reason === 'Other' ? $note : $reason . ($note !== '' ? ' — ' . $note : '');
             $pdo->beginTransaction();
             /* The receipt keeps the CHECKER's verdict; it gains who decided,
                when and why (DB-DECISIONS #6). */

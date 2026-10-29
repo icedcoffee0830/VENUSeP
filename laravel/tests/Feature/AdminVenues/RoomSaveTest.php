@@ -89,4 +89,35 @@ class RoomSaveTest extends VenuesTestCase
             $this->dropRoom($code);
         }
     }
+
+    /* A cleared or non-numeric rate used to be cast to ₱0 and saved — the room
+       became free. Counts must be whole numbers; a clock time must be real. */
+    public function test_blank_or_non_numeric_rates_and_counts_are_refused_not_saved_as_zero(): void
+    {
+        $this->actingAsAdmin();
+        $r1 = DB::table('rooms as r')->join('event_room_details as e', 'e.room_id', '=', 'r.id')
+            ->where('r.room_code', 'r1')->select('r.name', 'e.fee_per_day', 'e.attendee_capacity')->first();
+        $event = ['room_id' => 'r1', 'name' => $r1->name, 'venue' => 'Bahay Alumni', 'room_type' => 'event'];
+        foreach (['', 'abc', '-5'] as $bad) {
+            $this->postForm('admin.room-save', $event + ['fee' => $bad, 'capacity' => '10'])
+                ->assertStatus(400)->assertJson(['ok' => false, 'error' => 'bad_fee']);
+        }
+        foreach (['', 'ten', '12.5', '0'] as $bad) {
+            $this->postForm('admin.room-save', $event + ['fee' => '100', 'capacity' => $bad])
+                ->assertStatus(400)->assertJson(['ok' => false, 'error' => 'bad_capacity']);
+        }
+        $after = DB::table('event_room_details')->where('room_id', DB::table('rooms')->where('room_code', 'r1')->value('id'))->first();
+        $this->assertEquals((float) $r1->fee_per_day, (float) $after->fee_per_day);
+        $this->assertSame((int) $r1->attendee_capacity, (int) $after->attendee_capacity);
+
+        $h1 = DB::table('rooms as r')->join('hostel_room_details as h', 'h.room_id', '=', 'r.id')
+            ->where('r.room_code', 'h1')->select('r.name', 'h.rate_per_head_per_night')->first();
+        $hostel = ['room_id' => 'h1', 'name' => $h1->name, 'venue' => 'USeP Hostel', 'room_type' => 'hostel',
+            'beds' => '6', 'rate' => '350', 'cr_type' => 'communal', 'check_in_time' => '14:00', 'check_out_time' => '11:00'];
+        $this->postForm('admin.room-save', ['rate' => ''] + $hostel)->assertStatus(400)->assertJson(['error' => 'bad_rate']);
+        $this->postForm('admin.room-save', ['beds' => 'six'] + $hostel)->assertStatus(400)->assertJson(['error' => 'bad_beds']);
+        $this->postForm('admin.room-save', ['check_in_time' => '25:99'] + $hostel)->assertStatus(400)->assertJson(['error' => 'bad_times']);
+        $this->assertEquals((float) $h1->rate_per_head_per_night,
+            (float) DB::table('hostel_room_details')->where('room_id', DB::table('rooms')->where('room_code', 'h1')->value('id'))->value('rate_per_head_per_night'));
+    }
 }

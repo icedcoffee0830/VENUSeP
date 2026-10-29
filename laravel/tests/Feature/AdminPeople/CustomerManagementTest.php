@@ -54,6 +54,21 @@ class CustomerManagementTest extends TestCase
         }
     }
 
+    /* A customer chooses their own name. Printed into the page's <script> as JSON, a
+       "</script>" in it must not end the script and run as the staff member's page. */
+    public function test_a_customer_name_cannot_break_out_of_the_page_script(): void
+    {
+        $old = DB::table('customers')->where('id', 3)->value('full_name');
+        DB::table('customers')->where('id', 3)->update(['full_name' => '</script><script>alert(1)</script>']);
+        try {
+            $this->actingAsStaff()->get(route('admin.customer-management'))->assertOk()
+                ->assertDontSee('</script><script>alert(1)', false)
+                ->assertSee('"name":"\u003C/script\u003E\u003Cscript\u003Ealert(1)\u003C/script\u003E"', false);
+        } finally {
+            DB::table('customers')->where('id', 3)->update(['full_name' => $old]);
+        }
+    }
+
     public function test_a_staff_side_account_is_refused(): void
     {
         $staffId = DB::table('users')->where('email', 'staff@gmail.com')->value('id');

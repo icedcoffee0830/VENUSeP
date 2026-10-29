@@ -38,6 +38,21 @@ class StaffManagementTest extends TestCase
             ->assertSee(json_encode(route('admin.staff-save')), false);
     }
 
+    /* A staff member edits their own name (profile). In the admin's page script it
+       must stay data: a "</script>" in it must not end the script. */
+    public function test_a_staff_name_cannot_break_out_of_the_page_script(): void
+    {
+        $old = DB::table('staff')->where('user_id', 73)->value('full_name');
+        DB::table('staff')->where('user_id', 73)->update(['full_name' => '</script><script>alert(1)</script>']);
+        try {
+            $this->actingAsAdmin()->get(route('admin.staff'))->assertOk()
+                ->assertDontSee('</script><script>alert(1)', false)
+                ->assertSee('"name":"\u003C/script\u003E\u003Cscript\u003Ealert(1)\u003C/script\u003E"', false);
+        } finally {
+            DB::table('staff')->where('user_id', 73)->update(['full_name' => $old]);
+        }
+    }
+
     public function test_admin_sees_the_register_form_with_venues(): void
     {
         $this->actingAsAdmin()->get(route('admin.admin-register'))->assertOk()

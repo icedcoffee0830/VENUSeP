@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use PDOException;
-use RuntimeException;
 use Throwable;
 
 /* =====================================================================
@@ -354,26 +353,10 @@ class BookingSubmitController extends Controller
             }
 
             /* One exact bed per guest, for every night of the stay; the
-               UNIQUE(active_bed_id, night_date) index is the last-bed race guard. */
+               UNIQUE(active_bed_id, night_date) index is the last-bed race guard;
+               a bed lost to a simultaneous stay is retried with the next one. */
             try {
-                $free = $pdo->prepare(
-                    'SELECT hb.id FROM hostel_beds hb
-                      WHERE hb.room_id = :r AND hb.is_active = 1
-                        AND NOT EXISTS (SELECT 1 FROM bed_reservation_nights n
-                                         WHERE n.bed_id = hb.id AND n.released_at IS NULL
-                                           AND n.night_date >= :i AND n.night_date < :o)
-                      ORDER BY hb.display_order, hb.id LIMIT 1'
-                );
-                $assign = $pdo->prepare('CALL sp_assign_bed(:b, :o, :bed)');
-                foreach ($occIds as $occId) {
-                    $free->execute([':r' => $room['id'], ':i' => $checkIn, ':o' => $checkOut]);
-                    $bedId = $free->fetchColumn();
-                    if ($bedId === false) {
-                        throw new RuntimeException('no_bed');
-                    }
-                    $assign->execute([':b' => $bookingId, ':o' => $occId, ':bed' => (int) $bedId]);
-                    $assign->closeCursor();
-                }
+                BookingRules::assignBeds($pdo, (int) $room['id'], $bookingId, $occIds, $checkIn, $checkOut);
             } catch (Throwable $e) {
                 /* Not enough beds for the whole stay, or a hard closure inside it.
                    Remove the booking rather than leave a half-held one behind. */

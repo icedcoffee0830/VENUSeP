@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Customer;
 
 use PDO;
 use PDOException;
+use RuntimeException;
 
-/* The rules a new booking must pass, shared by the two places that create one:
+/* The rules a new booking must pass (and the bed step), shared by the two places that create one:
    customer.booking-submit (online) and admin.booking-create (the counter).
    One copy, so the counter cannot accept what the website refuses. */
 final class BookingRules
@@ -105,5 +106,44 @@ final class BookingRules
             return null;
         }
         return self::overdueNotice($pdo, (int) session('customer_id'));
+    }
+
+    /* One exact bed per guest, free on EVERY night of the stay; the
+       UNIQUE(active_bed_id, night_date) index is the last-bed race guard. Two stays
+       submitted at once can pick the same free bed: the second one's insert hits
+       that index (1062), so it takes the next free bed instead (2026-10-30).
+       Throws RuntimeException('no_bed') when no bed is left, PDOException otherwise
+       (a hard closure inside the stay is sp_assign_bed's SQLSTATE 45000). */
+    public static function assignBeds(PDO $pdo, int $roomId, int $bookingId, array $occupantIds, string $checkIn, string $checkOut): void
+    {
+        $free = $pdo->prepare(
+            'SELECT hb.id FROM hostel_beds hb
+              WHERE hb.room_id = :r AND hb.is_active = 1
+                AND NOT EXISTS (SELECT 1 FROM bed_reservation_nights n
+                                 WHERE n.bed_id = hb.id AND n.released_at IS NULL
+                                   AND n.night_date >= :i AND n.night_date < :o)
+              ORDER BY hb.display_order, hb.id LIMIT 1'
+        );
+        $assign = $pdo->prepare('CALL sp_assign_bed(:b, :o, :bed)');
+        foreach ($occupantIds as $occId) {
+            for ($try = 1; ; $try++) {
+                $free->execute([':r' => $roomId, ':i' => $checkIn, ':o' => $checkOut]);
+                $bedId = $free->fetchColumn();
+                $free->closeCursor();
+                if ($bedId === false) {
+                    throw new RuntimeException('no_bed');
+                }
+                try {
+                    $assign->execute([':b' => $bookingId, ':o' => $occId, ':bed' => (int) $bedId]);
+                    $assign->closeCursor();
+                    break;
+                } catch (PDOException $e) {
+                    $assign->closeCursor();
+                    if (($e->errorInfo[1] ?? null) !== 1062 || $try >= 5) {
+                        throw $e;
+                    }
+                }
+            }
+        }
     }
 }

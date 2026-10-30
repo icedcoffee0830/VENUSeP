@@ -637,7 +637,7 @@
         amount_mismatch: 'wrong amount', receiver_mismatch: 'wrong receiver',
         amount_unreadable: 'amount unreadable', receiver_unreadable: 'receiver unreadable',
         low_confidence: 'low OCR confidence', attempt_limit_reached: 'last allowed attempt',
-        rejected_by_staff: 'rejected by staff',
+        rejected_by_staff: 'rejected by staff', overridden_by_staff: 'confirmed by staff override',
       };
       const ATT_VERDICT = { accepted: 'Accepted', manual_review: 'Manual review', rejected: 'Rejected' };
       function attemptsUsedUp() { return (cur.attempts || []).length >= (cur.attemptsAllowed || 5); }
@@ -779,7 +779,9 @@
                <div style="margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="recordPos()">Record POS &amp; unlock payment</button></div>
              </div>`;
         }
-        switch (cur.pay) {
+        /* A rejected upload (by staff or the checker) keeps payment open
+           (await_gcash), so the override / undo box is drawn from the upload itself. */
+        switch (rejectedUpload() ? 'rejected' : cur.pay) {
           case 'locked': return banner('bn-gray', 'Payment is locked', 'The customer cannot pay until you approve the ID and the reservation.') +
             `<div class="br-kvgrid">${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}${PAY_POLICY.prepay
               ? kv('Pay-by once approved', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')
@@ -791,13 +793,9 @@
           case 'await_cash': return banner('bn-amber', 'Awaiting cash payment at the cashier', 'The customer chose to pay in cash, so GCash is closed for them until they cancel that choice — then this button goes away. Confirm here once the cashier records the payment.') +
             `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}${kv('Where', 'USeP Cashier — Venue Reservations Window', true)}</div>
              <div style="margin-top:0.8rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Record cash payment</button></div>`;
-          /* NEITHER of the next two states exists in the database: an uploaded
-             receipt always lands in `under_review` (customer/payment-submit.php,
-             DB-DECISIONS #6) and rejecting one reopens `await_gcash`/`await_cash`
-             so the customer can resubmit. They are kept because they are the only
-             place the override-and-confirm box lives; reaching it again needs a
-             decision about how a rejected receipt should be recorded, which is a
-             separate question from this page rendering. */
+          /* `auto_pass` is not a database state (an upload always lands in
+             `under_review`, DB-DECISIONS #6); `rejected` is reached through
+             rejectedUpload() above. */
           case 'auto_pass': return banner('bn-green', 'All automatic checks passed', 'Exact amount · correct receiver · fresh reference · genuine receipt markers.') + receiptBlock() +
             `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="openRejectPay()">Reject after GCash check</button></div>` + rejectPayPanel() + `
              <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.55rem">Find the reference number in the business GCash Transaction History before confirming.</div>`;
@@ -818,11 +816,12 @@
              less: after DB-DECISIONS #6 most rejections are a staff decision, and
              labelling those "auto-rejected" told staff the machine did something
              they did themselves — while the reason line underneath said otherwise. */
-          case 'rejected': return banner('bn-red',
-              cur.rejectedByStaff ? 'Receipt rejected by staff' : 'Receipt auto-rejected',
-              (cur.rejectedByStaff ? 'Checked against GCash and refused. ' : 'The automatic check refused it. ')
-              + 'Customer was told to fix and resubmit. Slot held for the 48-hour window (until ' + esc(cur.resubmitBy || cur.payBy) + '), bounded by the pay-by deadline.') +
-            flags(cur.rejects || [], '#b23a3a') +
+          case 'rejected': { const up = rejectedUpload(), byStaff = up.flags.includes('rejected_by_staff');
+            return banner('bn-red',
+              byStaff ? 'Receipt rejected by staff' : 'Receipt auto-rejected',
+              (byStaff ? 'Checked against GCash and refused. ' : 'The automatic check refused it. ')
+              + 'The customer was told to send another receipt. The slot stays held until the pay-by deadline (' + esc(cur.payBy) + ').') +
+            flags(byStaff ? [up.staffNote || 'No reason recorded'] : up.flags.map(f => ATT_FLAG_TEXT[f] || String(f).replace(/_/g, ' ')), '#b23a3a') +
             `<div class="br-ovr">
               <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.4rem">Override &amp; confirm payment (staff)</div>
               <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.5;margin-bottom:0.6rem">Use only after finding the payment in the business GCash Transaction History. <strong>Duplicate-receipt rejections can only be overridden by an admin.</strong> The auto-check verdict stays on record either way.</div>
@@ -831,9 +830,9 @@
               ${cur.ovrErr ? `<div style="color:#b23a3a;font-size:0.74rem;margin-top:0.35rem">${esc(cur.ovrErr)}</div>` : ''}
               <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
                 <button class="br-btn br-btn-primary" onclick="overrideConfirm()">Override &amp; confirm</button>
-                ${cur.rejectedByStaff ? `<button class="br-btn" onclick="undoRejection()">&larr; Undo rejection</button>` : ""}
+                ${byStaff ? `<button class="br-btn" onclick="undoRejection()">&larr; Undo rejection</button>` : ""}
               </div>
-            </div>`;
+            </div>`; }
           case 'confirmed': return banner('bn-green', 'Payment confirmed', 'Confirmed by ' + esc(cur.confirmedBy || 'staff') + '. The reference number is permanently locked.') + (cur.receipt ? receiptBlock() : '');
           case 'paid_cash': return isHostel()
               /* the hostel takes cash at the front desk; its OR comes later from the cashier */
@@ -1221,39 +1220,50 @@
         const why = rejectMessage();
         staffAction('reject_payment', { reason: cur.rejReason, note: (cur.rejNote || '').trim() }, function () {
           cur.rejOpen = false; cur.rejReason = ''; cur.rejNote = ''; cur.rejErr = null;
-          cur.rejectedByStaff = true;      /* a person decided this, not the scanner */
           /* the server marked the upload under review (the latest) — show it without a reload */
           const lastUp = (cur.attempts || []).slice(-1)[0];
           if (lastUp && !lastUp.flags.includes('rejected_by_staff')) { lastUp.flags.push('rejected_by_staff'); lastUp.staffNote = why; }
-          cur.rejects = [why + ' (receipt kept on record; the same receipt cannot be used again)'];
         });
       }
-      /* Take back a rejection STAFF made and return the receipt to where it was —
-         the confirm / reject choice. Only offered for staff rejections: an
-         auto-rejection is a duplicate or a total mismatch, and the considered way
-         back from those is Override & confirm with a written reason.
-         The timeline keeps both entries; undoing a decision is itself a decision. */
-      function undoRejection() {
-        cur.pay = cur.prevPay || 'under_review';
-        cur.rejectedByStaff = false;
-        cur.rejects = []; cur.resubmitBy = null;   /* the 48-hour window dies with the rejection */
-        render();
+      /* The latest upload, when it was rejected (by staff or by the checker) and
+         payment is open again for another one — or null. */
+      function rejectedUpload() {
+        const up = (cur.attempts || []).slice(-1)[0];
+        return cur.pay === 'await_gcash' && up && (up.verdict === 'rejected' || up.flags.includes('rejected_by_staff')) ? up : null;
       }
+      /* Take back a rejection STAFF made: the receipt is under review again.
+         Only offered for staff rejections: an auto-rejection is a duplicate or
+         a total mismatch, and the considered way back from those is Override &
+         confirm with a written reason. The timeline keeps both entries. */
+      function undoRejection() {
+        staffAction('undo_rejection', {}, function () {
+          const up = (cur.attempts || []).slice(-1)[0];
+          if (up) { up.flags = up.flags.filter(f => f !== 'rejected_by_staff'); up.staffNote = ''; }
+        });
+      }
+      /* Staff found the payment in the venue's GCash history after all. */
       function overrideConfirm() {
         cur.ovrRef = (document.getElementById('ovrRef') || {}).value || '';
         cur.ovrNote = (document.getElementById('ovrNote') || {}).value || '';
         if (!cur.ovrRef.trim() || !cur.ovrNote.trim()) { cur.ovrErr = 'Both the verified reference number and a note are required.'; render(); return; }
-        cur.ovrErr = ''; cur.pay = 'confirmed'; cur.confirmedBy = 'You (override) · just now';
-        render();
+        cur.ovrErr = '';
+        staffAction('override_confirm', { ref: cur.ovrRef.trim(), note: cur.ovrNote.trim() }, function () {
+          const up = (cur.attempts || []).slice(-1)[0];
+          if (up) up.flags.push('overridden_by_staff');
+          cur.ovrRef = ''; cur.ovrNote = '';
+          loadMail();                      /* a receipt was just issued (and maybe emailed) */
+          cur.confirmedBy = 'You (override) · just now';
+        });
       }
-      function releaseSlot() {
-        cur.res = 'released';
-        render();
+      /* OVERDUE: stop waiting and free the dates — no undo, so ask first. */
+      async function releaseSlot() {
+        if (!(await venusepConfirm('Release ' + cur.id + '? The reservation ends, its payment is marked expired and the customer is told. This cannot be undone.',
+              { title: 'Release the slot?', okLabel: 'Release the slot' }))) return;
+        staffAction('release_slot', {});
       }
+      /* OVERDUE: 48 more hours from now to pay. */
       function extendDeadline() {
-        cur.pay = cur.method === 'cash' ? 'await_cash' : 'await_gcash';
-        cur.payBy = 'Jul 16, 2026 (extended +48 h)';
-        render();
+        staffAction('extend_deadline', {});
       }
       /* NOT a denial. A paperwork problem hands the request back with a bounded
          window to fix it; the claim is untouched, and so is the booking. */

@@ -13,6 +13,8 @@ set "VENUSEP_NOPAUSE=1"
 set "LOG=%~dp0test-loop-log.txt"
 set "OUT=%TEMP%\venusep-loop-run.txt"
 set /a N=0
+rem VENUSEP_LOOPS = stop after that many runs; 0 (the default) = run until the window is closed
+if not defined VENUSEP_LOOPS set "VENUSEP_LOOPS=0"
 echo ===== loop started %date% %time% >> "%LOG%"
 
 :again
@@ -27,7 +29,7 @@ rem keep the newest 30 reports so the disk doesn't fill up overnight
 for /f "skip=30 delims=" %%d in ('dir /b /ad /o-d "laravel\storage\app\venusep-flows" 2^>nul') do rd /s /q "laravel\storage\app\venusep-flows\%%d"
 for /f "skip=30 delims=" %%f in ('dir /b /a-d /o-d "laravel\storage\app\venusep-check\*.html" 2^>nul') do del /q "laravel\storage\app\venusep-check\%%f"
 
-if defined VENUSEP_LOOPS if %N% GEQ %VENUSEP_LOOPS% goto :done
+if %VENUSEP_LOOPS% GTR 0 if %N% GEQ %VENUSEP_LOOPS% goto :done
 timeout /t 30 /nobreak >nul
 goto :again
 

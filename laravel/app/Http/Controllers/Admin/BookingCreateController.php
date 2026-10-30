@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Customer\BookingRules;
 use Illuminate\Http\Request;
 use PDO;
 use PDOException;
@@ -231,8 +232,11 @@ class BookingCreateController extends Controller
         $checkIn  = (string) ($request->post('check_in') ?? '');
         $checkOut = (string) ($request->post('check_out') ?? '');
         $occupants = json_decode((string) ($request->post('occupants') ?? '[]'), true);
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $checkIn) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $checkOut) || $checkOut <= $checkIn) {
+        if (!BookingRules::isDate($checkIn) || !BookingRules::isDate($checkOut) || $checkOut <= $checkIn) {
             $this->reply(400, ['ok' => false, 'message' => 'Check-out must be after check-in.']);
+        }
+        if (BookingRules::daysBetween($checkIn, $checkOut) > BookingRules::MAX_DAYS) {
+            $this->reply(400, ['ok' => false, 'message' => 'A stay can be at most ' . BookingRules::MAX_DAYS . ' nights.']);
         }
         if ($checkIn < date('Y-m-d')) {
             $this->reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
@@ -249,7 +253,7 @@ class BookingCreateController extends Controller
             }
             $guests[] = ['name' => mb_substr($n, 0, 190), 'gender' => in_array($g, ['male', 'female', 'other'], true) ? $g : 'other'];
         }
-        $nights = (int) round((strtotime($checkOut) - strtotime($checkIn)) / 86400);
+        $nights = BookingRules::daysBetween($checkIn, $checkOut);
         /* per head, per night; the discount applies now — staff have seen the ID */
         $roomPrice = (float) $room['rate_per_head_per_night'] * count($guests) * $nights;
         $pct       = $c['usepId'] ? (float) venusep_discount_percent() : 0.0;
@@ -413,8 +417,11 @@ class BookingCreateController extends Controller
         if ($eventName === '' || mb_strlen($eventName) > 190) {
             $this->reply(400, ['ok' => false, 'message' => 'Enter an event name.']);
         }
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startIso) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $endIso) || $endIso < $startIso) {
+        if (!BookingRules::isDate($startIso) || !BookingRules::isDate($endIso) || $endIso < $startIso) {
             $this->reply(400, ['ok' => false, 'message' => 'Pick valid reservation dates.']);
+        }
+        if (BookingRules::daysBetween($startIso, $endIso) + 1 > BookingRules::MAX_DAYS) {
+            $this->reply(400, ['ok' => false, 'message' => 'A booking can cover at most ' . BookingRules::MAX_DAYS . ' days.']);
         }
         if ($attendees <= 0 || $attendees > (int) $room['attendee_capacity']) {
             $this->reply(400, ['ok' => false, 'message' => 'Enter an attendee count within the room capacity.']);
@@ -430,7 +437,7 @@ class BookingCreateController extends Controller
             $t = isset($times[$d]) && is_array($times[$d]) ? $times[$d] : [];
             $s = isset($t['start']) ? (string) $t['start'] : '';
             $e = isset($t['end'])   ? (string) $t['end']   : '';
-            if (!preg_match('/^\d{2}:\d{2}$/', $s) || !preg_match('/^\d{2}:\d{2}$/', $e) || $e <= $s) {
+            if (!BookingRules::validHours($s, $e)) {
                 $this->reply(400, ['ok' => false, 'message' => 'Set valid hours for ' . $d . '.']);
             }
             $slots[] = ['date' => $d, 'start' => $s . ':00', 'end' => $e . ':00'];

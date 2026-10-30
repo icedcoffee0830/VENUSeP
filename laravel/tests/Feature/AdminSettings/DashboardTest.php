@@ -64,6 +64,25 @@ class DashboardTest extends TestCase
         }
     }
 
+    /* "Welcome, <who> | Managing: <what>": the signed-in person (the header's name
+       rule), every active venue for an admin, only their own venue for staff. */
+    public function test_welcome_line_names_the_signed_in_user_and_their_venues(): void
+    {
+        $name = fn (string $email) => DB::table('users as u')->leftJoin('staff as s', 's.user_id', '=', 'u.id')
+            ->where('u.email', $email)->selectRaw('COALESCE(s.full_name, u.username, u.email) AS n')->value('n');
+        $venues = DB::table('venues')->where('is_active', 1)->orderBy('id')->pluck('name')->all();
+        $last = array_pop($venues);
+        $this->actingAsAdmin()->get(route('admin.dashboard'))->assertOk()
+            ->assertSee('Welcome, ' . $name('admin@gmail.com') . ' | Managing: ' . implode(', ', $venues) . ' and ' . $last)
+            ->assertDontSee('Welcome, Admin |');
+
+        $this->flushSession();
+        $own = DB::table('staff as s')->join('users as u', 'u.id', '=', 's.user_id')->join('venues as v', 'v.id', '=', 's.venue_id')
+            ->where('u.email', 'staff@gmail.com')->value('v.name');
+        $this->actingAsStaff()->get(route('admin.dashboard'))->assertOk()
+            ->assertSee('Welcome, ' . $name('staff@gmail.com') . ' | Managing: ' . $own . '</p>', false);
+    }
+
     public function test_staff_sees_the_dashboard(): void
     {
         $this->actingAsStaff()->get(route('admin.dashboard'))->assertOk()->assertSee('Admin Dashboard');

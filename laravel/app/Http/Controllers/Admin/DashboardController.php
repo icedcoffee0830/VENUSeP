@@ -11,7 +11,7 @@ class DashboardController
     {
         /* The needs-action counts and the preview list come from the SAME builder the
            Booking Requests queue uses (legacy bookings.php). */
-        legacy('bookings');
+        legacy('bookings', 'auth');                // auth: staff_venue_scope()
         $adRows = booking_queue_rows();
 
         /* Today's bookings, money collected this quarter, the venue list —
@@ -19,6 +19,8 @@ class DashboardController
            is one of the booking's days: a venue's days are inclusive, a hostel
            stay's nights end the morning of check-out — not only the first day. */
         $adToday = 0; $adRevenue = 0.0; $adVenues = [];
+        $adWho = session('account_type') === 'admin' ? 'Administrator' : 'Staff';
+        $adManaging = '';
         try {
             $adPdo = venusep_db_or_fail();
             $adToday = (int) $adPdo->query(
@@ -37,8 +39,28 @@ class DashboardController
                    FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
                   WHERE v.is_active = 1 GROUP BY v.id ORDER BY v.id"
             )->fetchAll();
-        } catch (PDOException $e) { /* tiles fall back to zero */ }
 
-        return view('admin.dashboard', compact('adRows', 'adToday', 'adRevenue', 'adVenues'));
+            /* "Welcome, <who> | Managing: <what>" — the header's name rule (staff
+               full name, else username), and for staff only their own venue. */
+            $who = $adPdo->prepare('SELECT COALESCE(s.full_name, u.username, u.email) FROM users u
+                                      LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = :id');
+            $who->execute([':id' => (int) session('user_id')]);
+            $adWho = (string) ($who->fetchColumn() ?: $adWho);
+            $scope = staff_venue_scope();
+            if ($scope === null) {
+                $names = array_column($adVenues, 'name');
+                $last = array_pop($names);
+                $adManaging = $names ? implode(', ', $names) . ' and ' . $last : (string) $last;
+            } elseif ($scope !== 0) {
+                $v = $adPdo->prepare('SELECT name FROM venues WHERE id = :id');
+                $v->execute([':id' => $scope]);
+                $adManaging = (string) ($v->fetchColumn() ?: '');
+            }
+        } catch (PDOException $e) { /* tiles fall back to zero */ }
+        if ($adManaging === '') {
+            $adManaging = 'No venue assigned';
+        }
+
+        return view('admin.dashboard', compact('adRows', 'adToday', 'adRevenue', 'adVenues', 'adWho', 'adManaging'));
     }
 }

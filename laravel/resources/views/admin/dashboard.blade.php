@@ -888,7 +888,7 @@ tr:hover {
             <div class="header">
                 <div>
                     <h1>Admin Dashboard</h1>
-                    <p>Welcome, Admin | Managing: USeP Venues And Bahay Alumni</p>
+                    <p>Welcome, {{ $adWho }} | Managing: {{ $adManaging }}</p>
                 </div>
                 <!-- Counter booking. Opens the CUSTOMER booking page in counter
                      mode (includes/auth.php) rather than a form of its own, so

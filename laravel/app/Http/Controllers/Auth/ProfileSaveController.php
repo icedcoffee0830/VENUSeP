@@ -80,7 +80,8 @@ class ProfileSaveController
         if ($name === '' || mb_strlen($name) > 190) {
             $this->reply(400, ['ok' => false, 'field' => 'full_name', 'message' => 'Enter your full name.']);
         }
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        /* 190 = users.email; longer was silently cut, leaving a sign-in email nobody typed */
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 190) {
             $this->reply(400, ['ok' => false, 'field' => 'email', 'message' => 'Enter a valid email address.']);
         }
         $phoneNorm = $phone === '' ? null : cb_normalise_mobile($phone);

@@ -52,6 +52,18 @@ class CustomerProfileTest extends TestCase
         $this->signInAs($c, 'customer')->save(['action' => 'nope'])->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Unknown action.']);
     }
 
+    /* users.email is varchar(190): a longer address was a database error ("Something
+       went wrong") instead of the field message registration gives for it. */
+    public function test_an_email_longer_than_the_column_gets_the_field_message(): void
+    {
+        $c = $this->makeAccount('customer');
+        $this->signInAs($c, 'customer');
+        $long = str_repeat('a', 64) . '@' . str_repeat('b', 63) . '.' . str_repeat('c', 63) . '.com';   // valid, 195 chars
+        $this->save(['action' => 'details', 'full_name' => 'X', 'email' => $long])->assertStatus(400)
+            ->assertJson(['field' => 'email', 'message' => 'Enter a valid email address.']);
+        $this->assertSame($c->email, DB::table('users')->where('id', $c->id)->value('email'));
+    }
+
     public function test_details_are_saved_and_the_session_follows(): void
     {
         $c = $this->makeAccount('customer');

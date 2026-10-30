@@ -176,6 +176,30 @@ class BookingRequestFixesTest extends TestCase
             ->assertDontSee("' days after the event)</span>'", false);
     }
 
+    /* Aron 2026-10-30: every row the status trigger wrote read "Status changed";
+       the title now comes from the old -> new status. */
+    public function test_trigger_timeline_rows_get_real_titles(): void
+    {
+        [, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', false, false);
+        $this->actingAsStaff()->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => 'approve'])->assertOk();
+        $tl = $this->pageRow($ref)['tl'];
+        $this->assertSame('Approved', end($tl)['x']);
+
+        $t = fn (string $or, string $nr, string $op, string $np) => timeline_status_title(
+            ['old_reservation_status' => $or, 'new_reservation_status' => $nr, 'old_payment_status' => $op, 'new_payment_status' => $np]);
+        $this->assertSame('Request expired', $t('pending', 'released', 'locked', 'expired'));
+        $this->assertSame('Slot released', $t('approved', 'released', 'overdue', 'expired'));
+        $this->assertSame('Completed', $t('approved', 'completed', 'await_event', 'await_event'));
+        $this->assertSame('Payment window opened', $t('completed', 'completed', 'await_event', 'await_gcash'));
+        $this->assertSame('Payment overdue', $t('completed', 'completed', 'await_gcash', 'overdue'));
+        $this->assertSame('Deadline extended', $t('completed', 'completed', 'overdue', 'await_cash'));
+        $this->assertSame('Receipt rejected', $t('approved', 'approved', 'under_review', 'await_gcash'));
+        $this->assertSame('Payment confirmed', $t('approved', 'approved', 'under_review', 'confirmed'));
+        $this->assertSame('Refund withdrawn', $t('approved', 'approved', 'refund_requested', 'confirmed'));
+        $this->assertSame('Refunded — booking cancelled', $t('approved', 'cancelled', 'refund_processing', 'refunded'));
+        $this->assertSame('Status changed', $t('approved', 'approved', 'confirmed', 'confirmed'));
+    }
+
     public function test_the_page_has_no_fake_timeline_stamp(): void
     {
         [, $ref] = $this->seedVenueBooking('r1');

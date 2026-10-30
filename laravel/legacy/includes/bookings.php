@@ -923,7 +923,8 @@ function booking_history_events(array $b) {
     if ($pdo !== null) {
         try {
             $stmt = $pdo->prepare(
-                "SELECT t.occurred_at, t.action_code, t.new_reservation_status, t.new_payment_status, t.note,
+                "SELECT t.occurred_at, t.action_code, t.old_reservation_status, t.new_reservation_status,
+                        t.old_payment_status, t.new_payment_status, t.note,
                         COALESCE(s.full_name, u.email, 'System') AS actor
                    FROM booking_timeline t
                    LEFT JOIN users u ON u.id = t.performed_by_user_id
@@ -948,13 +949,57 @@ function booking_history_events(array $b) {
                 $code = (string) $t['action_code'];
                 $events[] = [
                     'w' => date('M j · g:i A', strtotime($t['occurred_at'])) . ' — ' . $t['actor'],
-                    'x' => isset($titles[$code]) ? $titles[$code] : ucfirst(str_replace('_', ' ', $code)),
+                    'x' => $code === 'status_changed' ? timeline_status_title($t)
+                         : (isset($titles[$code]) ? $titles[$code] : ucfirst(str_replace('_', ' ', $code))),
                     'm' => (string) $t['note'],
                 ];
             }
         } catch (PDOException $e) { /* the derived events above still stand */ }
     }
     return $events;
+}
+
+/* A title for a row trg_bookings_after_update wrote ("status_changed"), read
+   from the move itself (Aron, 2026-10-30). The reservation moving is the bigger
+   news; when only the payment moved, the payment says what happened. */
+function timeline_status_title(array $t) {
+    $oldRes = (string) $t['old_reservation_status'];
+    $newRes = (string) $t['new_reservation_status'];
+    $oldPay = (string) $t['old_payment_status'];
+    $newPay = (string) $t['new_payment_status'];
+    $awaiting = ['await_gcash', 'await_cash'];
+
+    if ($oldRes !== $newRes) {
+        switch ($newRes) {
+            case 'approved':  return 'Approved';
+            case 'rejected':  return 'Request rejected';
+            case 'completed': return 'Completed';
+            case 'disrupted': return 'Room closed — booking disrupted';
+            case 'cancelled': return $newPay === 'refunded' ? 'Refunded — booking cancelled' : 'Cancelled';
+            case 'released':  return $oldRes === 'pending' ? 'Request expired' : 'Slot released';
+        }
+    }
+    if ($oldPay !== $newPay) {
+        if (in_array($newPay, $awaiting, true)) {
+            if ($oldPay === 'await_event')  return 'Payment window opened';
+            if ($oldPay === 'overdue')      return 'Deadline extended';
+            if ($oldPay === 'await_pos')    return 'Payment unlocked';
+            if ($oldPay === 'under_review') return 'Receipt rejected';
+            if ($oldPay === 'locked')       return 'Payment opened';
+            if ($newPay === 'await_cash')   return 'Customer chose to pay cash';
+            return 'Cash payment cancelled';
+        }
+        if (in_array($oldPay, ['refund_requested', 'refund_await_or', 'refund_processing', 'refund_correction'], true)
+            && in_array($newPay, ['confirmed', 'paid_cash'], true)) {
+            return 'Refund withdrawn';
+        }
+        if ($newPay === 'refund_requested' && $oldPay === 'refund_correction') return 'Refund resubmitted';
+        if ($newPay === 'under_review') return $oldPay === 'locked' ? 'Receipt uploaded' : 'Receipt under review';
+        if ($newPay === 'paid_cash') return 'Paid in cash';
+        $pay = status_badge_maps()['pay'];
+        if (isset($pay[$newPay])) return $pay[$newPay]['t'];   // "Payment confirmed", "Payment overdue", "Refund denied" …
+    }
+    return 'Status changed';
 }
 
 /* REFUND ELIGIBILITY (agreed 2026-09-09, policy snapshot added 2026-09-16) —

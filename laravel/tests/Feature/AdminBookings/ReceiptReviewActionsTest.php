@@ -89,6 +89,20 @@ class ReceiptReviewActionsTest extends TestCase
         $this->assertSame('confirmed', $this->booking($id)->payment_status);
     }
 
+    /* Found 2026-10-30: "reject" accepted an approved, PAID booking (and a released one)
+       and locked its payment. Only a pending request is rejected. */
+    public function test_only_a_pending_request_can_be_rejected(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'confirmed');
+        [$relId, $relRef] = $this->seedVenueBooking('r1', 'released', 'expired');
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'reject'])
+            ->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'Only a pending request can be rejected.']);
+        $this->act(['booking' => $relRef, 'action' => 'reject'])
+            ->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'That booking is already closed.']);
+        $this->assertSame(['approved', 'confirmed'], [$this->booking($id)->reservation_status, $this->booking($id)->payment_status]);
+        $this->assertSame('released', $this->booking($relId)->reservation_status);
+    }
+
     /* §7 Undo rejection: the receipt goes back under review, with the timeline keeping both steps. */
     public function test_undo_rejection_puts_the_receipt_back_under_review(): void
     {

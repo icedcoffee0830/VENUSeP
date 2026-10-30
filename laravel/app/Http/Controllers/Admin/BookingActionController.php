@@ -315,8 +315,13 @@ class BookingActionController extends Controller
 
         /* ---- REJECT the request. The booking keeps its history; the slot frees. ---- */
         case 'reject':
-            if (in_array($bk['reservation_status'], ['rejected', 'cancelled', 'completed'], true)) {
+            if (in_array($bk['reservation_status'], ['rejected', 'cancelled', 'completed', 'released'], true)) {
                 $this->reply(409, ['ok' => false, 'message' => 'That booking is already closed.']);
+            }
+            /* Rejecting answers a REQUEST. An approved booking may already be paid,
+               and this would lock its payment with no refund (found 2026-10-30). */
+            if ($bk['reservation_status'] !== 'pending') {
+                $this->reply(409, ['ok' => false, 'message' => 'Only a pending request can be rejected.']);
             }
             $this->setActor($pdo, $actor, $note !== '' ? $note : 'Request rejected.');
             /* trg_bookings_after_update releases the held slots and bed-nights. */

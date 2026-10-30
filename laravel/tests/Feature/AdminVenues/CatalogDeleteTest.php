@@ -50,4 +50,35 @@ class CatalogDeleteTest extends VenuesTestCase
             $this->dropVenue($venueId);
         }
     }
+
+    /* The rows go, and so do the files they pointed at: a deleted room's photo
+       folder and a deleted venue's cover used to stay on disk for good. */
+    public function test_deleting_a_room_or_venue_removes_its_photo_files(): void
+    {
+        $venueId = $this->makeVenue('Delete Files Venue');
+        $roomId = DB::table('rooms')->insertGetId([
+            'venue_id' => $venueId, 'room_code' => 'r902', 'name' => 'Delete Files Room', 'room_type' => 'event',
+        ]);
+        DB::table('event_room_details')->insert(['room_id' => $roomId, 'attendee_capacity' => 10, 'fee_per_day' => 100]);
+        $roomDir = public_path('assets/img/venues/rooms/r902');
+        try {
+            $this->actingAsAdmin();
+            $this->withCsrf()->post(route('admin.room-photos-api'), [
+                '_token' => self::TOKEN, 'action' => 'upload', 'room_id' => 'r902', 'files' => [$this->pngUpload('a.png')],
+            ])->assertOk();
+            $this->withCsrf()->post(route('admin.venue-photo-api'), [
+                '_token' => self::TOKEN, 'action' => 'upload', 'venue_id' => (string) $venueId, 'file' => $this->pngUpload('c.png'),
+            ])->assertOk();
+            $this->assertCount(1, glob($roomDir . '/photos/*.png'));
+            $this->assertFileExists(public_path('assets/img/venues/covers/' . $venueId . '.png'));
+
+            $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'room', 'room_id' => 'r902'])->assertOk();
+            $this->assertDirectoryDoesNotExist($roomDir);
+            $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'venue', 'venue_id' => (string) $venueId])->assertOk();
+            $this->assertFileDoesNotExist(public_path('assets/img/venues/covers/' . $venueId . '.png'));
+        } finally {
+            $this->dropRoom('r902');
+            $this->dropVenue($venueId);
+        }
+    }
 }

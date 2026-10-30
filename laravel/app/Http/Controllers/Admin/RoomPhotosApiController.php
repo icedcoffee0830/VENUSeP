@@ -57,6 +57,17 @@ class RoomPhotosApiController extends Controller
                 ->header('Cache-Control', 'no-store')->header('Allow', 'GET, POST'));
         }
 
+        /* every change is scoped to the room's venue (#24); an unknown room is
+           answered by the rp_* functions below */
+        $pdo = venusep_db();
+        if ($pdo !== null) {
+            $venueOfRoom = $pdo->prepare('SELECT venue_id FROM rooms WHERE room_code = :c');
+            $venueOfRoom->execute([':c' => $roomId]);
+            $venueOfRoom = $venueOfRoom->fetchColumn();
+            if ($venueOfRoom !== false) {
+                $this->requireVenueScope($venueOfRoom);
+            }
+        }
 
         $uploaderId = (int) session('user_id');
 

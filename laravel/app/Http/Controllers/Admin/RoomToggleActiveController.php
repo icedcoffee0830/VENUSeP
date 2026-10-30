@@ -45,13 +45,14 @@ class RoomToggleActiveController extends Controller
 
         try {
             $pdo->beginTransaction();
-            $room = $pdo->prepare('SELECT id, name, is_active FROM rooms WHERE room_code = :code FOR UPDATE');
+            $room = $pdo->prepare('SELECT id, name, is_active, venue_id FROM rooms WHERE room_code = :code FOR UPDATE');
             $room->execute([':code' => $roomCode]);
             $roomRow = $room->fetch();
             if (!$roomRow) {
                 $pdo->rollBack();
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
             }
+            $this->requireVenueScope($roomRow['venue_id']);
 
             $newActive = $roomRow['is_active'] ? 0 : 1;
             $pdo->prepare('UPDATE rooms SET is_active = :a WHERE id = :id')
@@ -63,6 +64,7 @@ class RoomToggleActiveController extends Controller
                 'message' => $roomRow['name'] . ($newActive ? ' is visible to customers again.' : ' is hidden from customers now.'),
             ]);
         } catch (HttpResponseException $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }

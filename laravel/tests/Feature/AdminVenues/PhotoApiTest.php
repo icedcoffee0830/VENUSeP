@@ -75,7 +75,7 @@ class PhotoApiTest extends VenuesTestCase
     {
         $venueId = $this->makeVenue('Photo Test Venue');
         try {
-            $this->actingAsStaff();
+            $this->actingAsAdmin();
             $this->withCsrf()->post(route('admin.venue-photo-api'), [
                 '_token' => self::TOKEN, 'action' => 'upload', 'venue_id' => (string) $venueId, 'file' => $this->pngUpload('c.png'),
             ])->assertOk()->assertJson(['ok' => true, 'cover' => '../assets/img/venues/covers/' . $venueId . '.png']);

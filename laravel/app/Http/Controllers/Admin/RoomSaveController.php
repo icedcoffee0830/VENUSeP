@@ -222,10 +222,14 @@ class RoomSaveController extends Controller
         foreach (['best_for', 'catering', 'accessibility'] as $g) {
             $glance[$g] = mb_substr(trim((string) ($post->get($g) ?? '')), 0, 255);
         }
+        /* A blank or non-numeric field is refused, not cast: (float) '' is 0, which
+           silently made a room FREE when the rate box was cleared. Counts are whole. */
+        $whole = function ($v) { return is_string($v) && preg_match('/^\s*\d{1,9}\s*$/', $v) === 1 ? (int) $v : -1; };
+        $money = function ($v) { return is_string($v) && is_numeric($v) ? (float) $v : -1.0; };
         $capGiven = $post->has('capacity');
-        $cap = (int) ($post->get('capacity') ?? 0);
+        $cap = $whole($post->get('capacity'));
         $feeGiven = $post->has('fee');
-        $fee = (float) ($post->get('fee') ?? -1);
+        $fee = $money($post->get('fee'));
         if ($capGiven && ($cap < 1 || $cap > 100000)) {
             $this->reply(400, ['ok' => false, 'error' => 'bad_capacity', 'message' => 'Capacity must be at least 1 person.']);
         }
@@ -233,8 +237,8 @@ class RoomSaveController extends Controller
             $this->reply(400, ['ok' => false, 'error' => 'bad_fee', 'message' => 'Enter a rate of ₱0 or more.']);
         }
         $hostelGiven = $roomType === 'hostel' && $post->has('rate');
-        $hRate  = (float) ($post->get('rate') ?? -1);
-        $hBeds  = (int) ($post->get('beds') ?? 0);
+        $hRate  = $money($post->get('rate'));
+        $hBeds  = $whole($post->get('beds'));
         $hCr    = ($post->get('cr_type') ?? '') === 'private' ? 'private' : 'communal';
         $hIn    = (string) ($post->get('check_in_time') ?? '');
         $hOut   = (string) ($post->get('check_out_time') ?? '');
@@ -245,7 +249,8 @@ class RoomSaveController extends Controller
             if ($hBeds < 1 || $hBeds > 20) {
                 $this->reply(400, ['ok' => false, 'error' => 'bad_beds', 'message' => 'A hostel room holds 1 to 20 beds.']);
             }
-            if (!preg_match('/^\d{2}:\d{2}$/', $hIn) || !preg_match('/^\d{2}:\d{2}$/', $hOut)) {
+            $clock = '/^([01]\d|2[0-3]):[0-5]\d$/';   /* "25:99" used to reach MySQL and fail as a 500 */
+            if (!preg_match($clock, $hIn) || !preg_match($clock, $hOut)) {
                 $this->reply(400, ['ok' => false, 'error' => 'bad_times', 'message' => 'Set the check-in and check-out times.']);
             }
         }
@@ -263,6 +268,10 @@ class RoomSaveController extends Controller
             if (!$venueRow) {
                 $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Unknown location.']);
             }
+
+            /* the venue the room is (or will be) filed under must be the staff
+               member's own (#24); an edit also checks the venue it is in now, below */
+            $this->requireVenueScope($venueRow['id']);
 
             if ($isNewRoom) {
                 /* The room must suit the venue (trg_rooms_type_ins enforces the same
@@ -345,12 +354,13 @@ class RoomSaveController extends Controller
                     'message' => 'Room created as ' . $newCode . '. You can add its photos now.']);
             }
 
-            $room = $pdo->prepare('SELECT id, room_type FROM rooms WHERE room_code = :code');
+            $room = $pdo->prepare('SELECT id, room_type, venue_id FROM rooms WHERE room_code = :code');
             $room->execute([':code' => $roomCode]);
             $roomRow = $room->fetch();
             if (!$roomRow) {
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
             }
+            $this->requireVenueScope($roomRow['venue_id']);
             if ($roomRow['room_type'] !== $roomType) {
                 $this->reply(409, ['ok' => false, 'error' => 'wrong_type', 'message' => 'This room does not match the form that submitted it.']);
             }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 
 /* CATALOG DELETE (was admin/catalog-delete.php) — deletes an eligible room
    or venue from Venue Management. Booking/history rows are never deleted
@@ -21,7 +22,7 @@ class CatalogDeleteController extends Controller
             $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
         }
 
-        legacy('db');
+        legacy('db', 'venue-photos');   /* + room-photos: rp_room_dir(), vp_delete_cover_file() */
         $pdo = venusep_db();
         if ($pdo === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so nothing was deleted.']);
@@ -92,6 +93,9 @@ class CatalogDeleteController extends Controller
                 $deleted = $pdo->prepare('DELETE FROM rooms WHERE id = :id');
                 $deleted->execute([':id' => $roomId]);
                 $pdo->commit();
+                /* the files those room_media rows pointed at (photos + 360°); the code
+                   passed the regex above, so this stays inside the rooms folder */
+                File::deleteDirectory(rp_room_dir($roomCode));
 
                 $this->reply(200, ['ok' => true, 'entity' => 'room', 'name' => $roomRow['name'],
                     'message' => $roomRow['name'] . ' was deleted.']);
@@ -135,6 +139,7 @@ class CatalogDeleteController extends Controller
                 $deleted = $pdo->prepare('DELETE FROM venues WHERE id = :id');
                 $deleted->execute([':id' => $venueId]);
                 $pdo->commit();
+                vp_delete_cover_file($venueId);   /* venues.cover_photo's file */
 
                 $this->reply(200, ['ok' => true, 'entity' => 'venue', 'name' => $venueRow['name'],
                     'message' => $venueRow['name'] . ' was deleted.']);

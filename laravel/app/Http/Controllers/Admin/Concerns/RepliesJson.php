@@ -31,6 +31,31 @@ trait RepliesJson
         if (!session()->has('user_id') || !in_array(session('account_type'), ['admin', 'staff'], true)) {
             $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
         }
+        /* These routes have no page guard (staff_session_heal()), so the account is
+           re-read here: a suspended one is refused, a demoted admin acts as staff. */
+        legacy('db');
+        $pdo = venusep_db();
+        if ($pdo !== null) {
+            $st = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :id');
+            $st->execute([':id' => (int) session('user_id')]);
+            $row = $st->fetch();
+            if (!$row || !(bool) $row['is_active'] || !in_array($row['account_type'], ['admin', 'staff'], true)) {
+                $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
+            }
+            session(['account_type' => $row['account_type']]);
+        }
+    }
+
+    /* STAFF HANDLE ONLY THEIR OWN VENUE (DB-DECISIONS #24): the catalog writes
+       (rooms, venues, their photos) are refused for another venue's things, the
+       same way booking-action refuses another venue's bookings. Admins pass. */
+    protected function requireVenueScope($venueId, string $what = 'room'): void
+    {
+        legacy('auth');
+        if (!staff_may_handle_venue($venueId)) {
+            $this->reply(403, ['ok' => false, 'error' => 'forbidden',
+                'message' => 'This ' . $what . ' belongs to another venue. Only that venue\'s staff or an administrator can change it.']);
+        }
     }
 
     protected function requirePost(Request $request): void

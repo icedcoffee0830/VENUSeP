@@ -53,6 +53,26 @@ class StaffManagementTest extends TestCase
         }
     }
 
+    /* The Venue column (Tabulator) put the admin-typed venue name in as HTML: in the
+       cell, the inline editor's list and the header filter's list. All three now go
+       through escText(); the name itself reaches the script as JSON data. */
+    public function test_the_venue_column_shows_a_venue_name_as_text(): void
+    {
+        $old = DB::table('venues')->where('id', 1)->value('name');
+        DB::table('venues')->where('id', 1)->update(['name' => 'Hall <img src=x onerror=alert(1)>']);
+        try {
+            $html = $this->actingAsAdmin()->get(route('admin.staff'))->assertOk()
+                ->assertDontSee('<img src=x', false)
+                ->assertSee('"name":' . json_encode('Hall <img src=x onerror=alert(1)>', JSON_HEX_TAG), false)   // data, not markup
+                ->getContent();
+            $this->assertStringContainsString("return escText(venueEditorValues[String(cell.getValue())] || 'Choose a venue');", $html);
+            $this->assertStringContainsString('editorParams: { values: venueEditorValues, itemFormatter: escText }', $html);
+            $this->assertStringContainsString('headerFilterParams: { values: venueFilterValues, clearable: true, itemFormatter: escText }', $html);
+        } finally {
+            DB::table('venues')->where('id', 1)->update(['name' => $old]);
+        }
+    }
+
     public function test_admin_sees_the_register_form_with_venues(): void
     {
         $this->actingAsAdmin()->get(route('admin.admin-register'))->assertOk()

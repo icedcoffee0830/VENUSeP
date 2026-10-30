@@ -200,6 +200,20 @@ class BookingRequestFixesTest extends TestCase
         $this->assertSame('Status changed', $t('approved', 'approved', 'confirmed', 'confirmed'));
     }
 
+    /* cbook's night-2 report: "Decided: X% applied" printed the LIVE discount
+       setting, not the rate snapshotted onto this booking (DB-DECISIONS: per-booking snapshot). */
+    public function test_decided_discount_line_uses_the_bookings_snapshot(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', true, false);
+        $reply = $this->actingAsStaff()->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => 'approve', 'discount' => '1'])
+            ->assertOk()->json('booking');
+        $this->assertGreaterThan(0, $reply['discount']);
+        $this->assertEquals($this->booking($id)->discount_percent, $reply['discount']);   // what cur.discountPct becomes
+
+        $this->page($ref)->assertSee("Decided: <strong>\${cur.discountPct > 0 ? cur.discountPct + '% applied'", false)
+            ->assertDontSee("DISCOUNT_PERCENT + '% applied'", false);
+    }
+
     public function test_the_page_has_no_fake_timeline_stamp(): void
     {
         [, $ref] = $this->seedVenueBooking('r1');

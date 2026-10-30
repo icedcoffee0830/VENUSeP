@@ -937,7 +937,7 @@
                   : ' <span style="color:var(--vm-label)">&mdash; not a USeP address</span>'}
               </div>
               ${cur.discountPct != null ? `<div style="font-size:0.76rem;margin-top:0.4rem;color:${cur.discountPct > 0 ? '#1c7a4f' : 'var(--vm-muted)'}">
-                Decided: <strong>${cur.discountPct > 0 ? DISCOUNT_PERCENT + '% applied' : 'no discount — full price'}</strong></div>` : ''}
+                Decided: <strong>${cur.discountPct > 0 ? cur.discountPct + '% applied' : 'no discount — full price'}</strong></div>` : ''}
             </div>
           </div>`;
       }

@@ -37,7 +37,7 @@ class RoomToggleActiveController extends Controller
             $this->reply(400, ['ok' => false, 'error' => 'bad_room', 'message' => 'Invalid room.']);
         }
 
-        legacy('db');
+        legacy('db', 'bookings');   /* booking_reference() */
         $pdo = venusep_db();
         if ($pdo === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so nothing changed.']);
@@ -57,11 +57,27 @@ class RoomToggleActiveController extends Controller
             $newActive = $roomRow['is_active'] ? 0 : 1;
             $pdo->prepare('UPDATE rooms SET is_active = :a WHERE id = :id')
                 ->execute([':a' => $newActive, ':id' => (int) $roomRow['id']]);
+            /* Disabling keeps the room's upcoming bookings, but names them (the
+               same way room-save names bookings over a lowered capacity). */
+            $notes = [];
+            if (!$newActive) {
+                $up = $pdo->prepare(
+                    "SELECT b.id, b.submitted_at FROM bookings b
+                      WHERE b.room_id = :r AND b.reservation_status IN ('pending','approved')
+                        AND fn_booking_last_day(b.id) >= CURDATE() ORDER BY b.id"
+                );
+                $up->execute([':r' => (int) $roomRow['id']]);
+                $refs = array_map(function ($b) { return booking_reference($b['id'], $b['submitted_at']); }, $up->fetchAll());
+                if ($refs) {
+                    $notes[] = 'These upcoming bookings are kept as booked: ' . implode(', ', $refs) . '.';
+                }
+            }
             $pdo->commit();
 
             $this->reply(200, [
-                'ok' => true, 'active' => (bool) $newActive, 'name' => $roomRow['name'],
-                'message' => $roomRow['name'] . ($newActive ? ' is visible to customers again.' : ' is hidden from customers now.'),
+                'ok' => true, 'active' => (bool) $newActive, 'name' => $roomRow['name'], 'notes' => $notes,
+                'message' => $roomRow['name'] . ($newActive ? ' is visible to customers again.' : ' is hidden from customers now.')
+                    . ($notes ? "\n\n" . implode("\n\n", $notes) : ''),
             ]);
         } catch (HttpResponseException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }

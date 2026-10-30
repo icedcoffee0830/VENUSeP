@@ -1182,6 +1182,10 @@ function vmMaint($m, $today) {
                 venusepAlert(result.message || 'Nothing changed.');
                 return;
               }
+              // disabled with upcoming bookings: the reply names them — show it first
+              if (result.notes && result.notes.length) {
+                return venusepAlert(result.message, { title: 'Room disabled' }).then(() => location.reload());
+              }
               location.reload();
             })
             .catch(() => venusepAlert('Could not reach the server, so nothing changed.'))

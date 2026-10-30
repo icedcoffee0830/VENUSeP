@@ -233,9 +233,9 @@
                             @if ($booking['paymentStatus'] === 'Payment pending')
                               <span class="booking-pay-note">opens {{ $booking['payment']['opensLabel'] }}</span>
                             @elseif ($booking['paymentStatus'] === 'Payment due')
-                              <span class="booking-pay-note">pay by {{ $booking['payment']['payByLabel'] }}</span>
+                              <span class="booking-pay-note">pay by {{ customer_pay_by_label($booking['payment']) }}</span>
                             @elseif ($booking['paymentStatus'] === 'Overdue')
-                              <span class="booking-pay-note is-overdue">was due {{ $booking['payment']['payByLabel'] }} &middot; can still be paid</span>
+                              <span class="booking-pay-note is-overdue">was due {{ customer_pay_by_label($booking['payment']) }} &middot; can still be paid</span>
                             @endif
                           </td>
                           <td data-label="Status"><span class="booking-badge {{ bh_badge($booking['bookingStatus']) }}">{{ $booking['bookingStatus'] }}</span>

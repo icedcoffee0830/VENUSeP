@@ -84,7 +84,7 @@
                   <div><div class="pay-k">Amount due</div><div class="pay-v">{{ $payB['amount'] }}</div></div>
                   <div><div class="pay-k">Payment</div><div class="pay-v">{{ $payB['paymentStatus'] }}</div></div>
                   @if ($payOpen || $payCode === 'await_event')
-                    <div><div class="pay-k">{{ $payCode === 'overdue' ? 'Was due' : 'Pay by' }}</div><div class="pay-v">{{ $payB['payment']['payByLabel'] }}</div></div>
+                    <div><div class="pay-k">{{ $payCode === 'overdue' ? 'Was due' : 'Pay by' }}</div><div class="pay-v">{{ customer_pay_by_label($payB['payment']) }}</div></div>
                   @endif
                 </div>
               </section>
@@ -114,7 +114,7 @@
 
               @else
                 @if ($payCode === 'overdue')
-                  <div class="pay-note is-bad"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><div><strong>This payment is overdue</strong>It was due {{ $payB['payment']['payByLabel'] }}. It can still be paid, but staff may release the slot.</div></div>
+                  <div class="pay-note is-bad"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><div><strong>This payment is overdue</strong>It was due {{ customer_pay_by_label($payB['payment']) }}.{{ $payB['payment']['policy'] === 'postpay' ? ' Please pay it now — it can still be paid here.' : ' It can still be paid, but staff may release the slot.' }}</div></div>
                 @elseif (!empty($payB['payToUse']))
                   <!-- the hostel is pay to use (2026-10-27, DB-DECISIONS #26) -->
                   <div class="pay-note is-info"><i class="bi bi-info-circle" aria-hidden="true"></i><div><strong>Pay before you check in</strong>Pay here by GCash, or in cash at the front desk when you arrive. If it is not paid by the end of {{ $payB['payment']['payByLabel'] }}, the beds are released. You get your bed once the stay is paid.</div></div>

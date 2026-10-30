@@ -33,6 +33,9 @@ class ReceiptPdfController
         if (!$isStaff && !$isCustomer) {
             return self::deny();
         }
+        if ($isStaff) {
+            staff_session_heal();   /* a suspended account loses its session here too (redirects) */
+        }
 
         $bookingId = booking_id_from_reference($request->query('booking', ''));
         $pdo = venusep_db();

@@ -228,7 +228,7 @@ class StaffController
             if ($name === '' || mb_strlen($name) > 190) {
                 return $this->reply(400, ['ok' => false, 'field' => 'full_name', 'message' => 'Enter a full name.']);
             }
-            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 190) {   /* users.email varchar(190), as register-submit */
                 return $this->reply(400, ['ok' => false, 'field' => 'email', 'message' => 'Enter a valid email address.']);
             }
             $phoneNorm = $phone === '' ? null : cb_normalise_mobile($phone);

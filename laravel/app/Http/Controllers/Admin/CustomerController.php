@@ -74,7 +74,7 @@ class CustomerController
         if (!$request->isMethod('post')) {
             return $this->reply(405, ['ok' => false, 'message' => 'Use POST.'])->header('Allow', 'POST');
         }
-        if (!venusep_is_staff_session()) {
+        if (!venusep_is_staff_session() || !CounterCustomerController::staffStillActive()) {
             return $this->reply(403, ['ok' => false, 'message' => 'Only admin or staff can manage customer accounts.']);
         }
         $token = $request->input('csrf', $request->input('_token', $request->header('X-CSRF-TOKEN')));

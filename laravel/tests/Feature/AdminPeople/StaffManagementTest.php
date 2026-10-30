@@ -38,6 +38,21 @@ class StaffManagementTest extends TestCase
             ->assertSee(json_encode(route('admin.staff-save')), false);
     }
 
+    /* A staff member edits their own name (profile). In the admin's page script it
+       must stay data: a "</script>" in it must not end the script. */
+    public function test_a_staff_name_cannot_break_out_of_the_page_script(): void
+    {
+        $old = DB::table('staff')->where('user_id', 73)->value('full_name');
+        DB::table('staff')->where('user_id', 73)->update(['full_name' => '</script><script>alert(1)</script>']);
+        try {
+            $this->actingAsAdmin()->get(route('admin.staff'))->assertOk()
+                ->assertDontSee('</script><script>alert(1)', false)
+                ->assertSee('"name":"\u003C/script\u003E\u003Cscript\u003Ealert(1)\u003C/script\u003E"', false);
+        } finally {
+            DB::table('staff')->where('user_id', 73)->update(['full_name' => $old]);
+        }
+    }
+
     public function test_admin_sees_the_register_form_with_venues(): void
     {
         $this->actingAsAdmin()->get(route('admin.admin-register'))->assertOk()
@@ -118,6 +133,23 @@ class StaffManagementTest extends TestCase
             $this->assertSame(2, (int) DB::table('staff')->where('user_id', 73)->value('venue_id'));
         } finally {
             DB::table('staff')->where('user_id', 73)->update(['venue_id' => 3]);
+        }
+    }
+
+    /* users.email is varchar(190) and the connection is not in strict mode: a longer
+       (still valid) address used to be cut to 190 characters and saved as "updated". */
+    public function test_update_refuses_an_email_longer_than_the_column(): void
+    {
+        $this->actingAsAdmin()->withSession(['_token' => 'tok']);
+        $origEmail = DB::table('users')->where('id', 74)->value('email');
+        $long = str_repeat('a', 64) . '@' . str_repeat('b', 60) . '.' . str_repeat('c', 60) . '.co.ph';   // 193 characters
+        $this->assertNotFalse(filter_var($long, FILTER_VALIDATE_EMAIL));
+        try {
+            $this->post_(['action' => 'update', 'user_id' => 74, 'full_name' => 'Maco Case', 'email' => $long])
+                ->assertStatus(400)->assertExactJson(['ok' => false, 'field' => 'email', 'message' => 'Enter a valid email address.']);
+            $this->assertSame($origEmail, DB::table('users')->where('id', 74)->value('email'));
+        } finally {
+            DB::table('users')->where('id', 74)->update(['email' => $origEmail]);
         }
     }
 

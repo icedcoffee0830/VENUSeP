@@ -28,6 +28,36 @@ class CounterCustomerTest extends TestCase
         $this->get(route('admin.customer-search', ['q' => 'Carmen']))->assertExactJson(['ok' => true, 'results' => []]);
     }
 
+    /* "%%%" or "___" are three characters, but as LIKE wildcards they match every
+       customer — the three-character minimum must not be walkable that way. */
+    public function test_search_treats_like_wildcards_as_plain_characters(): void
+    {
+        $this->actingAsStaff();
+        foreach (['%%%', '___', '%_%', 'a%a', '\\\\\\'] as $q) {
+            $this->get(route('admin.customer-search', ['q' => $q]))->assertOk()
+                ->assertExactJson(['ok' => true, 'results' => []]);
+        }
+        $this->get(route('admin.customer-search', ['q' => 'msantos@usep']))->assertOk()
+            ->assertJsonPath('results.0.name', 'Maria Santos');
+    }
+
+    public function test_a_suspended_staff_session_cannot_search_or_verify(): void
+    {
+        $staffId = DB::table('users')->where('email', 'staff@gmail.com')->value('id');
+        DB::table('users')->where('id', $staffId)->update(['is_active' => 0]);
+        try {
+            $this->actingAsStaff()->withSession(['_token' => 'tok123'])
+                ->get(route('admin.customer-search', ['q' => 'Maria']))
+                ->assertStatus(403)->assertExactJson(['ok' => false, 'results' => [], 'message' => 'Staff only.']);
+            $this->actingAsStaff()->withSession(['_token' => 'tok123'])
+                ->post(route('admin.customer-verify'), ['csrf' => 'tok123', 'customer_id' => 3, 'password' => 'x'])
+                ->assertStatus(403)->assertExactJson(['ok' => false, 'message' => 'Staff only.']);
+            $this->assertNull(session('counter_proof'));
+        } finally {
+            DB::table('users')->where('id', $staffId)->update(['is_active' => 1]);
+        }
+    }
+
     public function test_verify_rejects_get_guests_and_a_bad_token(): void
     {
         $this->get(route('admin.customer-verify'))->assertStatus(405)->assertHeader('Allow', 'POST')

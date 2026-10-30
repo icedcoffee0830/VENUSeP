@@ -389,7 +389,7 @@ body {
     document.addEventListener('DOMContentLoaded', () => {
       /* The real customer accounts, from `users` + `customers`. Walk-ins
          (no user_id) never appear here — see admin/customer-management.php. */
-      const data = {!! json_encode($cmRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+      const data = {!! json_encode($cmRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
       const CSRF = {!! json_encode(csrf_token()) !!};
 
       /* Every write goes to admin/customer-save.php, which re-checks that the

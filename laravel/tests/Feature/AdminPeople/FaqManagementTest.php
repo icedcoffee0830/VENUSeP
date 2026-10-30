@@ -73,6 +73,67 @@ class FaqManagementTest extends TestCase
         $this->post(route('admin.faq-save'), ['action' => 'bogus'])->assertRedirect(route('admin.faq-management') . '?msg=action');
     }
 
+    /* Moving a question to another section by editing it: it kept its old position
+       number, so it shared a sort_order with a row of the new section and the
+       Up/Down arrows could not order the two. It now goes to the end of the new section. */
+    public function test_editing_a_question_into_another_section_puts_it_last_there(): void
+    {
+        $this->actingAsStaff();
+        $this->post(route('admin.faq-save'), ['action' => 'add', 'section' => 'cash', 'policy' => 'any',
+            'question' => 'Section move test?', 'answer' => 'x']);
+        $id = DB::table('faqs')->where('question', 'Section move test?')->value('id');
+        try {
+            $this->post(route('admin.faq-save'), ['action' => 'edit', 'id' => $id, 'section' => 'after', 'policy' => 'any',
+                'question' => 'Section move test?', 'answer' => 'y'])
+                ->assertRedirect(route('admin.faq-management') . '?msg=saved&show=any#after');
+            $row = DB::table('faqs')->where('id', $id)->first();
+            $this->assertSame('after', $row->section_key);
+            $othersMax = (int) DB::table('faqs')->where('section_key', 'after')->where('id', '<>', $id)->max('sort_order');
+            $this->assertSame($othersMax + 1, (int) $row->sort_order);
+
+            // an edit that stays in its section keeps its place
+            $this->post(route('admin.faq-save'), ['action' => 'edit', 'id' => $id, 'section' => 'after', 'policy' => 'any',
+                'question' => 'Section move test?', 'answer' => 'z']);
+            $this->assertSame($othersMax + 1, (int) DB::table('faqs')->where('id', $id)->value('sort_order'));
+        } finally {
+            DB::table('faqs')->where('id', $id)->delete();
+        }
+    }
+
+    /* A second click on Delete (or another admin deleting it first) is not a "built-in"
+       refusal, and saving or hiding a question that is gone is not "saved". */
+    public function test_a_question_that_no_longer_exists_says_so(): void
+    {
+        $this->actingAsStaff();
+        foreach (['delete', 'toggle'] as $action) {
+            $this->post(route('admin.faq-save'), ['action' => $action, 'id' => 999999])
+                ->assertRedirect(route('admin.faq-management') . '?msg=missing');
+        }
+        $this->post(route('admin.faq-save'), ['action' => 'edit', 'id' => 999999, 'section' => 'cash', 'policy' => 'any',
+            'question' => 'Gone?', 'answer' => 'x'])
+            ->assertRedirect(route('admin.faq-management') . '?msg=missing');
+        $this->assertNull(DB::table('faqs')->where('question', 'Gone?')->first());
+    }
+
+    /* The answer format allows "[text](page.php)" and http(s) links (faqs.php). Typed
+       HTML stays text on the customer page, and no other scheme becomes a link. */
+    public function test_answers_link_http_pages_and_never_run_typed_html(): void
+    {
+        $id = DB::table('faqs')->insertGetId(['section_key' => 'cash', 'question' => 'Link test <b>q</b>?', 'policy' => 'any', 'sort_order' => 99,
+            'answer' => "See [the USeP site](https://www.usep.edu.ph/about) or [bad](javascript:alert(1)).\n<script>alert(2)</script> <img src=x onerror=alert(3)>"]);
+        try {
+            $this->get(route('customer.faq'))->assertOk()
+                ->assertSee('<a href="https://www.usep.edu.ph/about">the USeP site</a>', false)
+                ->assertDontSee('href="javascript:', false)
+                ->assertDontSee('<script>alert(2)', false)
+                ->assertDontSee('<img src=x', false)
+                ->assertDontSee('<b>q</b>', false)
+                ->assertSee('&lt;script&gt;alert(2)&lt;/script&gt;', false);
+        } finally {
+            DB::table('faqs')->where('id', $id)->delete();
+        }
+    }
+
     public function test_toggle_twice_and_move_round_trip(): void
     {
         $this->actingAsStaff();

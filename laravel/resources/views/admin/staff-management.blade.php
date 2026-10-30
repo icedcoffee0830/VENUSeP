@@ -574,8 +574,8 @@ body {
 
     document.addEventListener('DOMContentLoaded', () => {
       /* The real staff-side accounts, from `users` + `staff`. */
-      const data = {!! json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
-      const venues = {!! json_encode($smVenues, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+      const data = {!! json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+      const venues = {!! json_encode($smVenues, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
       const CSRF = {!! json_encode(csrf_token()) !!};
       /* No "Unassigned" (2026-10-27): every staff member handles exactly one
          venue, and staff-save.php refuses an empty one. Admins handle all. */

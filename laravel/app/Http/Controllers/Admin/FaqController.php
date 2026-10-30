@@ -105,27 +105,41 @@ class FaqController
                     if ($answer === '' || mb_strlen($answer) > 4000) {
                         return $this->back('answer', '&keep=1');
                     }
+                    $nextSql = "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM faqs WHERE section_key = " . $pdo->quote($section);
                     if ($action === 'add') {
-                        $next = (int) $pdo->query("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM faqs WHERE section_key = " . $pdo->quote($section))->fetchColumn();
+                        $next = (int) $pdo->query($nextSql)->fetchColumn();
                         $stmt = $pdo->prepare("INSERT INTO faqs (section_key, question, answer, policy, sort_order, created_by_user_id, updated_by_user_id)
                                                VALUES (:s, :q, :a, :p, :o, :u, :u2)");
                         $stmt->execute([':s' => $section, ':q' => $question, ':a' => $answer, ':p' => $policy, ':o' => $next, ':u' => $userId, ':u2' => $userId]);
                         return $this->back('added', '&show=' . $policy . '#' . $section);   /* the page previews that policy so the new row is visible */
                     }
-                    $stmt = $pdo->prepare("UPDATE faqs SET section_key = :s, question = :q, answer = :a, policy = :p, updated_by_user_id = :u WHERE id = :id");
-                    $stmt->execute([':s' => $section, ':q' => $question, ':a' => $answer, ':p' => $policy, ':u' => $userId, ':id' => $id]);
+                    $cur = $pdo->prepare("SELECT section_key, sort_order FROM faqs WHERE id = :id");
+                    $cur->execute([':id' => $id]);
+                    $cur = $cur->fetch();
+                    if (!$cur) {
+                        return $this->back('missing');
+                    }
+                    /* moved to another section: it goes to the end of that one, never sharing a position there */
+                    $order = $cur['section_key'] === $section ? (int) $cur['sort_order'] : (int) $pdo->query($nextSql)->fetchColumn();
+                    $stmt = $pdo->prepare("UPDATE faqs SET section_key = :s, question = :q, answer = :a, policy = :p, sort_order = :o, updated_by_user_id = :u WHERE id = :id");
+                    $stmt->execute([':s' => $section, ':q' => $question, ':a' => $answer, ':p' => $policy, ':o' => $order, ':u' => $userId, ':id' => $id]);
                     return $this->back('saved', '&show=' . $policy . '#' . $section);
 
                 case 'toggle':
                     $stmt = $pdo->prepare("UPDATE faqs SET is_active = NOT is_active, updated_by_user_id = :u WHERE id = :id");
                     $stmt->execute([':u' => $userId, ':id' => $id]);
-                    return $this->back('toggled');
+                    return $this->back($stmt->rowCount() ? 'toggled' : 'missing');   /* NOT is_active always changes a row that exists */
 
                 case 'delete':
                     /* built-ins ship with the system: hide them, never delete them */
                     $stmt = $pdo->prepare("DELETE FROM faqs WHERE id = :id AND is_builtin = 0");
                     $stmt->execute([':id' => $id]);
-                    return $this->back($stmt->rowCount() ? 'deleted' : 'builtin');
+                    if ($stmt->rowCount()) {
+                        return $this->back('deleted');
+                    }
+                    $left = $pdo->prepare("SELECT 1 FROM faqs WHERE id = :id");
+                    $left->execute([':id' => $id]);
+                    return $this->back($left->fetchColumn() ? 'builtin' : 'missing');   /* gone already: a second click, or another admin */
 
                 case 'restore':
                     $stmt = $pdo->prepare("UPDATE faqs SET question = default_question, answer = default_answer, updated_by_user_id = :u

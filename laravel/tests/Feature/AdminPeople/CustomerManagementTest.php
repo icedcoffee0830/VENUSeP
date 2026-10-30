@@ -54,6 +54,39 @@ class CustomerManagementTest extends TestCase
         }
     }
 
+    /* A customer chooses their own name. Printed into the page's <script> as JSON, a
+       "</script>" in it must not end the script and run as the staff member's page. */
+    public function test_a_customer_name_cannot_break_out_of_the_page_script(): void
+    {
+        $old = DB::table('customers')->where('id', 3)->value('full_name');
+        DB::table('customers')->where('id', 3)->update(['full_name' => '</script><script>alert(1)</script>']);
+        try {
+            $this->actingAsStaff()->get(route('admin.customer-management'))->assertOk()
+                ->assertDontSee('</script><script>alert(1)', false)
+                ->assertSee('"name":"\u003C/script\u003E\u003Cscript\u003Ealert(1)\u003C/script\u003E"', false);
+        } finally {
+            DB::table('customers')->where('id', 3)->update(['full_name' => $old]);
+        }
+    }
+
+    /* The session still says staff, but the account was suspended meanwhile: the
+       database decides, like on every staff page (staff_session_heal()). */
+    public function test_a_suspended_staff_session_cannot_disable_customers(): void
+    {
+        $staffId = DB::table('users')->where('email', 'staff@gmail.com')->value('id');
+        DB::table('users')->where('id', $staffId)->update(['is_active' => 0]);
+        try {
+            $this->actingAsStaff()->withSession(['_token' => 'tok'])
+                ->post(route('admin.customer-save'), ['csrf' => 'tok', 'action' => 'set_active', 'user_id' => 4, 'active' => '0'])
+                ->assertStatus(403)->assertExactJson(['ok' => false, 'message' => 'Only admin or staff can manage customer accounts.']);
+            $this->assertSame(1, (int) DB::table('users')->where('id', 4)->value('is_active'));
+            $this->assertFalse(session()->has('user_id'));                     // the dead session is ended
+        } finally {
+            DB::table('users')->where('id', $staffId)->update(['is_active' => 1]);
+            DB::table('users')->where('id', 4)->update(['is_active' => 1]);
+        }
+    }
+
     public function test_a_staff_side_account_is_refused(): void
     {
         $staffId = DB::table('users')->where('email', 'staff@gmail.com')->value('id');

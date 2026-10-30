@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDOException;
 
@@ -31,10 +32,24 @@ class CounterCustomerController
         return response()->json($data, $status)->header('Cache-Control', 'no-store');
     }
 
+    /* These JSON routes have no `staff` middleware, so nothing else re-reads the
+       account: the SESSION says staff, the DATABASE decides. staff_session_heal()
+       ends a suspended (or 2FA-reset) account's session by throwing its redirect;
+       here that is a "no". Also used by CustomerController::save(). */
+    public static function staffStillActive(): bool
+    {
+        try {
+            staff_session_heal();
+        } catch (HttpResponseException $e) {
+            return false;
+        }
+        return venusep_is_staff_session();
+    }
+
     public function search(Request $request)
     {
         legacy('auth');
-        if (!venusep_is_staff_session()) {
+        if (!venusep_is_staff_session() || !self::staffStillActive()) {
             return $this->reply(403, ['ok' => false, 'results' => [], 'message' => 'Staff only.']);
         }
 
@@ -58,7 +73,9 @@ class CounterCustomerController
                   ORDER BY c.full_name
                   LIMIT 10"
             );
-            $like = '%' . $q . '%';
+            /* what was typed is matched literally: "%%%" or "___" are not three
+               characters of a name, they would match every customer */
+            $like = '%' . addcslashes($q, '%_\\') . '%';
             $stmt->execute([':like' => $like, ':like2' => $like]);
 
             $out = [];
@@ -99,7 +116,7 @@ class CounterCustomerController
         if (!$request->isMethod('post')) {
             return $this->reply(405, ['ok' => false, 'message' => 'Use POST.'])->header('Allow', 'POST');
         }
-        if (!venusep_is_staff_session()) {
+        if (!venusep_is_staff_session() || !self::staffStillActive()) {
             return $this->reply(403, ['ok' => false, 'message' => 'Staff only.']);
         }
         $token = $request->input('csrf', $request->input('_token', $request->header('X-CSRF-TOKEN')));

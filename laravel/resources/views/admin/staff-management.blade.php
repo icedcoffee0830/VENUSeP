@@ -585,6 +585,15 @@ body {
         venueEditorValues[String(venue.id)] = venue.name;
         venueFilterValues[String(venue.id)] = venue.name;
       });
+      /* A venue name is typed by an admin: it is text, never markup. Tabulator
+         puts a formatter's string and each list item's label in as HTML, so both
+         are escaped; the labels themselves stay plain (the list's input shows
+         them as typed). */
+      const escText = function (s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      };
 
       /* Every write goes to admin/staff-save.php, which re-checks that the
          caller is an admin and refuses the two ways an admin could lock
@@ -643,13 +652,13 @@ body {
             field: 'venueId',
             formatter: function (cell) {
               if (cell.getRow().getData().role !== 'Staff') return 'All venues';
-              return venueEditorValues[String(cell.getValue())] || 'Choose a venue';
+              return escText(venueEditorValues[String(cell.getValue())] || 'Choose a venue');
             },
             editor: 'list',
-            editorParams: { values: venueEditorValues },
+            editorParams: { values: venueEditorValues, itemFormatter: escText },
             editable: function (cell) { return cell.getRow().getData().role === 'Staff'; },
             headerFilter: 'list',
-            headerFilterParams: { values: venueFilterValues, clearable: true },
+            headerFilterParams: { values: venueFilterValues, clearable: true, itemFormatter: escText },
             headerFilterFunc: function (filterValue, rowValue) {
               if (!filterValue) return true;
               return String(rowValue) === String(filterValue);

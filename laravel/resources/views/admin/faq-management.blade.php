@@ -188,8 +188,8 @@
                       <div class="fq-tb-list">
                         <button type="button" data-value="{discount}">USeP discount<small>{{ (int) $DISCOUNT_PERCENT }}% &mdash; updates by itself</small></button>
                         <button type="button" data-value="{grace_days}">Days to pay after the event<small>{{ (int) $POSTPAY_GRACE_DAYS }} days &mdash; updates by itself</small></button>
-                        <button type="button" data-value="{rate_communal}">Hostel rate &middot; communal CR<small>&#8369;{{ number_format((int) ($HOSTEL_RATES['communal'] ?? 0)) }} per head, per night</small></button>
-                        <button type="button" data-value="{rate_private}">Hostel rate &middot; private CR<small>&#8369;{{ number_format((int) ($HOSTEL_RATES['private'] ?? 0)) }} per head, per night</small></button>
+                        <button type="button" data-value="{rate_communal}">Hostel rate &middot; communal CR<small>{!! $fqValues['{rate_communal}'] !!} per head, per night</small></button>
+                        <button type="button" data-value="{rate_private}">Hostel rate &middot; private CR<small>{!! $fqValues['{rate_private}'] !!} per head, per night</small></button>
                         <button type="button" data-value="{cr_communal}">Room label &middot; communal CR<small>{{ $HOSTEL_CR_LABEL['communal'] }}</small></button>
                         <button type="button" data-value="{cr_private}">Room label &middot; private CR<small>{{ $HOSTEL_CR_LABEL['private'] }}</small></button>
                       </div></span>
@@ -276,8 +276,8 @@
                         <div class="fq-tb-list">
                           <button type="button" data-value="{discount}">USeP discount<small>{{ (int) $DISCOUNT_PERCENT }}%</small></button>
                           <button type="button" data-value="{grace_days}">Days to pay after the event<small>{{ (int) $POSTPAY_GRACE_DAYS }} days</small></button>
-                          <button type="button" data-value="{rate_communal}">Hostel rate &middot; communal CR<small>&#8369;{{ number_format((int) ($HOSTEL_RATES['communal'] ?? 0)) }} per head, per night</small></button>
-                          <button type="button" data-value="{rate_private}">Hostel rate &middot; private CR<small>&#8369;{{ number_format((int) ($HOSTEL_RATES['private'] ?? 0)) }} per head, per night</small></button>
+                          <button type="button" data-value="{rate_communal}">Hostel rate &middot; communal CR<small>{!! $fqValues['{rate_communal}'] !!} per head, per night</small></button>
+                          <button type="button" data-value="{rate_private}">Hostel rate &middot; private CR<small>{!! $fqValues['{rate_private}'] !!} per head, per night</small></button>
                           <button type="button" data-value="{cr_communal}">Room label &middot; communal CR<small>{{ $HOSTEL_CR_LABEL['communal'] }}</small></button>
                           <button type="button" data-value="{cr_private}">Room label &middot; private CR<small>{{ $HOSTEL_CR_LABEL['private'] }}</small></button>
                         </div></span>

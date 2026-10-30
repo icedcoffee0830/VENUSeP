@@ -107,6 +107,15 @@ class CounterCustomerController
         return substr($d, 0, 4) . str_repeat('•', max(0, strlen($d) - 8)) . substr($d, -4);
     }
 
+    /* What the staff member reads out: why, and how long to wait. */
+    private static function lockedMessage(int $seconds): string
+    {
+        $wait = $seconds < 60 ? $seconds . ' second' . ($seconds === 1 ? '' : 's')
+                              : ($m = (int) ceil($seconds / 60)) . ' minute' . ($m === 1 ? '' : 's');
+        return 'Too many wrong passwords for this account, so it is locked for ' . $wait
+             . '. Ask the customer to try again after that, or book them as a walk-in with no account.';
+    }
+
     /* The route skips Laravel's CSRF middleware so an expired page still gets
        the old 400 JSON the counter JS shows; the token is checked here instead
        (old field `csrf`, Laravel's `_token`, or the X-CSRF-TOKEN header). */
@@ -136,35 +145,74 @@ class CounterCustomerController
         }
 
         try {
+            /* FOR UPDATE: two wrong passwords sent at the same moment must both count. */
+            $pdo->beginTransaction();
             $stmt = $pdo->prepare(
-                'SELECT u.id, u.password_hash, u.is_active
+                'SELECT u.id, u.password_hash, u.is_active, u.reauth_failed_attempts, u.reauth_lock_level,
+                        CASE WHEN u.reauth_locked_until > NOW()
+                             THEN TIMESTAMPDIFF(SECOND, NOW(), u.reauth_locked_until) ELSE 0 END AS lock_seconds
                    FROM customers c JOIN users u ON u.id = c.user_id
-                  WHERE c.id = :c LIMIT 1'
+                  WHERE c.id = :c LIMIT 1 FOR UPDATE'
             );
             $stmt->execute([':c' => $customerId]);
             $user = $stmt->fetch();
+
+            if (!$user) {
+                $pdo->rollBack();
+                return $this->reply(404, ['ok' => false, 'message' => 'That account no longer exists.']);
+            }
+            if (!(bool) $user['is_active']) {
+                $pdo->rollBack();
+                return $this->reply(403, ['ok' => false, 'message' => 'That account is suspended and cannot be booked for.']);
+            }
+
+            /* Created through Google (#23): there is no password to type at the counter. */
+            if ($user['password_hash'] === null) {
+                $pdo->rollBack();
+                return $this->reply(409, ['ok' => false, 'message' => 'This account signs in with Google, so it has no password to type. Ask the customer to set a password in their profile, or book them as a walk-in with no account.']);
+            }
+
+            /* ATTEMPT LIMIT — the CUSTOMER's users.reauth_* ladder (the refund
+               switch's: 5 wrong in a row = one lock of 10s, 30s, 1m, 5m, then 15m),
+               so a counter screen cannot be used to guess someone's password.
+               Stored on the account, not the staff session: another staff member
+               or another browser does not start over. A correct password resets it.
+               The reply says nothing about which part was wrong. */
+            if ((int) $user['lock_seconds'] > 0) {
+                $pdo->rollBack();
+                return $this->reply(423, ['ok' => false, 'seconds' => (int) $user['lock_seconds'],
+                    'message' => self::lockedMessage((int) $user['lock_seconds'])]);
+            }
+
+            if (!password_verify($password, $user['password_hash'])) {
+                $attempts = (int) $user['reauth_failed_attempts'] + 1;
+                if ($attempts >= RefundSwitchController::RS_ATTEMPTS_PER_LOCK) {
+                    $ladder  = RefundSwitchController::RS_LOCK_SECONDS;
+                    $level   = min((int) $user['reauth_lock_level'] + 1, 255);
+                    $seconds = $ladder[min($level, count($ladder)) - 1];
+                    $pdo->prepare(
+                        'UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :l,
+                                reauth_locked_until = DATE_ADD(NOW(), INTERVAL :s SECOND) WHERE id = :id'
+                    )->execute([':l' => $level, ':s' => $seconds, ':id' => $user['id']]);
+                    $pdo->commit();
+                    return $this->reply(423, ['ok' => false, 'seconds' => $seconds, 'message' => self::lockedMessage($seconds)]);
+                }
+                $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id')
+                    ->execute([':a' => $attempts, ':id' => $user['id']]);
+                $pdo->commit();
+                return $this->reply(401, ['ok' => false, 'attemptsLeft' => RefundSwitchController::RS_ATTEMPTS_PER_LOCK - $attempts,
+                    'message' => 'That password did not match. Try again, or book them as a walk-in with no account.']);
+            }
+
+            $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id')
+                ->execute([':id' => $user['id']]);
+            $pdo->commit();
         } catch (PDOException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             error_log('VENUSeP customer-verify: ' . $e->getMessage());
             return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was confirmed.']);
-        }
-
-        if (!$user) {
-            return $this->reply(404, ['ok' => false, 'message' => 'That account no longer exists.']);
-        }
-        if (!(bool) $user['is_active']) {
-            return $this->reply(403, ['ok' => false, 'message' => 'That account is suspended and cannot be booked for.']);
-        }
-
-        /* Created through Google (#23): there is no password to type at the counter. */
-        if ($user['password_hash'] === null) {
-            return $this->reply(409, ['ok' => false, 'message' => 'This account signs in with Google, so it has no password to type. Ask the customer to set a password in their profile, or book them as a walk-in with no account.']);
-        }
-
-        /* A wrong password here is the customer mistyping their own — it does not
-           feed the staff lockout ladder. Checked with password_verify; the reply
-           says nothing about which part was wrong. */
-        if (!password_verify($password, $user['password_hash'])) {
-            return $this->reply(401, ['ok' => false, 'message' => 'That password did not match. Try again, or book them as a walk-in with no account.']);
         }
 
         $proof = session('counter_proof');

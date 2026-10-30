@@ -106,7 +106,9 @@ function faq_placeholders()
     /* Laravel: those files' variables live in legacy()'s registry, not in globals */
     extract(array_intersect_key(legacy('hostel-rooms', 'refund-policy'),
         array_flip(['DISCOUNT_PERCENT', 'POSTPAY_GRACE_DAYS', 'HOSTEL_RATES', 'HOSTEL_CR_LABEL'])));
-    $peso = function ($n) { return '&#8369;' . number_format((int) $n); };
+    /* usep_peso()'s rule (pricing.php — not loaded here, it prints a <script>):
+       centavos only when there are any, so 350.50 is "₱350.50" and 350 is "₱350" */
+    $peso = function ($n) { return '&#8369;' . number_format((float) $n, fmod((float) $n, 1.0) == 0.0 ? 0 : 2); };
     return [
         '{discount}'      => (int) $DISCOUNT_PERCENT . '%',           /* "20%" — the sign is part of the value */
         '{grace_days}'    => (int) $POSTPAY_GRACE_DAYS,

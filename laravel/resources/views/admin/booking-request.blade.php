@@ -752,7 +752,7 @@
           /* The GUEST decides how they pay, in Pay now (2026-10-28). Cash received
              is offered only after they chose the front desk — which also closes
              GCash for them until they cancel the choice. */
-          if (cur.pay === 'await_gcash') {
+          if (cur.pay === 'await_gcash' && !rejectedUpload()) {   /* a rejected upload gets the override / undo box below */
             return banner('bn-amber', 'Payment due before check-in — waiting for the guest',
                 'The guest pays by GCash from Pay now, or chooses to pay cash here at the front desk. Cash received appears once they choose cash. If it is not paid by the end of the check-in day, the beds are released.') +
               `<div class="br-kvgrid">${kv('Pay by', 'end of ' + esc(cur.checkIn))}${kv('Amount due', esc(cur.total))}${kv('Guest’s plan', 'Not chosen yet &mdash; GCash is open')}</div>`;

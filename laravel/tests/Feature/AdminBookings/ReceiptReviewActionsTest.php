@@ -205,6 +205,8 @@ class ReceiptReviewActionsTest extends TestCase
             /* §7: the four buttons call the server, not just the screen */
             ->assertSee("staffAction('release_slot'", false)->assertSee("staffAction('extend_deadline'", false)
             ->assertSee("staffAction('undo_rejection'", false)->assertSee("staffAction('override_confirm'", false)
-            ->assertDontSee("cur.res = 'released'", false);
+            ->assertDontSee("cur.res = 'released'", false)
+            /* a hostel stay's rejected upload reaches the same box */
+            ->assertSee("if (cur.pay === 'await_gcash' && !rejectedUpload())", false);
     }
 }

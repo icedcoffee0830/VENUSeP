@@ -105,6 +105,39 @@ function staff_session_heal()
     }
 }
 
+/* =====================================================================
+   EVERY REQUEST of a staff-side session (the EnforceTwoFactor middleware):
+   a suspended or removed account loses its session at once, and a demoted
+   admin stops being one. staff_session_heal() above only runs on pages
+   behind the `staff` guard; this also covers the JSON endpoints a page that
+   is still open keeps calling, and the counter booking pages. No redirect:
+   the page guard or the endpoint's own "session ended" reply takes over, and
+   the sign-in page says why (the flag below).
+   ===================================================================== */
+function staff_session_refresh(): void
+{
+    if (!venusep_is_staff_session()) {
+        return;
+    }
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return;                       // offline: do not log anyone out over a hiccup
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :u');
+        $stmt->execute([':u' => (int) session('user_id')]);
+        $row = $stmt->fetch();
+    } catch (PDOException $e) {
+        return;
+    }
+    if (!$row || !(bool) $row['is_active'] || !in_array($row['account_type'], ['admin', 'staff'], true)) {
+        venusep_logout();
+        session(['staff_suspended_notice' => true]);
+        return;
+    }
+    session(['account_type' => $row['account_type']]);
+}
+
 function admin_is_admin()
 {
     return session()->has('user_id') && session('account_type') === 'admin';

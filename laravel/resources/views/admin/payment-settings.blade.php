@@ -222,7 +222,7 @@
           <div class="container-fluid">
             <div class="ps-grid" id="psGrid">
 @foreach ($psCards as $venue => $acct)
-@php $isHostel = $venue === 'USeP Hostel'; @endphp
+@php $isHostel = in_array($venue, $psHostelVenues, true); @endphp
               <div class="ps-card" data-venue="{{ $venue }}">
                 <div class="ps-venue">
                   <h2>{{ $venue }}</h2>

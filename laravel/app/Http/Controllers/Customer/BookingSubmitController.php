@@ -297,6 +297,10 @@ class BookingSubmitController extends Controller
             if ($checkIn < date('Y-m-d')) {
                 return self::reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
             }
+            /* The advance limit (system_settings, Aron 2026-10-30): no further ahead than N days. */
+            if ($tooFar = BookingRules::hostelTooFarAhead($pdo, $checkIn)) {
+                return self::reply(400, ['ok' => false, 'message' => $tooFar]);
+            }
             /* PAY TO USE (DB-DECISIONS #26): no method is chosen now (NULL). */
             $method = null;
 

@@ -369,6 +369,11 @@ const COUNTER = {{ counter_mode() ? 'true' : 'false' }};
 const COUNTER_STAFF = {!! json_encode(counter_staff_name(), JSON_UNESCAPED_UNICODE) !!};
 const NOW = new Date();
 const TODAY = isoOf(NOW);
+/* THE ADVANCE LIMIT (system_settings.hostel_advance_booking_max_days, 2026-10-30): a
+   stay can be booked at most this many days before check-in; later check-ins are
+   greyed out, and booking-submit / booking-create refuse them. null = no limit. */
+const ADVANCE_DAYS = {{ json_encode($HOSTEL_ADVANCE_DAYS) }};
+const LAST_CHECKIN = ADVANCE_DAYS==null ? null : (function(){ const d=new Date(NOW); d.setDate(d.getDate()+ADVANCE_DAYS); return isoOf(d); })();
 
 /* Rooms come from the ONE PHP source, so this page, the landing page and admin
    Venue Management can never disagree about what exists. photoUrls/panorama
@@ -517,11 +522,15 @@ function derive(){
   const total=hpr.total, discountPercent=hpr.discountPercent, discountAmount=hpr.discountAmount;
   const named=b.occupants.every(o=>o.name.trim().length>0);
   const badRange=!!(b.checkIn && b.checkOut && b.checkOut<=b.checkIn);
+  const tooFar=!!(b.checkIn && LAST_CHECKIN && b.checkIn>LAST_CHECKIN);
 
   /* the status card: neutral surface + a small dot, same as the venue page */
   let slot={show:false};
   if(b.checkIn && b.checkOut){
-    if(badRange){
+    if(tooFar){
+      slot={show:true,dot:'#d9930d',title:'Check-in is too far ahead',
+            detail:'Hostel stays can be booked at most '+ADVANCE_DAYS+' days ahead — pick a check-in on or before '+fmtShort(LAST_CHECKIN)+'.'};
+    }else if(badRange){
       slot={show:true,dot:'#d9930d',title:'Check-out must be after check-in',
             detail: b.checkOut===b.checkIn ? 'A stay is at least one night — pick the next day or later for check-out.'
                                            : 'Adjust your dates to see availability.'};
@@ -545,10 +554,11 @@ function derive(){
     }
   }
 
-  const ready = !!(R && nights.length>0 && !blocked && beds>0 && beds<=maxFree && named);
+  const ready = !!(R && nights.length>0 && !tooFar && !blocked && beds>0 && beds<=maxFree && named);
 
   let hint='';
   if(!b.checkIn||!b.checkOut) hint='Pick your check-in and check-out dates';
+  else if(tooFar) hint='Check-in can be at most '+ADVANCE_DAYS+' days ahead';
   else if(badRange) hint='Check-out must be after check-in';
   else if(blocked) hint='Closed for maintenance during your stay — pick different dates';
   else if(maxFree===0) hint='No beds available for these dates';
@@ -632,7 +642,7 @@ function calHtml(field){
   for(let i=0;i<start;i++) cells.push('<span></span>');
   for(let d=1;d<=dim;d++){
     const iso=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-    const off = iso<min;
+    const off = iso<min || (field==='checkIn' && LAST_CHECKIN!==null && iso>LAST_CHECKIN);
     const cls='cal-day'+(iso===sel?' sel':'')+(iso===TODAY?' today':'');
     cells.push(`<button class="${cls}" ${off?'disabled':''} onclick="event.stopPropagation();calPick('${iso}')">${d}</button>`);
   }
@@ -648,6 +658,7 @@ function calHtml(field){
       ${['S','M','T','W','T','F','S'].map(d=>`<span style="font-size:12px;font-weight:600;color:#a5a19a;padding:4px 0">${d}</span>`).join('')}
       ${cells.join('')}
     </div>
+    ${field==='checkIn' && LAST_CHECKIN ? `<div style="font-size:12px;color:#77736c;margin-top:6px;text-align:center">Check-in up to ${ADVANCE_DAYS} days ahead</div>` : ''}
   </div>`;
 }
 function nextDay(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+1); return isoOf(d); }

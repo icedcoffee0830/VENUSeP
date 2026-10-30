@@ -60,6 +60,8 @@ class HostelReservationController extends Controller
             'REFUNDS_ENABLED'   => $REFUNDS_ENABLED,
             'DISCOUNT_PERCENT'  => $DISCOUNT_PERCENT,
             'customerContact'   => $customerContact,
+            /* the advance limit greys out later check-ins in the date picker */
+            'HOSTEL_ADVANCE_DAYS' => ($pdo = venusep_db()) ? BookingRules::hostelAdvanceDays($pdo) : null,
         ]);
     }
 }

@@ -241,6 +241,10 @@ class BookingCreateController extends Controller
         if ($checkIn < date('Y-m-d')) {
             $this->reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
         }
+        /* the same advance limit as online (system_settings.hostel_advance_booking_max_days) */
+        if ($tooFar = BookingRules::hostelTooFarAhead($pdo, $checkIn)) {
+            $this->reply(400, ['ok' => false, 'message' => $tooFar]);
+        }
         if (!is_array($occupants) || !$occupants || count($occupants) > 20) {
             $this->reply(400, ['ok' => false, 'message' => 'Name at least one guest.']);
         }

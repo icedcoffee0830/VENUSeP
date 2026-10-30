@@ -21,6 +21,12 @@ class EnforceTwoFactor
                 $session->put('tfa_required_notice', true);
             }
         }
+        /* Same question, other cause: a staff account suspended or demoted since
+           sign-in no longer counts either — on JSON endpoints too (staff_session_refresh()). */
+        if ($session->has('user_id')) {
+            legacy('auth');
+            staff_session_refresh();
+        }
 
         return $next($request);
     }

@@ -1,13 +1,20 @@
 {{-- THE ONE HEADER BAR (was includes/header.php). $portal = admin | customer picks the menu, not the look. --}}
 @php
   $hdName   = $portal === 'customer' ? 'Juan Miguel Dela Cruz' : 'Administrator';
-  $hdAvatar = $portal === 'customer' ? 'JM' : 'AD';
+  $hdRole   = '';
   if ($portal === 'customer') {
     if (isset($customerContact['name'])) $hdName = $customerContact['name'];   /* pages that load the shared customer record */
     if (session('customer_name') && session('account_type') === 'customer') $hdName = session('customer_name');   /* who actually logged in */
-    $hdParts  = preg_split('/\s+/', trim($hdName));   /* initials = first + last name */
-    $hdAvatar = strtoupper(substr($hdParts[0], 0, 1) . substr(end($hdParts), 0, 1));
+  } else {
+    /* who actually signed in (Bug 5) — the profile page's name rule: the staff
+       row's full name, else the username (the seeded admin has no staff row) */
+    $hdRole = session('account_type') === 'admin' ? 'Administrator' : 'Staff';
+    $hdName = (string) (\Illuminate\Support\Facades\DB::selectOne(
+      'SELECT COALESCE(s.full_name, u.username, u.email) AS who FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = ?',
+      [(int) session('user_id')])->who ?? $hdRole);
   }
+  $hdParts  = preg_split('/\s+/', trim($hdName));   /* initials = first + last name */
+  $hdAvatar = strtoupper(mb_substr($hdParts[0], 0, 1) . (count($hdParts) > 1 ? mb_substr(end($hdParts), 0, 1) : ''));
   legacy('demo-mode');
 @endphp
 <style>
@@ -75,7 +82,7 @@
     </ul>
     <ul class="hd-nav">
       <li>@include('partials.notification-bell', ['nbLook' => 'admin'])</li>
-      <li><a class="hd-user" href="{{ route('admin.profile') }}" title="Your account"><span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span><span class="hd-username">{{ $hdName }}</span></a></li>
+      <li><a class="hd-user" href="{{ route('admin.profile') }}" title="Your account · {{ $hdRole }}"><span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span><span class="hd-username">{{ $hdName }}</span></a></li>
     </ul>
   </div>
 </nav>

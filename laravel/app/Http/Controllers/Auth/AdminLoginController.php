@@ -22,8 +22,9 @@ class AdminLoginController
 
         $loginError = '';
 
-        /* Sent here mid-session because the account was suspended (staff_session_heal()). */
-        if ($request->query->has('suspended')) {
+        /* Sent here mid-session because the account was suspended (staff_session_heal(),
+           or staff_session_refresh(), which leaves its one-time flag in the session). */
+        if ($request->query->has('suspended') || session()->pull('staff_suspended_notice')) {
             $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
         }
         /* Sent here because the session had not passed two-step verification: by

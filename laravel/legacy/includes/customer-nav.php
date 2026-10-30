@@ -128,7 +128,7 @@ echo demo_banner_html();
 ?>
 <header class="cn-nav<?php echo $navMode === 'hero' ? '' : ' solid is-static'; ?>" id="cnNav">
   <div class="cn-wrap">
-    <a class="cn-logo" href="<?php echo route('customer.venues'); ?>" title="Back to the landing page"><img src="<?php echo asset('logo/Logo Header 3.png'); ?>" alt="VENUSeP"></a>
+    <a class="cn-logo" href="<?php echo route('customer.venues') . $navCounterQ; ?>" title="Back to the landing page"><img src="<?php echo asset('logo/Logo Header 3.png'); ?>" alt="VENUSeP"></a>
     <nav class="cn-links">
 <?php foreach ($navLinks as $l): ?>
       <a href="<?php echo htmlspecialchars($l[1]); ?>"<?php echo $l[0] === $navHere ? ' class="is-here" aria-current="page"' : ''; ?>><?php echo $l[2]; ?></a>

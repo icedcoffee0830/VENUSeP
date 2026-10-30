@@ -72,6 +72,11 @@ class BookingSubmitController extends Controller
             return self::reply(503, ['ok' => false, 'message' => 'The database is unreachable, so your booking was not submitted.']);
         }
 
+        /* An Overdue (post-pay) booking blocks new online bookings until it is paid (2026-10-30). */
+        if ($overdue = BookingRules::overdueNotice($pdo, $customerId)) {
+            return self::reply(409, ['ok' => false, 'error' => 'overdue', 'message' => $overdue]);
+        }
+
         /* ---- the room, and the rate THIS server believes in ---- */
         $roomStmt = $pdo->prepare(
             "SELECT r.id, r.name, r.room_type, r.is_active, v.name AS venue_name,

@@ -19,7 +19,7 @@ class CounterBookerTest extends TestCase
         $this->assertNotNull($block, 'counter-booker.php block not on the page');
 
         $esc = "function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }";
-        $script = "const COUNTER_STAFF='Staff', DISCOUNT_PERCENT=20, CSRF='t'; let state; function render(){}\n"
+        $script = "const COUNTER_STAFF='Staff', DISCOUNT_PERCENT=20, CSRF='t', COUNTER_OVERDUE={}; let state; function render(){}\n"
             . $esc . "\n" . $block . "\nstate = { booker: Object.assign({}, booker0) };\n" . $js;
         $file = tempnam(sys_get_temp_dir(), 'cbk') . '.js';
         file_put_contents($file, $script);
@@ -51,5 +51,24 @@ class CounterBookerTest extends TestCase
         JS);
 
         $this->assertSame('{"hacked":false,"ok":true}', $out);
+    }
+
+    /* Overdue block (2026-10-30): picking an account with an Overdue booking warns
+       staff, and the step can still go on (nothing is disabled by it). */
+    public function test_an_account_with_an_overdue_booking_is_flagged_but_can_still_be_booked(): void
+    {
+        $out = $this->runCounterScript(<<<'JS'
+            COUNTER_OVERDUE[7] = 'USeP Gymnasium, Sep 10, 2026 — ₱1,800 <b>';
+            state.booker = Object.assign({}, booker0, { customerId: 7, name: 'Eve', phone: '0917***1234', verified: true, idChecked: true });
+            const html = whoScreen();
+            state.booker.customerId = 8;
+            const other = whoScreen();
+            console.log(JSON.stringify({
+              warned: html.includes('<strong>Unpaid booking:</strong> USeP Gymnasium, Sep 10, 2026 — ₱1,800 &lt;b&gt;.'),
+              ready: counterBookerReady(), otherWarned: other.includes('Unpaid booking'),
+            }));
+        JS);
+
+        $this->assertSame('{"warned":true,"ready":true,"otherWarned":false}', $out);
     }
 }

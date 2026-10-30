@@ -265,6 +265,7 @@
 <body>
 {{-- counter mode draws its own bar (legacy counter-booker.php), like the venue page --}}
 @include('partials.customer-nav', ['navMode' => 'solid', 'navHere' => 'hostel', 'navCounterHasOwnBar' => true])
+@include('customer.overdue-notice')
 <div id="app"></div>
 
 {{-- legacy pricing.php + gcash-checker.php print their <script> blocks here, as the old includes did --}}
@@ -367,6 +368,9 @@ const REFUNDS_ENABLED = {{ $REFUNDS_ENABLED ? 'true' : 'false' }};
    the stay outright. */
 const COUNTER = {{ counter_mode() ? 'true' : 'false' }};
 const COUNTER_STAFF = {!! json_encode(counter_staff_name(), JSON_UNESCAPED_UNICODE) !!};
+/* Counter: customer id -> their oldest Overdue booking. Online they cannot book until it
+   is paid; here staff see the warning (counter-booker.php) and may still book. */
+const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const NOW = new Date();
 const TODAY = isoOf(NOW);
 /* THE ADVANCE LIMIT (system_settings.hostel_advance_booking_max_days, 2026-10-30): a

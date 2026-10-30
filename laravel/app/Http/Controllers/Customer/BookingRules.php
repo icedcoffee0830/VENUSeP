@@ -58,4 +58,52 @@ final class BookingRules
         return 'Hostel stays can be booked at most ' . $max . ' days ahead. Pick a check-in on or before '
             . date('M j, Y', strtotime('+' . $max . ' days')) . '.';
     }
+
+    /* POST-PAY OVERDUE BLOCK (Aron, 2026-10-30): a customer with a booking whose
+       payment is Overdue cannot book online until it is paid; it unblocks by itself
+       once the payment status moves on. Staff at the counter see it but may book.
+
+       customer id => "Room, Oct 1, 2026 — ₱1,800" naming that customer's oldest
+       overdue booking; every such customer when $customerId is null. */
+    public static function overdueBookings(PDO $pdo, ?int $customerId = null): array
+    {
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT b.customer_id, r.name, fn_booking_first_day(b.id) AS first_day, b.total_amount
+                   FROM bookings b JOIN rooms r ON r.id = b.room_id
+                  WHERE b.payment_status = 'overdue'" . ($customerId === null ? '' : ' AND b.customer_id = :c') . '
+                  ORDER BY b.current_deadline_at, b.id'
+            );
+            $stmt->execute($customerId === null ? [] : [':c' => $customerId]);
+            $rows = $stmt->fetchAll();
+        } catch (PDOException $e) {
+            error_log('VENUSeP overdue check: ' . $e->getMessage());
+            return [];
+        }
+        $out = [];
+        foreach ($rows as $r) {
+            $amount = (float) $r['total_amount'];
+            $out[(int) $r['customer_id']] ??= $r['name'] . ', '
+                . ($r['first_day'] ? date('M j, Y', strtotime($r['first_day'])) : '—')
+                . ' — ₱' . number_format($amount, fmod($amount, 1.0) == 0.0 ? 0 : 2);   /* = usep_peso() */
+        }
+        return $out;
+    }
+
+    /* The refusal booking-submit gives, and the notice the booking pages show up front. */
+    public static function overdueNotice(PDO $pdo, int $customerId): ?string
+    {
+        $which = self::overdueBookings($pdo, $customerId)[$customerId] ?? null;
+        return $which === null ? null
+            : 'You have an unpaid booking (' . $which . '). Please settle it before making a new booking.';
+    }
+
+    /* For a booking page: the signed-in customer's notice — never at the counter. */
+    public static function overdueNoticeForPage(): ?string
+    {
+        if (counter_mode() || !customer_logged_in() || !($pdo = venusep_db())) {
+            return null;
+        }
+        return self::overdueNotice($pdo, (int) session('customer_id'));
+    }
 }

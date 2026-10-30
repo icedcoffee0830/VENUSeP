@@ -260,6 +260,7 @@
      counter bar (with the same link + the staff name) below #app, so the shared
      nav's link would just duplicate it --}}
 @include('partials.customer-nav', ['navMode' => 'solid', 'navHere' => $navHere, 'navCounterHasOwnBar' => true])
+@include('customer.overdue-notice')
 <div id="app"></div>
 
 {{-- legacy pricing.php + gcash-checker.php print their <script> blocks here, as the old includes did --}}
@@ -444,6 +445,9 @@ const DEMO_MODE = {{ demo_mode_on() ? 'true' : 'false' }};
    --------------------------------------------------------------------- */
 const COUNTER = {{ counter_mode() ? 'true' : 'false' }};
 const COUNTER_STAFF = {!! json_encode(counter_staff_name(), JSON_UNESCAPED_UNICODE) !!};
+/* Counter: customer id -> their oldest Overdue booking. Online they cannot book until it
+   is paid; here staff see the warning (counter-booker.php) and may still book. */
+const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 /* SAME DAY, DIFFERENT TIME (2026-10-27): minutes kept free before and after
    every booking of a room. From system_settings, the same value
    sp_add_venue_slot() enforces. */

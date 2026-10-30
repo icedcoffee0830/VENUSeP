@@ -346,8 +346,8 @@
 const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
 /* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
    OFF = the stay is non-refundable and the guest must tick that they understand
-   before submitting. ON leaves the hostel's refund text as it was — hostel refund
-   REQUESTS are still a separate, undecided flow (venue-only, 2026-09-09). */
+   before submitting. ON leaves the hostel's refund text as it was — a stay booked
+   with refunds on can be refunded like a venue booking (Aron, 2026-10-30). */
 const REFUNDS_ENABLED = {{ $REFUNDS_ENABLED ? 'true' : 'false' }};
 /* PAYMENT TIMING: the hostel is PAY TO USE (decided 2026-10-27, DB-DECISIONS
    #26), whatever the refund switch says — venues still follow it (#18). Payment

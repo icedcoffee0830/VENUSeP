@@ -227,6 +227,10 @@ class BookingSubmitController extends Controller
             $price = (float) $room['fee_per_day'] * count($slots);
 
             try {
+                /* The deadline housekeeping runs BEFORE the transaction (migration 15):
+                   its UPDATEs lock every bookings row they scan, so inside the
+                   transaction two submits a moment apart deadlocked on each other. */
+                $pdo->exec('CALL sp_expire_due_bookings()');
                 $pdo->beginTransaction();
                 $ins = $pdo->prepare(
                     "INSERT INTO bookings
@@ -261,14 +265,17 @@ class BookingSubmitController extends Controller
             } catch (PDOException $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }
                 /* 45000 = a real conflict raised by the procedures (a taken slot or a
-                   closed day). Anything else goes to the SERVER LOG. */
-                if ($e->getCode() !== '45000') {
+                   closed day); 40001 = a deadlock with a booking made at the same
+                   moment (MySQL 1213, nothing was saved) — told like a taken slot.
+                   Anything else goes to the SERVER LOG. */
+                $refused = in_array($e->getCode(), ['45000', '40001'], true);
+                if (!$refused) {
                     error_log('VENUSeP booking-submit (venue): ' . $e->getMessage());
                 }
-                $msg = $e->getCode() === '45000'
+                $msg = $refused
                     ? venue_slot_refusal_message($e)
                     : 'Something went wrong, so your booking was not submitted.';
-                return self::reply($e->getCode() === '45000' ? 409 : 500, ['ok' => false, 'message' => $msg]);
+                return self::reply($refused ? 409 : 500, ['ok' => false, 'message' => $msg]);
             }
 
         /* ============================ HOSTEL ============================ */
@@ -312,6 +319,10 @@ class BookingSubmitController extends Controller
             $price = (float) $room['rate_per_head_per_night'] * count($clean) * $nights;
 
             try {
+                /* The deadline housekeeping runs BEFORE the transaction (migration 15):
+                   its UPDATEs lock every bookings row they scan, so inside the
+                   transaction two submits a moment apart deadlocked on each other. */
+                $pdo->exec('CALL sp_expire_due_bookings()');
                 $pdo->beginTransaction();
                 $ins = $pdo->prepare(
                     "INSERT INTO bookings

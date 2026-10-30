@@ -203,6 +203,25 @@ class BookingSubmitTest extends TestCase
         ]))->assertStatus(409)->assertJson(['ok' => false]);
     }
 
+    /* Two submits a moment apart could deadlock (MySQL 1213, SQLSTATE 40001) and
+       showed a 500 "Something went wrong". A deadlock is now told like a taken
+       slot (409) and nothing is saved. The deadlock is stood in for by a test
+       trigger that raises SQLSTATE 40001 inside the booking transaction. */
+    public function test_a_deadlock_with_a_simultaneous_booking_is_a_409_and_saves_nothing(): void
+    {
+        $before = DB::table('bookings')->count();
+        DB::unprepared("CREATE TRIGGER trg_test_deadlock BEFORE INSERT ON venue_booking_details FOR EACH ROW
+                        SIGNAL SQLSTATE '40001' SET MESSAGE_TEXT = 'Deadlock found when trying to get lock'");
+        try {
+            $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost())
+                ->assertStatus(409)
+                ->assertExactJson(['ok' => false, 'message' => 'That slot was taken while the booking was being made. Please pick another time.']);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS trg_test_deadlock');
+        }
+        $this->assertSame($before, DB::table('bookings')->count());
+    }
+
     public function test_a_hostel_stay_assigns_one_bed_per_guest_per_night(): void
     {
         $in  = date('Y-m-d', strtotime('+1 day'));

@@ -93,6 +93,26 @@ class BookingCreateTest extends TestCase
             ->assertJson(['message' => 'Enter the guest&rsquo;s email address, or tick &ldquo;Guest has no email&rdquo; and print the receipt.']);
     }
 
+    /* A deadlock with a booking made at the same moment (SQLSTATE 40001, stood in
+       for by a test trigger) is a 409 like a taken slot, not a 500; the walk-in
+       and the booking are rolled back. */
+    public function test_a_deadlock_with_a_simultaneous_booking_is_a_409_and_saves_nothing(): void
+    {
+        $bookings = DB::table('bookings')->count();
+        $customers = DB::table('customers')->count();
+        DB::unprepared("CREATE TRIGGER trg_test_deadlock BEFORE INSERT ON venue_booking_details FOR EACH ROW
+                        SIGNAL SQLSTATE '40001' SET MESSAGE_TEXT = 'Deadlock found when trying to get lock'");
+        try {
+            $this->actingAsStaff()->create($this->walkInVenue())
+                ->assertStatus(409)
+                ->assertExactJson(['ok' => false, 'message' => 'That slot was taken while the booking was being made. Please pick another time.']);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS trg_test_deadlock');
+        }
+        $this->assertSame($bookings, DB::table('bookings')->count());
+        $this->assertSame($customers, DB::table('customers')->count());
+    }
+
     public function test_hostel_stay_needs_the_cash_first_then_is_paid(): void
     {
         $in = now()->addDays(random_int(400, 4000));

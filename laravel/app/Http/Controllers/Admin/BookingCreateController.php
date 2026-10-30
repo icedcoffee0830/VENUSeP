@@ -295,6 +295,10 @@ class BookingCreateController extends Controller
             }
         };
         try {
+            /* The deadline housekeeping runs BEFORE the transaction (migration 15):
+               its UPDATEs lock every bookings row they scan, so inside the
+               transaction two submits a moment apart deadlocked on each other. */
+            $pdo->exec('CALL sp_expire_due_bookings()');
             $pdo->beginTransaction();
             if ($c['isNewWalkIn']) {
                 $this->insertWalkIn($pdo, $c);
@@ -474,6 +478,10 @@ class BookingCreateController extends Controller
         /* ---- the write ---- */
         $queued = null;   /* the walk-in confirmation email, sent after commit */
         try {
+            /* The deadline housekeeping runs BEFORE the transaction (migration 15):
+               its UPDATEs lock every bookings row they scan, so inside the
+               transaction two submits a moment apart deadlocked on each other. */
+            $pdo->exec('CALL sp_expire_due_bookings()');
             $pdo->beginTransaction();
             if ($c['isNewWalkIn']) {
                 $this->insertWalkIn($pdo, $c);
@@ -528,11 +536,14 @@ class BookingCreateController extends Controller
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            if ($e->getCode() !== '45000') {
+            /* 40001 = a deadlock with a booking made at the same moment (MySQL
+               1213, nothing was saved) — told like a taken slot. */
+            $refused = in_array($e->getCode(), ['45000', '40001'], true);
+            if (!$refused) {
                 error_log('VENUSeP booking-create: ' . $e->getMessage());
             }
-            $this->reply($e->getCode() === '45000' ? 409 : 500, ['ok' => false,
-                'message' => $e->getCode() === '45000'
+            $this->reply($refused ? 409 : 500, ['ok' => false,
+                'message' => $refused
                     ? venue_slot_refusal_message($e)
                     : 'Something went wrong, so nothing was created.']);
         }

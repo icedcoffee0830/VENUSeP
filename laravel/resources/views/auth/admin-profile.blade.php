@@ -447,6 +447,67 @@
               <button class="btn btn-outline-dark" type="reset">Cancel</button>
             </div>
           </form>
+          {{-- Change password — profile-save action=password (current password required; the
+               same one again is refused). Staff whose password the admin typed are held on this
+               page until they set their own (EnforceTwoFactor, Aron 2026-10-31). --}}
+          <div class="settings-panel-header" id="vpPassword" style="border-top:1px solid var(--venusep-border)">
+            <h2>Change password</h2>
+          </div>
+          <form class="settings-form" id="vpPwForm" novalidate>
+            @if ($vpMustChange)
+            <div class="form-field form-field-full" role="alert" style="padding:.7rem .85rem;border-radius:8px;background:#fcf6f4;border:1px solid #efe0db;color:#4a4440;font-size:.85rem;line-height:1.5">
+              <strong>Set your own password to continue.</strong> Your account was created by an administrator, who chose the password you signed in with. Replace it with one only you know — this is needed once.
+            </div>
+            @endif
+            <div class="form-field form-field-full">
+              <label class="form-label" for="pw-current">{{ $vpMustChange ? 'Password you were given' : 'Current password' }}</label>
+              <input class="form-control" id="pw-current" name="current_password" type="password" autocomplete="current-password" required{{ $vpMustChange ? ' autofocus' : '' }}/>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="pw-new">New password</label>
+              <input class="form-control" id="pw-new" name="new_password" type="password" autocomplete="new-password" minlength="8" required/>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="pw-confirm">Confirm new password</label>
+              <input class="form-control" id="pw-confirm" name="confirm_new_password" type="password" autocomplete="new-password" minlength="8" required/>
+            </div>
+            <div class="form-field form-field-full">
+              <div id="vpPwMessage" role="status" aria-live="polite" style="font-size:.85rem;min-height:1.2em"></div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary-dark" type="submit">Change password</button>
+            </div>
+          </form>
+          <script>
+            (function () {
+              const form = document.getElementById('vpPwForm');
+              const out = document.getElementById('vpPwMessage');
+              if (!form) return;
+              form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const body = new FormData(form);
+                body.append('_token', @json($vpCsrf));
+                body.append('action', 'password');
+                out.style.color = '#6b675f'; out.textContent = 'Saving…';
+                fetch(@json(route('root.profile-save')), { method: 'POST', body: body, credentials: 'same-origin' })
+                  .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
+                  .then(function (res) {
+                    out.style.color = res.ok ? '#1c7a4f' : '#b23a3a';
+                    out.textContent = res.message || (res.ok ? 'Your password was changed.' : 'Your password was not changed.');
+                    if (!res.ok) {
+                      const field = res.field && form.querySelector('[name="' + res.field + '"]');
+                      if (field) field.focus();
+                      return;
+                    }
+                    form.reset();
+                    @if ($vpMustChange)
+                    location.replace(@json(route('admin.dashboard')));   // the password is their own now: on to work
+                    @endif
+                  })
+                  .catch(function () { out.style.color = '#b23a3a'; out.textContent = 'Could not reach the server.'; });
+              });
+            })();
+          </script>
           <script>
             /* Saves to the same profile-save.php the customer portal uses — it
                works out WHICH profile row from the session, so neither side can

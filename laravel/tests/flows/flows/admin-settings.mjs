@@ -273,8 +273,34 @@ export default {
       return page;
     });
 
-    await step('The new staff member can sign in', async () => {
-      const page = await ctx.loginStaff(s.newEmail);
+    await step('The new staff member signs in, must replace the password the admin gave them, then reaches the dashboard', async () => {
+      const page = await ctx.newPage('new staff ' + s.newEmail);
+      await page.goto(ctx.url('/admin/admin-login'));
+      await ctx.pickDepartment(page, s.newEmail);
+      await page.locator('#adminEmail').fill(s.newEmail);
+      await page.locator('#adminPassword').fill(ctx.password);
+      await page.locator('#adminLoginForm button[type="submit"]').click();
+      await page.waitForURL(/\/admin\/profile\?password=required/);
+      await expect.text(page, 'Set your own password to continue.');
+
+      // any other page sends them back here until it is done
+      await page.goto(ctx.url('/admin/booking-requests'));
+      await page.waitForURL(/\/admin\/profile\?password=required/);
+
+      // keeping the given password is refused
+      await page.locator('#pw-current').fill(ctx.password);
+      await page.locator('#pw-new').fill(ctx.password);
+      await page.locator('#pw-confirm').fill(ctx.password);
+      await page.getByRole('button', { name: 'Change password' }).click();
+      await expect.text(page, 'Choose a password different from your current one.');
+
+      s.newPassword = 'MyOwn#Flow2026';
+      await page.locator('#pw-new').fill(s.newPassword);
+      await page.locator('#pw-confirm').fill(s.newPassword);
+      await page.getByRole('button', { name: 'Change password' }).click();
+      await page.waitForURL(/\/admin\/dashboard/);
+      expect.ok((await dbOne(`SELECT password_changed_at FROM users WHERE id = ?`, [s.newId])).password_changed_at,
+        'users.password_changed_at not set after the change');
       return page;
     });
 
@@ -304,7 +330,7 @@ export default {
       await login.goto(ctx.url('/admin/admin-login'));
       await ctx.pickDepartment(login, s.newEmail);
       await login.locator('#adminEmail').fill(s.newEmail);
-      await login.locator('#adminPassword').fill(ctx.password);
+      await login.locator('#adminPassword').fill(s.newPassword);   // the right password: only the suspension refuses
       await Promise.all([login.waitForLoadState('load'), login.locator('#adminLoginForm button[type="submit"]').click()]);
       await login.waitForLoadState('load');
       await expect.text(login, /Invalid email or password|suspended/i);

@@ -194,6 +194,9 @@ class ProfileSaveController
                 if ($hash === false || !password_verify($current, $hash)) {
                     $this->reply(401, ['ok' => false, 'field' => 'current_password', 'message' => 'That is not your current password.']);
                 }
+                if (password_verify($new, $hash)) {
+                    $this->reply(400, ['ok' => false, 'field' => 'new_password', 'message' => 'Choose a password different from your current one.']);
+                }
                 $pdo->prepare('UPDATE users SET password_hash = :h, password_changed_at = NOW() WHERE id = :u')
                     ->execute([':h' => venusep_password_hash($new), ':u' => $userId]);
             }

@@ -54,7 +54,7 @@ class StaffSuspendedMidSessionTest extends TestCase
     {
         $admin = $this->makeAccount('admin', ['totp' => 'JBSWY3DPEHPK3PXP']);
         $this->signInAs($admin, 'admin')->withSession(['_token' => self::TOKEN]);
-        DB::table('users')->where('id', $admin->id)->update(['account_type' => 'staff']);
+        DB::table('users')->where('id', $admin->id)->update(['account_type' => 'staff', 'password_changed_at' => now()]);
 
         $this->post(route('admin.discount-save'), ['_token' => self::TOKEN, 'percent' => 'abc', 'reason' => 'x'],   // invalid on purpose: nothing is written even if the role check fails
             ['Accept' => 'application/json'])

@@ -27,6 +27,14 @@ class EnforceTwoFactor
             legacy('auth');
             staff_session_refresh();
         }
+        /* A staff account the admin created sets its own password before anything
+           else (Aron 2026-10-31): until then only the profile's password form,
+           saving it, and signing out. */
+        if ($session->get('must_change_password') && !$request->routeIs('admin.profile', 'root.profile-save', 'admin.logout')) {
+            return $request->isMethod('get') && !$request->expectsJson()
+                ? redirect()->route('admin.profile', ['password' => 'required'])
+                : response()->json(['ok' => false, 'message' => 'Set your own password first, in your profile.'], 403);
+        }
 
         return $next($request);
     }

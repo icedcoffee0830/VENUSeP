@@ -55,6 +55,7 @@ class AdminProfileController
         $vpParts2 = preg_split('/\s+/', trim($vpName));
         $vpInitials = strtoupper(mb_substr($vpParts2[0] ?? '', 0, 1) . mb_substr($vpParts2[1] ?? '', 0, 1)) ?: '?';   // vp_initials()
         $vpCsrf = csrf_token();
+        $vpMustChange = (bool) session('must_change_password');   // staff whose password the admin typed (EnforceTwoFactor holds them here)
 
         /* DEMO MODE — the card is the refund switch's twin; admin.demo-mode-switch re-checks everything. */
         $dmDetails = demo_setting_details();        // null = the database cannot be read
@@ -94,7 +95,7 @@ class AdminProfileController
         return view('auth.admin-profile', compact(
             'vpName', 'vpFirst', 'vpLast', 'vpEmail', 'vpPhone', 'vpRole', 'vpEmp', 'vpPhoto', 'vpRoleLine',
             'vpInitials', 'vpCsrf', 'dmDetails', 'dmDbOk', 'dmOn', 'dmIsAdmin', 'dmLockSeconds', 'dmJustSaved',
-            'vpTfaShow', 'vpTfa', 'vpTfaLow'
+            'vpTfaShow', 'vpTfa', 'vpTfaLow', 'vpMustChange'
         ));
     }
 }

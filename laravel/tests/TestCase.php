@@ -22,9 +22,12 @@ abstract class TestCase extends BaseTestCase
         return $this->withSession(['user_id' => (int) $id, 'account_type' => 'admin', 'tfa_passed' => true]);
     }
 
-    /* staff@gmail.com — handles venue 1 only (staff_venue_scope()). */
+    /* staff@gmail.com — handles venue 1 only (staff_venue_scope()). A staff member
+       who never set their own password is held on the profile page, so the test
+       account counts as having set one. */
     protected function actingAsStaff(string $email = 'staff@gmail.com'): static
     {
+        DB::update('UPDATE users SET password_changed_at = NOW() WHERE email = ? AND password_changed_at IS NULL', [$email]);
         $id = DB::table('users')->where('email', $email)->value('id');
 
         return $this->withSession(['user_id' => (int) $id, 'account_type' => 'staff']);

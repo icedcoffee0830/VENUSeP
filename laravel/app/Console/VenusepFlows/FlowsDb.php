@@ -132,7 +132,8 @@ final class FlowsDb
                 throw new RuntimeException("Unknown setting '{$key}' (see the system_settings table).");
             }
         }
-        $conn->update('UPDATE users SET password_hash = ? WHERE password_hash IS NOT NULL',
+        /* the demo password counts as each account's own (staff who never set one are held on their profile) */
+        $conn->update('UPDATE users SET password_hash = ?, password_changed_at = COALESCE(password_changed_at, NOW()) WHERE password_hash IS NOT NULL',
             [password_hash(self::PASSWORD, PASSWORD_ARGON2ID)]);
     }
 

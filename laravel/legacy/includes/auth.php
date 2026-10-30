@@ -116,7 +116,7 @@ function staff_session_refresh(): void
         return;                       // offline: do not log anyone out over a hiccup
     }
     try {
-        $stmt = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :u');
+        $stmt = $pdo->prepare('SELECT account_type, is_active, password_changed_at IS NULL AS must_change FROM users WHERE id = :u');
         $stmt->execute([':u' => (int) session('user_id')]);
         $row = $stmt->fetch();
     } catch (PDOException $e) {
@@ -127,7 +127,9 @@ function staff_session_refresh(): void
         session(['staff_suspended_notice' => true]);
         return;
     }
-    session(['account_type' => $row['account_type']]);
+    session(['account_type' => $row['account_type'],
+             /* the admin typed this staff member's password: they must set their own (Aron 2026-10-31) */
+             'must_change_password' => $row['account_type'] === 'staff' && (bool) $row['must_change']]);
 }
 
 function admin_is_admin()

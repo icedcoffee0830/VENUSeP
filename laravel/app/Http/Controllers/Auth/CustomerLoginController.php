@@ -93,6 +93,8 @@ class CustomerLoginController
                 $loginError = 'Please enter a valid email address.';
             } elseif ($password === '') {
                 $loginError = 'Please enter your password.';
+            } elseif (($lock = SignInThrottle::secondsLeft($email)) > 0) {
+                $loginError = SignInThrottle::message($lock);   // the password is not even checked
             } else {
                 $stmt = $pdo->prepare(
                     'SELECT
@@ -124,8 +126,10 @@ class CustomerLoginController
                     $accountDisabled = true;
                 } elseif (!$customer || !$customer['is_active'] || !password_verify($password, $customer['password_hash'])) {
                     // One generic message so the page does not reveal whether an email exists.
-                    $loginError = 'Invalid email or password.';
+                    $lock = SignInThrottle::failed($email);   // counted for an unknown email too
+                    $loginError = $lock > 0 ? SignInThrottle::message($lock) : 'Invalid email or password.';
                 } else {
+                    SignInThrottle::passed($email);
                     // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).
                     venusep_password_upgrade($pdo, (int) $customer['user_id'], $password, $customer['password_hash']);
                     /* "Remember me" rides along through the code step (it is in the pending state). */

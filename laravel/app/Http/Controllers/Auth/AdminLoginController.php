@@ -72,6 +72,8 @@ class AdminLoginController
                     $loginError = 'Please enter your password.';
                 } elseif (!isset($departments[$selectedDepartment])) {
                     $loginError = 'Please select a department.';
+                } elseif (($lock = SignInThrottle::secondsLeft($email)) > 0) {
+                    $loginError = SignInThrottle::message($lock);   // the password is not even checked
                 } else {
                     /* The department is a venue: staff.venue_id for a staff account.
                        Authorization itself stays account_type (+ staff_venue_scope()). */
@@ -93,7 +95,8 @@ class AdminLoginController
                         /* (string): password_hash is nullable (Google-only customers, #23) */
                         !password_verify($password, (string) $user['password_hash'])
                     ) {
-                        $loginError = 'Invalid email or password.';
+                        $lock = SignInThrottle::failed($email);   // counted for an unknown email too
+                        $loginError = $lock > 0 ? SignInThrottle::message($lock) : 'Invalid email or password.';
                     } elseif (!(bool) $user['is_active']) {
                         /* Only AFTER the password checked out, so this reveals nothing to a stranger. */
                         $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
@@ -102,6 +105,7 @@ class AdminLoginController
                            (A staff row always has a venue: the database trigger insists.) */
                         $loginError = 'This account belongs to ' . $user['staff_venue_name'] . '.';
                     } else {
+                        SignInThrottle::passed($email);
                         // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).
                         venusep_password_upgrade($pdo, (int) $user['id'], $password, $user['password_hash']);
 

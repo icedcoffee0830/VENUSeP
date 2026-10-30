@@ -24,7 +24,7 @@ define('ROOM_PHOTO_BASE', public_path('assets/img/venues/rooms'));   // Laravel:
 define('ROOM_PHOTO_WEB_BASE', '../assets/img/venues/rooms');   // relative from admin/ and customer/ (both one level deep)
 define('ROOM_ID_RE', '/^[a-zA-Z0-9_-]{1,40}$/');
 define('ROOM_PHOTO_ALLOWED_EXT', ['jpg', 'jpeg', 'png', 'webp']);
-define('ROOM_PHOTO_MAX_BYTES', 8 * 1024 * 1024);   // 8MB per file
+define('ROOM_PHOTO_MAX_BYTES', 7 * 1024 * 1024);   // 7 MB per file (every upload, Aron 2026-10-30)
 define('ROOM_PHOTO_MAX_COUNT', 5);                 // gallery photos per room (the 360° is separate, one only)
 
 function rp_room_id_valid($id) {
@@ -100,7 +100,7 @@ function rp_validate_image($tmpPath, $originalName, &$error) {
     return null;
   }
   if ($size > ROOM_PHOTO_MAX_BYTES) {
-    $error = 'That file is larger than 8MB.';
+    $error = 'This file is over 7 MB. Choose a smaller photo or a screenshot.';
     return null;
   }
   $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));

@@ -372,6 +372,7 @@ if (!function_exists('vf_initials')) {
           <label class="vm-photo-btn" style="cursor:pointer">✎ Change photo<input id="vpPhotoInput" type="file" accept="image/*" onchange="vpChangePhoto(this)" style="display:none" /></label>
           <button type="button" class="vm-photo-btn" id="vpRemoveBtn" style="right:auto;left:12px" onclick="vpRemovePhoto()"{{ $venueCover ? '' : ' hidden' }}>Remove photo</button>
         </div>
+        <p class="vm-staff-hint" style="margin:.5rem 0 0">Photo: JPG, PNG or WEBP, up to 7 MB.</p>
 
         <hr class="vm-divider" />
 

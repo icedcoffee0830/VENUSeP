@@ -551,7 +551,7 @@
             </svg>
           </div>
           <div class="vm-pano-tools-abs">
-            <label class="vm-edit-photos vm-pano-btn">
+            <label class="vm-edit-photos vm-pano-btn" title="JPG, PNG or WEBP, up to 7 MB">
               <input type="file" accept="image/*" onchange="vmLoadPano(this)" />
               ◐ Add / replace 360°
             </label>
@@ -971,7 +971,7 @@
           '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-weight:700;font-size:.95rem">Venue uploads <span id="vmGalCount" style="font-weight:400;color:#8a857d"></span></div><label id="vmGalAddWrap" class="vm-btn vm-btn-outline vm-pano-btn" style="min-height:2rem;padding:0 .9rem;display:inline-flex;align-items:center"><span id="vmGalAddLabel">Add photos</span><input id="vmGalAddInput" type="file" accept="image/*" multiple onchange="vmGalAdd(this)" /></label></div>' +
           '<div id="vmGalBig" class="vm-galbig"></div>' +
           '<div id="vmGalGrid" class="vm-galgrid"></div>' +
-          '<p style="color:#8a857d;font-size:.78rem;margin:10px 2px 0">Click a photo to make it the cover. The &times; on a thumbnail removes it. Up to ' + VM_MAX_PHOTOS + ' photos per room.</p>' +
+          '<p style="color:#8a857d;font-size:.78rem;margin:10px 2px 0">Click a photo to make it the cover. The &times; on a thumbnail removes it. Up to ' + VM_MAX_PHOTOS + ' photos per room; JPG, PNG or WEBP, 7 MB each.</p>' +
           '</div></div>';
         ov.addEventListener('click', function (e) { if (e.target === ov) vmCloseGallery(); });
         document.body.appendChild(ov);

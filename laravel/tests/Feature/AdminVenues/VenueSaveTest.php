@@ -24,13 +24,13 @@ class VenueSaveTest extends VenuesTestCase
     public function test_admin_creates_a_venue_then_edits_it(): void
     {
         $this->actingAsAdmin();
-        $res = $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Port Test Hall', 'description' => 'A hall', 'venue_type' => 'hostel'])
+        $res = $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Port Test Hall', 'description' => 'A hall'])
             ->assertOk()->assertJson(['ok' => true, 'created' => true, 'code' => 'PORT-TEST-HALL',
                 'message' => 'Venue created. You can add its photo and rooms now.']);
         $id = (int) $res->json('venue_id');
         try {
             $row = DB::table('venues')->where('id', $id)->first();
-            $this->assertSame('hostel', $row->venue_type);
+            $this->assertSame('event', $row->venue_type);
             $this->assertSame('A hall', $row->description);
 
             $this->postForm('admin.venue-save', ['venue_id' => (string) $id, 'name' => 'Port Test Hall 2', 'description' => 'Renamed'])
@@ -43,6 +43,38 @@ class VenueSaveTest extends VenuesTestCase
         } finally {
             $this->dropVenue($id);
         }
+    }
+
+    /* Aron 2026-10-30: the hostel is one venue — a second hostel venue is refused
+       (the form never sends venue_type; this is the tampered post). */
+    public function test_a_second_hostel_venue_is_refused(): void
+    {
+        $before = DB::table('venues')->count();
+        $this->actingAsAdmin();
+        $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Second Hostel', 'venue_type' => 'hostel'])
+            ->assertStatus(409)->assertJson(['ok' => false, 'error' => 'hostel_exists',
+                'message' => 'There is already a hostel venue (USeP Hostel). Add Venue is for event venues; add hostel rooms to the hostel instead.']);
+        $this->assertSame($before, DB::table('venues')->count());
+    }
+
+    /* Aron 2026-10-30: adding a venue is admin-only — no button for staff, and
+       venue-save refuses a staff create. Staff still edit their own venue. */
+    public function test_only_an_admin_adds_a_venue(): void
+    {
+        $before = DB::table('venues')->count();
+        $this->actingAsStaff();
+        $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Staff Made Hall'])
+            ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden', 'message' => 'Only an administrator can add a venue.']);
+        $this->postForm('admin.venue-save', ['name' => 'Staff Made Hall'])->assertStatus(403);
+        $this->assertSame($before, DB::table('venues')->count());
+        $this->get(route('admin.venue-management'))->assertOk()
+            ->assertDontSee('+ Add Venue')->assertSee('+ Add Room');
+        $v1 = DB::table('venues')->where('id', 1)->first();
+        $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => $v1->name, 'description' => (string) $v1->description])->assertOk()->assertJson(['ok' => true, 'created' => false]);
+        $this->flushSession();
+
+        $this->actingAsAdmin()->get(route('admin.venue-management'))->assertOk()
+            ->assertSee('+ Add Venue')->assertSee(route('admin.venue-form'), false);
     }
 
     public function test_only_an_admin_moves_staff_and_only_staff_accounts_move(): void

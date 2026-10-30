@@ -54,6 +54,21 @@ class VenueManagementController extends Controller
               ORDER BY v.id"
         )->fetchAll();
 
+        /* Staff change only their own venue's rooms (DB-DECISIONS #24; the JSON
+           endpoints refuse the rest), so the cards hide Edit/Disable on other
+           venues' rooms. null = admin (every room); '' = unknown (none). */
+        legacy('auth');
+        $vmMyVenue = null;
+        $vmScope = staff_venue_scope();
+        if ($vmScope !== null) {
+            $vmMyVenue = '';
+            foreach ($vmVenueRows as $vmRow) {
+                if ((int) $vmRow['id'] === $vmScope) {
+                    $vmMyVenue = (string) $vmRow['name'];
+                }
+            }
+        }
+
         $vmStaffByVenue = [];
         $vmStaffRows = venusep_db_or_fail()->query(
             'SELECT venue_id, full_name FROM staff WHERE venue_id IS NOT NULL ORDER BY full_name'
@@ -89,6 +104,7 @@ class VenueManagementController extends Controller
             'DISCOUNT_PERCENT' => $DISCOUNT_PERCENT,
             'vmVenueRows' => $vmVenueRows,
             'vmStaffByVenue' => $vmStaffByVenue,
+            'vmMyVenue' => $vmMyVenue,
             'dcHistory' => $dcHistory,
             'dcCsrf' => csrf_token(),
             'pricingScript' => $pricingScript,

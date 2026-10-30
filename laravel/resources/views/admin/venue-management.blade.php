@@ -761,7 +761,9 @@ function vmMaint($m, $today) {
           <p>Manage locations and the rooms available under them.</p>
         </div>
         <div class="vm-actions">
+@if (admin_is_admin()) {{-- adding a venue is admin-only (venue-save refuses staff too) --}}
           <a class="vm-btn vm-btn-primary" href="{{ route('admin.venue-form') }}">+ Add Venue</a>
+@endif
           <a class="vm-btn vm-btn-outline" href="{{ route('admin.room-form') }}">+ Add Room</a>
         </div>
       </div>
@@ -967,8 +969,10 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
+@if ($vmMyVenue === null || $room['venue'] === $vmMyVenue) {{-- staff: own venue's rooms only --}}
               <a class="vm-edit-link" href="{{ route('admin.room-form', ['id' => $room['id']]) }}"><span class="plus">✎</span> Edit Room</a>
               <button type="button" class="vm-toggle-link{{ $room['active'] ? '' : ' is-off' }}" data-toggle-id="{{ $room['id'] }}" data-toggle-name="{{ $room['name'] }}">{{ $room['active'] ? 'Disable' : 'Enable' }}</button>
+@endif
 @if (admin_is_admin())
               <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="{{ $room['id'] }}" data-delete-name="{{ $room['name'] }}">Delete</button>
 @endif
@@ -1044,13 +1048,15 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
+@if ($vmMyVenue === null || $room['venue'] === $vmMyVenue) {{-- staff: own venue's rooms only --}}
               <a class="vm-edit-link" href="{{ route('admin.hostel-room-form', ['id' => $room['id']]) }}"><span class="plus">✎</span> Edit Room</a>
               <button type="button" class="vm-toggle-link{{ $room['active'] ? '' : ' is-off' }}" data-toggle-id="{{ $room['id'] }}" data-toggle-name="{{ $room['name'] }}">{{ $room['active'] ? 'Disable' : 'Enable' }}</button>
+@endif
 @if (admin_is_admin())
               <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="{{ $room['id'] }}" data-delete-name="{{ $room['name'] }}">Delete</button>
 @endif
             </div>
-            <span class="vm-price">₱{{ number_format($room['rate']) }}/head</span>
+            <span class="vm-price">₱{{ usep_peso($room['rate']) }}/head</span>
           </div>
         </div>
 @endforeach
@@ -1179,6 +1185,10 @@ function vmMaint($m, $today) {
               if (!result.ok) {
                 venusepAlert(result.message || 'Nothing changed.');
                 return;
+              }
+              // disabled with upcoming bookings: the reply names them — show it first
+              if (result.notes && result.notes.length) {
+                return venusepAlert(result.message, { title: 'Room disabled' }).then(() => location.reload());
               }
               location.reload();
             })

@@ -42,6 +42,10 @@ class VenueSaveController extends Controller
            saved and has an id" — but nothing behind it ever inserted a row, so the
            screen was a facade. */
         $isNew = ($venueId === '' || $venueId === '0');
+        /* Adding a venue is admin-only (Aron 2026-10-30); staff edit their own one. */
+        if ($isNew && !admin_is_admin()) {
+            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only an administrator can add a venue.']);
+        }
         if (!$isNew && !ctype_digit($venueId)) {
             $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Invalid venue.']);
         }
@@ -83,6 +87,15 @@ class VenueSaveController extends Controller
                    creation because changing it later would orphan every room already
                    filed under it. */
                 $venueType = ($post->get('venue_type') ?? '') === 'hostel' ? 'hostel' : 'event';
+                /* The hostel is ONE venue (Aron 2026-10-30): Add Venue is for event
+                   venues, so a second hostel venue is refused. */
+                if ($venueType === 'hostel') {
+                    $hostel = $pdo->query("SELECT name FROM venues WHERE venue_type = 'hostel' ORDER BY id LIMIT 1")->fetchColumn();
+                    if ($hostel !== false) {
+                        $this->reply(409, ['ok' => false, 'error' => 'hostel_exists',
+                            'message' => 'There is already a hostel venue (' . $hostel . '). Add Venue is for event venues; add hostel rooms to the hostel instead.']);
+                    }
+                }
 
                 /* venue_code is UNIQUE and is what a human reads in a URL or an export,
                    so it is derived from the name rather than being a bare number:

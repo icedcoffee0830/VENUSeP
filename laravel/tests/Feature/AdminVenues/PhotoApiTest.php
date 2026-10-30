@@ -71,6 +71,49 @@ class PhotoApiTest extends VenuesTestCase
         $this->assertDirectoryDoesNotExist(public_path('assets/img/venues/rooms/r902'));
     }
 
+    /* A real PNG padded to $bytes (getimagesize reads only the header). */
+    private function bigPng(string $name, int $bytes): UploadedFile
+    {
+        $file = $this->pngUpload($name);
+        $fh = fopen($file->getPathname(), 'r+');
+        ftruncate($fh, $bytes);
+        fclose($fh);
+        clearstatcache();
+        return new UploadedFile($file->getPathname(), $name, 'image/png', null, true);
+    }
+
+    /* Aron 2026-10-30: every upload is capped at 7 MB, with a clear message. */
+    public function test_room_and_venue_photos_over_7_mb_are_refused(): void
+    {
+        $over = 7 * 1024 * 1024 + 1;
+        $msg = 'This file is over 7 MB. Choose a smaller photo or a screenshot.';
+        $venueId = $this->makeVenue('Big Photo Venue');
+        $roomId = DB::table('rooms')->insertGetId(['venue_id' => 1, 'room_code' => 'r903', 'name' => 'Big Photo Room', 'room_type' => 'event']);
+        try {
+            $this->actingAsAdmin();
+            $this->withCsrf()->post(route('admin.room-photos-api'), [
+                '_token' => self::TOKEN, 'action' => 'upload', 'room_id' => 'r903', 'files' => [$this->bigPng('big.png', $over)],
+            ])->assertStatus(400)->assertJson(['ok' => false, 'error' => 'upload_failed', 'message' => $msg]);
+            $this->withCsrf()->post(route('admin.room-photos-api'), [
+                '_token' => self::TOKEN, 'action' => 'upload_pano', 'room_id' => 'r903', 'file' => $this->bigPng('pano.png', $over),
+            ])->assertStatus(400)->assertJson(['ok' => false, 'message' => $msg]);
+            $this->assertSame(0, DB::table('room_media')->where('room_id', $roomId)->count());
+
+            $this->withCsrf()->post(route('admin.venue-photo-api'), [
+                '_token' => self::TOKEN, 'action' => 'upload', 'venue_id' => (string) $venueId, 'file' => $this->bigPng('c.png', $over),
+            ])->assertStatus(400)->assertJson(['ok' => false, 'error' => 'upload_failed', 'message' => $msg]);
+            $this->assertNull(DB::table('venues')->where('id', $venueId)->value('cover_photo'));
+
+            /* exactly 7 MB is still fine */
+            $this->withCsrf()->post(route('admin.venue-photo-api'), [
+                '_token' => self::TOKEN, 'action' => 'upload', 'venue_id' => (string) $venueId, 'file' => $this->bigPng('c.png', 7 * 1024 * 1024),
+            ])->assertOk()->assertJson(['ok' => true]);
+        } finally {
+            $this->dropRoom('r903');
+            $this->dropVenue($venueId);
+        }
+    }
+
     public function test_venue_cover_upload_and_delete(): void
     {
         $venueId = $this->makeVenue('Photo Test Venue');

@@ -7,7 +7,7 @@
    and supports a gallery this UI never asked for).
 
    Reuses rp_validate_image() from includes/room-photos.php — same image
-   rules (real image, allowed extension, 8MB cap), one file at a time.
+   rules (real image, allowed extension, 7 MB cap), one file at a time.
    ===================================================================== */
 
 require_once __DIR__ . '/db.php';

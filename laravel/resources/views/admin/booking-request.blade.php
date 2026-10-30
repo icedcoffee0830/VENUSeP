@@ -242,6 +242,7 @@
             cur.total = out.booking.total;
             cur.discountPct = out.booking.discount;
             cur.payBy = out.booking.payBy;
+            cur.graceEnds = out.booking.graceEnds;
             /* the timeline exactly as a reload shows it — real time, real actor */
             if (out.booking.tl) cur.tl = out.booking.tl;
           }
@@ -408,6 +409,9 @@
         return ' <span style="color:#b23a3a">· ' + (a < b ? 'SHORT by ' : 'OVER by ') + centavosFmt(Math.abs(b - a)) + '</span>';
       }
       function kv(k, v, wide) { return `<div class="br-kv${wide ? ' kv-wide' : ''}"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
+      /* Post-pay: due the day after the event (cur.payBy), Overdue only once the
+         grace days have passed (cur.graceEnds) — Aron, 2026-10-30. */
+      function graceKv() { return cur.postpay && cur.graceEnds ? kv('Overdue after', esc(cur.graceEnds)) : ''; }
       function banner(cls, title, sub) { return `<div class="br-banner ${cls}"><div>${title}${sub ? `<span class="s">${sub}</span>` : ''}</div></div>`; }
       function flags(list, color) { return list.map(f => `<div class="br-flag"><span class="dot" style="background:${color}"></span><span>${esc(f)}</span></div>`).join(''); }
       function initials(n) { return n.split(' ').map(w => w[0]).slice(0, 2).join(''); }
@@ -561,8 +565,10 @@
            system are `completed`, and offering them the live queue's buttons
            would invite staff to act on something that is already over. An open
            refund is the exception: the booking is cancelled, but the claim it
-           was cancelled for can still be decided. */
-        if (CLOSED_RES.includes(cur.res) && !OPEN_REFUND.includes(cur.pay)) {
+           was cancelled for can still be decided. So is an overdue payment on a
+           completed (post-pay) booking: its deadline can be extended (Aron, 2026-10-30). */
+        const overdueAfterEvent = cur.res === 'completed' && cur.pay === 'overdue';
+        if (CLOSED_RES.includes(cur.res) && !OPEN_REFUND.includes(cur.pay) && !overdueAfterEvent) {
           return `<span class="none">${esc(resBadge(cur.res).t)} &middot; this booking is closed &mdash; nothing left to act on</span>`;
         }
         if (cur.res === 'disrupted') {
@@ -575,7 +581,10 @@
             ? `<button class="br-btn br-btn-primary" onclick="approveIdRes(true)">Approve with ${DISCOUNT_PERCENT}% discount</button><button class="br-btn" onclick="approveIdRes(false)">Approve at full price</button>`
             : `<button class="br-btn br-btn-primary" onclick="approveIdRes(false)">Approve ID &amp; reservation</button>`)
           + `<button class="br-btn" onclick="rejectRequest()">Reject request</button>`;
-        if (cur.pay === 'overdue') return `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
+        /* A post-pay booking is never released: its event already happened (Aron, 2026-10-30). */
+        if (cur.pay === 'overdue') return cur.postpay || overdueAfterEvent
+            ?`<button class="br-btn br-btn-primary" onclick="extendDeadline()">Extend 48 h</button>`
+            : `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
         if (OPEN_REFUND.includes(cur.pay)) return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button><button class="br-btn" onclick="openAction('fix')">Return for correction</button><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
         /* PAY TO USE (2026-10-27): no bed until the stay is paid. A receipt
            still under review is not paid; staff confirm it first. The OR is
@@ -785,13 +794,13 @@
           case 'locked': return banner('bn-gray', 'Payment is locked', 'The customer cannot pay until you approve the ID and the reservation.') +
             `<div class="br-kvgrid">${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}${cur.prepay
               ? kv('Pay-by once approved', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')
-              : kv('Payment timing', 'Post-pay <span class="soft">(opens after the event, due ' + PAY_POLICY.graceDays + ' days later)</span>')}</div>`;
+              : kv('Payment timing', 'Post-pay <span class="soft">(due the day after the event · overdue if unpaid ' + PAY_POLICY.graceDays + ' days after it)</span>')}</div>`;
           case 'await_event': return banner('bn-gray', 'Payment opens after the event', 'Post-pay booking: nothing is owed until the event is over. The customer cannot pay early. The system opens payment the day after the last booked day.') +
-            `<div class="br-kvgrid">${kv('Payment opens', 'the day after the event')}${kv('Due by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
+            `<div class="br-kvgrid">${kv('Payment opens', 'the day after the event')}${kv('Due by', esc(cur.payBy))}${graceKv()}${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
           case 'await_gcash': return banner('bn-amber', 'Awaiting GCash payment', 'The customer was notified. The receipt will be auto-checked the moment it is uploaded.') +
-            `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}</div>`;
+            `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${graceKv()}${kv('Amount due', esc(cur.total))}</div>`;
           case 'await_cash': return banner('bn-amber', 'Awaiting cash payment at the cashier', 'The customer chose to pay in cash, so GCash is closed for them until they cancel that choice — then this button goes away. Confirm here once the cashier records the payment.') +
-            `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}${kv('Where', 'USeP Cashier — Venue Reservations Window', true)}</div>
+            `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${graceKv()}${kv('Amount due', esc(cur.total))}${kv('Where', 'USeP Cashier — Venue Reservations Window', true)}</div>
              <div style="margin-top:0.8rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Record cash payment</button></div>`;
           /* `auto_pass` is not a database state (an upload always lands in
              `under_review`, DB-DECISIONS #6); `rejected` is reached through
@@ -838,8 +847,10 @@
               /* the hostel takes cash at the front desk; its OR comes later from the cashier */
               ? banner('bn-green', 'Paid in cash at the front desk', esc(cur.confirmedBy || 'Recorded by staff') + ' · the System Receipt is issued; the Official Receipt follows from the University Cashier.')
               : banner('bn-green', 'Paid at the cashier', esc(cur.confirmedBy || 'Recorded by staff') + ' · official receipt issued at the counter.');
-          case 'overdue': return banner('bn-red', 'Payment overdue', 'The pay-by deadline (' + esc(cur.payBy) + ') passed with no valid payment. The slot can be released or the deadline extended.') +
-            `<div class="br-kvgrid">${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
+          case 'overdue': return banner('bn-red', 'Payment overdue', (cur.postpay
+              ? 'It was due ' + esc(cur.payBy) + ' and the grace period ended ' + esc(cur.graceEnds || cur.payBy) + ' with no valid payment. The event already happened, so the booking is not released: the payment stays on record and can still be made. Extend the deadline or follow up with the customer.'
+              : 'The pay-by deadline (' + esc(cur.payBy) + ') passed with no valid payment. The slot can be released or the deadline extended.')) +
+            `<div class="br-kvgrid">${kv('Was due', esc(cur.payBy))}${graceKv()}${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
           case 'refund_requested':
           case 'refund_await_or':
           case 'refund_processing':
@@ -926,7 +937,7 @@
                   : ' <span style="color:var(--vm-label)">&mdash; not a USeP address</span>'}
               </div>
               ${cur.discountPct != null ? `<div style="font-size:0.76rem;margin-top:0.4rem;color:${cur.discountPct > 0 ? '#1c7a4f' : 'var(--vm-muted)'}">
-                Decided: <strong>${cur.discountPct > 0 ? DISCOUNT_PERCENT + '% applied' : 'no discount — full price'}</strong></div>` : ''}
+                Decided: <strong>${cur.discountPct > 0 ? cur.discountPct + '% applied' : 'no discount — full price'}</strong></div>` : ''}
             </div>
           </div>`;
       }
@@ -983,7 +994,7 @@
                     ${kv('Room', esc(cur.room))}${kv('Venue', esc(cur.venue))}
                     ${kv(cur.days > 1 ? 'Dates' : 'Date', esc(cur.dates))}${kv('Attendees', cur.attendees + ' / ' + cur.capacity + (over ? ' <span style="color:#8a5a12">· over capacity</span>' : ''))}
                     ${kv('Fee', esc(cur.total) + ' <span class="soft">(' + esc(cur.feeDay) + '/day × ' + cur.days + ')</span>')}${!cur.prepay
-                      ? kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(post-pay · ' + PAY_POLICY.graceDays + ' days after the event)</span>')
+                      ? kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(post-pay · the day after the event · overdue after ' + esc(cur.graceEnds || cur.payBy) + ')</span>')
                       : kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')}
                   </div>
                   <div style="margin-top:0.8rem">

@@ -133,6 +133,87 @@ class BookingRequestFixesTest extends TestCase
             ->assertDontSee("(!PAY_POLICY.prepay && ['pending','locked']", false);
     }
 
+    /* Aron 2026-10-30: post-pay is DUE the day after the event and turns Overdue
+       only after postpay_grace_days (3) — the stored deadline. */
+    public function test_post_pay_is_due_the_day_after_and_overdue_after_the_grace(): void
+    {
+        $moveEventTo = function (int $id, string $day): void {
+            DB::table('venue_booking_details')->where('booking_id', $id)->update(['start_date' => $day, 'end_date' => $day]);
+            DB::table('venue_booking_slots')->where('booking_id', $id)->update(['slot_date' => $day]);
+            DB::update('UPDATE bookings SET current_deadline_at = fn_payment_deadline(?) WHERE id = ?', [$id, $id]);
+            DB::statement('CALL sp_expire_due_bookings()');   // the deadline housekeeping every queue read runs
+        };
+        $label = fn (int $days) => now()->addDays($days)->format('M j, Y');
+
+        /* event 2 days ago: due yesterday, still inside the grace -> not overdue */
+        [$inGrace, $inGraceRef] = $this->seedVenueBooking('r1', 'completed', 'await_gcash', 'gcash', true, false);
+        $moveEventTo($inGrace, now()->subDays(2)->toDateString());
+        $row = $this->pageRow($inGraceRef);
+        $this->assertSame('await_gcash', $row['pay']);
+        $this->assertSame($label(-1), $row['payBy']);
+        $this->assertSame($label(1), $row['graceEnds']);
+
+        /* event 4 days ago: the grace (3 days) is over -> overdue */
+        [$late, $lateRef] = $this->seedVenueBooking('r1', 'completed', 'await_gcash', 'gcash', true, false);
+        $moveEventTo($late, now()->subDays(4)->toDateString());
+        $row = $this->pageRow($lateRef);
+        $this->assertSame('overdue', $row['pay']);
+        $this->assertSame($label(-3), $row['payBy']);
+        $this->assertSame($label(-1), $row['graceEnds']);
+        $q = booking_queue_action(booking_by_reference($lateRef));
+        $this->assertSame('Post-pay · was due ' . $label(-3) . ' · grace ended ' . $label(-1) . ' · still payable · follow up', $q);
+
+        /* staff extended it: the extended deadline is the date told */
+        $this->actingAsStaff()->postWithToken(route('admin.booking-action'), ['booking' => $lateRef, 'action' => 'extend_deadline'])
+            ->assertOk()->assertJson(['booking' => ['payBy' => $label(2), 'graceEnds' => $label(2)]]);
+
+        /* pre-pay is untouched */
+        [, $pre] = $this->seedVenueBooking('r1', 'approved', 'await_gcash');
+        $this->assertNull($this->pageRow($pre)['graceEnds']);
+
+        $this->page($inGraceRef)->assertSee("function graceKv() { return cur.postpay && cur.graceEnds ? kv('Overdue after', esc(cur.graceEnds)) : ''; }", false)
+            ->assertSee('(post-pay · the day after the event · overdue after', false)
+            ->assertDontSee("' days after the event)</span>'", false);
+    }
+
+    /* Aron 2026-10-30: every row the status trigger wrote read "Status changed";
+       the title now comes from the old -> new status. */
+    public function test_trigger_timeline_rows_get_real_titles(): void
+    {
+        [, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', false, false);
+        $this->actingAsStaff()->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => 'approve'])->assertOk();
+        $tl = $this->pageRow($ref)['tl'];
+        $this->assertSame('Approved', end($tl)['x']);
+
+        $t = fn (string $or, string $nr, string $op, string $np) => timeline_status_title(
+            ['old_reservation_status' => $or, 'new_reservation_status' => $nr, 'old_payment_status' => $op, 'new_payment_status' => $np]);
+        $this->assertSame('Request expired', $t('pending', 'released', 'locked', 'expired'));
+        $this->assertSame('Slot released', $t('approved', 'released', 'overdue', 'expired'));
+        $this->assertSame('Completed', $t('approved', 'completed', 'await_event', 'await_event'));
+        $this->assertSame('Payment window opened', $t('completed', 'completed', 'await_event', 'await_gcash'));
+        $this->assertSame('Payment overdue', $t('completed', 'completed', 'await_gcash', 'overdue'));
+        $this->assertSame('Deadline extended', $t('completed', 'completed', 'overdue', 'await_cash'));
+        $this->assertSame('Receipt rejected', $t('approved', 'approved', 'under_review', 'await_gcash'));
+        $this->assertSame('Payment confirmed', $t('approved', 'approved', 'under_review', 'confirmed'));
+        $this->assertSame('Refund withdrawn', $t('approved', 'approved', 'refund_requested', 'confirmed'));
+        $this->assertSame('Refunded — booking cancelled', $t('approved', 'cancelled', 'refund_processing', 'refunded'));
+        $this->assertSame('Status changed', $t('approved', 'approved', 'confirmed', 'confirmed'));
+    }
+
+    /* cbook's night-2 report: "Decided: X% applied" printed the LIVE discount
+       setting, not the rate snapshotted onto this booking (DB-DECISIONS: per-booking snapshot). */
+    public function test_decided_discount_line_uses_the_bookings_snapshot(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', true, false);
+        $reply = $this->actingAsStaff()->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => 'approve', 'discount' => '1'])
+            ->assertOk()->json('booking');
+        $this->assertGreaterThan(0, $reply['discount']);
+        $this->assertEquals($this->booking($id)->discount_percent, $reply['discount']);   // what cur.discountPct becomes
+
+        $this->page($ref)->assertSee("Decided: <strong>\${cur.discountPct > 0 ? cur.discountPct + '% applied'", false)
+            ->assertDontSee("DISCOUNT_PERCENT + '% applied'", false);
+    }
+
     public function test_the_page_has_no_fake_timeline_stamp(): void
     {
         [, $ref] = $this->seedVenueBooking('r1');

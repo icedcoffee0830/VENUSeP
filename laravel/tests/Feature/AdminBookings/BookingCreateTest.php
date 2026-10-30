@@ -15,10 +15,15 @@ class BookingCreateTest extends TestCase
         return $this->postWithToken(route('admin.booking-create'), $data);
     }
 
-    /* A walk-in venue booking far in the future (the 12-hour rule, no clashes). */
+    /* A walk-in venue booking far in the future (the 12-hour rule), on a day the
+       room holds no slot: other tests leave random far-future bookings behind,
+       and a clash used to fail this test now and then with a 409. */
     private function walkInVenue(string $room = 'r1', array $extra = []): array
     {
-        $day = now()->addDays(random_int(400, 4000))->toDateString();
+        do {
+            $day = now()->addDays(random_int(400, 4000))->toDateString();
+        } while (DB::table('venue_booking_slots as s')->join('rooms as r', 'r.id', '=', 's.room_id')
+            ->where('r.room_code', $room)->where('s.slot_date', $day)->whereNull('s.released_at')->exists());
         return $extra + [
             'type' => 'venue', 'room' => $room, 'method' => 'gcash', 'id_checked' => '1', 'usep_id' => '1',
             'agree_no_refund' => '1', 'booker_mode' => 'walkin',

@@ -180,6 +180,28 @@ class ReceiptReviewActionsTest extends TestCase
         $this->act(['booking' => $ref, 'action' => 'extend_deadline'])->assertStatus(409);   // not overdue any more
     }
 
+    /* Aron 2026-10-30: a post-pay booking is `completed` once its event is over,
+       and that overdue payment can be extended too — recorded with the actor. */
+    public function test_extend_deadline_works_on_a_completed_overdue_booking(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'completed', 'overdue', 'cash', true, false);
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'extend_deadline', 'note' => 'Called the customer.'])
+            ->assertOk()->assertJson(['booking' => ['res' => 'completed', 'pay' => 'await_cash']]);
+        $this->assertEqualsWithDelta(strtotime('+48 hours'), strtotime($this->booking($id)->current_deadline_at), 120);
+        $row = DB::table('booking_timeline')->where('booking_id', $id)->where('old_payment_status', 'overdue')->first();
+        $this->assertSame((int) DB::table('users')->where('email', 'staff@gmail.com')->value('id'), (int) $row->performed_by_user_id);
+        $this->assertStringStartsWith('Pay-by deadline extended 48 hours, to ', $row->note);
+        $this->assertStringEndsWith(' Called the customer.', $row->note);
+
+        [, $cancelled] = $this->seedVenueBooking('r1', 'cancelled', 'overdue', 'gcash', true, false);
+        $this->act(['booking' => $cancelled, 'action' => 'extend_deadline'])->assertStatus(409);
+
+        /* the header offers Extend on it instead of "this booking is closed" */
+        $this->get(route('admin.booking-request', ['id' => $ref]))->assertOk()
+            ->assertSee("const overdueAfterEvent = cur.res === 'completed' && cur.pay === 'overdue';", false)
+            ->assertSee('!OPEN_REFUND.includes(cur.pay) && !overdueAfterEvent', false);
+    }
+
     /* §7 Release slot: overdue -> released / expired; the dates free up; staff stay in their venue. */
     public function test_release_slot_ends_an_overdue_booking_and_frees_its_dates(): void
     {
@@ -189,11 +211,30 @@ class ReceiptReviewActionsTest extends TestCase
 
         [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'await_gcash');
         $this->act(['booking' => $ref, 'action' => 'release_slot'])->assertStatus(409);   // not overdue
-        DB::table('bookings')->where('id', $id)->update(['refunds_allowed' => 0, 'payment_status' => 'overdue']);
+        DB::table('bookings')->where('id', $id)->update(['payment_status' => 'overdue']);   // a pre-pay booking
         $this->act(['booking' => $ref, 'action' => 'release_slot'])
             ->assertOk()->assertJson(['booking' => ['res' => 'released', 'pay' => 'expired']]);
         $this->assertSame(0, DB::table('venue_booking_slots')->where('booking_id', $id)->whereNull('released_at')->count());
         $this->assertSame(1, DB::table('notifications')->where('booking_id', $id)->where('kind', 'expired')->count());   // the customer is told
+    }
+
+    /* Aron 2026-10-30: an overdue POST-PAY booking is never released — the event
+       happened, the debt stays on record. No button, and the server refuses. */
+    public function test_release_slot_refuses_a_post_pay_booking(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'overdue', 'gcash', true, false);
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'release_slot'])
+            ->assertStatus(409)->assertJson(['ok' => false, 'message' => 'A pay-after-the-event booking is never released: the event already happened, so what is owed stays on record. Extend the deadline or follow up with the customer.']);
+        $this->assertSame('approved', $this->booking($id)->reservation_status);
+        $this->assertSame('overdue', $this->booking($id)->payment_status);
+        $this->assertSame(1, DB::table('venue_booking_slots')->where('booking_id', $id)->whereNull('released_at')->count());
+
+        $html = $this->get(route('admin.booking-request', ['id' => $ref]))->assertOk()
+            ->assertSee("if (cur.pay === 'overdue') return cur.postpay", false)->getContent();
+        $this->assertStringContainsString('"postpay":true', $html);
+
+        [, $preRef] = $this->seedVenueBooking('r1', 'approved', 'overdue');
+        $this->assertStringContainsString('"postpay":false', $this->get(route('admin.booking-request', ['id' => $preRef]))->getContent());
     }
 
     public function test_the_page_offers_the_reason_list(): void

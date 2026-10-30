@@ -72,7 +72,7 @@ class CustomerProfileTest extends TestCase
             ->assertJson(['field' => 'full_name', 'message' => 'Enter your full name.']);
         $this->save(['action' => 'details', 'full_name' => 'X', 'email' => $c->email, 'contact_number' => '123'])->assertStatus(400)
             ->assertJson(['field' => 'contact_number']);
-        $this->save(['action' => 'details', 'full_name' => 'X', 'email' => 'admin@gmail.com'])->assertStatus(409)
+        $this->save(['action' => 'details', 'full_name' => 'X', 'email' => 'admin@gmail.com', 'current_password' => self::PASSWORD])->assertStatus(409)
             ->assertJson(['field' => 'email', 'message' => 'That email address is already used by another account.']);
         $this->save(['action' => 'details', 'full_name' => 'New Name', 'email' => strtoupper($c->email),
                      'contact_number' => '0917-123-4567', 'address' => 'Davao', 'university_id_no' => '2023-1'])

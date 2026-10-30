@@ -416,7 +416,12 @@
             </div>
             <div class="form-field">
               <label class="form-label" for="profile-email">Email</label>
-              <input class="form-control" id="profile-email" type="email" value="{{ $vpEmail }}"/>
+              <input class="form-control" id="profile-email" type="email" value="{{ $vpEmail }}" data-original="{{ strtolower($vpEmail) }}"/>
+            </div>
+            {{-- Shown only while the email is being changed: a new email needs the current password (profile-save). --}}
+            <div class="form-field" id="profile-email-pw-field" hidden>
+              <label class="form-label" for="profile-email-pw">Current password <span style="font-weight:400">(to change your email)</span></label>
+              <input class="form-control" id="profile-email-pw" type="password" autocomplete="current-password"/>
             </div>
             <div class="form-field">
               <label class="form-label" for="profile-number">Number</label>
@@ -450,6 +455,14 @@
               const form = document.getElementById('vpForm');
               const out = document.getElementById('vpMessage');
               if (!form) return;
+              const email = document.getElementById('profile-email');
+              const emailPw = document.getElementById('profile-email-pw');
+              /* A new email needs the current password: that field shows only while the email differs. */
+              function toggleEmailPw() {
+                document.getElementById('profile-email-pw-field').hidden = email.value.trim().toLowerCase() === email.dataset.original;
+              }
+              email.addEventListener('input', toggleEmailPw);
+              form.addEventListener('reset', function () { window.setTimeout(toggleEmailPw, 0); });
               form.addEventListener('submit', function (e) {
                 e.preventDefault();
                 const name = (document.getElementById('profile-first').value.trim() + ' ' +
@@ -459,7 +472,8 @@
                   _token: @json($vpCsrf),
                   action: 'details',
                   full_name: name,
-                  email: document.getElementById('profile-email').value.trim(),
+                  email: email.value.trim(),
+                  current_password: emailPw.value,
                   contact_number: document.getElementById('profile-number').value.trim()
                 });
                 out.style.color = '#6b675f'; out.textContent = 'Saving…';
@@ -468,7 +482,11 @@
                   .then(function (res) {
                     out.style.color = res.ok ? '#1c7a4f' : '#b23a3a';
                     out.textContent = res.message || (res.ok ? 'Saved.' : 'Nothing was saved.');
+                    if (!res.ok && res.field === 'current_password') emailPw.focus();
                     if (res.ok) {
+                      email.dataset.original = email.value.trim().toLowerCase();   // the saved email is the current one now
+                      emailPw.value = '';
+                      toggleEmailPw();
                       /* the card follows the saved name at once — initials too,
                          unless a photo stands in for them */
                       document.getElementById('vpCardName').textContent = name;

@@ -90,6 +90,26 @@ class ProfileSaveController
                 'message' => 'Enter a mobile number in the form 09XX XXX XXXX.']);
         }
 
+        /* A NEW email needs the current password, like a new password: the email is
+           where reset links go, so a session alone must not be able to move it. A
+           Google-only account (no password) shows the fresh Google confirmation
+           instead — the same proof as its first password (#23), not spent here. */
+        $acct = $pdo->prepare('SELECT email, password_hash FROM users WHERE id = :u');
+        $acct->execute([':u' => $userId]);
+        $acct = $acct->fetch();
+        if ($acct && strtolower((string) $acct['email']) !== $email) {
+            if ($acct['password_hash'] === null) {
+                if (!($isCustomer && google_proof_valid('google_reauth', $userId))) {
+                    $this->reply(403, ['ok' => false, 'field' => 'email', 'reauth' => true,
+                        'message' => 'To change your email, first confirm it’s you with Google (Account Security, below).']);
+                }
+            } elseif (!password_verify((string) $post->get('current_password', ''), $acct['password_hash'])) {
+                $this->reply(401, ['ok' => false, 'field' => 'current_password', 'message' => $post->get('current_password', '') === ''
+                    ? 'Enter your current password to change your email.'
+                    : 'That is not your current password.']);
+            }
+        }
+
         try {
             $pdo->beginTransaction();
             $pdo->prepare('UPDATE users SET email = :e WHERE id = :u')->execute([':e' => $email, ':u' => $userId]);

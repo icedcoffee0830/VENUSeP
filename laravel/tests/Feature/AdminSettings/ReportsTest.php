@@ -47,6 +47,56 @@ class ReportsTest extends TestCase
         $this->assertStringNotContainsString("<td><strong>\${item.venue}</strong></td>", $html);
     }
 
+    /* One venue booking on room $code, held from $from (Y-m-d). Callers roll back. */
+    private function addBooking(string $code, string $from, string $res, string $pay, float $total = 1000, float $discount = 0): int
+    {
+        $id = DB::table('bookings')->insertGetId([
+            'customer_id' => DB::table('customers')->value('id'),
+            'room_id' => DB::table('rooms')->where('room_code', $code)->value('id'), 'booking_type' => 'venue',
+            'reservation_status' => $res, 'payment_status' => $pay, 'payment_method' => 'gcash',
+            'is_usep_affiliated' => 0, 'affiliation_verified' => 0, 'room_price' => $total, 'discount_percent' => $discount,
+            'discount_amount' => 0, 'total_amount' => $total, 'refunds_allowed' => 1, 'submitted_at' => now()->subDays(5),
+        ]);
+        DB::table('venue_booking_details')->insert(['booking_id' => $id, 'event_name' => 'Reports test',
+            'start_date' => $from, 'end_date' => $from, 'attendee_count' => 10]);
+        return $id;
+    }
+
+    private function dashboardRevenue(): int
+    {
+        preg_match('/Revenue<\/h3>\s*<div class="number">₱([\d,]+)</u',
+            $this->actingAsAdmin()->get(route('admin.dashboard'))->assertOk()->getContent(), $m);
+        return (int) str_replace(',', '', $m[1]);
+    }
+
+    /* DB-DECISIONS #16: money stays collected until its refund payout is COMPLETE.
+       A refund requested, in progress or denied still counts; `refunded` does not.
+       The dashboard tile reads the same figure. */
+    public function test_revenue_counts_paid_bookings_until_the_refund_is_paid_out(): void
+    {
+        legacy('bookings');
+        DB::beginTransaction();
+        try {
+            $quarter = fn () => (float) report_quarters(1)[0]['revenue'];
+            $before = $quarter();
+            $tile = $this->dashboardRevenue();
+            $this->assertSame((int) round($before), $tile, 'dashboard and report agree before');
+
+            $today = now()->toDateString();
+            foreach (['confirmed', 'paid_cash', 'refund_requested', 'refund_correction', 'refund_await_or',
+                      'refund_processing', 'refund_denied'] as $pay) {
+                $this->addBooking('r1', $today, 'approved', $pay);
+            }
+            $this->addBooking('r1', $today, 'cancelled', 'refunded');        // the money went back
+            $this->addBooking('r1', $today, 'approved', 'await_gcash');      // never paid
+
+            $this->assertSame($before + 7000, $quarter());
+            $this->assertSame((int) round($before) + 7000, $this->dashboardRevenue(), 'dashboard follows the report');
+        } finally {
+            DB::rollBack();
+        }
+    }
+
     public function test_staff_sees_the_reports(): void
     {
         $this->actingAsStaff()->get(route('admin.reports'))->assertOk()->assertSee('Quarterly Reports');

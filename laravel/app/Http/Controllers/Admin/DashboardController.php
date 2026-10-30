@@ -29,15 +29,9 @@ class DashboardController
                          OR (hd.check_in_date <= CURDATE() AND hd.check_out_date > CURDATE()))
                     AND b.reservation_status IN ('approved', 'completed')"
             )->fetchColumn();
-            /* Money COLLECTED this quarter — an unpaid booking inflates nothing. */
-            $adRevenue = (float) $adPdo->query(
-                "SELECT COALESCE(SUM(b.total_amount), 0) FROM bookings b
-                   LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
-                   LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
-                  WHERE b.payment_status IN ('confirmed', 'paid_cash')
-                    AND QUARTER(COALESCE(vd.start_date, hd.check_in_date)) = QUARTER(CURDATE())
-                    AND YEAR(COALESCE(vd.start_date, hd.check_in_date)) = YEAR(CURDATE())"
-            )->fetchColumn();
+            /* Money COLLECTED this quarter — the Quarterly Reports' own figure
+               (report_quarters()), so the tile and the report cannot disagree. */
+            $adRevenue = (float) report_quarters(1)[0]['revenue'];
             $adVenues = $adPdo->query(
                 "SELECT v.name, v.description, COUNT(r.id) AS rooms
                    FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1

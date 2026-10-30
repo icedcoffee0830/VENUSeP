@@ -572,7 +572,10 @@ function transaction_rows($customerId = null) {
    A booking counts toward the quarter its EVENT falls in, not the quarter
    it was booked or paid in: a venue's quarter is the business it hosted.
    REVENUE counts only money actually collected (confirmed / paid at the
-   cashier), so an unpaid or overdue booking inflates nothing.
+   cashier), so an unpaid or overdue booking inflates nothing. Collected money
+   stays counted until its refund payout is COMPLETE (`refunded`): a refund
+   requested, in progress or denied has not left USeP (DB-DECISIONS #16 —
+   only a completed payout frees the booking).
    ===================================================================== */
 
 /* One derived table both report queries read: every booking with its event
@@ -581,7 +584,9 @@ function report_base_sql() {
     return "SELECT b.id, b.room_id, b.total_amount, b.discount_percent,
                    b.reservation_status, b.payment_status,
                    COALESCE(vd.start_date, hd.check_in_date) AS event_date,
-                   IF(b.payment_status IN ('confirmed','paid_cash'), b.total_amount, 0) AS collected,
+                   IF(b.payment_status IN ('confirmed','paid_cash','refund_requested','refund_correction',
+                                           'refund_await_or','refund_processing','refund_denied'),
+                      b.total_amount, 0) AS collected,
                    IF(b.reservation_status IN ('cancelled','rejected','released'), 1, 0) AS fell_through
               FROM bookings b
               LEFT JOIN venue_booking_details vd  ON vd.booking_id = b.id

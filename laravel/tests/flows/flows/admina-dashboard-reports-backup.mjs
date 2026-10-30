@@ -25,11 +25,13 @@ async function modal(ctx, page, { expect: re, ok } = {}) {
   return text;
 }
 
-/* collected money for one quarter, by event date — the rule report_base_sql() uses */
+/* collected money for one quarter, by event date — the rule report_base_sql() uses:
+   paid, and counted until the refund payout is complete (DB-DECISIONS #16) */
 const QUARTER_REVENUE = `SELECT COALESCE(SUM(b.total_amount), 0) AS v FROM bookings b
     LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
     LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
-   WHERE b.payment_status IN ('confirmed', 'paid_cash')
+   WHERE b.payment_status IN ('confirmed', 'paid_cash', 'refund_requested', 'refund_correction',
+                              'refund_await_or', 'refund_processing', 'refund_denied')
      AND YEAR(COALESCE(vd.start_date, hd.check_in_date)) = ? AND QUARTER(COALESCE(vd.start_date, hd.check_in_date)) = ?`;
 
 export default {

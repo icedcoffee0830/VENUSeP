@@ -64,9 +64,11 @@ class SettingSwitchesTest extends TestCase
         $this->actingAsAdmin()->withTestCsrf();
         try {
             DB::table('users')->where('email', 'admin@gmail.com')->update(['is_active' => 0]);
+            // a suspended account's session is ended on its next request (staff_session_refresh)
             $this->post(route('admin.discount-save'), ['_token' => 'test-csrf-token', 'percent' => $new, 'reason' => 'suspended'])
-                ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'not_admin']);
+                ->assertStatus(401)->assertJson(['ok' => false, 'error' => 'not_logged_in']);
             DB::table('users')->where('email', 'admin@gmail.com')->update(['is_active' => 1, 'account_type' => 'staff']);
+            $this->actingAsAdmin()->withTestCsrf();
             $this->post(route('admin.discount-save'), ['_token' => 'test-csrf-token', 'percent' => $new, 'reason' => 'demoted'])
                 ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'not_admin']);
         } finally {

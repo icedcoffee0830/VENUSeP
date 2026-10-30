@@ -109,13 +109,14 @@ class ReceiptTest extends TestCase
     }
 
     /* A suspended staff account loses its session on its next request (auth.php
-       staff_session_heal) — downloading a customer's receipt included. */
+       staff_session_refresh, run for every request) — so the receipt is "not found". */
     public function test_a_suspended_staff_session_cannot_print_a_receipt(): void
     {
         DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 0]);
         try {
             $this->actingAsStaff()->get(route('root.receipt-pdf', ['booking' => $this->ref(self::BOOKING)]))
-                ->assertRedirect(route('admin.admin-login') . '?suspended=1');
+                ->assertNotFound();
+            $this->assertNull(session('user_id'));
         } finally {
             DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 1]);
         }

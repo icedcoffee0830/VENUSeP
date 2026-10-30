@@ -49,7 +49,7 @@ class AdminLoginTest extends TestCase
         $this->post($this->url(), ['email' => $customer->email, 'password' => self::PASSWORD, 'department' => 1])
             ->assertSee('Invalid email or password.');   // a customer is never signed in here
         $off = $this->makeAccount('staff', ['active' => 0]);
-        $this->post($this->url(), ['email' => $off->email, 'password' => self::PASSWORD, 'department' => 1])->assertSee('Invalid email or password.');
+        $this->post($this->url(), ['email' => $off->email, 'password' => 'wrong-password', 'department' => 1])->assertSee('Invalid email or password.');   // right password: AdminSuspendedSignInTest
         $this->assertNull(session('user_id'));
     }
 

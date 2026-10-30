@@ -89,12 +89,14 @@ class AdminLoginController
 
                     if (
                         !$user ||
-                        !(bool) $user['is_active'] ||
                         !in_array($user['account_type'], ['admin', 'staff'], true) ||
                         /* (string): password_hash is nullable (Google-only customers, #23) */
                         !password_verify($password, (string) $user['password_hash'])
                     ) {
                         $loginError = 'Invalid email or password.';
+                    } elseif (!(bool) $user['is_active']) {
+                        /* Only AFTER the password checked out, so this reveals nothing to a stranger. */
+                        $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
                     } elseif ($user['account_type'] === 'staff' && (int) $user['staff_venue_id'] !== $selectedDepartment) {
                         /* Only AFTER the password checked out, so it hints nothing to a stranger.
                            (A staff row always has a venue: the database trigger insists.) */

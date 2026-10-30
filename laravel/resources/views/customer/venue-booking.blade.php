@@ -413,6 +413,7 @@
 
     <div class="lp-wrap">
       <div class="lp-hero-copy" data-reveal data-hero>
+        @include('customer.overdue-notice', ['noticeMargin' => '0 auto 22px', 'noticeGutter' => '0'])
         <span class="lp-pill lp-eyebrow" data-hero-item>
           <svg class="lp-i" width="13" height="13" style="color:var(--gold)" aria-hidden="true"><use href="#lp-i-pin"/></svg>
           USeP Tagum&ndash;Mabini Campus

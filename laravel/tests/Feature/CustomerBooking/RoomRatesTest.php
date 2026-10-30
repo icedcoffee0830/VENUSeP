@@ -61,4 +61,19 @@ class RoomRatesTest extends TestCase
             $this->get(route('customer.venues'))->assertOk()->assertSee('₱1,500.50 per day', false);
         });
     }
+
+    /* The scripts' peso() drew 1500.5 as "₱1,500.5" (and float sums as "₱1,050.449"):
+       it is run here in Node, straight from each booking page. */
+    public function test_the_booking_pages_draw_centavos_as_two_digits(): void
+    {
+        foreach ([['customer.room-reservation', 'r5'], ['customer.hostel-reservation', 'h1']] as [$route, $room]) {
+            $html = $this->actingAsCustomer('aronerfe0830@gmail.com')->get(route($route, ['room' => $room]))->assertOk()->getContent();
+            $this->assertSame(1, preg_match('/^function peso\(n\)\{.*\}$/m', $html, $m), "$route: no peso()");
+            $file = tempnam(sys_get_temp_dir(), 'peso') . '.js';
+            file_put_contents($file, $m[0] . "\nconsole.log([1500, 1500.5, 350.15*3, 0.1+0.2, 12345.678].map(peso).join('|'));");
+            $out = trim((string) shell_exec('node ' . escapeshellarg($file) . ' 2>&1'));
+            @unlink($file);
+            $this->assertSame('₱1,500|₱1,500.50|₱1,050.45|₱0.30|₱12,345.68', $out, $route);
+        }
+    }
 }

@@ -17,7 +17,7 @@ class HostelReservationController extends Controller
 
     public function __invoke(Request $request)
     {
-        extract(legacy('auth', 'hostel-rooms', 'room-photos', 'payment-settings', 'customer-bookings'));
+        extract(legacy('auth', 'documents', 'hostel-rooms', 'room-photos', 'payment-settings', 'customer-bookings'));
         $pricingJs = self::legacyOutput('pricing');          /* USeP discount rate + the account check */
         $checkerJs = self::legacyOutput('gcash-checker');
         $counterBookerJs = self::legacyOutput('counter-booker');
@@ -46,6 +46,9 @@ class HostelReservationController extends Controller
         }, $hostelRooms);
 
         return view('customer.hostel-reservation', [
+            /* an Overdue booking: the customer's notice; at the counter, every customer's (2026-10-30) */
+            'overdueNotice'     => BookingRules::overdueNoticeForPage(),
+            'counterOverdue'    => (counter_mode() && ($pdo = venusep_db())) ? BookingRules::overdueBookings($pdo) : [],
             'pricingJs'         => $pricingJs,
             'checkerJs'         => $checkerJs,
             'counterBookerJs'   => $counterBookerJs,
@@ -60,6 +63,8 @@ class HostelReservationController extends Controller
             'REFUNDS_ENABLED'   => $REFUNDS_ENABLED,
             'DISCOUNT_PERCENT'  => $DISCOUNT_PERCENT,
             'customerContact'   => $customerContact,
+            /* the advance limit greys out later check-ins in the date picker */
+            'HOSTEL_ADVANCE_DAYS' => ($pdo = venusep_db()) ? BookingRules::hostelAdvanceDays($pdo) : null,
         ]);
     }
 }

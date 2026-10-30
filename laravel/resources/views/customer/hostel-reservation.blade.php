@@ -2,6 +2,8 @@
      browse-mode top bar. Also COUNTER MODE (?counter=1, staff session). Data:
      Customer\HostelReservationController. The script is the old one, URLs/CSRF aside. --}}
 @use('App\Http\Controllers\Customer\RoomReservationController', 'RR')
+{{-- counter mode: every link back into the site keeps it (like the landing cards) --}}
+@php $cq = counter_mode() ? '?counter=1' : ''; @endphp
 <!DOCTYPE html>
 <!-- ==================================================================
   USeP HOSTEL RESERVATION — customer booking UI (self-contained mockup)
@@ -263,6 +265,7 @@
 <body>
 {{-- counter mode draws its own bar (legacy counter-booker.php), like the venue page --}}
 @include('partials.customer-nav', ['navMode' => 'solid', 'navHere' => 'hostel', 'navCounterHasOwnBar' => true])
+@include('customer.overdue-notice')
 <div id="app"></div>
 
 {{-- legacy pricing.php + gcash-checker.php print their <script> blocks here, as the old includes did --}}
@@ -277,7 +280,7 @@
   <div class="bk-more-wrap">
     <div class="bk-more-head">
       <div><span class="bk-more-eyebrow">Discover</span><h2>More hostel rooms</h2></div>
-      <a class="bk-more-all" href="{{ route('customer.venues') }}#hostel-listings">See all rooms <span aria-hidden="true">&rarr;</span></a>
+      <a class="bk-more-all" href="{{ route('customer.venues') . $cq }}#hostel-listings">See all rooms <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div class="bk-more-grid">
 @foreach ($mrOthers as $r)
@@ -286,7 +289,7 @@
         $free = hostelBedsFree($r, $mrToday); $mt = $r['maintenance'];
         $closed = $mt && $mt['blocks'] && hostelMaintCovers($mt, $mrToday);
 @endphp
-      <a class="bk-more-card" href="{{ route('customer.hostel-reservation') }}?room={{ urlencode($r['id']) }}">
+      <a class="bk-more-card" href="{{ route('customer.hostel-reservation') }}?room={{ urlencode($r['id']) }}{{ $cq ? '&counter=1' : '' }}">
         {!! RR::morePic($r['id'], $r['cr_type'] === 'private' ? 'private' : 'bunk') !!}
         <div class="bk-more-body">
           <h3>{{ $r['name'] }}</h3>
@@ -296,7 +299,7 @@
       </a>
 @endforeach
     </div>
-    <p class="bk-more-alt">Need an event space instead? <a href="{{ route('customer.venues') }}#venue-listings">See the venues</a></p>
+    <p class="bk-more-alt">Need an event space instead? <a href="{{ route('customer.venues') . $cq }}#venue-listings">See the venues</a></p>
   </div>
 </section>
 
@@ -313,8 +316,8 @@
       <div>
         <h4>Book</h4>
         <div class="bk-footer-links">
-          <a href="{{ route('customer.venues') }}#venue-listings">Browse venues</a>
-          <a href="{{ route('customer.venues') }}#hostel-listings">Hostel beds</a>
+          <a href="{{ route('customer.venues') . $cq }}#venue-listings">Browse venues</a>
+          <a href="{{ route('customer.venues') . $cq }}#hostel-listings">Hostel beds</a>
 @if (counter_mode()) {{-- counter mode: staff calendar; no customer-only links (2026-10-27) --}}
           <a href="{{ route('admin.calendar') }}">Availability calendar</a>
 @else
@@ -349,6 +352,8 @@ const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSO
    before submitting. ON leaves the hostel's refund text as it was — a stay booked
    with refunds on can be refunded like a venue booking (Aron, 2026-10-30). */
 const REFUNDS_ENABLED = {{ $REFUNDS_ENABLED ? 'true' : 'false' }};
+/* The upload cap for every file (Aron 2026-10-30: 7 MB) — documents.php's DOC_MAX_BYTES, the size the server refuses above. */
+const UPLOAD_MAX_MB = {{ intdiv(DOC_MAX_BYTES, 1048576) }};
 /* PAYMENT TIMING: the hostel is PAY TO USE (decided 2026-10-27, DB-DECISIONS
    #26), whatever the refund switch says — venues still follow it (#18). Payment
    opens at approval (GCash from Pay now, or cash at the front desk) and is due
@@ -365,8 +370,16 @@ const REFUNDS_ENABLED = {{ $REFUNDS_ENABLED ? 'true' : 'false' }};
    the stay outright. */
 const COUNTER = {{ counter_mode() ? 'true' : 'false' }};
 const COUNTER_STAFF = {!! json_encode(counter_staff_name(), JSON_UNESCAPED_UNICODE) !!};
+/* Counter: customer id -> their oldest Overdue booking. Online they cannot book until it
+   is paid; here staff see the warning (counter-booker.php) and may still book. */
+const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const NOW = new Date();
 const TODAY = isoOf(NOW);
+/* THE ADVANCE LIMIT (system_settings.hostel_advance_booking_max_days, 2026-10-30): a
+   stay can be booked at most this many days before check-in; later check-ins are
+   greyed out, and booking-submit / booking-create refuse them. null = no limit. */
+const ADVANCE_DAYS = {{ json_encode($HOSTEL_ADVANCE_DAYS) }};
+const LAST_CHECKIN = ADVANCE_DAYS==null ? null : (function(){ const d=new Date(NOW); d.setDate(d.getDate()+ADVANCE_DAYS); return isoOf(d); })();
 
 /* Rooms come from the ONE PHP source, so this page, the landing page and admin
    Venue Management can never disagree about what exists. photoUrls/panorama
@@ -414,7 +427,7 @@ const SAMPLE_PANO = 'https://pannellum.org/images/alma.jpg';
 /* ---------- state ---------- */
 const ROOM_PARAM = new URLSearchParams(location.search).get('room');
 const ROOM_OK = ROOMS.some(r=>r.id===ROOM_PARAM);
-if(!ROOM_OK) location.replace('{{ route('customer.venues') }}');
+if(!ROOM_OK) location.replace('{{ route('customer.venues') . $cq }}');
 
 let state = {
   screen: 'detail',                       // detail | who (counter) | review | pending | payment | done
@@ -440,7 +453,8 @@ let state = {
 
 /* ---------- helpers ---------- */
 function isoOf(dt){ return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
-function peso(n){ return '₱' + Number(n).toLocaleString('en-PH'); }
+/* "1,500" for whole pesos, "1,500.50" with centavos — never "1,500.5" (= usep_peso() in pricing.php) */
+function peso(n){ const v=Math.round(Number(n)*100)/100; return '₱' + v.toLocaleString('en-PH', v%1 ? {minimumFractionDigits:2, maximumFractionDigits:2} : {maximumFractionDigits:0}); }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
 function fmtShort(d){ if(!d) return '—'; return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
@@ -515,11 +529,15 @@ function derive(){
   const total=hpr.total, discountPercent=hpr.discountPercent, discountAmount=hpr.discountAmount;
   const named=b.occupants.every(o=>o.name.trim().length>0);
   const badRange=!!(b.checkIn && b.checkOut && b.checkOut<=b.checkIn);
+  const tooFar=!!(b.checkIn && LAST_CHECKIN && b.checkIn>LAST_CHECKIN);
 
   /* the status card: neutral surface + a small dot, same as the venue page */
   let slot={show:false};
   if(b.checkIn && b.checkOut){
-    if(badRange){
+    if(tooFar){
+      slot={show:true,dot:'#d9930d',title:'Check-in is too far ahead',
+            detail:'Hostel stays can be booked at most '+ADVANCE_DAYS+' days ahead — pick a check-in on or before '+fmtShort(LAST_CHECKIN)+'.'};
+    }else if(badRange){
       slot={show:true,dot:'#d9930d',title:'Check-out must be after check-in',
             detail: b.checkOut===b.checkIn ? 'A stay is at least one night — pick the next day or later for check-out.'
                                            : 'Adjust your dates to see availability.'};
@@ -543,10 +561,11 @@ function derive(){
     }
   }
 
-  const ready = !!(R && nights.length>0 && !blocked && beds>0 && beds<=maxFree && named);
+  const ready = !!(R && nights.length>0 && !tooFar && !blocked && beds>0 && beds<=maxFree && named);
 
   let hint='';
   if(!b.checkIn||!b.checkOut) hint='Pick your check-in and check-out dates';
+  else if(tooFar) hint='Check-in can be at most '+ADVANCE_DAYS+' days ahead';
   else if(badRange) hint='Check-out must be after check-in';
   else if(blocked) hint='Closed for maintenance during your stay — pick different dates';
   else if(maxFree===0) hint='No beds available for these dates';
@@ -590,7 +609,7 @@ function updateReady(){
   if(hint) hint.textContent=d.hint;
 }
 function setTab(k){ state.tab=k; render(); }
-function goHome(){ location.href='{{ route('customer.venues') }}'; }
+function goHome(){ location.href='{{ route('customer.venues') . $cq }}'; }
 /* At the counter the room, dates and guests are settled first, then we ask who
    the stay is for — the "who" step sits between detail and review. */
 function goReview(){ if(derive().ready){ state.screen = COUNTER ? 'who' : 'review'; window.scrollTo(0,0); render(); } }
@@ -598,7 +617,7 @@ function backToDetail(){ state.screen='detail'; window.scrollTo(0,0); render(); 
 function setPayMethod(m){ state.payMethod=m; render(); }
 function toggleAgreeExact(el){ state.agreeExact=!!el.checked; render(); }
 function closeModal(){ state.modal=null; render(); }
-function restart(){ location.href='{{ route('customer.venues') }}'; }
+function restart(){ location.href='{{ route('customer.venues') . $cq }}'; }
 
 /* ---------- date-picker ---------- */
 function openCal(field){
@@ -630,7 +649,7 @@ function calHtml(field){
   for(let i=0;i<start;i++) cells.push('<span></span>');
   for(let d=1;d<=dim;d++){
     const iso=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-    const off = iso<min;
+    const off = iso<min || (field==='checkIn' && LAST_CHECKIN!==null && iso>LAST_CHECKIN);
     const cls='cal-day'+(iso===sel?' sel':'')+(iso===TODAY?' today':'');
     cells.push(`<button class="${cls}" ${off?'disabled':''} onclick="event.stopPropagation();calPick('${iso}')">${d}</button>`);
   }
@@ -646,6 +665,7 @@ function calHtml(field){
       ${['S','M','T','W','T','F','S'].map(d=>`<span style="font-size:12px;font-weight:600;color:#a5a19a;padding:4px 0">${d}</span>`).join('')}
       ${cells.join('')}
     </div>
+    ${field==='checkIn' && LAST_CHECKIN ? `<div style="font-size:12px;color:#77736c;margin-top:6px;text-align:center">Check-in up to ${ADVANCE_DAYS} days ahead</div>` : ''}
   </div>`;
 }
 function nextDay(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+1); return isoOf(d); }
@@ -660,6 +680,9 @@ function nextDay(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+
    record whenever they arrive, so nobody thinks a paid stay is unpaid. */
 function uploadId(input){
   const f=input.files && input.files[0]; if(!f) return;
+  /* over the cap: refused here with the same words, no shrinking (2026-10-30) */
+  if(f.size > UPLOAD_MAX_MB*1048576){ state.submitError='This file is over '+UPLOAD_MAX_MB+' MB. Choose a smaller photo or a screenshot.'; input.value=''; render(); return; }
+  state.submitError=null;
   if(state.idFile && state.idFile.url){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
   /* keep the File itself — submitRequest() has to upload it, not just preview it */
   state.idFile={ name:f.name, url:URL.createObjectURL(f), file:f };
@@ -1356,7 +1379,7 @@ function reviewScreen(){
         </div>`:`
         <div onclick="document.getElementById('idFile').click()" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:24px 14px;text-align:center;background:#fff;cursor:pointer">
           <div style="font-size:13.5px;font-weight:600;color:#4a463f">Tap to upload your valid ID</div>
-          <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG, JPG or PDF · school or government ID</div>
+          <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG, JPG or PDF · up to ${UPLOAD_MAX_MB} MB · school or government ID</div>
         </div>`}
     </div>`}
 
@@ -1451,7 +1474,7 @@ function receiptPanelHtml(){
     return fileInput+`
     <div onclick="${on?'pickReceipt()':''}" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:26px 14px;text-align:center;background:#fff;${on?'cursor:pointer':'opacity:.55;cursor:not-allowed'}">
       <div style="font-size:13.5px;font-weight:600;color:#4a463f">${on?'Tap to upload a screenshot of your GCash receipt':'Tick the exact-amount box above to enable the upload'}</div>
-      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · keep the reference number and amount visible · checked instantly with OCR</div>
+      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · up to ${UPLOAD_MAX_MB} MB · keep the reference number and amount visible · checked instantly with OCR</div>
     </div>`;
   }
   if(o.phase==='reading'){
@@ -1898,7 +1921,7 @@ render();
     var to = e.state && e.state.screen;
     if (!to) return;
     var submitted = state.submitted || (state.screen !== 'detail' && state.screen !== 'review');
-    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') }}'); return; }
+    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') . $cq }}'); return; }
     silent = true; state.screen = to; window.scrollTo(0, 0); render(); silent = false;
   });
 })();

@@ -96,6 +96,11 @@ class BookingCreateTest extends TestCase
     public function test_hostel_stay_needs_the_cash_first_then_is_paid(): void
     {
         $in = now()->addDays(random_int(400, 4000));
+        /* a far, free date: lift the hostel advance limit for this test only */
+        $limit = DB::table('system_settings')->where('setting_key', 'hostel_advance_booking_max_days')->value('setting_value');
+        DB::update("UPDATE system_settings SET setting_value = '5000' WHERE setting_key = 'hostel_advance_booking_max_days'");
+        $this->beforeApplicationDestroyed(fn () => DB::update(
+            "UPDATE system_settings SET setting_value = ? WHERE setting_key = 'hostel_advance_booking_max_days'", [$limit]));
         $data = [
             'type' => 'hostel', 'room' => 'h1', 'id_checked' => '1', 'usep_id' => '0', 'agree_no_refund' => '1',
             'booker_mode' => 'walkin', 'walkin_name' => 'Hostel Walk-in', 'walkin_phone' => '09171234567', 'walkin_no_email' => '1',

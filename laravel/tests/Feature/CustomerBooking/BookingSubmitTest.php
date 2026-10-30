@@ -35,7 +35,8 @@ class BookingSubmitTest extends TestCase
 
     private function asCustomer(): static
     {
-        return $this->actingAsCustomer()->withSession(['_token' => 'test-token']);
+        /* a customer with no Overdue booking: one with an unpaid post-pay booking is refused first (OverdueBlockTest) */
+        return $this->actingAsCustomer('aronerfe0830@gmail.com')->withSession(['_token' => 'test-token']);
     }
 
     private function venuePost(array $over = []): array

@@ -2,6 +2,8 @@
      browse-mode top bar. Also COUNTER MODE (?counter=1, staff session). Data:
      Customer\RoomReservationController. The script is the old one, URLs/CSRF aside. --}}
 @use('App\Http\Controllers\Customer\RoomReservationController', 'RR')
+{{-- counter mode: every link back into the site keeps it (like the landing cards) --}}
+@php $cq = counter_mode() ? '?counter=1' : ''; @endphp
 <!DOCTYPE html>
 <!-- ==================================================================
   USeP ROOM RESERVATION — customer booking UI (self-contained mockup)
@@ -258,6 +260,7 @@
      counter bar (with the same link + the staff name) below #app, so the shared
      nav's link would just duplicate it --}}
 @include('partials.customer-nav', ['navMode' => 'solid', 'navHere' => $navHere, 'navCounterHasOwnBar' => true])
+@include('customer.overdue-notice')
 <div id="app"></div>
 
 {{-- legacy pricing.php + gcash-checker.php print their <script> blocks here, as the old includes did --}}
@@ -272,7 +275,7 @@
   <div class="bk-more-wrap">
     <div class="bk-more-head">
       <div><span class="bk-more-eyebrow">Discover</span><h2>More rooms</h2></div>
-      <a class="bk-more-all" href="{{ route('customer.venues') }}#venue-listings">See all spaces <span aria-hidden="true">&rarr;</span></a>
+      <a class="bk-more-all" href="{{ route('customer.venues') . $cq }}#venue-listings">See all spaces <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div class="bk-more-grid">
 @foreach ($mrOthers as $r)
@@ -286,7 +289,7 @@
           $status = '<p class="bk-more-status' . $cls . '">' . $word . ' &middot; ' . htmlspecialchars($mt['reason']) . '</p>';
         }
 @endphp
-      <a class="bk-more-card" href="{{ route('customer.room-reservation') }}?room={{ urlencode($r['id']) }}">
+      <a class="bk-more-card" href="{{ route('customer.room-reservation') }}?room={{ urlencode($r['id']) }}{{ $cq ? '&counter=1' : '' }}">
         {!! RR::morePic($r['id'], $r['capacity'] >= 500 ? 'gym' : 'hall', $badge) !!}
         <div class="bk-more-body">
           <h3>{{ $r['name'] }}</h3>
@@ -297,7 +300,7 @@
       </a>
 @endforeach
     </div>
-    <p class="bk-more-alt">Looking for a bed instead? <a href="{{ route('customer.venues') }}#hostel-listings">See the hostel rooms</a></p>
+    <p class="bk-more-alt">Looking for a bed instead? <a href="{{ route('customer.venues') . $cq }}#hostel-listings">See the hostel rooms</a></p>
   </div>
 </section>
 
@@ -314,8 +317,8 @@
       <div>
         <h4>Book</h4>
         <div class="bk-footer-links">
-          <a href="{{ route('customer.venues') }}#venue-listings">Browse venues</a>
-          <a href="{{ route('customer.venues') }}#hostel-listings">Hostel beds</a>
+          <a href="{{ route('customer.venues') . $cq }}#venue-listings">Browse venues</a>
+          <a href="{{ route('customer.venues') . $cq }}#hostel-listings">Hostel beds</a>
 @if (counter_mode()) {{-- counter mode: staff calendar; no customer-only links (2026-10-27) --}}
           <a href="{{ route('admin.calendar') }}">Availability calendar</a>
 @else
@@ -348,6 +351,8 @@ const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSO
    understand before the request can be submitted. Whatever it is at submit time
    is what the booking keeps (bookings.refunds_allowed) — it never changes later. */
 const REFUNDS_ENABLED = {{ $REFUNDS_ENABLED ? 'true' : 'false' }};
+/* The upload cap for every file (Aron 2026-10-30: 7 MB) — documents.php's DOC_MAX_BYTES, the size the server refuses above. */
+const UPLOAD_MAX_MB = {{ intdiv(DOC_MAX_BYTES, 1048576) }};
 /* PAYMENT TIMING follows the same switch (DB-DECISIONS #18). The rule and the
    date math come from includes/refund-policy.php — the same function every
    customer page uses — so this page never computes a deadline of its own.
@@ -442,6 +447,9 @@ const DEMO_MODE = {{ demo_mode_on() ? 'true' : 'false' }};
    --------------------------------------------------------------------- */
 const COUNTER = {{ counter_mode() ? 'true' : 'false' }};
 const COUNTER_STAFF = {!! json_encode(counter_staff_name(), JSON_UNESCAPED_UNICODE) !!};
+/* Counter: customer id -> their oldest Overdue booking. Online they cannot book until it
+   is paid; here staff see the warning (counter-booker.php) and may still book. */
+const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 /* SAME DAY, DIFFERENT TIME (2026-10-27): minutes kept free before and after
    every booking of a room. From system_settings, the same value
    sp_add_venue_slot() enforces. */
@@ -459,7 +467,7 @@ const VENUE_GAP_MIN = {{ (int) venue_cleanup_gap_minutes() }};
    the visitor back to the landing page. */
 const ROOM_PARAM = new URLSearchParams(location.search).get('room');
 const ROOM_OK = ROOMS.some(r=>r.id===ROOM_PARAM);
-if(!ROOM_OK) location.replace('{{ route('customer.venues') }}');
+if(!ROOM_OK) location.replace('{{ route('customer.venues') . $cq }}');
 
 /* booker0 — who a COUNTER booking is for — lives in includes/counter-booker.php */
 
@@ -487,7 +495,8 @@ let state = {
 };
 
 /* ---------- helpers ---------- */
-function peso(n){ return '₱' + Number(n).toLocaleString('en-PH'); }
+/* "1,500" for whole pesos, "1,500.50" with centavos — never "1,500.5" (= usep_peso() in pricing.php) */
+function peso(n){ const v=Math.round(Number(n)*100)/100; return '₱' + v.toLocaleString('en-PH', v%1 ? {minimumFractionDigits:2, maximumFractionDigits:2} : {maximumFractionDigits:0}); }
 function toMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; }
 function fmtTime(t){ if(!t) return ''; let [h,m]=t.split(':').map(Number); const ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+String(m).padStart(2,'0')+' '+ap; }
 function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
@@ -1057,7 +1066,7 @@ function applyTimeToAll(){
   render();
 }
 /* header logo + "← All rooms" go back to the landing page (room browsing lives there now) */
-function goHome(){ location.href='{{ route('customer.venues') }}'; }
+function goHome(){ location.href='{{ route('customer.venues') . $cq }}'; }
 function setTab(k){ state.tab=k; render(); }
 /* At the counter the room and dates are settled with the customer first, then
    we ask who it is for — so the "who" step sits between detail and review. */
@@ -1077,6 +1086,9 @@ function uploadId(input){
   const f=input.files && input.files[0];
   input.value='';
   if(!f) return;
+  /* over the cap: refused here with the same words, no shrinking (2026-10-30) */
+  if(f.size > UPLOAD_MAX_MB*1048576){ state.submitError='This file is over '+UPLOAD_MAX_MB+' MB. Choose a smaller photo or a screenshot.'; render(); return; }
+  state.submitError=null;
   if(state.idFile){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
   /* The File itself is kept, not just a preview URL: submitRequest() has to
      actually upload it. It used to hold only {name, url}, which was all a
@@ -1285,7 +1297,7 @@ async function confirmBooking(){
   paying = false; render();
 }
 /* "Browse more rooms" — back to the landing page (it links here again with ?room=) */
-function restart(){ location.href='{{ route('customer.venues') }}'; }
+function restart(){ location.href='{{ route('customer.venues') . $cq }}'; }
 
 /* ---------- shared bits ---------- */
 function header(){ return ''; }   /* the nav bar is static now: includes/customer-nav.php, above #app */
@@ -1770,7 +1782,7 @@ function reviewScreen(){
       </div>`:`
       <div onclick="document.getElementById('idFileInput').click()" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:22px 14px;text-align:center;cursor:pointer;background:#fff">
         <div style="font-size:13.5px;font-weight:600;color:#4a463f">Upload a photo of your valid ID</div>
-        <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · make sure the name and photo are readable</div>
+        <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · up to ${UPLOAD_MAX_MB} MB · make sure the name and photo are readable</div>
       </div>`}
     </div>`}
 
@@ -1876,7 +1888,7 @@ function receiptPanelHtml(){
     return fileInput+`
     <div onclick="${on?'pickReceipt()':''}" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:26px 14px;text-align:center;background:#fff;${on?'cursor:pointer':'opacity:.55;cursor:not-allowed'}">
       <div style="font-size:13.5px;font-weight:600;color:#4a463f">${on?'Tap to upload a screenshot of your GCash receipt':'Tick the exact-amount box above to enable the upload'}</div>
-      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · keep the reference number and amount visible · checked instantly with OCR</div>
+      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · up to ${UPLOAD_MAX_MB} MB · keep the reference number and amount visible · checked instantly with OCR</div>
     </div>`;
   }
   if(o.phase==='reading'){
@@ -2425,7 +2437,7 @@ render();
     var to = e.state && e.state.screen;
     if (!to) return;
     var submitted = state.submitted || (state.screen !== 'detail' && state.screen !== 'review');
-    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') }}'); return; }
+    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') . $cq }}'); return; }
     silent = true; state.screen = to; window.scrollTo(0, 0); render(); silent = false;
   });
 })();

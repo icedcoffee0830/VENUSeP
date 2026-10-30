@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use PDOException;
-use RuntimeException;
 use Throwable;
 
 /* =====================================================================
@@ -38,28 +37,9 @@ use Throwable;
    ===================================================================== */
 class BookingSubmitController extends Controller
 {
-    /* The limits the booking pages draw: hours 7:00 AM - 10:00 PM (DB-DECISIONS #9),
-       and a range of at most 366 days or nights (rangeDates() / nightsOf()). */
-    private const OPENS = '07:00';
-    private const CLOSES = '22:00';
-    private const MAX_DAYS = 366;
-    private const HHMM = '/^([01]\d|2[0-3]):[0-5]\d$/';   /* a real time of day, "00:00".."23:59" */
-
     private static function reply(int $status, array $data, array $headers = [])
     {
         return response()->json($data, $status, ['Cache-Control' => 'no-store'] + $headers);
-    }
-
-    /* A real calendar date in yyyy-mm-dd: the pattern alone let "2030-02-30" through. */
-    private static function isDate(string $iso): bool
-    {
-        return (bool) preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $iso, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
-    }
-
-    /* Whole days from one date to another. */
-    private static function daysBetween(string $from, string $to): int
-    {
-        return (int) round((strtotime($to) - strtotime($from)) / 86400);
     }
 
     public function __invoke(Request $request)
@@ -89,6 +69,11 @@ class BookingSubmitController extends Controller
         $pdo = venusep_db();
         if ($pdo === null) {
             return self::reply(503, ['ok' => false, 'message' => 'The database is unreachable, so your booking was not submitted.']);
+        }
+
+        /* An Overdue (post-pay) booking blocks new online bookings until it is paid (2026-10-30). */
+        if ($overdue = BookingRules::overdueNotice($pdo, $customerId)) {
+            return self::reply(409, ['ok' => false, 'error' => 'overdue', 'message' => $overdue]);
         }
 
         /* ---- the room, and the rate THIS server believes in ---- */
@@ -203,11 +188,11 @@ class BookingSubmitController extends Controller
             if ($eventName === '' || mb_strlen($eventName) > 190) {
                 return self::reply(400, ['ok' => false, 'message' => 'Enter an event name.']);
             }
-            if (!self::isDate($startIso) || !self::isDate($endIso) || $endIso < $startIso) {
+            if (!BookingRules::isDate($startIso) || !BookingRules::isDate($endIso) || $endIso < $startIso) {
                 return self::reply(400, ['ok' => false, 'message' => 'Pick valid reservation dates.']);
             }
-            if (self::daysBetween($startIso, $endIso) + 1 > self::MAX_DAYS) {
-                return self::reply(400, ['ok' => false, 'message' => 'A booking can cover at most ' . self::MAX_DAYS . ' days.']);
+            if (BookingRules::daysBetween($startIso, $endIso) + 1 > BookingRules::MAX_DAYS) {
+                return self::reply(400, ['ok' => false, 'message' => 'A booking can cover at most ' . BookingRules::MAX_DAYS . ' days.']);
             }
             if ($attendees <= 0 || $attendees > (int) $room['attendee_capacity']) {
                 return self::reply(400, ['ok' => false, 'message' => 'Enter an attendee count within the room capacity.']);
@@ -225,8 +210,7 @@ class BookingSubmitController extends Controller
                 $t = isset($times[$d]) && is_array($times[$d]) ? $times[$d] : [];
                 $s = isset($t['start']) ? (string) $t['start'] : '';
                 $e = isset($t['end'])   ? (string) $t['end']   : '';
-                if (!preg_match(self::HHMM, $s) || !preg_match(self::HHMM, $e)
-                    || $e <= $s || $s < self::OPENS || $e > self::CLOSES) {
+                if (!BookingRules::validHours($s, $e)) {
                     return self::reply(400, ['ok' => false, 'message' => 'Set valid hours for ' . $d . '.']);
                 }
                 $slots[] = ['date' => $d, 'start' => $s . ':00', 'end' => $e . ':00'];
@@ -293,11 +277,11 @@ class BookingSubmitController extends Controller
             $checkOut = (string) ($request->post('check_out') ?? '');
             $occupants = json_decode((string) ($request->post('occupants') ?? '[]'), true);
 
-            if (!self::isDate($checkIn) || !self::isDate($checkOut) || $checkOut <= $checkIn) {
+            if (!BookingRules::isDate($checkIn) || !BookingRules::isDate($checkOut) || $checkOut <= $checkIn) {
                 return self::reply(400, ['ok' => false, 'message' => 'Check-out must be after check-in.']);
             }
-            if (self::daysBetween($checkIn, $checkOut) > self::MAX_DAYS) {
-                return self::reply(400, ['ok' => false, 'message' => 'A stay can be at most ' . self::MAX_DAYS . ' nights.']);
+            if (BookingRules::daysBetween($checkIn, $checkOut) > BookingRules::MAX_DAYS) {
+                return self::reply(400, ['ok' => false, 'message' => 'A stay can be at most ' . BookingRules::MAX_DAYS . ' nights.']);
             }
             if (!is_array($occupants) || !$occupants) {
                 return self::reply(400, ['ok' => false, 'message' => 'Name at least one guest.']);
@@ -312,10 +296,14 @@ class BookingSubmitController extends Controller
                 $clean[] = ['name' => mb_substr($n, 0, 190), 'gender' => in_array($g, ['male', 'female', 'other'], true) ? $g : 'other'];
             }
             /* Nights are EXCLUSIVE of check-out: Aug 1 -> Aug 4 is 3 nights. */
-            $nights = self::daysBetween($checkIn, $checkOut);
+            $nights = BookingRules::daysBetween($checkIn, $checkOut);
             /* SAME-DAY CHECK-IN IS ALLOWED (2026-10-27): only a past date is refused. */
             if ($checkIn < date('Y-m-d')) {
                 return self::reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
+            }
+            /* The advance limit (system_settings, Aron 2026-10-30): no further ahead than N days. */
+            if ($tooFar = BookingRules::hostelTooFarAhead($pdo, $checkIn)) {
+                return self::reply(400, ['ok' => false, 'message' => $tooFar]);
             }
             /* PAY TO USE (DB-DECISIONS #26): no method is chosen now (NULL). */
             $method = null;
@@ -365,26 +353,10 @@ class BookingSubmitController extends Controller
             }
 
             /* One exact bed per guest, for every night of the stay; the
-               UNIQUE(active_bed_id, night_date) index is the last-bed race guard. */
+               UNIQUE(active_bed_id, night_date) index is the last-bed race guard;
+               a bed lost to a simultaneous stay is retried with the next one. */
             try {
-                $free = $pdo->prepare(
-                    'SELECT hb.id FROM hostel_beds hb
-                      WHERE hb.room_id = :r AND hb.is_active = 1
-                        AND NOT EXISTS (SELECT 1 FROM bed_reservation_nights n
-                                         WHERE n.bed_id = hb.id AND n.released_at IS NULL
-                                           AND n.night_date >= :i AND n.night_date < :o)
-                      ORDER BY hb.display_order, hb.id LIMIT 1'
-                );
-                $assign = $pdo->prepare('CALL sp_assign_bed(:b, :o, :bed)');
-                foreach ($occIds as $occId) {
-                    $free->execute([':r' => $room['id'], ':i' => $checkIn, ':o' => $checkOut]);
-                    $bedId = $free->fetchColumn();
-                    if ($bedId === false) {
-                        throw new RuntimeException('no_bed');
-                    }
-                    $assign->execute([':b' => $bookingId, ':o' => $occId, ':bed' => (int) $bedId]);
-                    $assign->closeCursor();
-                }
+                BookingRules::assignBeds($pdo, (int) $room['id'], $bookingId, $occIds, $checkIn, $checkOut);
             } catch (Throwable $e) {
                 /* Not enough beds for the whole stay, or a hard closure inside it.
                    Remove the booking rather than leave a half-held one behind. */

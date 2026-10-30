@@ -19,7 +19,7 @@ class RoomReservationController extends Controller
     {
         /* The GCash account per venue (payment-settings), the rooms (venue-rooms),
            their photos (room-photos), who is looking (customer-bookings). */
-        extract(legacy('auth', 'payment-settings', 'venue-rooms', 'room-photos', 'customer-bookings'));
+        extract(legacy('auth', 'documents', 'payment-settings', 'venue-rooms', 'room-photos', 'customer-bookings'));
         $pricingJs = self::legacyOutput('pricing');          /* USeP discount rate + the account check */
         $checkerJs = self::legacyOutput('gcash-checker');
         $counterBookerJs = self::legacyOutput('counter-booker');
@@ -62,6 +62,9 @@ class RoomReservationController extends Controller
         }, $venueRooms);
 
         return view('customer.room-reservation', [
+            /* an Overdue booking: the customer's notice; at the counter, every customer's (2026-10-30) */
+            'overdueNotice'     => BookingRules::overdueNoticeForPage(),
+            'counterOverdue'    => (counter_mode() && ($pdo = venusep_db())) ? BookingRules::overdueBookings($pdo) : [],
             'navHere'          => $navHere,
             'pricingJs'        => $pricingJs,
             'checkerJs'        => $checkerJs,

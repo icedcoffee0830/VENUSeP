@@ -10,7 +10,7 @@
    the hostel booking pages share ONE copy — two counters must not drift.
    Include it BEFORE the page's main <script> (state uses booker0). It
    calls back into what every booking page defines: state, render(), esc(),
-   CSRF, COUNTER_STAFF, DISCOUNT_PERCENT — and expects a 'detail' screen to
+   CSRF, COUNTER_STAFF, DISCOUNT_PERCENT, COUNTER_OVERDUE — and expects a 'detail' screen to
    go back to and a 'review' screen to go on to.
    ===================================================================== */
 ?>
@@ -151,7 +151,7 @@ function whoScreen(){
   let accountBlock = '';
   if(b.mode === 'account'){
     const results = b.results.map(r => `
-      <button type="button" onclick="pickCustomer(${r.id}, ${JSON.stringify(r.name).replace(/"/g,'&quot;')}, ${JSON.stringify(r.phone).replace(/"/g,'&quot;')})"
+      <button type="button" onclick="pickCustomer(${Number(r.id)}, ${esc(JSON.stringify(String(r.name || '')))}, ${esc(JSON.stringify(String(r.phone || '')))})"
               style="display:block;width:100%;text-align:left;border:none;border-bottom:1px solid #f0efec;background:#fff;padding:10px 12px;cursor:pointer;font-family:inherit">
         <div style="font-size:13.5px;font-weight:640;color:#1c1b19">${esc(r.name)}</div>
         <div style="font-size:12.5px;color:#8a857d">${esc(r.email)} &middot; ${esc(r.phone)}</div>
@@ -170,6 +170,10 @@ function whoScreen(){
         <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:14px">
           <div style="font-size:13.5px;font-weight:680;color:#1c1b19">${esc(b.name)}</div>
           <div style="font-size:12.5px;color:#8a857d;margin-bottom:10px">${esc(b.phone)}</div>
+          ${COUNTER_OVERDUE[b.customerId] ? `
+            <div role="status" style="background:#fdf6e7;border:1px solid #efd9ab;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5;color:#5c3d0c">
+              <strong>Unpaid booking:</strong> ${esc(COUNTER_OVERDUE[b.customerId])}. This customer can&rsquo;t book online until it is paid &mdash; you may still book for them here.
+            </div>` : ''}
           ${b.verified ? `
             <div style="display:flex;align-items:center;gap:8px;background:#eaf6ef;border:1px solid #d4ebdd;border-radius:10px;padding:10px 12px">
               <span style="color:#1c7a4f;font-size:15px">&check;</span>

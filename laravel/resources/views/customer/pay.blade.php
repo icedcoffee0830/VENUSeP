@@ -175,7 +175,7 @@
           return fileInput + `
             <div onclick="${on ? 'pickReceipt()' : ''}" role="button" tabindex="${on ? 0 : -1}" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:26px 14px;text-align:center;background:#fff;${on ? 'cursor:pointer' : 'opacity:.55;cursor:not-allowed'}">
               <div style="font-size:13.5px;font-weight:600;color:#4a463f">${on ? 'Tap to upload a screenshot of your GCash receipt' : 'Tick the exact-amount box above to enable the upload'}</div>
-              <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · keep the reference number and amount visible · checked instantly with OCR</div>
+              <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG, up to 7 MB · keep the reference number and amount visible · checked instantly with OCR</div>
             </div>`;
         }
         if (o.phase === 'reading') {

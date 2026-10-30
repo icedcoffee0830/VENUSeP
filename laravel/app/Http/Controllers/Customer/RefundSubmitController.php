@@ -162,7 +162,7 @@ class RefundSubmitController
         }
 
         /* The documents are checked BEFORE anything is filed: a file the store would
-           refuse (wrong type, over 8MB) used to be dropped silently after the request
+           refuse (wrong type, over 7 MB) used to be dropped silently after the request
            was saved, so the customer believed the required receipts were attached. */
         $supportFiles = $request->file('support', []);
         $supportFiles = array_filter(is_array($supportFiles) ? $supportFiles : [$supportFiles]);

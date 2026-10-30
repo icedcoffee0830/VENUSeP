@@ -30,7 +30,8 @@
 
 require_once __DIR__ . '/db.php';
 
-define('DOC_MAX_BYTES', 8 * 1024 * 1024);                  // 8MB, same cap as room photos
+define('DOC_MAX_BYTES', 7 * 1024 * 1024);                  // 7 MB — the one limit for every upload (Aron, 2026-10-30)
+define('DOC_TOO_BIG_MESSAGE', 'This file is over 7 MB. Choose a smaller photo or a screenshot.');
 define('DOC_ALLOWED_EXT', ['jpg', 'jpeg', 'png', 'webp', 'pdf']);
 
 /* Where the private files live. Outside the web root by construction. */
@@ -70,7 +71,7 @@ function doc_validate($tmpPath, $originalName, &$error) {
         return null;
     }
     if ($size > DOC_MAX_BYTES) {
-        $error = 'That file is larger than 8MB.';
+        $error = DOC_TOO_BIG_MESSAGE;
         return null;
     }
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));

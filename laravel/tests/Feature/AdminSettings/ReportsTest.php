@@ -97,6 +97,37 @@ class ReportsTest extends TestCase
         }
     }
 
+    /* Events Held counts what the venue hosted: approved or completed. Fell-through
+       (cancelled / rejected / released) and still-pending bookings are not events. */
+    public function test_events_held_leaves_out_bookings_that_fell_through_or_are_pending(): void
+    {
+        legacy('bookings');
+        $venue = DB::table('rooms as r')->join('venues as v', 'v.id', '=', 'r.venue_id')->where('r.room_code', 'r1')->value('v.name');
+        $row = function () use ($venue) {
+            $q = now()->quarter;
+            foreach (report_by_venue((int) now()->year, $q) as $v) {
+                if ($v['venue'] === $venue) {
+                    return $v;
+                }
+            }
+            $this->fail('no report row for ' . $venue);
+        };
+        DB::beginTransaction();
+        try {
+            $before = $row();
+            $today = now()->toDateString();
+            foreach (['approved' => 'confirmed', 'completed' => 'paid_cash', 'pending' => 'locked',
+                      'cancelled' => 'locked', 'rejected' => 'locked', 'released' => 'expired'] as $res => $pay) {
+                $this->addBooking('r1', $today, $res, $pay);
+            }
+            $after = $row();
+            $this->assertSame((int) $before['events'] + 2, (int) $after['events'], 'Events Held');
+            $this->assertSame((int) $before['cancelled'] + 3, (int) $after['cancelled'], 'Cancelled');
+        } finally {
+            DB::rollBack();
+        }
+    }
+
     public function test_staff_sees_the_reports(): void
     {
         $this->actingAsStaff()->get(route('admin.reports'))->assertOk()->assertSee('Quarterly Reports');

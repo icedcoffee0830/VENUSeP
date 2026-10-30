@@ -648,6 +648,10 @@ function report_quarters($count = 4) {
 /* Per-venue totals for the breakdown charts and the table.
    Pass a year+quarter to narrow it; omit both for all time.
 
+   EVENTS HELD = approved or completed only: a booking that fell through
+   (cancelled / rejected / released), is still pending review, or whose room
+   was closed (disrupted) is not an event the venue hosted.
+
    EVERY ACTIVE VENUE APPEARS, even with nothing in it. A venue that simply
    vanishes from the breakdown in a quiet quarter reads as "this venue was
    removed", and the donut silently re-proportions around the gap — a quiet
@@ -666,7 +670,7 @@ function report_by_venue($year = null, $quarter = null) {
     try {
         $stmt = $pdo->prepare(
             "SELECT v.name AS venue,
-                    COALESCE(SUM(x.id IS NOT NULL), 0)      AS events,
+                    COALESCE(SUM(x.reservation_status IN ('approved','completed')), 0) AS events,
                     COALESCE(SUM(x.discount_percent > 0), 0) AS discounted,
                     COALESCE(SUM(x.fell_through), 0)         AS cancelled,
                     COALESCE(SUM(x.collected), 0)            AS revenue

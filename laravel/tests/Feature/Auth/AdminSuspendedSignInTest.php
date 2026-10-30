@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /* A suspended staff (or admin) account that types the RIGHT password is told it
@@ -29,7 +30,7 @@ class AdminSuspendedSignInTest extends TestCase
     public function test_the_suspended_notice_comes_before_the_venue_check(): void
     {
         $off = $this->makeAccount('staff', ['active' => 0]);   // venue 1; picks another card
-        $other = (int) \DB::table('venues')->where('venue_code', 'USEP-VENUES')->value('id');
+        $other = (int) DB::table('venues')->where('venue_code', 'USEP-VENUES')->value('id');
         $this->post($this->url(), ['email' => $off->email, 'password' => self::PASSWORD, 'department' => $other])
             ->assertSee(self::NOTICE)->assertDontSee('This account belongs to');
     }

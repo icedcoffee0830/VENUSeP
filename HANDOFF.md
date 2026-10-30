@@ -293,8 +293,9 @@ broke were updated (commit 6d66941) but only syntax-checked.
    Add Venue page sends staff back; a deadlock between two submits is a friendly 409; **migration 15**
    (`venusep_migration_15.sql`: sp_assign_bed leaves the transaction to the caller, maintenance
    re-check is a locking read, deadline expiry runs before the booking transaction). Applied to the
-   Laravel DB copies + snapshot. **Aron must still run migration 15 on the real `venusep` DB** (cmd,
-   backup first). Report: `helpers/_tools/round3-reports/abook.md`.
+   Laravel DB copies + snapshot. Aron ran migration 15 on the real `venusep` DB too (2026-10-30, cmd,
+   backup `C:
+mp5enusep_backup_before_m15.sql`). Next migration: 16. Report: `helpers/_tools/round3-reports/abook.md`.
 5. **Run the browser flows** (`run-tests.bat`) — not run since round 2.
 6. **Old site:** none of tonight's fixes are in the plain-PHP site (branch `Aron`) — Laravel only,
    by Aron's decision. The first night's old-site fixes sit on branch `bugfixes`, unmerged.

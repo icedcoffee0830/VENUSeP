@@ -124,7 +124,7 @@
         .auth-brand { display: none; }
         .auth-card { max-width: 480px; margin: 0 auto; }
       }
-      /* ---- admin only: the department picker (two radio cards) ---- */
+      /* ---- admin only: the department picker (one radio card per active venue) ---- */
       .department-label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px 4px; }
       .department-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
       .department-card { display: block; cursor: pointer; margin: 0; }
@@ -136,6 +136,8 @@
       .department-copy span { font-size: 12px; color: var(--muted); }
       .department-card:hover .department-card-header { border-color: #bdb7ac; }
       .department-card-header:has(input:checked) { border-color: var(--crimson); box-shadow: 0 0 0 3px rgba(161,22,38,.12); }
+      .department-card-header:has(input:focus-visible) { outline: 2px solid var(--crimson); outline-offset: 2px; }
+      .department-card:last-child:nth-child(odd) { grid-column: 1 / -1; }   /* an odd last card (the hostel) takes the full row */
       .department-options.is-invalid .department-card-header { border-color: var(--danger); }
       @media (max-width: 420px) { .department-options { grid-template-columns: 1fr; } }
     </style>
@@ -179,21 +181,18 @@
             @csrf
             <div class="form-group">
               <span class="department-label">Department</span>
-              <div class="department-options" role="radiogroup" aria-describedby="departmentValidation">
-                <label class="department-card" for="loginDepartmentUsep">
+              <div class="department-options" role="radiogroup" aria-label="Department" aria-describedby="departmentValidation">
+                {{-- One card per active venue. Staff pick their own venue (checked on the
+                     server after the password); nothing is pre-picked. --}}
+                @foreach ($departments as $deptId => $dept)
+                <label class="department-card" for="loginDepartment{{ $deptId }}">
                   <span class="department-card-header">
-                    <span class="department-icon"><i class="bi bi-building" aria-hidden="true"></i></span>
-                    <span class="department-copy"><strong>USeP Venues</strong><span>University Venue Management</span></span>
-                    <input type="radio" name="department" id="loginDepartmentUsep" value="usep-venues" checked required />
+                    <span class="department-icon"><i class="bi {{ $dept['icon'] }}" aria-hidden="true"></i></span>
+                    <span class="department-copy"><strong>{{ $dept['name'] }}</strong><span>{{ $dept['line'] }}</span></span>
+                    <input type="radio" name="department" id="loginDepartment{{ $deptId }}" value="{{ $deptId }}" @checked($selectedDepartment === $deptId) required />
                   </span>
                 </label>
-                <label class="department-card" for="loginDepartmentAlumni">
-                  <span class="department-card-header">
-                    <span class="department-icon"><i class="bi bi-house" aria-hidden="true"></i></span>
-                    <span class="department-copy"><strong>Bahay Alumni</strong><span>Alumni House Management</span></span>
-                    <input type="radio" name="department" id="loginDepartmentAlumni" value="bahay-alumni" required />
-                  </span>
-                </label>
+                @endforeach
               </div>
               <small class="validation-message" id="departmentValidation" aria-live="polite"></small>
             </div>

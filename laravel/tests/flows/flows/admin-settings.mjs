@@ -300,6 +300,7 @@ export default {
 
       const login = await ctx.newPage('suspended staff ' + s.newEmail);
       await login.goto(ctx.url('/admin/admin-login'));
+      await ctx.pickDepartment(login, s.newEmail);
       await login.locator('#adminEmail').fill(s.newEmail);
       await login.locator('#adminPassword').fill(ctx.password);
       await Promise.all([login.waitForLoadState('load'), login.locator('#adminLoginForm button[type="submit"]').click()]);

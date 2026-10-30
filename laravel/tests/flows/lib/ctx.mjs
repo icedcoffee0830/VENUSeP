@@ -87,9 +87,19 @@ export function makeCtx({ cfg, browser, flow, record }) {
     return page;
   }
 
+  /* The staff sign-in's Department card: a staff account's own venue, else the first card. */
+  async function pickDepartment(page, email) {
+    const row = (await db('SELECT s.venue_id FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.email = ?', [email]))[0];
+    const card = row && row.venue_id
+      ? page.locator(`label.department-card:has(input[name="department"][value="${row.venue_id}"])`)
+      : page.locator('label.department-card').first();
+    await card.click();
+  }
+
   async function loginStaffSide(email, password, label) {
     const page = await newPage(label + ' ' + email);
     await page.goto(url('/admin/admin-login'));
+    await pickDepartment(page, email);
     await page.locator('#adminEmail').fill(email);
     await page.locator('#adminPassword').fill(password);
     await Promise.all([page.waitForLoadState('load'), page.locator('#adminLoginForm button[type="submit"]').click()]);
@@ -231,6 +241,7 @@ export function makeCtx({ cfg, browser, flow, record }) {
     loginCustomer,
     loginStaff: (email = 'staff@gmail.com', password = cfg.password) => loginStaffSide(email, password, 'staff'),
     loginAdmin: (email = 'admin@gmail.com', password = cfg.password) => loginStaffSide(email, password, 'admin'),
+    pickDepartment,
     fixtures,
     note: (msg) => bucket().notes.push(String(msg)),
     fail,

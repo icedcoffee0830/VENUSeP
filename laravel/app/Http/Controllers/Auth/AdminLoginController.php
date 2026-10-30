@@ -43,33 +43,42 @@ class AdminLoginController
 
         $self = route('admin.admin-login');
 
+        /* The Department cards = the active venues (Aron, 2026-10-30). A staff account
+           must pick its own venue; an admin may pick any. */
+        $departments = $pdo !== null ? $this->departments($pdo) : [];
+        $selectedDepartment = (int) $request->request->get('department', 0);
+
         /* A two-step sign-in step (DB-DECISIONS #20); the flow itself is tfa_login_step(). */
         $tfaError = '';
         if ($request->isMethod('post') && $request->request->has('tfa_step')) {
             if ($pdo !== null) {   // otherwise $loginError already says the database is down
                 [$stepError, $tfaError] = tfa_login_step($pdo, 'admin', $self,
                     function (array $pending) use ($pdo) {
-                        $this->finishLogin($pdo, (int) $pending['user_id'], (string) ($pending['department'] ?? ''), true);
+                        $this->finishLogin($pdo, (int) $pending['user_id'], (int) ($pending['department'] ?? 0), true);
                     });
                 $loginError = $stepError !== '' ? $stepError : $loginError;
             }
         } elseif ($request->isMethod('post')) {
             $email = trim((string) $request->request->get('email', ''));
             $password = (string) $request->request->get('password', '');
-            $selectedDepartment = (string) $request->request->get('department', '');
 
             if ($loginError === '') {
                 if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     $loginError = 'Please enter a valid email address.';
                 } elseif ($password === '') {
                     $loginError = 'Please enter your password.';
+                } elseif (!isset($departments[$selectedDepartment])) {
+                    $loginError = 'Please select a department.';
                 } else {
-                    /* There is NO department column in users: the department
-                       selection is a UI field only; authorization is account_type. */
+                    /* The department is a venue: staff.venue_id for a staff account.
+                       Authorization itself stays account_type (+ staff_venue_scope()). */
                     $stmt = $pdo->prepare(
-                        'SELECT id, email, username, password_hash, account_type, is_active
-                         FROM users
-                         WHERE email = :email
+                        'SELECT u.id, u.email, u.username, u.password_hash, u.account_type, u.is_active,
+                                s.venue_id AS staff_venue_id, v.name AS staff_venue_name
+                         FROM users u
+                         LEFT JOIN staff s ON s.user_id = u.id
+                         LEFT JOIN venues v ON v.id = s.venue_id
+                         WHERE u.email = :email
                          LIMIT 1'
                     );
                     $stmt->execute(['email' => $email]);
@@ -83,6 +92,10 @@ class AdminLoginController
                         !password_verify($password, (string) $user['password_hash'])
                     ) {
                         $loginError = 'Invalid email or password.';
+                    } elseif ($user['account_type'] === 'staff' && (int) $user['staff_venue_id'] !== $selectedDepartment) {
+                        /* Only AFTER the password checked out, so it hints nothing to a stranger.
+                           (A staff row always has a venue: the database trigger insists.) */
+                        $loginError = 'This account belongs to ' . $user['staff_venue_name'] . '.';
                     } else {
                         // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).
                         venusep_password_upgrade($pdo, (int) $user['id'], $password, $user['password_hash']);
@@ -108,7 +121,8 @@ class AdminLoginController
         $tfaSecret = $tfaView === 'enroll' ? tfa_setup_secret((int) $pending['user_id']) : '';     // the same key on every visit until confirmed
 
         $response = response()->view('auth.admin-login', compact(
-            'loginError', 'tfaView', 'tfaCsrf', 'tfaLock', 'tfaSecret', 'tfaError', 'pending'
+            'loginError', 'tfaView', 'tfaCsrf', 'tfaLock', 'tfaSecret', 'tfaError', 'pending',
+            'departments', 'selectedDepartment'
         ));
         if ($tfaView !== 'password') {
             $response->header('Cache-Control', 'no-store');   // the secret and the recovery codes must never be cached
@@ -117,11 +131,28 @@ class AdminLoginController
         return $response;
     }
 
+    /* The active venues by id — the Department cards (name, icon, one line under it). */
+    private function departments(PDO $pdo): array
+    {
+        $out = [];
+        foreach ($pdo->query('SELECT id, name, venue_code, venue_type FROM venues WHERE is_active = 1 ORDER BY venue_type, name') as $v) {
+            [$icon, $line] = match (true) {
+                $v['venue_type'] === 'hostel' => ['bi-door-open', 'Hostel Room Management'],
+                $v['venue_code'] === 'BAHAY-ALUMNI' => ['bi-house', 'Alumni House Management'],
+                $v['venue_code'] === 'USEP-VENUES' => ['bi-building', 'University Venue Management'],
+                default => ['bi-geo-alt', 'Venue Management'],
+            };
+            $out[(int) $v['id']] = ['name' => $v['name'], 'icon' => $icon, 'line' => $line];
+        }
+
+        return $out;
+    }
+
     /* The last step of every staff sign-in, and the only place a staff session is
        created: after the code, never before it. Re-reads the account because the
        password step may have been minutes ago and it could have been suspended since.
        Never returns (throws the redirect), like the old al_finish_login(). */
-    private function finishLogin(PDO $pdo, int $userId, string $department, bool $passedCode): void
+    private function finishLogin(PDO $pdo, int $userId, int $department, bool $passedCode): void
     {
         $stmt = $pdo->prepare('SELECT id, email, username, account_type, is_active FROM users WHERE id = :id LIMIT 1');
         $stmt->execute(['id' => $userId]);
@@ -142,7 +173,7 @@ class AdminLoginController
             'user_email' => $user['email'],
             'username' => $user['username'],
             'account_type' => $user['account_type'],
-            'department' => $department,
+            'department' => $department,   // the venue id of the card picked at sign-in
             /* Only a sign-in that went through the code sets this; EnforceTwoFactor
                ends any admin session without it. Never set on the password-only path. */
             'tfa_passed' => $passedCode,

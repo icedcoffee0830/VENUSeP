@@ -288,6 +288,19 @@ function booking_shape(array $row) {
                                         && $ts <= strtotime(($firstIso ?: date('Y-m-d')) . ' 23:59:59');
     }
 
+    /* POST-PAY: DUE vs OVERDUE (Aron, 2026-10-30). People are told to pay by
+       the DAY AFTER the event (payByLabel); the booking only turns Overdue once
+       postpay_grace_days have passed — the stored deadline above, which
+       sp_expire_due_bookings() enforces (graceEndsLabel). A deadline staff
+       extended lies past the natural grace end, and then it IS the date told. */
+    if ($b['payment']['policy'] === 'postpay') {
+        $lastDay = strtotime(($lastBooked ?: ($firstIso ?: date('Y-m-d'))) . ' 00:00:00');
+        $b['payment']['graceEndsLabel'] = $b['payment']['payByLabel'];
+        if ($b['payment']['payByTs'] <= strtotime('+' . postpay_grace_days() . ' days 23:59:59', $lastDay)) {
+            $b['payment']['payByLabel'] = date('M j, Y', strtotime('+1 day', $lastDay));
+        }
+    }
+
     /* WHY a released booking was released, in plain words (2026-10-27). A
        request nobody approved before its date reads "Expired" rather than
        "Released": nothing was ever held for the customer to lose, and nothing
@@ -438,7 +451,7 @@ function booking_queue_action(array $b) {
         case 'overdue':
             return $b['refundsAllowed']
                 ? 'Pre-pay booking · deadline passed ' . $due . ' · slot releasable'
-                : 'Post-pay window ended ' . $due . ' · still payable · follow up';
+                : 'Post-pay · was due ' . $due . ' · grace ended ' . ($b['payment']['graceEndsLabel'] ?? $due) . ' · still payable · follow up';
         case 'expired':           return !empty($b['neverApproved']) ? 'Never approved · request expired' : 'Never paid · hold released';
         case 'refund_requested':  return 'All documents in · verify';
         case 'refund_await_or':   return 'Receipts in · OR still to come';

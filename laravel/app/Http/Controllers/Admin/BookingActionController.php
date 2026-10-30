@@ -148,6 +148,7 @@ class BookingActionController extends Controller
                 'total'      => $after['amount'],
                 'discount'   => $after['discountPercent'],
                 'payBy'      => $after['payment']['payByLabel'],
+                'graceEnds'  => $after['payment']['graceEndsLabel'] ?? null,
                 'method'     => $after['method'],          /* Cash received turns a stay into a cash booking */
                 'attempts'        => $after['receiptAttempts'],
                 'attemptsAllowed' => $after['receiptAttemptsAllowed'],

@@ -130,6 +130,7 @@ class BookingRequestController extends Controller
             'payBy'     => $b['payment']['payByLabel'],
             /* paid after the event (DB-DECISIONS #18): an overdue one is never released (Aron, 2026-10-30) */
             'postpay'   => $b['payment']['policy'] === 'postpay',
+            'graceEnds' => $b['payment']['graceEndsLabel'] ?? null,   /* post-pay: turns Overdue after this day */
             'method'    => strtolower($b['method']),
             'submitted' => date('M j, Y · g:i A', strtotime($b['submittedAt'])),
             'res'       => $b['reservationCode'],

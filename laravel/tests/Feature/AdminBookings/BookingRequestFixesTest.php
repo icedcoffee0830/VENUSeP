@@ -121,6 +121,18 @@ class BookingRequestFixesTest extends TestCase
         $checkIn()->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'Only an approved stay can be checked in.']);
     }
 
+    /* Found 2026-10-30: the "Pay-by rule" line read the LIVE refund switch, so a
+       post-pay booking waiting on GCash after its event said "1 day before the event". */
+    public function test_pay_by_rule_follows_the_bookings_own_policy(): void
+    {
+        [, $post] = $this->seedVenueBooking('r1', 'approved', 'overdue', 'gcash', true, false);
+        [, $pre] = $this->seedVenueBooking('r1', 'approved', 'await_gcash', 'gcash', true, true);
+        $this->assertFalse($this->pageRow($post)['prepay']);
+        $this->assertTrue($this->pageRow($pre)['prepay']);
+        $this->page($post)->assertSee('${!cur.prepay', false)->assertSee("'GCash')}\${cur.prepay", false)
+            ->assertDontSee("(!PAY_POLICY.prepay && ['pending','locked']", false);
+    }
+
     public function test_the_page_has_no_fake_timeline_stamp(): void
     {
         [, $ref] = $this->seedVenueBooking('r1');

@@ -783,7 +783,7 @@
            (await_gcash), so the override / undo box is drawn from the upload itself. */
         switch (rejectedUpload() ? 'rejected' : cur.pay) {
           case 'locked': return banner('bn-gray', 'Payment is locked', 'The customer cannot pay until you approve the ID and the reservation.') +
-            `<div class="br-kvgrid">${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}${PAY_POLICY.prepay
+            `<div class="br-kvgrid">${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}${cur.prepay
               ? kv('Pay-by once approved', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')
               : kv('Payment timing', 'Post-pay <span class="soft">(opens after the event, due ' + PAY_POLICY.graceDays + ' days later)</span>')}</div>`;
           case 'await_event': return banner('bn-gray', 'Payment opens after the event', 'Post-pay booking: nothing is owed until the event is over. The customer cannot pay early. The system opens payment the day after the last booked day.') +
@@ -982,7 +982,7 @@
                   <div class="br-kvgrid">
                     ${kv('Room', esc(cur.room))}${kv('Venue', esc(cur.venue))}
                     ${kv(cur.days > 1 ? 'Dates' : 'Date', esc(cur.dates))}${kv('Attendees', cur.attendees + ' / ' + cur.capacity + (over ? ' <span style="color:#8a5a12">· over capacity</span>' : ''))}
-                    ${kv('Fee', esc(cur.total) + ' <span class="soft">(' + esc(cur.feeDay) + '/day × ' + cur.days + ')</span>')}${cur.pay === 'await_event' || (!PAY_POLICY.prepay && ['pending','locked'].includes(cur.pay))
+                    ${kv('Fee', esc(cur.total) + ' <span class="soft">(' + esc(cur.feeDay) + '/day × ' + cur.days + ')</span>')}${!cur.prepay
                       ? kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(post-pay · ' + PAY_POLICY.graceDays + ' days after the event)</span>')
                       : kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')}
                   </div>

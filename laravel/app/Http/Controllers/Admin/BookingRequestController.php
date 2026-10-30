@@ -185,6 +185,8 @@ class BookingRequestController extends Controller
                 'endIso'  => $b['endDateIso'],
                 'feeDay'  => '₱' . number_format($b['days'] > 0 ? $b['roomPrice'] / $b['days'] : $b['roomPrice']),
                 'days'    => $b['days'],
+                /* the policy THIS booking was made under, not the live switch (DB-DECISIONS #18) */
+                'prepay'  => $b['refundsAllowed'],
                 'sched'   => $sched,
             ];
         }

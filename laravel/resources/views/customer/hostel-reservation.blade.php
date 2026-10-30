@@ -1370,6 +1370,8 @@ function reviewScreen(){
       </label>
     </div>`}
 
+    <!-- the server's refusal (beds just taken, ID not accepted...) — it used to be set and never drawn -->
+    ${state.submitError?`<div role="alert" style="margin-top:14px;background:#fdf2f2;border:1px solid #f2d8d8;color:#b23a3a;border-radius:11px;padding:11px 13px;font-size:13px;line-height:1.5">${esc(state.submitError)}</div>`:''}
     <button onclick="submitRequest()" ${(canSubmitRequest()&&!submitting)?'':'disabled'} style="width:100%;height:48px;margin-top:16px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14.5px;font-weight:650;cursor:${(canSubmitRequest()&&!submitting)?'pointer':'not-allowed'};opacity:${canSubmitRequest()?1:.45}">${submitting?'Submitting&hellip;':(COUNTER?'Cash received &mdash; book it ('+peso(x.d.total)+')':'Submit booking request')}</button>
     <div style="font-size:12px;color:#a5a19a;text-align:center;margin-top:8px">${COUNTER?(canSubmitRequest()?'Take the cash first. Nothing is booked until you confirm it is received.':'Tick that the guest understands the booking is non-refundable to continue'):!idOk?'Attach a valid ID to continue':!canSubmitRequest()?'Tick that you understand the booking is non-refundable to continue':'Once staff approve it, pay before you check in &mdash; GCash from My Bookings, or cash at the front desk &mdash; by the end of '+esc(payByInfo().label)+'.'}</div>
   </main>`;

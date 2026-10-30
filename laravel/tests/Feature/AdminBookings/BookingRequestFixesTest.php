@@ -103,6 +103,24 @@ class BookingRequestFixesTest extends TestCase
         $this->assertSame(1, (int) DB::table('hostel_booking_details')->where('booking_id', $id)->value('checked_in'));
     }
 
+    /* Found 2026-10-30: check-in accepted a cancelled stay, and a second check-in
+       of the same guest (a second timeline row). */
+    public function test_check_in_needs_an_approved_stay_and_happens_once(): void
+    {
+        [$id, $ref] = $this->seedHostelBooking('approved', 'paid_cash', 'cash', false, true);
+        DB::table('hostel_booking_details')->where('booking_id', $id)->update(['check_in_date' => now()->toDateString(),
+            'check_out_date' => now()->addDay()->toDateString()]);
+        $this->actingAsAdmin();
+        $checkIn = fn () => $this->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => 'check_in']);
+        $checkIn()->assertOk();
+        $checkIn()->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'The guest is already checked in.']);
+        $this->assertSame(1, DB::table('booking_timeline')->where('booking_id', $id)->where('action_code', 'checked_in')->count());
+
+        DB::table('hostel_booking_details')->where('booking_id', $id)->update(['checked_in' => 0]);
+        DB::table('bookings')->where('id', $id)->update(['reservation_status' => 'cancelled']);
+        $checkIn()->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'Only an approved stay can be checked in.']);
+    }
+
     public function test_the_page_has_no_fake_timeline_stamp(): void
     {
         [, $ref] = $this->seedVenueBooking('r1');

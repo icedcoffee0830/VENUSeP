@@ -385,6 +385,10 @@ class BookingActionController extends Controller
             if ($bk['booking_type'] !== 'hostel') {
                 $this->reply(400, ['ok' => false, 'message' => 'Only a hostel booking has a check-in.']);
             }
+            /* A rejected, cancelled or released stay has no bed to check into. */
+            if ($bk['reservation_status'] !== 'approved') {
+                $this->reply(409, ['ok' => false, 'message' => 'Only an approved stay can be checked in.']);
+            }
             if ($bk['pay_to_use'] && !in_array($bk['payment_status'], ['confirmed', 'paid_cash'], true)) {
                 $this->reply(409, ['ok' => false, 'message' => $bk['payment_status'] === 'under_review'
                     ? 'Not paid yet: the GCash receipt is still under review. Confirm it first, then check the guest in.'
@@ -393,9 +397,12 @@ class BookingActionController extends Controller
                         : 'Not paid yet. The guest pays before using the bed — by GCash in Pay now, or by choosing cash at the front desk there.')]);
             }
             /* Not before the stay begins (Aron, 2026-10-30): the bed is booked from the check-in date. */
-            $stay = $pdo->prepare('SELECT check_in_date, check_in_date > CURDATE() AS early FROM hostel_booking_details WHERE booking_id = :b');
+            $stay = $pdo->prepare('SELECT check_in_date, check_in_date > CURDATE() AS early, checked_in FROM hostel_booking_details WHERE booking_id = :b');
             $stay->execute([':b' => $bookingId]);
             $stay = $stay->fetch();
+            if ($stay && $stay['checked_in']) {
+                $this->reply(409, ['ok' => false, 'message' => 'The guest is already checked in.']);
+            }
             if ($stay && $stay['early']) {
                 $this->reply(409, ['ok' => false,
                     'message' => 'Too early: check-in opens on ' . date('M j, Y', strtotime($stay['check_in_date'])) . ', the first night of the stay.']);

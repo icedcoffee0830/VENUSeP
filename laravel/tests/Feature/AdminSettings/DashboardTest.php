@@ -3,11 +3,14 @@
 namespace Tests\Feature\AdminSettings;
 
 use Illuminate\Support\Facades\DB;
+use Tests\Feature\AdminBookings\SeedsBookings;
 use Tests\TestCase;
 
 /* admin/Admin_Dashboard.php -> route admin.dashboard (admin + staff). */
 class DashboardTest extends TestCase
 {
+    use SeedsBookings;
+
     public function test_guest_is_sent_to_sign_in(): void
     {
         $this->get(route('admin.dashboard'))->assertRedirect(route('admin.admin-login'));
@@ -81,6 +84,22 @@ class DashboardTest extends TestCase
             ->where('u.email', 'staff@gmail.com')->value('v.name');
         $this->actingAsStaff()->get(route('admin.dashboard'))->assertOk()
             ->assertSee('Welcome, ' . $name('staff@gmail.com') . ' | Managing: ' . $own . '</p>', false);
+    }
+
+    /* The latest-requests preview labels cash with the row's own label: a hostel
+       stay is paid at the front desk, not "at cashier" (the venues' window). */
+    public function test_preview_labels_hostel_cash_paid_at_the_front_desk(): void
+    {
+        DB::beginTransaction();
+        try {
+            [, $ref] = $this->seedHostelBooking('approved', 'paid_cash', 'cash', false, true);
+            $this->actingAsAdmin()->get(route('admin.dashboard'))->assertOk()
+                ->assertSee('"id":"' . $ref . '"', false)
+                ->assertSee('"pay":"paid_cash","payLabel":"Paid at the front desk"', false)
+                ->assertSee("\${r.pay === 'paid_cash' && r.payLabel ? esc(r.payLabel) : pay.t}", false);
+        } finally {
+            DB::rollBack();
+        }
     }
 
     public function test_staff_sees_the_dashboard(): void

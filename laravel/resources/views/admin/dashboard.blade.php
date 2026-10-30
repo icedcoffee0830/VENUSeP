@@ -1011,7 +1011,7 @@ const PAY = {
   review:      { t: 'Receipt · manual review',     c: 'b-amber' },
   rejected:    { t: 'Receipt rejected',          c: 'b-red'   },
   confirmed:   { t: 'Payment confirmed',           c: 'b-green' },
-  paid_cash:   { t: 'Paid at cashier',             c: 'b-green' },
+  paid_cash:   { t: 'Paid at cashier',             c: 'b-green' },   /* fallback: rows carry their own payLabel (hostel: front desk) */
   overdue:     { t: 'Payment overdue',             c: 'b-red'   },
   /* POST-PAY (DB-DECISIONS #18): approved while refunds were OFF, so nothing
      can be paid until the event is over. Not waiting on anyone. */
@@ -1059,7 +1059,7 @@ document.getElementById('adRows').innerHTML = BR.slice()
       <span>
         <span class="r-badges">
           <span class="br-badge ${res.c}">${res.t}</span>
-          <span class="br-badge ${pay.c}">${pay.t}</span>
+          <span class="br-badge ${pay.c}">${r.pay === 'paid_cash' && r.payLabel ? esc(r.payLabel) : pay.t}</span>
         </span>
         <div class="r-act ${r.cls}">${esc(r.act)}</div>
       </span>

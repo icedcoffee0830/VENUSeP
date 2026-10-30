@@ -906,7 +906,9 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
+@if ($vmMyVenue === null || $venueName === $vmMyVenue) {{-- staff: own venue only --}}
               <a class="vm-edit-link" href="{{ route('admin.venue-form', ['id' => $venueId]) }}"><span class="plus">✎</span> Edit Details</a>
+@endif
 @if (admin_is_admin())
               <button type="button" class="vm-delete-link" data-delete-entity="venue" data-delete-id="{{ $venueId }}" data-delete-name="{{ $venueName }}">Delete Venue</button>
 @endif
@@ -956,7 +958,7 @@ function vmMaint($m, $today) {
 @endif
 @if ($mt)
             <span class="vm-status" title="{{ $mt['reason'] }}"><span class="vm-dot {{ $mt['dot'] }}"></span> {{ $mt['label'] }}</span>
-@if ($mt['review'])
+@if ($mt['review'] && ($vmMyVenue === null || $room['venue'] === $vmMyVenue)) {{-- staff: own venue's rooms only --}}
             <!-- The rot guard. An indefinite closure is the only window that
                  cannot end on its own, so this is the only thing that will ever
                  ask about it. It asks, and it carries the answer (Reopen) —
@@ -1039,7 +1041,7 @@ function vmMaint($m, $today) {
 @endif
 @if ($mt)
             <span class="vm-status" title="{{ $mt['reason'] }}"><span class="vm-dot {{ $mt['dot'] }}"></span> {{ $mt['label'] }}</span>
-@if ($mt['review'])
+@if ($mt['review'] && ($vmMyVenue === null || $room['venue'] === $vmMyVenue)) {{-- staff: own venue's rooms only --}}
             <span class="vm-review">Closed {{ $mt['days'] }} days &mdash; still closed?
               <a href="{{ route('admin.hostel-room-form', ['id' => $room['id']]) }}" title="[SIM] opens the room's maintenance window">Reopen</a>
             </span>

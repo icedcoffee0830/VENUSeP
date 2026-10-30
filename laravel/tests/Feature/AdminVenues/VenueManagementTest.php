@@ -45,6 +45,41 @@ class VenueManagementTest extends VenuesTestCase
             ->assertDontSee(route('admin.hostel-room-form', ['id' => 'h1']), false);
     }
 
+    /* Aron 2026-10-30 (round 3): staff see "Edit Details" only on their own venue's
+       card and the long-closure "Reopen" reminder only on their own venue's rooms
+       (r4 is venue 1's, closed since July); admins see every one. */
+    public function test_staff_get_edit_details_and_reopen_only_on_their_own_venue(): void
+    {
+        $reopen = fn (string $form, string $code) => '<a href="' . route('admin.' . $form, ['id' => $code])
+            . '" title="[SIM] opens the room\'s maintenance window">Reopen</a>';
+        $from = date('Y-m-d', strtotime('-30 days'));
+        $ids = [];
+        foreach (['r5', 'h1'] as $code) {
+            $ids[] = DB::table('maintenance_windows')->insertGetId([
+                'room_id' => DB::table('rooms')->where('room_code', $code)->value('id'),
+                'from_date' => $from, 'until_date' => null, 'reason' => 'test closure', 'blocks_booking' => 1,
+            ]);
+        }
+        try {
+            $this->actingAsStaff()->get(route('admin.venue-management'))->assertOk()
+                ->assertSee(route('admin.venue-form', ['id' => 1]), false)
+                ->assertDontSee(route('admin.venue-form', ['id' => 2]), false)
+                ->assertDontSee(route('admin.venue-form', ['id' => 3]), false)
+                ->assertSee($reopen('room-form', 'r4'), false)
+                ->assertDontSee($reopen('room-form', 'r5'), false)
+                ->assertDontSee($reopen('hostel-room-form', 'h1'), false);
+            $this->flushSession();
+            $this->actingAsAdmin()->get(route('admin.venue-management'))->assertOk()
+                ->assertSee(route('admin.venue-form', ['id' => 2]), false)
+                ->assertSee(route('admin.venue-form', ['id' => 3]), false)
+                ->assertSee($reopen('room-form', 'r4'), false)
+                ->assertSee($reopen('room-form', 'r5'), false)
+                ->assertSee($reopen('hostel-room-form', 'h1'), false);
+        } finally {
+            DB::table('maintenance_windows')->whereIn('id', $ids)->delete();
+        }
+    }
+
     /* A hostel rate with centavos shows them (was rounded to the peso); a whole
        rate stays without ".00". */
     public function test_hostel_rate_keeps_its_centavos_on_the_card(): void

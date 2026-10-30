@@ -21,16 +21,19 @@ class AdminLoginController
         }
 
         $loginError = '';
+        /* The ?suspended / ?tfa notices are for SHOWING the page: the form posts back to
+           this same URL (query and all), and a notice here would stop that sign-in. */
+        $showing = !$request->isMethod('post');
 
         /* Sent here mid-session because the account was suspended (staff_session_heal(),
            or staff_session_refresh(), which leaves its one-time flag in the session). */
-        if ($request->query->has('suspended') || session()->pull('staff_suspended_notice')) {
+        if (($showing && $request->query->has('suspended')) || session()->pull('staff_suspended_notice')) {
             $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
         }
         /* Sent here because the session had not passed two-step verification: by
            staff_session_heal() (?tfa=required) or by the EnforceTwoFactor middleware,
            which leaves this one-time notice in the session it just emptied. */
-        if ($request->query('tfa') === 'required' || !empty(session('tfa_required_notice'))) {
+        if (($showing && $request->query('tfa') === 'required') || !empty(session('tfa_required_notice'))) {
             session()->forget('tfa_required_notice');
             $loginError = 'Admin accounts now need two-step verification. Sign in to set it up. It takes about a minute.';
         }

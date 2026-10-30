@@ -92,7 +92,12 @@ class VenueSlotRaceTest extends TestCase
         $room = (int) $pdo->query("SELECT r.id FROM rooms r JOIN event_room_details e ON e.room_id = r.id
                                     WHERE r.room_type = 'event' AND r.is_active = 1 ORDER BY r.id LIMIT 1")->fetchColumn();
         $customer = (int) $pdo->query('SELECT id FROM customers ORDER BY id LIMIT 1')->fetchColumn();
-        $day = date('Y-m-d', strtotime('+' . random_int(1500, 3000) . ' days'));   /* a far, free date */
+        /* a far date with nothing in this room (other tests leave far-future bookings behind) */
+        $taken = $pdo->prepare('SELECT COUNT(*) FROM venue_booking_slots WHERE room_id = ? AND slot_date = ?');
+        do {
+            $day = date('Y-m-d', strtotime('+' . random_int(1500, 3000) . ' days'));
+            $taken->execute([$room, $day]);
+        } while ((int) $taken->fetchColumn() > 0);
         return [$customer, $room, $day];
     }
 

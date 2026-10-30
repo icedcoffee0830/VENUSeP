@@ -116,34 +116,14 @@ class RegisterSubmitController
                     $pdo->rollBack();
                     $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can create an admin account.']);
                 }
-                if ((int) $creator['lock_seconds'] > 0) {
-                    $pdo->rollBack();
-                    $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => (int) $creator['lock_seconds'],
-                        'message' => 'Too many wrong passwords. Try again in ' . (int) $creator['lock_seconds'] . ' seconds.']);
+                if ($no = reauth_verify($pdo, $creator, $creatorPw)) {   // the shared lockout (auth.php)
+                    isset($no['locked'])
+                        ? $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => $no['locked'],
+                            'message' => 'Too many wrong passwords. Try again in ' . $no['locked'] . ' seconds.'])
+                        : $this->reply(401, ['ok' => false, 'field' => 'creator_password', 'error' => 'wrong_password',
+                            'attemptsLeft' => $no['attemptsLeft'],
+                            'message' => 'That is not your password. ' . $no['attemptsLeft'] . ' attempt(s) left before a temporary lock.']);
                 }
-                if (!password_verify($creatorPw, (string) $creator['password_hash'])) {
-                    $attempts = (int) $creator['reauth_failed_attempts'] + 1;
-                    $ladder = [10, 30, 60, 300, 900];
-                    if ($attempts >= 5) {
-                        $level = min((int) $creator['reauth_lock_level'] + 1, 255);
-                        $seconds = $ladder[min($level, count($ladder)) - 1];
-                        $pdo->prepare(
-                            'UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :l,
-                                    reauth_locked_until = DATE_ADD(NOW(), INTERVAL :s SECOND) WHERE id = :id'
-                        )->execute([':l' => $level, ':s' => $seconds, ':id' => $creator['id']]);
-                        $pdo->commit();
-                        $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => $seconds,
-                            'message' => 'Too many wrong passwords. Try again in ' . $seconds . ' seconds.']);
-                    }
-                    $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id')
-                        ->execute([':a' => $attempts, ':id' => $creator['id']]);
-                    $pdo->commit();
-                    $this->reply(401, ['ok' => false, 'field' => 'creator_password', 'error' => 'wrong_password',
-                        'attemptsLeft' => 5 - $attempts,
-                        'message' => 'That is not your password. ' . (5 - $attempts) . ' attempt(s) left before a temporary lock.']);
-                }
-                $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id')
-                    ->execute([':id' => $creator['id']]);
                 $pdo->commit();
             } catch (PDOException $e) {
                 if ($pdo->inTransaction()) {

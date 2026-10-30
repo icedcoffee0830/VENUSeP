@@ -198,6 +198,49 @@ function staff_may_handle_booking($bookingId)
     return $venue === false || staff_may_handle_venue($venue);
 }
 
+/* =====================================================================
+   "TYPE YOUR PASSWORD AGAIN" — the one lockout every sensitive action shares
+   (refund switch, demo mode, GCash accounts, backup restore, creating an
+   admin, the counter's customer check). Stored on users.reauth_*, so another
+   browser does not start over: 5 wrong in a row = one lock, each lock longer
+   than the last (10s, 30s, 1m, 5m, then 15m). A right password resets it.
+
+   $user: the account row, read FOR UPDATE inside the caller's transaction
+   (two wrong tries at the same moment must both count), with id,
+   password_hash, reauth_failed_attempts, reauth_lock_level and lock_seconds
+   (CASE WHEN reauth_locked_until > NOW() THEN TIMESTAMPDIFF(...) ELSE 0 END).
+   Returns null = right password, the transaction stays open; otherwise the
+   transaction is already closed (a wrong try is committed so it counts) and
+   ['locked' => seconds, 'justLocked' => bool] or ['attemptsLeft' => n].
+   ===================================================================== */
+function reauth_verify(PDO $pdo, array $user, string $password): ?array
+{
+    if ((int) $user['lock_seconds'] > 0) {
+        $pdo->rollBack();
+        return ['locked' => (int) $user['lock_seconds'], 'justLocked' => false];
+    }
+    if (password_verify($password, (string) $user['password_hash'])) {
+        $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id')
+            ->execute([':id' => $user['id']]);
+        return null;
+    }
+    $attempts = (int) $user['reauth_failed_attempts'] + 1;
+    if ($attempts < 5) {
+        $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id')
+            ->execute([':a' => $attempts, ':id' => $user['id']]);
+        $pdo->commit();
+        return ['attemptsLeft' => 5 - $attempts];
+    }
+    $ladder = [10, 30, 60, 300, 900];
+    $level = min((int) $user['reauth_lock_level'] + 1, 255);
+    $seconds = $ladder[min($level, count($ladder)) - 1];
+    $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :l,
+                          reauth_locked_until = DATE_ADD(NOW(), INTERVAL :s SECOND) WHERE id = :id')
+        ->execute([':l' => $level, ':s' => $seconds, ':id' => $user['id']]);
+    $pdo->commit();
+    return ['locked' => $seconds, 'justLocked' => true];
+}
+
 /* ---- CUSTOMER SIDE — a staff session never counts as a customer. ---- */
 function customer_logged_in()
 {

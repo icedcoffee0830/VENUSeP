@@ -22,17 +22,11 @@ use Throwable;
      4. the password is correct
      5. only then: change the value + write system_settings_history
 
-   PASSWORD LOCKOUT — stored on users.reauth_*, so clearing cookies or
-   switching browsers does not reset it. 5 wrong in a row = one lock, and
-   each lock is longer than the last: 10s, 30s, 1m, 5m, then 15m (the max).
-   A correct password resets everything.
+   PASSWORD LOCKOUT — reauth_verify() in legacy auth.php.
    ===================================================================== */
 class RefundSwitchController
 {
     use JsonEndpoint;
-
-    const RS_ATTEMPTS_PER_LOCK = 5;
-    const RS_LOCK_SECONDS = [10, 30, 60, 300, 900];   // lock #1, #2, #3, #4, #5 and later
 
     public function __invoke(Request $request)
     {
@@ -86,41 +80,12 @@ class RefundSwitchController
                 return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the administrator can change the refund setting.']);
             }
 
-            if ((int) $user['lock_seconds'] > 0) {
-                $pdo->rollBack();
-                return $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => (int) $user['lock_seconds'],
-                    'message' => 'Too many wrong passwords.']);
+            if ($no = reauth_verify($pdo, $user, $password)) {   // the shared lockout (auth.php)
+                return isset($no['locked'])
+                    ? $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => $no['locked'], 'message' => 'Too many wrong passwords.']
+                        + ($no['justLocked'] ? ['justLocked' => true] : []))
+                    : $this->reply(401, ['ok' => false, 'error' => 'wrong_password', 'attemptsLeft' => $no['attemptsLeft'], 'message' => 'Wrong password.']);
             }
-
-            if (!password_verify($password, (string) $user['password_hash'])) {
-                $attempts = (int) $user['reauth_failed_attempts'] + 1;
-
-                if ($attempts >= self::RS_ATTEMPTS_PER_LOCK) {
-                    $level = min((int) $user['reauth_lock_level'] + 1, 255);
-                    $seconds = self::RS_LOCK_SECONDS[min($level, count(self::RS_LOCK_SECONDS)) - 1];
-                    $upd = $pdo->prepare(
-                        'UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :level,
-                                reauth_locked_until = DATE_ADD(NOW(), INTERVAL :seconds SECOND)
-                          WHERE id = :id'
-                    );
-                    $upd->execute([':level' => $level, ':seconds' => $seconds, ':id' => $user['id']]);
-                    $pdo->commit();
-                    return $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => $seconds, 'justLocked' => true,
-                        'message' => 'Too many wrong passwords.']);
-                }
-
-                $upd = $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id');
-                $upd->execute([':a' => $attempts, ':id' => $user['id']]);
-                $pdo->commit();
-                return $this->reply(401, ['ok' => false, 'error' => 'wrong_password',
-                    'attemptsLeft' => self::RS_ATTEMPTS_PER_LOCK - $attempts,
-                    'message' => 'Wrong password.']);
-            }
-
-            /* Correct password — the lockout starts over from 10 seconds. */
-            $pdo->prepare(
-                'UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id'
-            )->execute([':id' => $user['id']]);
 
             $cur = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'refunds_enabled' FOR UPDATE");
             $cur->execute();

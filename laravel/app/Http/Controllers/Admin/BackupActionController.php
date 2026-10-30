@@ -137,27 +137,12 @@ class BackupActionController
                 $pdo->rollBack();
                 return $this->bk(403, ['ok' => false, 'message' => 'Only an administrator can restore a backup.']);
             }
-            if ((int) $me['lock_seconds'] > 0) {
-                $pdo->rollBack();
-                return $this->bk(423, ['ok' => false, 'error' => 'locked', 'message' => 'Too many wrong passwords. Try again in ' . (int) $me['lock_seconds'] . ' seconds.']);
+            if ($no = reauth_verify($pdo, $me, $password)) {
+                return isset($no['locked'])
+                    ? $this->bk(423, ['ok' => false, 'error' => 'locked', 'message' => 'Too many wrong passwords. Try again in ' . $no['locked'] . ' seconds.'])
+                    : $this->bk(401, ['ok' => false, 'error' => 'wrong_password',
+                        'message' => 'Wrong password. ' . $no['attemptsLeft'] . ' attempt(s) left before a temporary lock.']);
             }
-            if (!password_verify($password, (string) $me['password_hash'])) {
-                $attempts = (int) $me['reauth_failed_attempts'] + 1;
-                $ladder = [10, 30, 60, 300, 900];
-                if ($attempts >= 5) {
-                    $level = min((int) $me['reauth_lock_level'] + 1, 255);
-                    $seconds = $ladder[min($level, count($ladder)) - 1];
-                    $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :l, reauth_locked_until = DATE_ADD(NOW(), INTERVAL :s SECOND) WHERE id = :id')
-                        ->execute([':l' => $level, ':s' => $seconds, ':id' => $actor]);
-                    $pdo->commit();
-                    return $this->bk(423, ['ok' => false, 'error' => 'locked', 'message' => 'Too many wrong passwords. Try again in ' . $seconds . ' seconds.']);
-                }
-                $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id')->execute([':a' => $attempts, ':id' => $actor]);
-                $pdo->commit();
-                return $this->bk(401, ['ok' => false, 'error' => 'wrong_password',
-                    'message' => 'Wrong password. ' . (5 - $attempts) . ' attempt(s) left before a temporary lock.']);
-            }
-            $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id')->execute([':id' => $actor]);
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }

@@ -172,40 +172,17 @@ class CounterCustomerController
                 return $this->reply(409, ['ok' => false, 'message' => 'This account signs in with Google, so it has no password to type. Ask the customer to set a password in their profile, or book them as a walk-in with no account.']);
             }
 
-            /* ATTEMPT LIMIT — the CUSTOMER's users.reauth_* ladder (the refund
-               switch's: 5 wrong in a row = one lock of 10s, 30s, 1m, 5m, then 15m),
+            /* ATTEMPT LIMIT — the CUSTOMER's own lockout (reauth_verify, auth.php),
                so a counter screen cannot be used to guess someone's password.
                Stored on the account, not the staff session: another staff member
-               or another browser does not start over. A correct password resets it.
+               or another browser does not start over.
                The reply says nothing about which part was wrong. */
-            if ((int) $user['lock_seconds'] > 0) {
-                $pdo->rollBack();
-                return $this->reply(423, ['ok' => false, 'seconds' => (int) $user['lock_seconds'],
-                    'message' => self::lockedMessage((int) $user['lock_seconds'])]);
+            if ($no = reauth_verify($pdo, $user, $password)) {
+                return isset($no['locked'])
+                    ? $this->reply(423, ['ok' => false, 'seconds' => $no['locked'], 'message' => self::lockedMessage($no['locked'])])
+                    : $this->reply(401, ['ok' => false, 'attemptsLeft' => $no['attemptsLeft'],
+                        'message' => 'That password did not match. Try again, or book them as a walk-in with no account.']);
             }
-
-            if (!password_verify($password, $user['password_hash'])) {
-                $attempts = (int) $user['reauth_failed_attempts'] + 1;
-                if ($attempts >= RefundSwitchController::RS_ATTEMPTS_PER_LOCK) {
-                    $ladder  = RefundSwitchController::RS_LOCK_SECONDS;
-                    $level   = min((int) $user['reauth_lock_level'] + 1, 255);
-                    $seconds = $ladder[min($level, count($ladder)) - 1];
-                    $pdo->prepare(
-                        'UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :l,
-                                reauth_locked_until = DATE_ADD(NOW(), INTERVAL :s SECOND) WHERE id = :id'
-                    )->execute([':l' => $level, ':s' => $seconds, ':id' => $user['id']]);
-                    $pdo->commit();
-                    return $this->reply(423, ['ok' => false, 'seconds' => $seconds, 'message' => self::lockedMessage($seconds)]);
-                }
-                $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id')
-                    ->execute([':a' => $attempts, ':id' => $user['id']]);
-                $pdo->commit();
-                return $this->reply(401, ['ok' => false, 'attemptsLeft' => RefundSwitchController::RS_ATTEMPTS_PER_LOCK - $attempts,
-                    'message' => 'That password did not match. Try again, or book them as a walk-in with no account.']);
-            }
-
-            $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id')
-                ->execute([':id' => $user['id']]);
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) {

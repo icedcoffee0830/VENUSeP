@@ -72,33 +72,11 @@ class DemoModeSwitchController
                 $pdo->rollBack();
                 return $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can change demo mode.']);
             }
-            if ((int) $user['lock_seconds'] > 0) {
-                $pdo->rollBack();
-                return $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => (int) $user['lock_seconds'],
-                    'message' => 'Too many wrong passwords.']);
+            if ($no = reauth_verify($pdo, $user, $password)) {   // the shared lockout (auth.php)
+                return isset($no['locked'])
+                    ? $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => $no['locked'], 'message' => 'Too many wrong passwords.'])
+                    : $this->reply(401, ['ok' => false, 'error' => 'wrong_password', 'attemptsLeft' => $no['attemptsLeft'], 'message' => 'Wrong password.']);
             }
-            if (!password_verify($password, (string) $user['password_hash'])) {
-                $attempts = (int) $user['reauth_failed_attempts'] + 1;
-                $ladder = [10, 30, 60, 300, 900];
-                if ($attempts >= 5) {
-                    $level = min((int) $user['reauth_lock_level'] + 1, 255);
-                    $seconds = $ladder[min($level, count($ladder)) - 1];
-                    $pdo->prepare(
-                        'UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :l,
-                                reauth_locked_until = DATE_ADD(NOW(), INTERVAL :s SECOND) WHERE id = :id'
-                    )->execute([':l' => $level, ':s' => $seconds, ':id' => $user['id']]);
-                    $pdo->commit();
-                    return $this->reply(423, ['ok' => false, 'error' => 'locked', 'seconds' => $seconds,
-                        'message' => 'Too many wrong passwords.']);
-                }
-                $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id')
-                    ->execute([':a' => $attempts, ':id' => $user['id']]);
-                $pdo->commit();
-                return $this->reply(401, ['ok' => false, 'error' => 'wrong_password',
-                    'attemptsLeft' => 5 - $attempts, 'message' => 'Wrong password.']);
-            }
-            $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id')
-                ->execute([':id' => $user['id']]);
 
             $cur = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'demo_mode'")->fetchColumn();
             if ((string) $cur === $enable) {

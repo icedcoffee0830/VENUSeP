@@ -48,6 +48,8 @@ class FaqController
             'REFUNDS_ENABLED' => $vars['REFUNDS_ENABLED'],
             'fqSections'      => $fqSections,
             'fqApp'           => $request->query('in') === 'app',
+            /* staff at the counter: links keep ?counter=1, customer-only links are hidden */
+            'fqCounterQ'      => counter_mode() ? '?counter=1' : '',
         ]);
     }
 }

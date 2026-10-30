@@ -162,11 +162,22 @@ function payment_policy_for($prepay, $firstIso, $lastIso = null, $now = null)
         'policy'     => 'postpay',
         'payByTs'    => $payBy,
         'payByLabel' => date('M j, Y', $payBy),
+        'askByLabel' => date('M j, Y', $over),               // what the customer is told — see customer_pay_by_label()
         'open'       => $now >= $over,
         'late'       => false,
         'overdue'    => $now > $payBy,
         'opensLabel' => 'after ' . date('M j, Y', $last),
     ];
+}
+
+/* The pay-by date the CUSTOMER is told (Aron, 2026-10-30). Post-pay: "pay by
+   the day after your event". The stored deadline (fn_payment_deadline: last day
+   + postpay_grace_days) is untouched and is still what turns the booking
+   Overdue — the grace days are a quiet buffer, not the date we ask for.
+   Pre-pay and pay-to-use: the stored deadline itself. */
+function customer_pay_by_label(array $payment)
+{
+    return isset($payment['askByLabel']) ? $payment['askByLabel'] : $payment['payByLabel'];
 }
 
 /* The same rule for the browser: the two booking pages render with JS, so

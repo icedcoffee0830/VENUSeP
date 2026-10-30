@@ -13,7 +13,9 @@ use Illuminate\Http\Request;
    denial is final, paperwork problems are "returned for correction"; the
    customer never types an amount; reason = category + free text; System
    Receipt + proof of payment required to FILE, the OR may follow; filing
-   deadline = cb_is_refundable(); venue bookings only for now.
+   deadline = cb_is_refundable(). Venue bookings AND hostel stays: whatever
+   was booked with refunds on (bookings.refunds_allowed) can be refunded
+   (Aron, 2026-10-30 — DB-DECISIONS #16/#18).
 
    ELIGIBILITY IS RE-CHECKED HERE, not trusted from the link, including the
    refund policy snapshot (legacy refund-policy.php). Submitting POSTs to

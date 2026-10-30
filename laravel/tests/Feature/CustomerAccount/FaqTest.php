@@ -21,6 +21,35 @@ class FaqTest extends TestCase
             ->assertDontSee('class="sidebar', false);
     }
 
+    /* Counter mode (staff + ?counter=1): the page's own links (back link, help
+       button, footer) keep ?counter=1, and the customer-only ones (bookings,
+       calendar, transactions) are not offered — they end at the customer sign-in. */
+    public function test_counter_mode_keeps_counter_links_and_hides_customer_only_ones(): void
+    {
+        $html = $this->actingAsStaff()->get(route('customer.faq') . '?counter=1')->assertOk()->getContent();
+        $page = substr($html, strpos($html, '<main>'));
+        $page = preg_replace('~<section class="fq-section".*?</section>~s', '', $page);   // the FAQ answers themselves
+        preg_match_all('~<a [^>]*href="([^"]*)"~', $page, $m);
+        $customer = array_filter(array_map('html_entity_decode', $m[1]), fn ($h) => str_starts_with($h, url('/customer/')));
+        $this->assertCount(3, $customer);   // back link, Browse venues, Hostel beds
+        foreach ($customer as $href) {
+            $this->assertStringContainsString('counter=1', $href, "FAQ link $href drops counter mode");
+        }
+        $this->assertStringNotContainsString('Open my bookings', $page);
+        $this->assertStringNotContainsString('Transaction history', $page);
+        $this->assertStringNotContainsString('Availability calendar', $page);
+    }
+
+    public function test_outside_counter_mode_the_customer_links_stay(): void
+    {
+        $this->actingAsCustomer('customer@gmail.com')->get(route('customer.faq'))
+            ->assertOk()
+            ->assertSee('Open my bookings')
+            ->assertSee('href="' . route('customer.calendar') . '"', false)
+            ->assertSee('href="' . route('customer.transaction-history') . '"', false)
+            ->assertSee('href="' . route('customer.venues') . '#venue-listings"', false);
+    }
+
     public function test_in_app_keeps_the_account_shell(): void
     {
         $this->actingAsCustomer('customer@gmail.com')->get(route('customer.faq', ['in' => 'app']))

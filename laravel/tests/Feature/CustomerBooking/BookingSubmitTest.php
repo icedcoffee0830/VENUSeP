@@ -77,12 +77,12 @@ class BookingSubmitTest extends TestCase
         $this->assertSame($before, DB::table('bookings')->count());
     }
 
-    public function test_an_id_over_8mb_is_refused(): void
+    public function test_an_id_over_7mb_is_refused(): void
     {
         $before = DB::table('bookings')->count();
         $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
-            'id_document' => $this->idFileFrom('id.pdf', str_repeat('x', 8 * 1024 * 1024 + 1)),
-        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'That file is larger than 8MB.']);
+            'id_document' => $this->idFileFrom('id.pdf', str_repeat('x', 7 * 1024 * 1024 + 1)),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'This file is over 7 MB. Choose a smaller photo or a screenshot.']);
         $this->assertSame($before, DB::table('bookings')->count());
     }
 

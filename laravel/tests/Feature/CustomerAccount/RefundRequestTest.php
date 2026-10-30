@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\CustomerAccount;
 
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /* customer/refund-request — eligibility re-checked on the server. */
@@ -44,6 +45,28 @@ class RefundRequestTest extends TestCase
             ->assertSee('id="rr-form"', false)
             ->assertSee('const RR_RESUBMIT = true;', false)
             ->assertSee('"status":"fix"', false);
+    }
+
+    /* Aron, 2026-10-30: a hostel stay booked with refunds on is refundable like a
+       venue booking (booking 28: rafael's paid stay, moved ahead and given the
+       refunds-on snapshot for this test; undone after). */
+    public function test_a_hostel_stay_booked_with_refunds_on_is_refundable(): void
+    {
+        $old = DB::table('hostel_booking_details')->where('booking_id', 28)->first();
+        $oldAllowed = DB::table('bookings')->where('id', 28)->value('refunds_allowed');
+        try {
+            DB::table('hostel_booking_details')->where('booking_id', 28)->update(['check_in_date' => '2027-06-15', 'check_out_date' => '2027-06-17']);
+            DB::table('bookings')->where('id', 28)->update(['refunds_allowed' => 1]);
+            $this->actingAsCustomer('rafael.lim@gmail.com')
+                ->get(route('customer.refund-request', ['booking' => $this->ref(28)]))
+                ->assertOk()
+                ->assertSee('Your refund request')
+                ->assertSee('id="rr-form"', false)
+                ->assertDontSee('Refund not available');
+        } finally {
+            DB::table('bookings')->where('id', 28)->update(['refunds_allowed' => $oldAllowed]);
+            DB::table('hostel_booking_details')->where('booking_id', 28)->update(['check_in_date' => $old->check_in_date, 'check_out_date' => $old->check_out_date]);
+        }
     }
 
     public function test_a_refundable_booking_shows_the_form(): void

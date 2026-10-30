@@ -164,7 +164,7 @@
       <span class="fq-eyebrow"><svg class="fq-icon" width="13" height="13" style="color:var(--gold)"><use href="#fq-i-help"/></svg>Help</span>
       <h1>Frequently asked questions</h1>
       <p>Everything about booking a venue or a hostel bed, the USeP discount, paying, and what happens after you submit.</p>
-      @if (!$fqApp)<a class="fq-back" href="{{ route('customer.venues') }}"><svg class="fq-icon" width="15" height="15"><use href="#fq-i-back"/></svg>Back to venue booking</a>@endif
+      @if (!$fqApp)<a class="fq-back" href="{{ route('customer.venues') . $fqCounterQ }}"><svg class="fq-icon" width="15" height="15"><use href="#fq-i-back"/></svg>Back to venue booking</a>@endif
     </div>
 
     <div class="fq-body">
@@ -221,7 +221,7 @@
             <h3>Still need help?</h3>
             <p>Reach the venue coordination office through your USeP account email, or visit the USeP Cashier &mdash; Venue Reservations Window during office hours. Your booking history shows where every request stands.</p>
           </div>
-          <a class="fq-btn" href="{{ route('customer.booking-history') }}">Open my bookings<svg class="fq-icon" width="15" height="15"><use href="#fq-i-arrow"/></svg></a>
+          @if (!$fqCounterQ)<a class="fq-btn" href="{{ route('customer.booking-history') }}">Open my bookings<svg class="fq-icon" width="15" height="15"><use href="#fq-i-arrow"/></svg></a>@endif
         </div>
 
       </div>
@@ -242,10 +242,12 @@
       <div>
         <h4>Book</h4>
         <div class="fq-footer-links">
-          <a href="{{ route('customer.venues') }}#venue-listings">Browse venues</a>
-          <a href="{{ route('customer.venues') }}#hostel-listings">Hostel beds</a>
+          <a href="{{ route('customer.venues') . $fqCounterQ }}#venue-listings">Browse venues</a>
+          <a href="{{ route('customer.venues') . $fqCounterQ }}#hostel-listings">Hostel beds</a>
+          @if (!$fqCounterQ)
           <a href="{{ route('customer.calendar') }}">Availability calendar</a>
           <a href="{{ route('customer.booking-history') }}">My bookings</a>
+          @endif
         </div>
       </div>
       <div>
@@ -254,7 +256,7 @@
           <a href="#gcash">How to pay by GCash</a>
           <a href="#after">{{ $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy' }}</a>
           <a href="#discount">USeP discount rules</a>
-          <a href="{{ route('customer.transaction-history') }}">Transaction history</a>
+          @if (!$fqCounterQ)<a href="{{ route('customer.transaction-history') }}">Transaction history</a>@endif
         </div>
       </div>
     </div>

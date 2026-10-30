@@ -229,7 +229,7 @@
                                 </div>
                               @endforeach
                             </div>
-                            <p class="rr-hint">Items marked * are needed before your request can be filed. The Official Receipt is needed before the refund can be <strong>paid</strong> &mdash; send it later if you do not have it yet.</p>
+                            <p class="rr-hint">Items marked * are needed before your request can be filed. The Official Receipt is needed before the refund can be <strong>paid</strong> &mdash; send it later if you do not have it yet. Photos or PDFs, up to 7 MB each.</p>
                           </div>
   
                           <div class="rr-section">

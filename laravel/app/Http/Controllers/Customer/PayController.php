@@ -88,7 +88,7 @@ class PayController
         switch ($code) {
             case 'locked':      return ['Waiting for approval', 'Staff are reviewing your ID and reservation. Payment opens here once they approve it.'
                                     . (!empty($b['payToUse']) ? ' Then pay before you check in — here by GCash, or in cash at the front desk.' : '')];
-            case 'await_event': return ['Payment opens after your event', 'This booking is paid after it happens. Payment opens ' . $b['payment']['opensLabel'] . ' and is due by ' . $b['payment']['payByLabel'] . '.'];
+            case 'await_event': return ['Payment opens after your event', 'This booking is paid after it happens. Payment opens the day after your event — pay by ' . customer_pay_by_label($b['payment']) . '.'];
             case 'await_pos':   return ['Waiting for your POS', 'Hostel staff are getting your POS (order of payment) from CEDU. Payment opens here as soon as it is recorded.'];
             case 'confirmed':
             case 'paid_cash':   return ['Paid', 'Your payment is confirmed. Nothing more to do.'];

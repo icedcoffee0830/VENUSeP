@@ -128,6 +128,19 @@ class ReportsTest extends TestCase
         }
     }
 
+    /* The four-quarter window ends at today's quarter whatever the day of the month:
+       "-9 months" from March 31 overflowed to July 1 and skipped Q2. */
+    public function test_the_quarter_window_ends_at_the_current_quarter_on_a_31st(): void
+    {
+        legacy('bookings');
+        $labels = fn (string $day) => array_column(report_quarters(4, strtotime($day)), 'label');
+        $this->assertSame(['Q2 2025', 'Q3 2025', 'Q4 2025', 'Q1 2026'], $labels('2026-03-31'));
+        $this->assertSame(['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026'], $labels('2026-05-31'));
+        $this->assertSame(['Q1 2026', 'Q2 2026', 'Q3 2026', 'Q4 2026'], $labels('2026-12-31'));
+        $this->assertSame(['Q4 2025', 'Q1 2026', 'Q2 2026', 'Q3 2026'], $labels('2026-08-31'));
+        $this->assertSame(['Q1 2026'], array_column(report_quarters(1, strtotime('2026-03-31')), 'label'));   // the dashboard's one quarter
+    }
+
     public function test_staff_sees_the_reports(): void
     {
         $this->actingAsStaff()->get(route('admin.reports'))->assertOk()->assertSee('Quarterly Reports');

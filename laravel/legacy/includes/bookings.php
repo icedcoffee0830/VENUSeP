@@ -595,13 +595,18 @@ function report_base_sql() {
 
 /* The last $count quarters up to and including the current one, oldest first.
    Quarters with no business still appear, as zeroes — a missing quarter would
-   silently compress the x-axis and make a quiet period look like growth. */
-function report_quarters($count = 4) {
+   silently compress the x-axis and make a quiet period look like growth.
+   $now (a timestamp) is "today"; tests pass a fixed date. */
+function report_quarters($count = 4, $now = null) {
     $pdo = venusep_db();
     $out = [];
+    $now = $now === null ? time() : (int) $now;
 
-    /* Build the window first, so empty quarters are present by construction. */
-    $cursor = strtotime(date('Y-m-01', strtotime('-' . (3 * ($count - 1)) . ' months')));
+    /* Build the window first, so empty quarters are present by construction.
+       It starts from the FIRST DAY of the current quarter: "-9 months" from a
+       31st overflows (Mar 31 - 9 months = "Jun 31" = Jul 1) and skips a quarter. */
+    $firstMonth = 3 * ((int) ceil((int) date('n', $now) / 3) - 1) + 1;
+    $cursor = mktime(0, 0, 0, $firstMonth - 3 * ($count - 1), 1, (int) date('Y', $now));
     for ($i = 0; $i < $count; $i++) {
         $y = (int) date('Y', $cursor);
         $q = (int) ceil((int) date('n', $cursor) / 3);

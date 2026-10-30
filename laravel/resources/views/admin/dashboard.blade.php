@@ -926,7 +926,7 @@ tr:hover {
                     <span class="stat-icon"><i class="bi bi-alarm"></i></span>
                     <h3>Payment Overdue</h3>
                     <div class="number" id="statOverdue">–</div>
-                    <div class="info">Slots releasable →</div>
+                    <div class="info">Needs follow-up →</div>
                 </a>
                 <div class="stat-card">
                     <span class="stat-icon"><i class="bi bi-calendar2-check"></i></span>

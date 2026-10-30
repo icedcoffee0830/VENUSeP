@@ -315,6 +315,17 @@ function backup_restore($archivePath, $userId, $userLabel, &$error) {
         $a->extractTo($work, null, true);
         unset($a);
 
+        /* the dump names its database itself (USE / CREATE / DROP DATABASE), and
+           the mysql client follows it — a backup of another copy (the old site's
+           `venusep`, a test copy) would overwrite THAT database, not this one */
+        $cfg = venusep_db_config();
+        $other = backup_dump_other_database($work . '/database.sql', $cfg['name']);
+        if ($other !== null) {
+            $error = 'That backup is of the database "' . $other . '", and this system runs on "' . $cfg['name']
+                   . '". Restoring it would overwrite "' . $other . '", so it was refused.';
+            return null;
+        }
+
         /* 1. the safety copy — no safety copy, no restore */
         $pre = backup_create('pre-restore', $userId, $userLabel, $preErr);
         if ($pre === null) {
@@ -322,8 +333,7 @@ function backup_restore($archivePath, $userId, $userLabel, &$error) {
             return null;
         }
 
-        /* 2. the database (the dump drops and recreates `venusep` itself) */
-        $cfg = venusep_db_config();
+        /* 2. the database (the dump drops and recreates it itself) */
         $err = backup_run([$mysql, '--host=' . $cfg['host'], '--user=' . $cfg['user'], '--default-character-set=utf8mb4'],
                           $work . '/database.sql', null);
         if ($err !== '') {
@@ -351,6 +361,28 @@ function backup_restore($archivePath, $userId, $userLabel, &$error) {
     } finally {
         backup_rmtree($work);
         @rmdir($work);
+    }
+}
+
+/* The first database a dump switches to, creates, drops or alters that is not
+   $expected — or null when every such statement names $expected. Only lines
+   that START with one (mysqldump writes them alone on a line, sometimes inside
+   a version comment), so table data mentioning them is never read as one. */
+function backup_dump_other_database($sqlFile, $expected) {
+    $fh = fopen($sqlFile, 'rb');
+    if ($fh === false) {
+        return '(unreadable database.sql)';
+    }
+    try {
+        while (($line = fgets($fh)) !== false) {
+            if (preg_match('#^(?:/\*!\d+\s+)?(?:(?:CREATE|DROP|ALTER)\s+(?:DATABASE|SCHEMA)\s+(?:/\*!\d+\s+)?(?:IF\s+(?:NOT\s+)?EXISTS\s*)?(?:\*/\s*)?|USE\s+)`?([^`;\s*/]+)#i', $line, $m)
+                && $m[1] !== $expected) {
+                return $m[1];
+            }
+        }
+        return null;
+    } finally {
+        fclose($fh);
     }
 }
 

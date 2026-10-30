@@ -55,6 +55,27 @@ class SettingSwitchesTest extends TestCase
             ->assertOk();
     }
 
+    /* A suspended or demoted admin keeps 'admin' in a session that is still open;
+       the endpoint has no staff middleware to notice, so it must re-read the account. */
+    public function test_discount_refuses_a_suspended_or_demoted_admin_session(): void
+    {
+        $old = $this->setting('discount_percent');
+        $new = $old === '15' ? '16' : '15';
+        $this->actingAsAdmin()->withTestCsrf();
+        try {
+            DB::table('users')->where('email', 'admin@gmail.com')->update(['is_active' => 0]);
+            $this->post(route('admin.discount-save'), ['_token' => 'test-csrf-token', 'percent' => $new, 'reason' => 'suspended'])
+                ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'not_admin']);
+            DB::table('users')->where('email', 'admin@gmail.com')->update(['is_active' => 1, 'account_type' => 'staff']);
+            $this->post(route('admin.discount-save'), ['_token' => 'test-csrf-token', 'percent' => $new, 'reason' => 'demoted'])
+                ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'not_admin']);
+        } finally {
+            DB::table('users')->where('email', 'admin@gmail.com')->update(['is_active' => 1, 'account_type' => 'admin']);
+            DB::table('system_settings')->where('setting_key', 'discount_percent')->update(['setting_value' => $old]);
+        }
+        $this->assertSame($old, $this->setting('discount_percent'));
+    }
+
     /* ---- demo mode ---- */
 
     public function test_demo_mode_refuses_staff_and_guests(): void

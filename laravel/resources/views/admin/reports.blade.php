@@ -787,9 +787,11 @@
             document.querySelector('#totalEvents').textContent = numberFormatter.format(totalEvents);
             document.querySelector('#averageRevenue').textContent = currencyFormatter.format(currentAverageRevenue);
 
+            /* a venue name is typed by an admin: text, never markup */
+            const escHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             document.querySelector('#venueReportRows').innerHTML = venueReport.map((item) => `
                 <tr>
-                    <td><strong>${item.venue}</strong></td>
+                    <td><strong>${escHtml(item.venue)}</strong></td>
                     <td>${numberFormatter.format(item.events)}</td>
                     <td>${numberFormatter.format(item.discounted)}</td>
                     <td>${numberFormatter.format(item.cancelled)}</td>

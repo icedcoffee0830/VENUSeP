@@ -71,6 +71,7 @@
       .ps-kv .k { color: #a5a19a; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
       .ps-kv .v { color: var(--ps-text); font-size: 0.95rem; font-weight: 640; margin-top: 0.15rem; }
       .ps-kv .v.mono { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+      .ps-kv .v:empty::before { color: var(--ps-muted); content: 'Not set'; font-weight: 500; }   /* a venue with no account yet; Edit starts from an empty field */
 
       .ps-control {
         background: #fff;
@@ -220,7 +221,7 @@
         <div class="app-content">
           <div class="container-fluid">
             <div class="ps-grid" id="psGrid">
-@foreach ($gcAccounts as $venue => $acct)
+@foreach ($psCards as $venue => $acct)
 @php $isHostel = $venue === 'USeP Hostel'; @endphp
               <div class="ps-card" data-venue="{{ $venue }}">
                 <div class="ps-venue">
@@ -239,7 +240,11 @@
                 </div>
 
                 <div class="ps-foot">
-                  <button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>
+                  @if ($rsIsAdmin)
+                    <button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>
+                  @else
+                    <span class="rs-lock"><i class="bi bi-lock-fill" aria-hidden="true"></i>Only the administrator can change this</span>
+                  @endif
                 </div>
               </div>
 @endforeach

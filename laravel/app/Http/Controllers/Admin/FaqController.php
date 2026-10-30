@@ -56,7 +56,9 @@ class FaqController
             'fqPolicies' => ['any' => 'Always shown', 'refunds_on' => 'Only when refunds are ON', 'refunds_off' => 'Only when refunds are OFF'],
             'fqTotal' => $fqTotal, 'fqAdded' => $fqAdded, 'fqHidden' => $fqHidden, 'fqChanged' => $fqChanged,
             'REFUNDS_ENABLED' => $REFUNDS_ENABLED, 'DISCOUNT_PERCENT' => $DISCOUNT_PERCENT,
-            'POSTPAY_GRACE_DAYS' => $POSTPAY_GRACE_DAYS, 'HOSTEL_RATES' => $HOSTEL_RATES, 'HOSTEL_CR_LABEL' => $HOSTEL_CR_LABEL,
+            'POSTPAY_GRACE_DAYS' => $POSTPAY_GRACE_DAYS, 'HOSTEL_CR_LABEL' => $HOSTEL_CR_LABEL,
+            /* what each {placeholder} becomes (already escaped) — the "Insert a current value" menu shows the same */
+            'fqValues' => faq_placeholders(),
             /* the editor keeps the stored link; its serializer strips "…/customer/" back off */
             'fqAnswer' => fn ($answer, $forEditor = false) => str_replace(
                 'href="booking-history.php"',

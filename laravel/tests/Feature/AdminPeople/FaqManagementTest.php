@@ -115,6 +115,39 @@ class FaqManagementTest extends TestCase
         $this->assertNull(DB::table('faqs')->where('question', 'Gone?')->first());
     }
 
+    /* Hostel rates are DECIMAL(12,2): {rate_communal}/{rate_private} and the editor's
+       "Insert a current value" menu cut ₱350.50 to ₱350. Centavos show when there are
+       any; a whole-peso rate stays without ".00". */
+    public function test_hostel_rates_keep_their_centavos(): void
+    {
+        $this->assertCommunalRateShows(1350.50, '&#8369;1,350.50');
+    }
+
+    public function test_a_whole_peso_hostel_rate_has_no_centavos(): void
+    {
+        $this->assertCommunalRateShows(500, '&#8369;500');
+    }
+
+    /* One rate per test: legacy() reads the hostel rooms once per process. */
+    private function assertCommunalRateShows(float $rate, string $shown): void
+    {
+        $old = DB::table('hostel_room_details')->where('cr_type', 'communal')->pluck('rate_per_head_per_night', 'room_id')->all();
+        DB::table('hostel_room_details')->where('cr_type', 'communal')->update(['rate_per_head_per_night' => $rate]);
+        $id = DB::table('faqs')->insertGetId(['section_key' => 'cash', 'question' => 'Rate test?', 'policy' => 'any', 'sort_order' => 99,
+            'answer' => 'Communal rate: {rate_communal}.']);
+        try {
+            $this->get(route('customer.faq'))->assertOk()
+                ->assertSee('Communal rate: ' . $shown . '.', false);
+            $this->actingAsStaff()->get(route('admin.faq-management'))->assertOk()
+                ->assertSee('Hostel rate &middot; communal CR<small>' . $shown . ' per head, per night</small>', false);
+        } finally {
+            DB::table('faqs')->where('id', $id)->delete();
+            foreach ($old as $roomId => $oldRate) {
+                DB::table('hostel_room_details')->where('room_id', $roomId)->update(['rate_per_head_per_night' => $oldRate]);
+            }
+        }
+    }
+
     /* The answer format allows "[text](page.php)" and http(s) links (faqs.php). Typed
        HTML stays text on the customer page, and no other scheme becomes a link. */
     public function test_answers_link_http_pages_and_never_run_typed_html(): void

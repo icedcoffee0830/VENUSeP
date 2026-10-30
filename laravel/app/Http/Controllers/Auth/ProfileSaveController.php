@@ -17,6 +17,8 @@ use PDOException;
    CSRF: Laravel's check (an expired page gets the old 400 JSON, bootstrap/app.php). */
 class ProfileSaveController
 {
+    const PHOTO_MAX_BYTES = 7 * 1024 * 1024;
+
     /* pf_reply(): the JSON reply, ending the request like the old exit. */
     private function reply(int $status, array $data): never
     {
@@ -295,6 +297,10 @@ class ProfileSaveController
         $file = $request->files->get('photo');
         if (!$file || $file->getError() !== UPLOAD_ERR_OK) {
             $this->reply(400, ['ok' => false, 'message' => 'Choose a picture to upload.']);
+        }
+        /* 7 MB, the one limit for every upload (Aron, 2026-10-30). */
+        if ($file->getSize() > self::PHOTO_MAX_BYTES) {
+            $this->reply(400, ['ok' => false, 'message' => 'This file is over 7 MB. Choose a smaller photo or a screenshot.']);
         }
         /* The same validator room photos use. PDFs are deliberately NOT accepted. */
         $err = '';

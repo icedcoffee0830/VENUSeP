@@ -178,6 +178,7 @@
 @if ($customerProfile['photo'] !== '')
                   <button class="btn-profile" type="button" id="avatarRemove"><i class="bi bi-trash" aria-hidden="true"></i>Remove</button>
 @endif
+                  <small class="signin-note" id="avatarHint" style="display:block">PNG, JPG or WebP, up to 7 MB.</small>
                   <div class="profile-validation" id="avatarMessage" aria-live="polite"></div>
                 </aside>
 

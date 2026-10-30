@@ -399,6 +399,7 @@
               <button type="button" class="profile-photo-btn" onclick="document.getElementById('vpPhotoInput').click()">{!! $vpPhoto !== '' ? 'Change photo' : 'Add photo' !!}</button>
               <button type="button" class="profile-photo-btn" id="vpPhotoRemove"{!! $vpPhoto !== '' ? '' : ' hidden' !!}>Remove</button>
             </div>
+            <small class="profile-photo-hint" id="vpPhotoHint" style="display:block;color:#6b675f;font-size:.78rem">PNG, JPG or WebP, up to 7 MB.</small>
             <div class="profile-photo-msg" id="vpPhotoMsg" aria-live="polite"></div>
           </aside>
           <article class="settings-panel">

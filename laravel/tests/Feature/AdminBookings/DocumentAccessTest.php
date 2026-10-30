@@ -93,6 +93,22 @@ class DocumentAccessTest extends TestCase
         $this->assertPlain404($this->actingAsCustomer()->get(route('root.valid-id-view', ['booking' => 'VB-2026-158'])));
     }
 
+    /* cacct's night-2 report: a suspended staff session could still open IDs and
+       receipts here (no page guard). The EnforceTwoFactor middleware's
+       staff_session_refresh() now ends that session before this controller runs. */
+    public function test_a_suspended_staff_session_sees_nothing(): void
+    {
+        $this->actingAsStaff()->get(route('root.document-view', ['doc' => 3]))->assertOk();   // still active: allowed
+        \Illuminate\Support\Facades\DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 0]);
+        try {
+            $this->assertPlain404($this->actingAsStaff()->get(route('root.document-view', ['doc' => 3])));
+            $this->assertPlain404($this->actingAsStaff()->get(route('root.valid-id-view', ['booking' => 'VB-2026-158'])));
+            $this->assertFalse(session()->has('user_id'));
+        } finally {
+            \Illuminate\Support\Facades\DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 1]);
+        }
+    }
+
     public function test_viewer_for_a_gcash_receipt_and_a_booking_without_an_id(): void
     {
         $this->actingAsAdmin()->get(route('root.valid-id-view', ['receipt' => 1]))->assertOk()

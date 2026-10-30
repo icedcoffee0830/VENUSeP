@@ -572,7 +572,10 @@ function transaction_rows($customerId = null) {
    A booking counts toward the quarter its EVENT falls in, not the quarter
    it was booked or paid in: a venue's quarter is the business it hosted.
    REVENUE counts only money actually collected (confirmed / paid at the
-   cashier), so an unpaid or overdue booking inflates nothing.
+   cashier), so an unpaid or overdue booking inflates nothing. Collected money
+   stays counted until its refund payout is COMPLETE (`refunded`): a refund
+   requested, in progress or denied has not left USeP (DB-DECISIONS #16 —
+   only a completed payout frees the booking).
    ===================================================================== */
 
 /* One derived table both report queries read: every booking with its event
@@ -581,7 +584,9 @@ function report_base_sql() {
     return "SELECT b.id, b.room_id, b.total_amount, b.discount_percent,
                    b.reservation_status, b.payment_status,
                    COALESCE(vd.start_date, hd.check_in_date) AS event_date,
-                   IF(b.payment_status IN ('confirmed','paid_cash'), b.total_amount, 0) AS collected,
+                   IF(b.payment_status IN ('confirmed','paid_cash','refund_requested','refund_correction',
+                                           'refund_await_or','refund_processing','refund_denied'),
+                      b.total_amount, 0) AS collected,
                    IF(b.reservation_status IN ('cancelled','rejected','released'), 1, 0) AS fell_through
               FROM bookings b
               LEFT JOIN venue_booking_details vd  ON vd.booking_id = b.id
@@ -590,13 +595,18 @@ function report_base_sql() {
 
 /* The last $count quarters up to and including the current one, oldest first.
    Quarters with no business still appear, as zeroes — a missing quarter would
-   silently compress the x-axis and make a quiet period look like growth. */
-function report_quarters($count = 4) {
+   silently compress the x-axis and make a quiet period look like growth.
+   $now (a timestamp) is "today"; tests pass a fixed date. */
+function report_quarters($count = 4, $now = null) {
     $pdo = venusep_db();
     $out = [];
+    $now = $now === null ? time() : (int) $now;
 
-    /* Build the window first, so empty quarters are present by construction. */
-    $cursor = strtotime(date('Y-m-01', strtotime('-' . (3 * ($count - 1)) . ' months')));
+    /* Build the window first, so empty quarters are present by construction.
+       It starts from the FIRST DAY of the current quarter: "-9 months" from a
+       31st overflows (Mar 31 - 9 months = "Jun 31" = Jul 1) and skips a quarter. */
+    $firstMonth = 3 * ((int) ceil((int) date('n', $now) / 3) - 1) + 1;
+    $cursor = mktime(0, 0, 0, $firstMonth - 3 * ($count - 1), 1, (int) date('Y', $now));
     for ($i = 0; $i < $count; $i++) {
         $y = (int) date('Y', $cursor);
         $q = (int) ceil((int) date('n', $cursor) / 3);
@@ -643,10 +653,18 @@ function report_quarters($count = 4) {
 /* Per-venue totals for the breakdown charts and the table.
    Pass a year+quarter to narrow it; omit both for all time.
 
+   EVENTS HELD = approved or completed only: a booking that fell through
+   (cancelled / rejected / released), is still pending review, or whose room
+   was closed (disrupted) is not an event the venue hosted.
+
    EVERY ACTIVE VENUE APPEARS, even with nothing in it. A venue that simply
    vanishes from the breakdown in a quiet quarter reads as "this venue was
    removed", and the donut silently re-proportions around the gap — a quiet
-   quarter and a deleted venue must not look the same. */
+   quarter and a deleted venue must not look the same.
+
+   An INACTIVE venue appears too while it has bookings in the period, marked
+   "(inactive)": the quarter totals count its money and bookings, so dropping
+   its row would leave the donut and the table short of the totals. */
 function report_by_venue($year = null, $quarter = null) {
     $pdo = venusep_db();
     if ($pdo === null) {
@@ -660,8 +678,8 @@ function report_by_venue($year = null, $quarter = null) {
     }
     try {
         $stmt = $pdo->prepare(
-            "SELECT v.name AS venue,
-                    COALESCE(SUM(x.id IS NOT NULL), 0)      AS events,
+            "SELECT IF(v.is_active = 1, v.name, CONCAT(v.name, ' (inactive)')) AS venue,
+                    COALESCE(SUM(x.reservation_status IN ('approved','completed')), 0) AS events,
                     COALESCE(SUM(x.discount_percent > 0), 0) AS discounted,
                     COALESCE(SUM(x.fell_through), 0)         AS cancelled,
                     COALESCE(SUM(x.collected), 0)            AS revenue
@@ -669,8 +687,8 @@ function report_by_venue($year = null, $quarter = null) {
                LEFT JOIN rooms r ON r.venue_id = v.id
                LEFT JOIN (" . report_base_sql() . ") x
                       ON x.room_id = r.id" . $where . "
-              WHERE v.is_active = 1
-              GROUP BY v.id, v.name
+              GROUP BY v.id, v.name, v.is_active
+             HAVING v.is_active = 1 OR COUNT(x.id) > 0
               ORDER BY v.id"
         );
         $stmt->execute($args);

@@ -70,6 +70,21 @@ class PaymentSettingsTest extends TestCase
         }
     }
 
+    /* The hostel's card (a staff GCash account) is picked by venue_type, not by the
+       name "USeP Hostel": a renamed hostel keeps it, and only the hostel has it. */
+    public function test_the_hostel_card_follows_venue_type_not_its_name(): void
+    {
+        DB::beginTransaction();
+        try {
+            DB::table('venues')->where('venue_type', 'hostel')->update(['name' => 'Campus Dormitory']);
+            $html = $this->actingAsAdmin()->get(route('admin.payment-settings'))->assertOk()
+                ->assertSeeInOrder(['<h2>Campus Dormitory</h2>', 'Staff account'], false)->getContent();
+            $this->assertSame(1, substr_count($html, '<span class="ps-kind">Staff account</span>'));
+        } finally {
+            DB::rollBack();
+        }
+    }
+
     public function test_admin_gets_the_gcash_edit_buttons(): void
     {
         $this->actingAsAdmin()->get(route('admin.payment-settings'))->assertOk()

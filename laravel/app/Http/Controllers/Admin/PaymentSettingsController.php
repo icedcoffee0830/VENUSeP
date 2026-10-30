@@ -65,8 +65,15 @@ class PaymentSettingsController
             }
         } catch (PDOException $e) { /* the venues that have one still show */ }
 
+        /* Which cards are the hostel's (a staff GCash account): by venue_type, not
+           by name — a renamed hostel stays the hostel. Cards are keyed by name. */
+        $psHostelVenues = [];
+        try {
+            $psHostelVenues = venusep_db()->query("SELECT name FROM venues WHERE venue_type = 'hostel'")->fetchAll(PDO::FETCH_COLUMN);
+        } catch (PDOException $e) { /* every card reads as a business account */ }
+
         return view('admin.payment-settings', compact(
-            'psCards', 'POSTPAY_GRACE_DAYS', 'rsDetails', 'rsDbOk', 'rsEnabled', 'rsIsAdmin', 'rsCsrf',
+            'psCards', 'psHostelVenues','POSTPAY_GRACE_DAYS', 'rsDetails', 'rsDbOk', 'rsEnabled', 'rsIsAdmin', 'rsCsrf',
             'rsStayRefundable', 'rsOpenRefunds', 'rsLockSeconds', 'rsJustSaved'
         ));
     }

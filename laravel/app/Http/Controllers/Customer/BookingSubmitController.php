@@ -43,6 +43,7 @@ class BookingSubmitController extends Controller
     private const OPENS = '07:00';
     private const CLOSES = '22:00';
     private const MAX_DAYS = 366;
+    private const HHMM = '/^([01]\d|2[0-3]):[0-5]\d$/';   /* a real time of day, "00:00".."23:59" */
 
     private static function reply(int $status, array $data, array $headers = [])
     {
@@ -224,7 +225,7 @@ class BookingSubmitController extends Controller
                 $t = isset($times[$d]) && is_array($times[$d]) ? $times[$d] : [];
                 $s = isset($t['start']) ? (string) $t['start'] : '';
                 $e = isset($t['end'])   ? (string) $t['end']   : '';
-                if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $s) || !preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $e)
+                if (!preg_match(self::HHMM, $s) || !preg_match(self::HHMM, $e)
                     || $e <= $s || $s < self::OPENS || $e > self::CLOSES) {
                     return self::reply(400, ['ok' => false, 'message' => 'Set valid hours for ' . $d . '.']);
                 }

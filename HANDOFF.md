@@ -110,7 +110,7 @@ mp5\php\php.exe artisan venusep:flows` (`--headed` to watch). It resets its own 
    tests. To bring them into the old site: in `C:\xamp5\htdocs\VENUSeP`, run
    `git merge bugfixes` (or push the branch and open a PR).
 
-## 6. Bugs reported by Aron (2026-10-30) — NOT fixed yet
+## 6. Bugs reported by Aron (2026-10-30) — FIXED on night 2 (see §10)
 
 Aron said to record these, not change code. Each is in BOTH the old site and the Laravel copy
 (the port copied behaviour exactly), so fix both, like the `bugfixes` branch did.
@@ -229,24 +229,84 @@ If you are a Claude session continuing this: the flow-tester helper may be resum
 original session; otherwise start a new one in the `lv-flows` worktree with §5 as its brief,
 and keep committing after every step so a usage limit never loses work.
 
-## 10. Night 2 (2026-10-30) — IN PROGRESS: bug fixing + bug hunting (Laravel only)
+## 10. Night 2 (2026-10-30) — DONE: bug fixing + bug hunting (Laravel only)
 
-Aron's decisions and the agents' rules: `C:\xamp5\htdocs\VENUSeP-laravel-helpers\_tools\NIGHT-BRIEF.md`.
-Google sign-in now WORKS in the Laravel copy (git-ignored `laravel/legacy/includes/google-config.php`
-filled in by Aron; redirect URI `http://localhost:8000/customer/google-callback` added in Google Cloud;
-open the site as `localhost:8000`, not 127.0.0.1).
+Everything below is merged into `laravel` (not pushed). PHPUnit: **463 passed** (was 296).
+Browser flows: NOT re-run after round 2 (Aron tests them himself); the 4 flows the new rules
+broke were updated (commit 6d66941) but only syntax-checked.
 
-7 agents, each in its own helper worktree/branch (started from `laravel` at f498aba):
-abook (booking-request bugs 4,6,7,8,9,10 + the §7 fake actions), auth (bugs 1,2,5),
-and bug hunters cbook, cacct, venues, admina, adminb. Flow DBs `venusep_laravel_flows_<area>`,
-ports 8121-8127.
+- **All §6 bugs fixed** (1-10, except Google, which Aron set up himself — it works on
+  `http://localhost:8000`, settings in the git-ignored `laravel/legacy/includes/google-config.php`).
+- **§7 fake actions** (Release slot, Extend deadline, Override, Undo rejection) really save now.
+- **~45 more bugs found and fixed** by 7 hunting agents + a second round of 8 agents. Per-agent
+  reports (what, file:line, test name, choices made): `C:\xamp5\htdocs\VENUSeP-laravel-helpers\_tools\night2-reports\*.md`
+  and `...\_tools\round2-reports\*.md`. Highlights: staff could edit other venues' rooms; a
+  customer name could run script on admin pages and the counter search; backup restore could
+  wipe another database; venue double booking under concurrency (**migration 14**); refund
+  withdraw/resubmit never appeared; quarterly report miscounted Events Held and broke on Mar 31.
+- **Aron's decisions built tonight:** upload limit 7 MB everywhere; Add Venue admin-only and no
+  second hostel venue; hostel bookable at most `hostel_advance_booking_max_days` (7) ahead;
+  admin login has 3 Department cards and staff must pick their own venue; wrong-password limit
+  on both sign-ins and on the counter identity check; current password needed to change email;
+  suspended staff told they're suspended; revenue counts until the refund is paid out;
+  post-pay: due the day after the event, Overdue after the grace days, no Release on post-pay
+  (debt stays), Extend allowed after the event, and **a customer with an Overdue booking can't
+  book online until they pay** (counter staff get a warning but may still book).
+- **Migration 14** (`venusep_migration_14.sql`, repo root of this branch) is applied to every
+  Laravel DB copy, the test snapshot, AND Aron's real `venusep` DB (he ran it 2026-10-30;
+  backup `C:\xamp5\venusep_backup_before_m14.sql`). The next migration is **15**.
+- Demo customers with an Overdue booking (customer@gmail.com, rafael.lim, jmdelacruz, msantos,
+  areyes) now see the "unpaid booking" notice and can't book online — that's the new rule. To
+  test booking use aronerfe0830 / mesionaalexa / nikkaarena.
+- The site also runs through XAMPP Apache (no `artisan serve`):
+  `http://localhost/VENUSeP-laravel/laravel/public/customer/venues` — but Google sign-in only
+  works on `http://localhost:8000` (its redirect URI).
 
-**If the usage limit stopped them — how to resume:**
-1. For each worktree in `C:\xamp5\htdocs\VENUSeP-laravel-helpers\<area>`: `git log --oneline f498aba..HEAD`
-   (finished fixes) and `git status` (half-done work, not committed — finish it or discard it).
-2. In each, run `C:/xamp5/php/php.exe artisan test` from `laravel/`; merge only green branches into
-   `laravel` (`git merge lv-<area>` in `C:\xamp5\htdocs\VENUSeP-laravel`), one at a time, re-running
-   the tests after each merge.
-3. Restart unfinished areas with the brief (same prompt shape: area, worktree, DB, port, task list).
-4. At the end: `run-tests.bat` + full `artisan test` green, then write the morning report here
-   (fixed / choices made where docs were silent / needs Aron / cross-area bugs).
+## 11. TO DO — waiting for Aron's go-ahead (nothing here is started)
+
+1. **Privacy Policy page** (Aron asked 2026-10-30, "don't do it yet").
+   - Why: Google only lets *anyone* sign in once the OAuth app is published ("In
+     production"); showing the VENUSeP name/logo on Google's screen needs a home page + privacy
+     policy link on a real domain (not localhost). Also the Data Privacy Act (RA 10173): the site
+     collects ID photos, names, emails, phone numbers and payment receipts, so a privacy notice is
+     expected anyway.
+   - Build: a public page (e.g. `/privacy`) in the customer layout — what is collected (account,
+     ID image, GCash receipt, booking/payment records, Google profile if used), why, who sees it
+     (USeP venue staff/admins), how long it's kept, how to ask for access/correction/deletion,
+     contact (USeP Data Protection Officer — get the real contact; follow/link USeP's official
+     privacy notice if one exists). Link it from the footer, the sign-up page and the Google
+     button area. Content needs Aron's / USeP's approval before go-live.
+   - Meanwhile (localhost): keep the Google app in **Testing** and add teammates/teacher/panel as
+     test users (Google Auth Platform → Audience → Test users).
+2. **Leftover post-pay wording** — still says "pay within 3 days" / shows the grace-end date
+   instead of "pay by the day after your event": `customer/room-reservation.blade.php` (~1205,
+   1405, 1798, 1801, 1825, 1828, 2040) + the JS `payPolicyFor` label / `payment_policy_for()` in
+   `legacy/includes/refund-policy.php` (also used by the counter reply in
+   `BookingCreateController` ~275, 476), `customer/venue-booking.blade.php:519`,
+   `legacy/includes/receipt-emails.php:154-159` (emails), `BookingDetailsController.php:103`,
+   `admin/payment-settings.blade.php:184,357`. Staff-side labels keep the grace date.
+3. **FAQ answer links in counter mode:** `faq_answer_html` / `faq_link_url`
+   (`legacy/includes/faqs.php` ~154-185) drop `?counter=1`, so counter staff clicking "your
+   booking history" in an answer land on customer sign-in. Render customer-only targets as plain
+   text in counter mode.
+4. **Small recommendations not yet approved** (recommended: yes to all):
+   - hide "Edit Details" (venue cards) and the room "Reopen" link from staff on other venues;
+   - venue-form "Add Venue" page (no id) sends staff back to Venue Management;
+   - two booking submits within milliseconds can deadlock (MySQL 1213) and show "Something went
+     wrong" — call `sp_expire_due_bookings` before `beginTransaction()` or map 40001 to "That
+     slot was just taken, try again";
+   - **migration 15:** `sp_assign_bed` runs its own START TRANSACTION, silently committing the
+     caller's half-done hostel booking — remove it and let the caller own the transaction; also
+     make the maintenance re-check in `sp_add_venue_slot` a locking read.
+5. **Run the browser flows** (`run-tests.bat`) — not run since round 2.
+6. **Old site:** none of tonight's fixes are in the plain-PHP site (branch `Aron`) — Laravel only,
+   by Aron's decision. The first night's old-site fixes sit on branch `bugfixes`, unmerged.
+7. **Push / merge:** nothing pushed. `laravel` exists only on this laptop. Push when Aron says.
+8. **Clean-up:** helper worktrees in `C:\xamp5\htdocs\VENUSeP-laravel-helpers\` and their `lv-*`
+   branches are all merged into `laravel` and can be deleted; the `venusep_laravel_flows_*` and
+   `venusep_laravel_test_*` DB copies too. Loosen `C:\xamp5\htdocs\VENUSeP\.claude\settings.local.json`
+   when the overnight rules aren't wanted any more.
+9. **Later (decided, not now):** staff only *see* their own venue's lists/calendar/details —
+   with the separate staff UI. The shrinking phase (legacy includes -> Laravel classes).
+   Code-size notes: `legacy/includes/bookings.php` ~1,100 lines and
+   `admin/booking-request.blade.php` ~1,380 lines — split when touched next.

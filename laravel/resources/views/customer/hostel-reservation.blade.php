@@ -451,7 +451,8 @@ let state = {
 
 /* ---------- helpers ---------- */
 function isoOf(dt){ return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
-function peso(n){ return '₱' + Number(n).toLocaleString('en-PH'); }
+/* "1,500" for whole pesos, "1,500.50" with centavos — never "1,500.5" (= usep_peso() in pricing.php) */
+function peso(n){ const v=Math.round(Number(n)*100)/100; return '₱' + v.toLocaleString('en-PH', v%1 ? {minimumFractionDigits:2, maximumFractionDigits:2} : {maximumFractionDigits:0}); }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
 function fmtShort(d){ if(!d) return '—'; return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }

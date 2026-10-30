@@ -20,6 +20,12 @@ class VenueFormController extends Controller
         $venueFormRow = $venueId ? vp_venue_row($venueId) : null;
         if ($venueFormRow === null) $venueId = 0;   // unknown id — behaves like Add
 
+        /* Adding a venue is admin-only (Aron 2026-10-30; venue-save refuses it too),
+           so staff are sent back to the list instead of a form they can't save. */
+        if ($venueId === 0 && !admin_is_admin()) {
+            return redirect()->route('admin.venue-management');
+        }
+
         /* ASSIGNED STAFF (2026-10-27): the real staff.venue_id rows. Every staff member
            handles exactly one venue, so the picker MOVES people here from the venue
            they handle now. Nobody can be removed into "no venue". Only an admin may

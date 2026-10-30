@@ -280,8 +280,17 @@ broke were updated (commit 6d66941) but only syntax-checked.
      test users (Google Auth Platform → Audience → Test users).
 2. **DONE (round 4, merged 2026-10-30):** customers are told "pay by the day after your event"
    everywhere; staff keep the "Overdue after" date. Dashboard "Payment Overdue" card says "Needs
-   follow-up". Still open (needs Aron's OK): the seeded FAQ answers in the DB still say "due within
-   {grace_days} days" — content, edit in FAQ Management. Report: `helpers/_tools/round4-reports/cbook.md`.
+   follow-up". Report: `helpers/_tools/round4-reports/cbook.md`.
+   **LEFT FOR THE FINAL PREP DAYS (Aron will do it himself in Admin → FAQ Management, no migration):**
+   two FAQ answers stored in the DB still give the old "due within {grace_days} days" rule:
+   - Booking → "When do I have to pay?" — suggested: "**After your event, not before.** Staff
+     approve your ID and reservation first; that holds your slot. Payment opens the day after your
+     last booked day — **please pay by then**, by GCash or cash at the venue office. A booking still
+     unpaid {grace_days} days later is marked **overdue**: it can still be paid, but you can't book
+     again until it is settled."
+   - Cash → "Can I pay in cash instead of GCash?" — end with "…you do this after the event, by the
+     day after your last booked day."
+   - Keep `{grace_days}` as the live value (FAQ editor → "Insert a current value"), don't type "3".
 3. **DONE (round 4):** FAQ answer links in counter mode — customer-only targets become plain text,
    booking-page links keep `?counter=1`. Phone check: only fix was the overdue notice's tap area.
 4. **DONE (round 3, merged 2026-10-30):** staff no longer see Edit Details / Reopen on other venues;

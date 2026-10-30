@@ -561,8 +561,10 @@
            system are `completed`, and offering them the live queue's buttons
            would invite staff to act on something that is already over. An open
            refund is the exception: the booking is cancelled, but the claim it
-           was cancelled for can still be decided. */
-        if (CLOSED_RES.includes(cur.res) && !OPEN_REFUND.includes(cur.pay)) {
+           was cancelled for can still be decided. So is an overdue payment on a
+           completed (post-pay) booking: its deadline can be extended (Aron, 2026-10-30). */
+        const overdueAfterEvent = cur.res === 'completed' && cur.pay === 'overdue';
+        if (CLOSED_RES.includes(cur.res) && !OPEN_REFUND.includes(cur.pay) && !overdueAfterEvent) {
           return `<span class="none">${esc(resBadge(cur.res).t)} &middot; this booking is closed &mdash; nothing left to act on</span>`;
         }
         if (cur.res === 'disrupted') {
@@ -576,8 +578,8 @@
             : `<button class="br-btn br-btn-primary" onclick="approveIdRes(false)">Approve ID &amp; reservation</button>`)
           + `<button class="br-btn" onclick="rejectRequest()">Reject request</button>`;
         /* A post-pay booking is never released: its event already happened (Aron, 2026-10-30). */
-        if (cur.pay === 'overdue') return cur.postpay
-            ? `<button class="br-btn br-btn-primary" onclick="extendDeadline()">Extend 48 h</button>`
+        if (cur.pay === 'overdue') return cur.postpay || overdueAfterEvent
+            ?`<button class="br-btn br-btn-primary" onclick="extendDeadline()">Extend 48 h</button>`
             : `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
         if (OPEN_REFUND.includes(cur.pay)) return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button><button class="br-btn" onclick="openAction('fix')">Return for correction</button><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
         /* PAY TO USE (2026-10-27): no bed until the stay is paid. A receipt

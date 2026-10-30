@@ -522,9 +522,11 @@ class BookingActionController extends Controller
             break;
         }
 
-        /* ---- OVERDUE: give the customer 48 more hours from now. ---- */
+        /* ---- OVERDUE: give the customer 48 more hours from now. A post-pay
+                booking is usually already `completed` when it goes overdue (its
+                event is over), and that one can be extended too (Aron, 2026-10-30). ---- */
         case 'extend_deadline': {
-            if ($bk['reservation_status'] !== 'approved' || $bk['payment_status'] !== 'overdue') {
+            if (!in_array($bk['reservation_status'], ['approved', 'completed'], true) || $bk['payment_status'] !== 'overdue') {
                 $this->reply(409, ['ok' => false, 'message' => 'Only an overdue payment can be extended.']);
             }
             $until = $pdo->query('SELECT DATE_ADD(NOW(), INTERVAL 48 HOUR)')->fetchColumn();

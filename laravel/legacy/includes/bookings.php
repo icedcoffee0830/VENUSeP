@@ -660,7 +660,11 @@ function report_quarters($count = 4, $now = null) {
    EVERY ACTIVE VENUE APPEARS, even with nothing in it. A venue that simply
    vanishes from the breakdown in a quiet quarter reads as "this venue was
    removed", and the donut silently re-proportions around the gap — a quiet
-   quarter and a deleted venue must not look the same. */
+   quarter and a deleted venue must not look the same.
+
+   An INACTIVE venue appears too while it has bookings in the period, marked
+   "(inactive)": the quarter totals count its money and bookings, so dropping
+   its row would leave the donut and the table short of the totals. */
 function report_by_venue($year = null, $quarter = null) {
     $pdo = venusep_db();
     if ($pdo === null) {
@@ -674,7 +678,7 @@ function report_by_venue($year = null, $quarter = null) {
     }
     try {
         $stmt = $pdo->prepare(
-            "SELECT v.name AS venue,
+            "SELECT IF(v.is_active = 1, v.name, CONCAT(v.name, ' (inactive)')) AS venue,
                     COALESCE(SUM(x.reservation_status IN ('approved','completed')), 0) AS events,
                     COALESCE(SUM(x.discount_percent > 0), 0) AS discounted,
                     COALESCE(SUM(x.fell_through), 0)         AS cancelled,
@@ -683,8 +687,8 @@ function report_by_venue($year = null, $quarter = null) {
                LEFT JOIN rooms r ON r.venue_id = v.id
                LEFT JOIN (" . report_base_sql() . ") x
                       ON x.room_id = r.id" . $where . "
-              WHERE v.is_active = 1
-              GROUP BY v.id, v.name
+              GROUP BY v.id, v.name, v.is_active
+             HAVING v.is_active = 1 OR COUNT(x.id) > 0
               ORDER BY v.id"
         );
         $stmt->execute($args);

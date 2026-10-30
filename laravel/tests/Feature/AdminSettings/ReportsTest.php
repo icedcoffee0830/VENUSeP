@@ -141,6 +141,38 @@ class ReportsTest extends TestCase
         $this->assertSame(['Q1 2026'], array_column(report_quarters(1, strtotime('2026-03-31')), 'label'));   // the dashboard's one quarter
     }
 
+    /* The quarter totals count every booking, so a venue made inactive keeps its row
+       (marked) while it has bookings in the period: the per-venue rows add up to the
+       totals. A quiet inactive venue still stays out. */
+    public function test_an_inactive_venue_with_bookings_keeps_its_row_so_the_venues_add_up(): void
+    {
+        legacy('bookings');
+        DB::beginTransaction();
+        try {
+            $mk = function (string $code) {
+                $v = DB::table('venues')->insertGetId(['venue_code' => $code, 'name' => 'Old Hall ' . $code,
+                    'venue_type' => 'event', 'description' => 'test', 'is_active' => 1]);
+                DB::table('rooms')->insert(['venue_id' => $v, 'room_code' => $code, 'name' => 'Old room', 'room_type' => 'event']);
+                return $v;
+            };
+            $busy = $mk('ADMINA-OLD1');
+            $quiet = $mk('ADMINA-OLD2');
+            $this->addBooking('ADMINA-OLD1', now()->toDateString(), 'approved', 'confirmed', 4321);
+            DB::table('venues')->whereIn('id', [$busy, $quiet])->update(['is_active' => 0]);
+
+            $rows = report_by_venue((int) now()->year, now()->quarter);
+            $names = array_column($rows, 'venue');
+            $this->assertContains('Old Hall ADMINA-OLD1 (inactive)', $names);
+            $this->assertNotContains('Old Hall ADMINA-OLD2 (inactive)', $names);
+            $this->assertNotContains('Old Hall ADMINA-OLD2', $names);
+            $this->assertEqualsWithDelta((float) report_quarters(1)[0]['revenue'],
+                array_sum(array_map('floatval', array_column($rows, 'revenue'))), 0.001, 'venue revenues add up to the quarter');
+            $this->assertSame((int) DB::table('venues')->where('is_active', 1)->count() + 1, count($rows));
+        } finally {
+            DB::rollBack();
+        }
+    }
+
     public function test_staff_sees_the_reports(): void
     {
         $this->actingAsStaff()->get(route('admin.reports'))->assertOk()->assertSee('Quarterly Reports');

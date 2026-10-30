@@ -588,7 +588,7 @@
             <p class="lp-card-meta">up to {{ number_format((int) $room['capacity']) }} guests</p>
             {!! $status !!}
             <p class="lp-card-desc">{{ $room['description'] }}</p>
-            <div class="lp-card-price">{!! usep_price_html((int) $room['fee'], $isUsep, ' per day') !!}</div>
+            <div class="lp-card-price">{!! usep_price_html((float) $room['fee'], $isUsep, ' per day') !!}</div>
           </div>
         </a>
 @endforeach
@@ -637,7 +637,7 @@
           {!! LP::photoBlock($room['id'], $crType === 'private' ? 'private' : 'bunk') !!}
           <div class="lp-card-body">
             <h3>{{ $room['name'] }}</h3>
-            <p class="lp-card-meta">{{ (int) $room['beds'] }} beds &middot; {!! usep_price_html((int) $room['rate'], $isUsep, ' per head, per night') !!}</p>
+            <p class="lp-card-meta">{{ (int) $room['beds'] }} beds &middot; {!! usep_price_html((float) $room['rate'], $isUsep, ' per head, per night') !!}</p>
             <span class="lp-free {{ $closed ? 'lp-free-closed' : (!$free ? 'lp-free-no' : 'lp-free-yes') }}">
               <i></i>
               {{ $closed ? 'Closed for maintenance tonight' : (!$free ? 'No beds free tonight' : $free . ' of ' . (int) $room['beds'] . ' beds free tonight') }}

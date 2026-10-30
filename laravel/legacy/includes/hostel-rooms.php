@@ -75,7 +75,7 @@ $hrRoomRows = $hrPdo->query(
 $HOSTEL_RATES = [];
 foreach ($hrRoomRows as $r) {
   if ($r['cr_type'] !== null && !isset($HOSTEL_RATES[$r['cr_type']])) {
-    $HOSTEL_RATES[$r['cr_type']] = (int) $r['rate_per_head_per_night'];
+    $HOSTEL_RATES[$r['cr_type']] = (float) $r['rate_per_head_per_night'];
   }
 }
 
@@ -143,7 +143,7 @@ foreach ($hrRoomRows as $r) {
     'venue'       => $r['venue_name'],
     'active'      => (bool) $r['is_active'],     // catalog visibility — admin only reads this; customer pages never see a false row
     'cr_type'     => $r['cr_type'],
-    'rate'        => (int) $r['rate_per_head_per_night'],
+    'rate'        => (float) $r['rate_per_head_per_night'],   // to the centavo, as charged
     'checkIn'     => $r['check_in_time'] !== null ? substr($r['check_in_time'], 0, 5) : '14:00',    // 'HH:MM'
     'checkOut'    => $r['check_out_time'] !== null ? substr($r['check_out_time'], 0, 5) : '12:00',
     'beds'        => (int) $r['bed_count'],

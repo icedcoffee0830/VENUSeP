@@ -292,7 +292,7 @@
           <h3>{{ $r['name'] }}</h3>
           <p class="bk-more-meta">{{ $r['venue'] }} &middot; up to {{ number_format((int) $r['capacity']) }} guests</p>
           {!! $status !!}
-          <p class="bk-more-price">{!! usep_price_html((int) $r['fee'], $mrUsep, ' per day') !!}</p>
+          <p class="bk-more-price">{!! usep_price_html((float) $r['fee'], $mrUsep, ' per day') !!}</p>
         </div>
       </a>
 @endforeach

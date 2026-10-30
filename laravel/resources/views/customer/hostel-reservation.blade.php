@@ -290,7 +290,7 @@
         {!! RR::morePic($r['id'], $r['cr_type'] === 'private' ? 'private' : 'bunk') !!}
         <div class="bk-more-body">
           <h3>{{ $r['name'] }}</h3>
-          <p class="bk-more-meta">{{ (int) $r['beds'] }} beds &middot; {!! usep_price_html((int) $r['rate'], $mrUsep, ' per head, per night') !!}</p>
+          <p class="bk-more-meta">{{ (int) $r['beds'] }} beds &middot; {!! usep_price_html((float) $r['rate'], $mrUsep, ' per head, per night') !!}</p>
           <span class="bk-more-free {{ $closed ? 'is-closed' : (!$free ? 'is-none' : '') }}"><i></i>{{ $closed ? 'Closed for maintenance tonight' : (!$free ? 'No beds free tonight' : $free . ' of ' . (int) $r['beds'] . ' beds free tonight') }}</span>
         </div>
       </a>

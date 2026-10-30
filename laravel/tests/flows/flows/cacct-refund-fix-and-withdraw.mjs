@@ -94,8 +94,12 @@ export default {
       const btn = row(page).locator('.booking-action-withdraw', { hasText: 'Withdraw request' });
       await expect.visible(btn, 'no "Withdraw request" action on the open refund');
       await btn.click();
+      // the withdraw is a fetch, then a reload: wait for both, not for the page that is already loaded
+      const answer = page.waitForResponse((r) => r.url().includes('/customer/refund-submit') && r.request().method() === 'POST');
+      const reloaded = page.waitForEvent('load');
       await page.locator('.vz-modal .vz-ok').click();
-      await page.waitForLoadState('load');
+      expect.equal((await answer).status(), 200, 'POST /customer/refund-submit (withdraw) status');
+      await reloaded;
       await expect.visible(row(page), `${s.ref} is not listed after withdrawing`);
       const rf = await dbOne(`SELECT refund_status, withdrawn_at FROM refunds WHERE booking_id = ? ORDER BY id DESC LIMIT 1`, [BOOKING]);
       expect.equal(rf.refund_status, 'withdrawn', 'refunds.refund_status');

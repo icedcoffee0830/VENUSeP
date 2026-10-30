@@ -289,15 +289,12 @@ broke were updated (commit 6d66941) but only syntax-checked.
    (`legacy/includes/faqs.php` ~154-185) drop `?counter=1`, so counter staff clicking "your
    booking history" in an answer land on customer sign-in. Render customer-only targets as plain
    text in counter mode.
-4. **Small recommendations not yet approved** (recommended: yes to all):
-   - hide "Edit Details" (venue cards) and the room "Reopen" link from staff on other venues;
-   - venue-form "Add Venue" page (no id) sends staff back to Venue Management;
-   - two booking submits within milliseconds can deadlock (MySQL 1213) and show "Something went
-     wrong" — call `sp_expire_due_bookings` before `beginTransaction()` or map 40001 to "That
-     slot was just taken, try again";
-   - **migration 15:** `sp_assign_bed` runs its own START TRANSACTION, silently committing the
-     caller's half-done hostel booking — remove it and let the caller own the transaction; also
-     make the maintenance re-check in `sp_add_venue_slot` a locking read.
+4. **DONE (round 3, merged 2026-10-30):** staff no longer see Edit Details / Reopen on other venues;
+   Add Venue page sends staff back; a deadlock between two submits is a friendly 409; **migration 15**
+   (`venusep_migration_15.sql`: sp_assign_bed leaves the transaction to the caller, maintenance
+   re-check is a locking read, deadline expiry runs before the booking transaction). Applied to the
+   Laravel DB copies + snapshot. **Aron must still run migration 15 on the real `venusep` DB** (cmd,
+   backup first). Report: `helpers/_tools/round3-reports/abook.md`.
 5. **Run the browser flows** (`run-tests.bat`) — not run since round 2.
 6. **Old site:** none of tonight's fixes are in the plain-PHP site (branch `Aron`) — Laravel only,
    by Aron's decision. The first night's old-site fixes sit on branch `bugfixes`, unmerged.

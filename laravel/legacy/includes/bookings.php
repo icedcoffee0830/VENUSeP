@@ -299,6 +299,7 @@ function booking_shape(array $row) {
         if ($b['payment']['payByTs'] <= strtotime('+' . postpay_grace_days() . ' days 23:59:59', $lastDay)) {
             $b['payment']['payByLabel'] = date('M j, Y', strtotime('+1 day', $lastDay));
         }
+        $b['payment']['askByLabel'] = $b['payment']['payByLabel'];   /* customer_pay_by_label(): the extended date too */
     }
 
     /* WHY a released booking was released, in plain words (2026-10-27). A

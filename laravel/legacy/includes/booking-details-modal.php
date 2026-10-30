@@ -107,7 +107,7 @@ $bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route(
             <div class="bdm-row"><span>Room price</span><span>${e(m.roomPrice)}</span></div>
             ${m.discount ? `<div class="bdm-row"><span>USeP discount (${e(m.discountPercent)}%)</span><span>${e(m.discount)}</span></div>` : ''}
             <div class="bdm-row bdm-total"><span>Total</span><span>${e(m.total)}</span></div>
-            <div class="bdm-grid" style="margin-top:10px">${kv('Method', m.method)}${kv('Status', m.paymentStatus)}${kv('Pay by', m.payBy)}${kv('Paid on', m.paidOn)}</div>
+            <div class="bdm-grid" style="margin-top:10px">${kv('Method', m.method)}${kv('Status', m.paymentStatus)}${kv('Pay by', m.payBy)}${kv('Overdue after', m.overdueAfter)}${kv('Paid on', m.paidOn)}</div>
             ${d.gcash ? `<div class="bdm-gcash" style="margin-top:12px">
                 <a href="<?php echo e(route('root.valid-id-view')); ?>?receipt=${d.gcash.imageId}" title="Open the uploaded receipt"><img src="<?php echo e(route('root.document-view')); ?>?receipt=${d.gcash.imageId}" alt="GCash receipt"
                    onerror="this.closest('a').outerHTML='<span class=&quot;bdm-noimg&quot;>Image not on file</span>'"></a>

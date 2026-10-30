@@ -24,7 +24,7 @@ use Throwable;
        account: customer_id
        walkin : walkin_name, walkin_phone, walkin_email (or walkin_no_email=1)[, walkin_address]
      id_checked=1, usep_id=0|1
-   Replies with JSON: { ok, reference, bookingId, payBy }
+   Replies with JSON: { ok, reference, bookingId, payBy, overdueAfter (post-pay venue only) }
 
    NO ID FILE (staff looked at the ID; the judgement goes in the timeline).
    THE DISCOUNT IS GRANTED HERE (staff saw the ID). IT IS APPROVED
@@ -446,11 +446,12 @@ class BookingCreateController extends Controller
         $discount  = round($roomPrice * $pct) / 100;
         $total     = $roomPrice - $discount;
         $method    = $c['method'];
+        $policy    = payment_policy_for($c['refundsAllowed'], $slots[0]['date'], $slots[count($slots) - 1]['date']);
+        $postpay   = $policy['policy'] === 'postpay';
 
         /* DEMO MODE — validated exactly as above, then recorded in the session. */
         if (demo_mode_on()) {
             $days   = count($slots);
-            $policy = payment_policy_for($c['refundsAllowed'], $slots[0]['date'], $slots[count($slots) - 1]['date']);
             $row = demo_add_booking([
                 'type' => 'venue', 'customerId' => $c['customerId'], 'customerName' => $c['bookerName'],
                 'customerEmail' => '', 'customerPhone' => (string) ($request->post('walkin_phone') ?? ''),
@@ -467,7 +468,8 @@ class BookingCreateController extends Controller
                 'payment' => $policy, 'beds' => 0, 'nights' => 0,
             ]);
             $this->reply(200, ['ok' => true, 'demo' => true, 'bookingId' => $row['id'],
-                'reference' => $row['bookingId'], 'payBy' => $policy['payByLabel'],
+                'reference' => $row['bookingId'], 'payBy' => customer_pay_by_label($policy),
+                'overdueAfter' => $postpay ? $policy['payByLabel'] : null,
                 'message' => 'Booking created (demo mode — nothing was saved).']);
         }
 
@@ -554,14 +556,17 @@ class BookingCreateController extends Controller
             $row = ['submitted_at' => null, 'current_deadline_at' => null];
         }
 
+        /* Read out at the counter to staff AND customer: post-pay is due the
+           day after the event (customer_pay_by_label); the stored deadline is
+           when it turns Overdue. */
+        $deadline = $row['current_deadline_at'] ? date('M j, Y', strtotime($row['current_deadline_at'])) : '—';
         $this->reply(200, [
-            'ok'        => true,
-            'bookingId' => $bookingId,
-            'reference' => booking_reference($bookingId, $row['submitted_at']),
-            'payBy'     => $row['current_deadline_at']
-                            ? date('M j, Y', strtotime($row['current_deadline_at']))
-                            : '—',
-            'message'   => 'Booking created and approved.',
+            'ok'           => true,
+            'bookingId'    => $bookingId,
+            'reference'    => booking_reference($bookingId, $row['submitted_at']),
+            'payBy'        => $postpay ? customer_pay_by_label($policy) : $deadline,
+            'overdueAfter' => $postpay ? $deadline : null,
+            'message'      => 'Booking created and approved.',
         ]);
     }
 }

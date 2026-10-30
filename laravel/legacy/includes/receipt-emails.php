@@ -151,7 +151,7 @@ function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
         $how = 'Hostel staff get your POS (order of payment) from CEDU; payment opens then, in cash at the front desk. Bring this reference: ' . $ref . '.';
     } elseif ($b['payment']['policy'] === 'postpay') {
         $heading = $b['type'] === 'hostel' ? 'Pay after your stay' : 'Pay after your event';
-        $how = 'Payment opens ' . bh_e($b['payment']['opensLabel']) . ' and is due by ' . bh_e($b['payment']['payByLabel'])
+        $how = 'Payment opens ' . bh_e($b['payment']['opensLabel']) . ' &mdash; pay by ' . bh_e(customer_pay_by_label($b['payment']))
              . '. Pay <strong style="color:#1d1214;">' . bh_e($due) . '</strong> in cash at the counter and bring this reference: ' . $ref . '.';
     } else {
         $heading = 'Pay by ' . $b['payment']['payByLabel'];

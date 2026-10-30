@@ -241,8 +241,7 @@ export default {
       s.newName = 'Flow Staff ' + tag.slice(-6);
       const venue = await dbOne(`SELECT id FROM venues WHERE name = ?`, [GCASH_VENUE]);
 
-      // the FAQ page's own reload after the save (step 8) can abort this navigation: retry once
-      await page.goto(ctx.url('/admin/staff')).catch(() => page.goto(ctx.url('/admin/staff')));
+      await page.goto(ctx.url('/admin/staff'));
       await page.getByRole('link', { name: 'Add account' }).click();
       await expect.url(page, /\/admin\/admin-register/);
       await page.locator('input[name="account_role"][value="staff"]').check();
@@ -255,6 +254,8 @@ export default {
       await page.locator('#adminTerms').check();
       await page.getByRole('button', { name: 'Create Account' }).click();
       await expect.text(page, 'Staff account created');
+      // the page goes back to the dashboard by itself ~1s later; going elsewhere first gets cancelled by it
+      await page.waitForURL(/\/admin\/dashboard/);
 
       const u = await dbOne(`SELECT u.id, u.account_type, u.is_active, s.venue_id, s.full_name FROM users u JOIN staff s ON s.user_id = u.id WHERE u.email = ?`, [s.newEmail]);
       expect.ok(u, 'no users/staff row for the new account');

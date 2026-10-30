@@ -1,7 +1,7 @@
 // Flow — the staff actions on admin/booking-request fixed on 2026-10-30.
 // A. staff extend an OVERDUE booking's deadline (the snapshot has post-pay
 //    bookings that are overdue) — the new timeline entry names the staff member
-//    and survives a reload — and release another overdue booking's slot.
+//    and survives a reload — and a post-pay overdue booking offers no Release.
 // B. the customer of the extended booking uploads a GCash receipt for the wrong
 //    amount → staff reject it with a reason from the list + a note → the
 //    customer's bell shows that reason → staff UNDO the rejection (under review
@@ -28,7 +28,7 @@ const ref13 = (salt) => String(1000000000000 + ((Date.now() + salt * 7919) % 900
 
 export default {
   name: 'abook-staff-actions',
-  title: 'Extend / release an overdue booking, reject a receipt with a reason, undo, override, check-in date rule',
+  title: 'Extend an overdue booking (no Release on post-pay), reject a receipt with a reason, undo, override, check-in date rule',
 
   async run(ctx) {
     const { step, expect, dbOne } = ctx;
@@ -36,7 +36,7 @@ export default {
     const open = (page, ref) => page.goto(ctx.url('/admin/booking-request?id=' + encodeURIComponent(ref)));
     const lastEntry = (page) => page.locator('.br-tl li.hi');
 
-    /* ================= A. overdue: extend one, release another ================= */
+    /* ================= A. overdue: extend one; no Release on post-pay ================= */
 
     await step('Staff sign in; two overdue bookings at their venue are picked', async () => {
       s.staff = await ctx.loginStaff(STAFF);
@@ -50,7 +50,7 @@ export default {
          ORDER BY b.id LIMIT 1`, [s.a.id]);
       expect.ok(s.b, 'no second overdue booking at venue 1');
       s.refA = refOf(s.a); s.refB = refOf(s.b);
-      ctx.note(`extend ${s.refA} (customer ${s.a.email}), release ${s.refB}`);
+      ctx.note(`extend ${s.refA} (customer ${s.a.email}), no release on ${s.refB}`);
     });
 
     await step('Extend 48 h: payment reopens, the timeline names the staff member', async () => {
@@ -76,20 +76,17 @@ export default {
       await expect.text(page, /Pay-by deadline extended 48 hours/);
     });
 
-    await step('Release the slot of the other overdue booking (after a confirmation)', async () => {
+    /* Both overdue bookings at venue 1 in the snapshot are post-pay (event done, refunds off):
+       Aron decided (2026-10-30) a post-pay debt is never released, only extended. The server
+       refusal (409) is covered by ReceiptReviewActionsTest::test_release_slot_refuses_a_post_pay_booking. */
+    await step('A post-pay overdue booking offers no Release (the debt stays on record)', async () => {
       const page = s.staff;
       await open(page, s.refB);
-      await page.getByRole('button', { name: 'Release the slot' }).click();
-      const ok = page.locator('.vz-modal [data-vz="ok"]');
-      await expect.visible(ok, 'no "Release the slot?" confirmation');
-      await ok.click();
-      await expect.text(page, /this booking is closed/, 20_000);
-      const b = await dbOne(`SELECT reservation_status, payment_status FROM bookings WHERE id = ?`, [s.b.id]);
-      expect.equal(b.reservation_status, 'released', 'reservation_status');
-      expect.equal(b.payment_status, 'expired', 'payment_status');
-      const free = await dbOne(`SELECT COUNT(*) AS n FROM venue_booking_slots WHERE booking_id = ? AND released_at IS NULL`, [s.b.id]);
-      expect.equal(free.n, 0, 'held slots still active');
-      await expect.text(page, /Payment overdue; the slot was released by staff/);
+      await expect.text(page, 'Payment overdue');
+      expect.equal(await page.getByRole('button', { name: 'Release the slot' }).count(), 0, 'Release button shown on a post-pay booking');
+      await expect.visible(page.getByRole('button', { name: 'Extend 48 h' }), 'no Extend button on the overdue booking');
+      const b = await dbOne(`SELECT payment_status FROM bookings WHERE id = ?`, [s.b.id]);
+      expect.equal(b.payment_status, 'overdue', 'payment_status');
     });
 
     /* ================= B. reject with a reason, undo, override ================= */

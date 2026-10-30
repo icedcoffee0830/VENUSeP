@@ -14,8 +14,8 @@
 // answers it 403, so the hostel steps run as admin@gmail.com. Refunds stay OFF
 // (the snapshot default), so every booking ticks "non-refundable".
 
-const CUSTOMER = 'rafael.lim@gmail.com';      // Rafael Lim — non-USeP, no authenticator
-const CUSTOMER_NAME = 'Rafael Lim';
+const CUSTOMER = 'nikkaarena@gmail.com';    // Nikka Andrea — no authenticator, no overdue booking (an overdue one blocks new bookings)
+const CUSTOMER_NAME = 'Nikka Andrea';
 const STAFF = 'staff@gmail.com';              // venue 1 (Bahay Alumni)
 const HOSTEL_ROOM = 'h1';                     // Hostel Room 1 — part A
 const COUNTER_HOSTEL_ROOM = 'h2';             // Hostel Room 2 — part D (tonight)
@@ -36,7 +36,7 @@ async function pickHostelDate(page, field, day) {
 async function counterWho(ctx, page) {
   const { expect } = ctx;
   await expect.text(page, 'Who is this booking for?');
-  await page.locator('#bkSearch').fill('Rafael');
+  await page.locator('#bkSearch').fill('Nikka');
   const hit = page.locator('button', { hasText: CUSTOMER });
   await expect.visible(hit, 'the customer search never listed ' + CUSTOMER);
   await hit.first().click();
@@ -98,7 +98,7 @@ export default {
       await pickHostelDate(page, 'checkOut', s.checkOut);
       await page.locator('button[onclick^="setBeds("]').last().click();      // + : two beds
       await expect.visible(page.locator('.bed-name').nth(1), 'the + button did not add a second bed');
-      await page.locator('.bed-name').nth(0).fill('Rafael Lim');
+      await page.locator('.bed-name').nth(0).fill('Nikka Andrea');
       await page.locator('.bed-name').nth(1).fill('Paolo Lim');
       await page.locator('.bed-row').nth(1).getByRole('button', { name: 'Male', exact: true }).click();
       await page.locator('.bed-row').nth(0).getByRole('button', { name: 'Male', exact: true }).click();

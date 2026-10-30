@@ -1,7 +1,7 @@
 // cbook — the USeP discount, from the customer's claim to the snapshot on the booking
 // (DB-DECISIONS #2/#3: the claim is not the discount; staff grant it at approval,
 // and the % is snapshotted onto the booking, so a later rate change never rewrites it).
-// A. a usep.edu.ph customer books the Heritage Function Room claiming affiliation:
+// A. a customer books the Heritage Function Room claiming affiliation:
 //    the review shows the provisional 20% price, the booking stores the FULL price.
 // B. staff approve WITH the discount: 20% and the discounted total are stored, and
 //    equal what the customer was shown.
@@ -9,7 +9,7 @@
 //    My Bookings still shows the snapshot.
 
 const ROOM = 'r2';                            // Heritage Function Room, Bahay Alumni (staff@gmail.com's venue)
-const CUSTOMER = 'jmdelacruz@usep.edu.ph';
+const CUSTOMER = 'nikkaarena@gmail.com';     // no overdue booking (one blocks new bookings); the claim is a checkbox
 const STAFF = 'staff@gmail.com';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

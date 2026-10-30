@@ -1,7 +1,7 @@
 // cbook — two customers want the same room at the same time, and a hostel room
 // is asked for more beds than it has.
-// A. customer@gmail.com books the USeP Gymnasium 9:00 AM – 1:00 PM on a free date.
-// B. rafael.lim@gmail.com opens the same room and date: 9:00 AM is greyed out.
+// A. mesionaalexa@gmail.com books the USeP Gymnasium 9:00 AM – 1:00 PM on a free date.
+// B. aronerfe0830@gmail.com opens the same room and date: 9:00 AM is greyed out.
 //    A stale page posting 10:00 – 12:00 (overlap) or 1:30 – 3:00 PM (inside the
 //    60-minute cleanup gap) is refused by the server, and nothing is written.
 // C. B books 2:00 – 4:00 PM through the page: first with a text file as the "ID"
@@ -11,8 +11,8 @@
 
 const ROOM = 'r5';                       // USeP Gymnasium, USeP Venues (no lead time)
 const HOSTEL_ROOM = 'h3';
-const A = 'customer@gmail.com';
-const B = 'rafael.lim@gmail.com';
+const A = 'mesionaalexa@gmail.com';   // customers with no overdue booking (one blocks new bookings)
+const B = 'aronerfe0830@gmail.com';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';

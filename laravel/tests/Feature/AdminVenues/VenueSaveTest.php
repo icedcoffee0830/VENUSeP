@@ -45,6 +45,26 @@ class VenueSaveTest extends VenuesTestCase
         }
     }
 
+    /* Aron 2026-10-30: adding a venue is admin-only — no button for staff, and
+       venue-save refuses a staff create. Staff still edit their own venue. */
+    public function test_only_an_admin_adds_a_venue(): void
+    {
+        $before = DB::table('venues')->count();
+        $this->actingAsStaff();
+        $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Staff Made Hall'])
+            ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden', 'message' => 'Only an administrator can add a venue.']);
+        $this->postForm('admin.venue-save', ['name' => 'Staff Made Hall'])->assertStatus(403);
+        $this->assertSame($before, DB::table('venues')->count());
+        $this->get(route('admin.venue-management'))->assertOk()
+            ->assertDontSee('+ Add Venue')->assertSee('+ Add Room');
+        $v1 = DB::table('venues')->where('id', 1)->first();
+        $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => $v1->name, 'description' => (string) $v1->description])->assertOk()->assertJson(['ok' => true, 'created' => false]);
+        $this->flushSession();
+
+        $this->actingAsAdmin()->get(route('admin.venue-management'))->assertOk()
+            ->assertSee('+ Add Venue')->assertSee(route('admin.venue-form'), false);
+    }
+
     public function test_only_an_admin_moves_staff_and_only_staff_accounts_move(): void
     {
         $this->actingAsStaff();

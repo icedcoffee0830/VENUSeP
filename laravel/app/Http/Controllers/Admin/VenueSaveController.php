@@ -42,6 +42,10 @@ class VenueSaveController extends Controller
            saved and has an id" — but nothing behind it ever inserted a row, so the
            screen was a facade. */
         $isNew = ($venueId === '' || $venueId === '0');
+        /* Adding a venue is admin-only (Aron 2026-10-30); staff edit their own one. */
+        if ($isNew && !admin_is_admin()) {
+            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only an administrator can add a venue.']);
+        }
         if (!$isNew && !ctype_digit($venueId)) {
             $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Invalid venue.']);
         }

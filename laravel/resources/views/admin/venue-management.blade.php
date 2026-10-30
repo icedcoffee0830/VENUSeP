@@ -761,7 +761,9 @@ function vmMaint($m, $today) {
           <p>Manage locations and the rooms available under them.</p>
         </div>
         <div class="vm-actions">
+@if (admin_is_admin()) {{-- adding a venue is admin-only (venue-save refuses staff too) --}}
           <a class="vm-btn vm-btn-primary" href="{{ route('admin.venue-form') }}">+ Add Venue</a>
+@endif
           <a class="vm-btn vm-btn-outline" href="{{ route('admin.room-form') }}">+ Add Room</a>
         </div>
       </div>

@@ -2,6 +2,8 @@
      browse-mode top bar. Also COUNTER MODE (?counter=1, staff session). Data:
      Customer\HostelReservationController. The script is the old one, URLs/CSRF aside. --}}
 @use('App\Http\Controllers\Customer\RoomReservationController', 'RR')
+{{-- counter mode: every link back into the site keeps it (like the landing cards) --}}
+@php $cq = counter_mode() ? '?counter=1' : ''; @endphp
 <!DOCTYPE html>
 <!-- ==================================================================
   USeP HOSTEL RESERVATION — customer booking UI (self-contained mockup)
@@ -277,7 +279,7 @@
   <div class="bk-more-wrap">
     <div class="bk-more-head">
       <div><span class="bk-more-eyebrow">Discover</span><h2>More hostel rooms</h2></div>
-      <a class="bk-more-all" href="{{ route('customer.venues') }}#hostel-listings">See all rooms <span aria-hidden="true">&rarr;</span></a>
+      <a class="bk-more-all" href="{{ route('customer.venues') . $cq }}#hostel-listings">See all rooms <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div class="bk-more-grid">
 @foreach ($mrOthers as $r)
@@ -286,7 +288,7 @@
         $free = hostelBedsFree($r, $mrToday); $mt = $r['maintenance'];
         $closed = $mt && $mt['blocks'] && hostelMaintCovers($mt, $mrToday);
 @endphp
-      <a class="bk-more-card" href="{{ route('customer.hostel-reservation') }}?room={{ urlencode($r['id']) }}">
+      <a class="bk-more-card" href="{{ route('customer.hostel-reservation') }}?room={{ urlencode($r['id']) }}{{ $cq ? '&counter=1' : '' }}">
         {!! RR::morePic($r['id'], $r['cr_type'] === 'private' ? 'private' : 'bunk') !!}
         <div class="bk-more-body">
           <h3>{{ $r['name'] }}</h3>
@@ -296,7 +298,7 @@
       </a>
 @endforeach
     </div>
-    <p class="bk-more-alt">Need an event space instead? <a href="{{ route('customer.venues') }}#venue-listings">See the venues</a></p>
+    <p class="bk-more-alt">Need an event space instead? <a href="{{ route('customer.venues') . $cq }}#venue-listings">See the venues</a></p>
   </div>
 </section>
 
@@ -313,8 +315,8 @@
       <div>
         <h4>Book</h4>
         <div class="bk-footer-links">
-          <a href="{{ route('customer.venues') }}#venue-listings">Browse venues</a>
-          <a href="{{ route('customer.venues') }}#hostel-listings">Hostel beds</a>
+          <a href="{{ route('customer.venues') . $cq }}#venue-listings">Browse venues</a>
+          <a href="{{ route('customer.venues') . $cq }}#hostel-listings">Hostel beds</a>
 @if (counter_mode()) {{-- counter mode: staff calendar; no customer-only links (2026-10-27) --}}
           <a href="{{ route('admin.calendar') }}">Availability calendar</a>
 @else
@@ -414,7 +416,7 @@ const SAMPLE_PANO = 'https://pannellum.org/images/alma.jpg';
 /* ---------- state ---------- */
 const ROOM_PARAM = new URLSearchParams(location.search).get('room');
 const ROOM_OK = ROOMS.some(r=>r.id===ROOM_PARAM);
-if(!ROOM_OK) location.replace('{{ route('customer.venues') }}');
+if(!ROOM_OK) location.replace('{{ route('customer.venues') . $cq }}');
 
 let state = {
   screen: 'detail',                       // detail | who (counter) | review | pending | payment | done
@@ -590,7 +592,7 @@ function updateReady(){
   if(hint) hint.textContent=d.hint;
 }
 function setTab(k){ state.tab=k; render(); }
-function goHome(){ location.href='{{ route('customer.venues') }}'; }
+function goHome(){ location.href='{{ route('customer.venues') . $cq }}'; }
 /* At the counter the room, dates and guests are settled first, then we ask who
    the stay is for — the "who" step sits between detail and review. */
 function goReview(){ if(derive().ready){ state.screen = COUNTER ? 'who' : 'review'; window.scrollTo(0,0); render(); } }
@@ -598,7 +600,7 @@ function backToDetail(){ state.screen='detail'; window.scrollTo(0,0); render(); 
 function setPayMethod(m){ state.payMethod=m; render(); }
 function toggleAgreeExact(el){ state.agreeExact=!!el.checked; render(); }
 function closeModal(){ state.modal=null; render(); }
-function restart(){ location.href='{{ route('customer.venues') }}'; }
+function restart(){ location.href='{{ route('customer.venues') . $cq }}'; }
 
 /* ---------- date-picker ---------- */
 function openCal(field){
@@ -1898,7 +1900,7 @@ render();
     var to = e.state && e.state.screen;
     if (!to) return;
     var submitted = state.submitted || (state.screen !== 'detail' && state.screen !== 'review');
-    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') }}'); return; }
+    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') . $cq }}'); return; }
     silent = true; state.screen = to; window.scrollTo(0, 0); render(); silent = false;
   });
 })();

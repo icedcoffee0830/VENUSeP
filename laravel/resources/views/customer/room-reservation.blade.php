@@ -2,6 +2,8 @@
      browse-mode top bar. Also COUNTER MODE (?counter=1, staff session). Data:
      Customer\RoomReservationController. The script is the old one, URLs/CSRF aside. --}}
 @use('App\Http\Controllers\Customer\RoomReservationController', 'RR')
+{{-- counter mode: every link back into the site keeps it (like the landing cards) --}}
+@php $cq = counter_mode() ? '?counter=1' : ''; @endphp
 <!DOCTYPE html>
 <!-- ==================================================================
   USeP ROOM RESERVATION — customer booking UI (self-contained mockup)
@@ -272,7 +274,7 @@
   <div class="bk-more-wrap">
     <div class="bk-more-head">
       <div><span class="bk-more-eyebrow">Discover</span><h2>More rooms</h2></div>
-      <a class="bk-more-all" href="{{ route('customer.venues') }}#venue-listings">See all spaces <span aria-hidden="true">&rarr;</span></a>
+      <a class="bk-more-all" href="{{ route('customer.venues') . $cq }}#venue-listings">See all spaces <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div class="bk-more-grid">
 @foreach ($mrOthers as $r)
@@ -286,7 +288,7 @@
           $status = '<p class="bk-more-status' . $cls . '">' . $word . ' &middot; ' . htmlspecialchars($mt['reason']) . '</p>';
         }
 @endphp
-      <a class="bk-more-card" href="{{ route('customer.room-reservation') }}?room={{ urlencode($r['id']) }}">
+      <a class="bk-more-card" href="{{ route('customer.room-reservation') }}?room={{ urlencode($r['id']) }}{{ $cq ? '&counter=1' : '' }}">
         {!! RR::morePic($r['id'], $r['capacity'] >= 500 ? 'gym' : 'hall', $badge) !!}
         <div class="bk-more-body">
           <h3>{{ $r['name'] }}</h3>
@@ -297,7 +299,7 @@
       </a>
 @endforeach
     </div>
-    <p class="bk-more-alt">Looking for a bed instead? <a href="{{ route('customer.venues') }}#hostel-listings">See the hostel rooms</a></p>
+    <p class="bk-more-alt">Looking for a bed instead? <a href="{{ route('customer.venues') . $cq }}#hostel-listings">See the hostel rooms</a></p>
   </div>
 </section>
 
@@ -314,8 +316,8 @@
       <div>
         <h4>Book</h4>
         <div class="bk-footer-links">
-          <a href="{{ route('customer.venues') }}#venue-listings">Browse venues</a>
-          <a href="{{ route('customer.venues') }}#hostel-listings">Hostel beds</a>
+          <a href="{{ route('customer.venues') . $cq }}#venue-listings">Browse venues</a>
+          <a href="{{ route('customer.venues') . $cq }}#hostel-listings">Hostel beds</a>
 @if (counter_mode()) {{-- counter mode: staff calendar; no customer-only links (2026-10-27) --}}
           <a href="{{ route('admin.calendar') }}">Availability calendar</a>
 @else
@@ -459,7 +461,7 @@ const VENUE_GAP_MIN = {{ (int) venue_cleanup_gap_minutes() }};
    the visitor back to the landing page. */
 const ROOM_PARAM = new URLSearchParams(location.search).get('room');
 const ROOM_OK = ROOMS.some(r=>r.id===ROOM_PARAM);
-if(!ROOM_OK) location.replace('{{ route('customer.venues') }}');
+if(!ROOM_OK) location.replace('{{ route('customer.venues') . $cq }}');
 
 /* booker0 — who a COUNTER booking is for — lives in includes/counter-booker.php */
 
@@ -1057,7 +1059,7 @@ function applyTimeToAll(){
   render();
 }
 /* header logo + "← All rooms" go back to the landing page (room browsing lives there now) */
-function goHome(){ location.href='{{ route('customer.venues') }}'; }
+function goHome(){ location.href='{{ route('customer.venues') . $cq }}'; }
 function setTab(k){ state.tab=k; render(); }
 /* At the counter the room and dates are settled with the customer first, then
    we ask who it is for — so the "who" step sits between detail and review. */
@@ -1285,7 +1287,7 @@ async function confirmBooking(){
   paying = false; render();
 }
 /* "Browse more rooms" — back to the landing page (it links here again with ?room=) */
-function restart(){ location.href='{{ route('customer.venues') }}'; }
+function restart(){ location.href='{{ route('customer.venues') . $cq }}'; }
 
 /* ---------- shared bits ---------- */
 function header(){ return ''; }   /* the nav bar is static now: includes/customer-nav.php, above #app */
@@ -2425,7 +2427,7 @@ render();
     var to = e.state && e.state.screen;
     if (!to) return;
     var submitted = state.submitted || (state.screen !== 'detail' && state.screen !== 'review');
-    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') }}'); return; }
+    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') . $cq }}'); return; }
     silent = true; state.screen = to; window.scrollTo(0, 0); render(); silent = false;
   });
 })();

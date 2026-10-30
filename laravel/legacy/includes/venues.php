@@ -28,6 +28,7 @@
    ===================================================================== */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth.php';   /* staff_sees_venue() — staff list their own venue only */
 
 /* [id => name] for the pages that need the id (venue forms, photo uploads),
    and $venues as the plain name list every dropdown has always used. */
@@ -38,6 +39,7 @@ $stmt = venusep_db_or_fail()->query(
   'SELECT id, name FROM venues WHERE is_active = 1 ORDER BY id'
 );
 foreach ($stmt as $row) {
+  if (!staff_sees_venue($row['id'])) continue;
   $venuesById[(int) $row['id']] = $row['name'];
   $venues[] = $row['name'];
 }

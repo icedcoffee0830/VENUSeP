@@ -12,12 +12,13 @@ class HostelRoomFormTest extends VenuesTestCase
 
     public function test_staff_edit_a_hostel_room(): void
     {
-        $this->actingAsStaff()->get(route('admin.hostel-room-form', ['id' => 'h1']))->assertOk()
+        $this->actingAsStaff('jakemerson@gmail.com')->get(route('admin.hostel-room-form', ['id' => 'h1']))->assertOk()   // USeP Hostel staff
             ->assertSee('<title>VENUSeP | Hostel Room Form</title>', false)
             ->assertSee('Edit Hostel Room')
             ->assertSee('id="vmRoomId" value="h1"', false)
             ->assertSee('value="Hostel Room 1"', false)
             ->assertSee('<li class="vm-dd-option">USeP Hostel</li>', false)
+            ->assertDontSee('<li class="vm-dd-option">Bahay Alumni</li>', false)   // staff list their own venue only
             ->assertSee('admin\/room-save', false)
             ->assertSee('admin\/room-photos-api', false)
             ->assertSee('"group":"Hostel"', false);

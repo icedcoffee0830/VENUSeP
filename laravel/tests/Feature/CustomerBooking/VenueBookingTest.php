@@ -40,11 +40,18 @@ class VenueBookingTest extends TestCase
 
     public function test_staff_at_the_counter_keep_counter_mode_on_every_link(): void
     {
-        $this->actingAsStaff()->get(route('customer.venues') . '?counter=1')->assertOk()
+        $this->actingAsStaff()->get(route('customer.venues') . '?counter=1')->assertOk()   // Bahay Alumni staff
             ->assertSee(route('customer.room-reservation') . '?room=r1&amp;counter=1', false)
-            ->assertSee(route('customer.hostel-reservation') . '?room=h1&amp;counter=1', false)
+            ->assertDontSee(route('customer.hostel-reservation') . '?room=h1&amp;counter=1', false)   // own venue only
             ->assertSee(route('admin.calendar'), false)
             ->assertDontSee(route('customer.transaction-history'), false)
             ->assertSee('Leave counter mode');
+    }
+
+    public function test_hostel_staff_at_the_counter_get_only_hostel_rooms(): void
+    {
+        $this->actingAsStaff('jakemerson@gmail.com')->get(route('customer.venues') . '?counter=1')->assertOk()
+            ->assertSee(route('customer.hostel-reservation') . '?room=h1&amp;counter=1', false)
+            ->assertDontSee(route('customer.room-reservation') . '?room=r1&amp;counter=1', false);
     }
 }

@@ -39,6 +39,7 @@
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/amenities.php';
+require_once __DIR__ . '/auth.php';        /* staff_sees_venue() — staff list their own venue only */
 
 $hrPdo = venusep_db_or_fail();
 venusep_expire_due_bookings();   /* a lapsed request must not still hold its beds */
@@ -57,7 +58,7 @@ $HOSTEL_VENUE = (string) $hrPdo->query(
 /* ---- 1. the rooms ---- */
 $hrRoomRows = $hrPdo->query(
   "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
-          v.name AS venue_name,
+          r.venue_id, v.name AS venue_name,
           d.cr_type, d.rate_per_head_per_night, d.check_in_time, d.check_out_time,
           (SELECT COUNT(*) FROM hostel_beds b WHERE b.room_id = r.id AND b.is_active = 1) AS bed_count
      FROM rooms r
@@ -137,6 +138,7 @@ foreach ($hrNightRows as $n) {
 /* ---- 4. assemble the shape every page has always consumed ---- */
 $hostelRooms = [];
 foreach ($hrRoomRows as $r) {
+  if (!staff_sees_venue($r['venue_id'])) continue;   // after $HOSTEL_RATES: the FAQ's rates stay whole
   $hostelRooms[] = [
     'id'          => $r['room_code'],
     'name'        => $r['name'],

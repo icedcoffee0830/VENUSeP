@@ -42,6 +42,7 @@
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/amenities.php';
+require_once __DIR__ . '/auth.php';        /* staff_sees_venue() — staff list their own venue only */
 
 $vrPdo = venusep_db_or_fail();
 venusep_expire_due_bookings();   /* a lapsed request must not still show as taken */
@@ -57,7 +58,7 @@ $vrIncludeInactive = isset($vrIncludeInactive) ? (bool) $vrIncludeInactive : fal
 $vrRoomRows = $vrPdo->query(
   "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
           r.best_for, r.catering, r.accessibility,
-          v.name AS venue_name,
+          r.venue_id, v.name AS venue_name,
           d.attendee_capacity, d.fee_per_day
      FROM rooms r
      JOIN venues v                  ON v.id = r.venue_id
@@ -118,6 +119,7 @@ foreach ($vrSlotRows as $s) {
 /* ---- 4. assemble the exact shape every page has always consumed ---- */
 $venueRooms = [];
 foreach ($vrRoomRows as $r) {
+  if (!staff_sees_venue($r['venue_id'])) continue;
   /* "At a glance": what the room form saved (2026-10-27), else the text that
      used to be hard-coded in includes/amenities.php */
   $glance = room_glance($r['room_code']);

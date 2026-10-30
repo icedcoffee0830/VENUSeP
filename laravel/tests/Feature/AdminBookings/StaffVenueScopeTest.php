@@ -46,6 +46,19 @@ class StaffVenueScopeTest extends TestCase
         $this->assertLessThan($all, $mine);
     }
 
+    /* Aron 2026-10-31: staff see only their designated venue — the Dashboard's
+       venue box and Payment Settings' GCash cards too. */
+    public function test_staff_dashboard_and_payment_cards_show_their_venue_only(): void
+    {
+        $this->actingAsStaff()->get(route('admin.payment-settings'))->assertOk()
+            ->assertSee('data-venue="Bahay Alumni"', false)
+            ->assertDontSee('data-venue="USeP Venues"', false)
+            ->assertDontSee('data-venue="USeP Hostel"', false);
+        $this->actingAsStaff()->get(route('admin.dashboard'))->assertOk()
+            ->assertSee('Managing: Bahay Alumni')
+            ->assertDontSee('Dormitory rooms booked per bed.');    // USeP Hostel's description in the venue box
+    }
+
     public function test_a_customers_own_lists_are_not_narrowed(): void
     {
         $this->signIn('customer@gmail.com', 'customer');

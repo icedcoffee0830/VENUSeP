@@ -49,7 +49,7 @@ class VenueManagementController extends Controller
                LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
                LEFT JOIN hostel_beds hb ON hb.room_id = r.id AND hb.is_active = 1
                LEFT JOIN staff s ON s.venue_id = v.id
-              WHERE v.is_active = 1
+              WHERE v.is_active = 1" . staff_venue_sql('v.id = %d', 'AND') . "
               GROUP BY v.id, v.name, v.venue_type, v.description, v.cover_photo
               ORDER BY v.id"
         )->fetchAll();

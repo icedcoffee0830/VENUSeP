@@ -89,7 +89,10 @@ class OverdueBlockTest extends TestCase
         $this->assertSame('USeP Gymnasium, Sep 10, 2026 — ₱1,234.50', json_decode($m[1], true)[$this->customerId] ?? null);
         $this->assertStringContainsString('${COUNTER_OVERDUE[b.customerId] ?', $html);   /* counter-booker.php draws it */
 
-        $day = now()->addDays(random_int(400, 4000))->toDateString();
+        do {   /* a date r1 is actually free on: other tests leave far-future bookings behind */
+            $day = now()->addDays(random_int(400, 4000))->toDateString();
+        } while (DB::table('venue_booking_slots as s')->join('rooms as r', 'r.id', '=', 's.room_id')
+            ->where('r.room_code', 'r1')->where('s.slot_date', $day)->exists());
         $res = $this->withSession(['_token' => 'tok', 'counter_proof' => [$this->customerId => time()]])->withHeader('X-CSRF-TOKEN', 'tok')
             ->post(route('admin.booking-create'), [
                 'type' => 'venue', 'room' => 'r1', 'method' => 'cash', 'id_checked' => '1', 'usep_id' => '0', 'agree_no_refund' => '1',

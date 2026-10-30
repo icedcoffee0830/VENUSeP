@@ -615,13 +615,6 @@ function report_base_sql() {
               LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id" . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id = %d)');
 }
 
-/* A staff member's figures cover their own venue only: " $glue $sql" with the
-   venue id in $sql's %d, or '' for an admin. */
-function staff_venue_sql($sql, $glue = 'WHERE') {
-    $venue = staff_list_venue();
-    return $venue === null ? '' : " $glue " . sprintf($sql, (int) $venue);
-}
-
 /* The last $count quarters up to and including the current one, oldest first.
    Quarters with no business still appear, as zeroes — a missing quarter would
    silently compress the x-axis and make a quiet period look like growth.

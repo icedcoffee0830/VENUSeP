@@ -55,7 +55,7 @@ class PaymentSettingsController
         try {
             foreach (venusep_db()->query(
                 "SELECT v.name FROM venues v
-                  WHERE v.is_active = 1
+                  WHERE v.is_active = 1" . staff_venue_sql('v.id = %d', 'AND') . "
                     AND NOT EXISTS (SELECT 1 FROM gcash_accounts g
                                      WHERE g.venue_id = v.id AND g.is_active = 1 AND g.valid_until IS NULL)
                   ORDER BY v.id"

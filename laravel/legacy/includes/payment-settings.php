@@ -33,6 +33,7 @@
    ===================================================================== */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth.php';   /* staff_sees_venue() — staff see their own venue's card only */
 
 /* Keyed by venue NAME, because that is what a room carries. Shape is
    ['name','number','note'] — the booking pages json_encode this straight
@@ -50,6 +51,7 @@ $gcStmt = venusep_db_or_fail()->query(
     ORDER BY g.venue_id"
 );
 foreach ($gcStmt as $gcRow) {
+  if (!staff_sees_venue($gcRow['venue_id'])) continue;
   $gcAccounts[$gcRow['venue_name']] = [
     'name'   => $gcRow['account_name'],
     'number' => $gcRow['mobile_number'],

@@ -17,7 +17,8 @@ class RoomFormTest extends VenuesTestCase
             ->assertSee('Edit Room Details')
             ->assertSee('id="vmRoomId" value="r1"', false)
             ->assertSee('value="Alumni Grand Ballroom"', false)
-            ->assertSee('<li class="vm-dd-option">USeP Venues</li>', false)   // venueOptions()
+            ->assertSee('<li class="vm-dd-option">Bahay Alumni</li>', false)   // venueOptions(): staff@ = Bahay Alumni
+            ->assertDontSee('<li class="vm-dd-option">USeP Venues</li>', false)   // staff list their own venue only
             ->assertSee('pannellum.js', false)
             ->assertSee('admin\\/room-save', false)
             ->assertSee('admin\\/room-photos-api', false)

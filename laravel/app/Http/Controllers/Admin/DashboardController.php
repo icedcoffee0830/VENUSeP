@@ -38,7 +38,7 @@ class DashboardController
             $adVenues = $adPdo->query(
                 "SELECT v.name, v.description, COUNT(r.id) AS rooms
                    FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
-                  WHERE v.is_active = 1 GROUP BY v.id ORDER BY v.id"
+                  WHERE v.is_active = 1" . staff_venue_sql('v.id = %d', 'AND') . " GROUP BY v.id ORDER BY v.id"
             )->fetchAll();
 
             /* "Welcome, <who> | Managing: <what>" — the header's name rule (staff

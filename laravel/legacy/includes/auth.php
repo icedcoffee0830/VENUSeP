@@ -181,6 +181,22 @@ function staff_list_venue()
     return session('account_type') === 'staff' ? staff_venue_scope() : null;
 }
 
+/* Does a list shown to this session include the venue? Staff see their own
+   only — venue/room lists, GCash cards, the counter's rooms (2026-10-31). */
+function staff_sees_venue($venueId)
+{
+    $venue = staff_list_venue();
+    return $venue === null || $venue === (int) $venueId;
+}
+
+/* The same rule inside SQL: " $glue $sql" with the staff venue id in $sql's
+   %d, or '' for anyone not narrowed. */
+function staff_venue_sql($sql, $glue = 'WHERE')
+{
+    $venue = staff_list_venue();
+    return $venue === null ? '' : " $glue " . sprintf($sql, (int) $venue);
+}
+
 /* May this staff session see / handle the booking? Admins and non-staff: yes
    (their own checks apply). An unknown booking passes: the caller's 404 handles it. */
 function staff_may_handle_booking($bookingId)

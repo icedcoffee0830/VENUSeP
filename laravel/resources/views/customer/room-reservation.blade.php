@@ -292,7 +292,7 @@
           <h3>{{ $r['name'] }}</h3>
           <p class="bk-more-meta">{{ $r['venue'] }} &middot; up to {{ number_format((int) $r['capacity']) }} guests</p>
           {!! $status !!}
-          <p class="bk-more-price">{!! usep_price_html((int) $r['fee'], $mrUsep, ' per day') !!}</p>
+          <p class="bk-more-price">{!! usep_price_html((float) $r['fee'], $mrUsep, ' per day') !!}</p>
         </div>
       </a>
 @endforeach
@@ -1784,6 +1784,8 @@ function reviewScreen(){
       </label>
     </div>`}
 
+    <!-- the server's refusal (slot just taken, ID not accepted...) — it used to be set and never drawn -->
+    ${state.submitError?`<div role="alert" style="margin-top:14px;background:#fdf2f2;border:1px solid #f2d8d8;color:#b23a3a;border-radius:11px;padding:11px 13px;font-size:13px;line-height:1.5">${esc(state.submitError)}</div>`:''}
     <div style="display:flex;gap:12px;margin-top:20px">
       <button onclick="backToDetail()" ${submitting?'disabled':''} style="flex:none;height:48px;padding:0 20px;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;font-size:14px;font-weight:640;cursor:${submitting?'not-allowed':'pointer'};opacity:${submitting?'.6':'1'}">Edit details</button>
       <button onclick="submitRequest()" ${(canSubmitRequest()&&!submitting)?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${(canSubmitRequest()&&!submitting)?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${(canSubmitRequest()&&!submitting)?'pointer':'not-allowed'};opacity:${canSubmitRequest()?'1':'.85'}">${submitting?'Submitting&hellip;':(COUNTER?'Create booking &mdash; approved':'Submit booking request')}</button>

@@ -52,4 +52,13 @@ class RoomReservationTest extends TestCase
             ->assertSee(json_encode(route('admin.customer-search')), false)   /* counter-booker.php's search */
             ->assertSee(route('admin.calendar'), false);                 /* footer: staff calendar */
     }
+
+    /* A refusal from the server (slot or beds just taken, ID not accepted) was
+       stored in state.submitError and never drawn: the button simply came back. */
+    public function test_the_review_screen_draws_the_servers_refusal(): void
+    {
+        $this->actingAsCustomer()->get(route('customer.room-reservation', ['room' => 'r1']))->assertOk()
+            ->assertSee('${state.submitError?`<div role="alert"', false)
+            ->assertSee('${esc(state.submitError)}', false);
+    }
 }

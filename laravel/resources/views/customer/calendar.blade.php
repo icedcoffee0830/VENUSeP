@@ -394,7 +394,8 @@
         const calendar = new FullCalendar.Calendar(calendarEl, {
           // 1) Calendar start view/date
           initialView: 'dayGridMonth',
-          initialDate: '2026-09-01',
+          /* No initialDate: the calendar opens on the CURRENT month (it was
+             pinned to '2026-09-01' by the mockup, as the staff one was). */
 
           // 2) Calendar toolbar buttons
           headerToolbar: {

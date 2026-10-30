@@ -131,7 +131,7 @@ foreach ($vrRoomRows as $r) {
     'active'      => (bool) $r['is_active'],     // catalog visibility — admin only reads this; customer pages never see a false row
     'capacity'    => (int) $r['attendee_capacity'],
     'maintenance' => isset($vrMaint[$r['id']]) ? $vrMaint[$r['id']] : null,
-    'fee'         => (int) $r['fee_per_day'],
+    'fee'         => (float) $r['fee_per_day'],      // to the centavo: the server charges it so (room forms take 0.01)
     'description' => (string) $r['description'],
     'amenities'   => amenity_labels($r['amenities']),
     'bestFor'     => $glance['bestFor'],

@@ -151,7 +151,7 @@ function whoScreen(){
   let accountBlock = '';
   if(b.mode === 'account'){
     const results = b.results.map(r => `
-      <button type="button" onclick="pickCustomer(${r.id}, ${JSON.stringify(r.name).replace(/"/g,'&quot;')}, ${JSON.stringify(r.phone).replace(/"/g,'&quot;')})"
+      <button type="button" onclick="pickCustomer(${Number(r.id)}, ${esc(JSON.stringify(String(r.name || '')))}, ${esc(JSON.stringify(String(r.phone || '')))})"
               style="display:block;width:100%;text-align:left;border:none;border-bottom:1px solid #f0efec;background:#fff;padding:10px 12px;cursor:pointer;font-family:inherit">
         <div style="font-size:13.5px;font-weight:640;color:#1c1b19">${esc(r.name)}</div>
         <div style="font-size:12.5px;color:#8a857d">${esc(r.email)} &middot; ${esc(r.phone)}</div>

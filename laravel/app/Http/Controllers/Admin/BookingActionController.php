@@ -536,6 +536,11 @@ class BookingActionController extends Controller
 
         /* ---- The receipt was wrong. Only the payment goes back. ---- */
         case 'reject_payment':
+            /* Only a receipt waiting for review can be rejected: from any other
+               state this reopened payment on a booking that was already paid. */
+            if ($bk['payment_status'] !== 'under_review') {
+                $this->reply(409, ['ok' => false, 'message' => 'There is no receipt waiting for review on this booking.']);
+            }
             /* A reason from the list, plus an optional note — required for "Other". */
             $reason = trim((string) ($request->post('reason') ?? ''));
             if (!in_array($reason, receipt_reject_reasons(), true)) {

@@ -84,7 +84,7 @@ class BookingActionTest extends TestCase
 
     public function test_reject_payment_needs_a_reason(): void
     {
-        [, $ref] = $this->seedVenueBooking('r1', 'approved', 'await_gcash');
+        [, $ref] = $this->seedVenueBooking('r1', 'approved', 'under_review');
         $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'reject_payment', 'note' => '  '])
             ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A reason is required — the customer reads it.']);
     }

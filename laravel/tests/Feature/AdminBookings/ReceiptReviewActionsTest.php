@@ -80,6 +80,15 @@ class ReceiptReviewActionsTest extends TestCase
         $this->assertSame('Sent to the wrong venue.', $this->booking($id)->staff_notes);
     }
 
+    /* Found 2026-10-30: reject_payment had no state check, so it reopened payment on a PAID booking. */
+    public function test_a_paid_booking_cannot_have_its_payment_rejected(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'confirmed');
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'reject_payment', 'reason' => 'Receipt image is unreadable'])
+            ->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'There is no receipt waiting for review on this booking.']);
+        $this->assertSame('confirmed', $this->booking($id)->payment_status);
+    }
+
     /* §7 Undo rejection: the receipt goes back under review, with the timeline keeping both steps. */
     public function test_undo_rejection_puts_the_receipt_back_under_review(): void
     {

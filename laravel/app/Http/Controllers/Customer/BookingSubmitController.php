@@ -227,11 +227,7 @@ class BookingSubmitController extends Controller
             $price = (float) $room['fee_per_day'] * count($slots);
 
             try {
-                /* The deadline housekeeping runs BEFORE the transaction (migration 15):
-                   its UPDATEs lock every bookings row they scan, so inside the
-                   transaction two submits a moment apart deadlocked on each other. */
-                $pdo->exec('CALL sp_expire_due_bookings()');
-                $pdo->beginTransaction();
+                BookingRules::beginBooking($pdo);
                 $ins = $pdo->prepare(
                     "INSERT INTO bookings
                         (customer_id, room_id, booking_type, reservation_status, payment_status,
@@ -319,11 +315,7 @@ class BookingSubmitController extends Controller
             $price = (float) $room['rate_per_head_per_night'] * count($clean) * $nights;
 
             try {
-                /* The deadline housekeeping runs BEFORE the transaction (migration 15):
-                   its UPDATEs lock every bookings row they scan, so inside the
-                   transaction two submits a moment apart deadlocked on each other. */
-                $pdo->exec('CALL sp_expire_due_bookings()');
-                $pdo->beginTransaction();
+                BookingRules::beginBooking($pdo);
                 $ins = $pdo->prepare(
                     "INSERT INTO bookings
                         (customer_id, room_id, booking_type, reservation_status, payment_status,
@@ -353,9 +345,10 @@ class BookingSubmitController extends Controller
                 }
                 $pdo->prepare('UPDATE bookings SET current_deadline_at = fn_payment_deadline(:b) WHERE id = :b2')
                     ->execute([':b' => $bookingId, ':b2' => $bookingId]);
-                /* Committed BEFORE the beds are assigned: sp_assign_bed opens its own
-                   transaction. A booking with no beds holds nothing, and the catch
-                   below removes it if a bed is lost. */
+                /* Committed BEFORE the beds are assigned: each bed is its own
+                   transaction (BookingRules::assignBeds), so a bed lost to a
+                   simultaneous stay is retried with fresh reads. A booking with no
+                   beds holds nothing, and the catch below removes it if a bed is lost. */
                 $pdo->commit();
             } catch (PDOException $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }

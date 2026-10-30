@@ -84,6 +84,8 @@ class HostelBedRaceTest extends TestCase
 
         $this->assertSame([$freeBeds[0]], DB::table('bed_reservation_nights')->where('booking_id', $rival)->pluck('bed_id')->map(fn ($b) => (int) $b)->all());
         $this->assertSame([$freeBeds[1]], DB::table('bed_reservation_nights')->where('booking_id', $mine)->pluck('bed_id')->map(fn ($b) => (int) $b)->all());
+        /* the lost attempt left no half-written assignment behind (each bed is its own transaction, migration 15) */
+        $this->assertSame([$freeBeds[1]], DB::table('bed_reservations')->where('booking_id', $mine)->pluck('bed_id')->map(fn ($b) => (int) $b)->all());
         $this->assertSame('2', (string) $pdo->query('SELECT @race_try')->fetchColumn());   /* the stale answer, then the retry */
     }
 }

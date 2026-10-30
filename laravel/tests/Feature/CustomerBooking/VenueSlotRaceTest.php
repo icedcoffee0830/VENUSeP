@@ -110,6 +110,40 @@ class VenueSlotRaceTest extends TestCase
         $this->assertSame(1, $this->liveSlots($room, $day));
     }
 
+    /* Migration 15: the maintenance re-check is a locking read, so a closure
+       saved after the booking transaction's snapshot was taken is still seen. */
+    public function test_a_closure_saved_after_the_booking_transaction_began_is_still_refused(): void
+    {
+        [$customer, $room, $day] = $this->fixture();
+        $this->a = $this->pdo();
+        $this->a->beginTransaction();
+        $this->a->query('SELECT COUNT(*) FROM maintenance_windows')->fetchColumn();   /* the snapshot is taken here */
+
+        $other = $this->pdo();
+        $other->prepare("INSERT INTO maintenance_windows (room_id, from_date, until_date, reason, blocks_booking)
+                         VALUES (?, ?, ?, 'test closure', 1)")->execute([$room, $day, $day]);
+        $closure = (int) $other->lastInsertId();
+        try {
+            $this->a->prepare("INSERT INTO bookings (customer_id, room_id, booking_type, reservation_status, payment_status,
+                                 payment_method, is_usep_affiliated, affiliation_verified, room_price, discount_percent,
+                                 discount_amount, total_amount, refunds_allowed)
+                               VALUES (?, ?, 'venue', 'pending', 'locked', 'gcash', 0, 0, 100, 0, 0, 100, 0)")
+                ->execute([$customer, $room]);
+            $this->made[] = (int) $this->a->lastInsertId();
+            $call = $this->a->prepare('CALL sp_add_venue_slot(?, ?, ?, ?)');
+            try {
+                $call->execute([end($this->made), $day, '08:00:00', '12:00:00']);
+                $this->fail('a slot was saved on a day closed for maintenance');
+            } catch (\PDOException $e) {
+                $this->assertSame('45000', $e->getCode());
+                $this->assertStringContainsString('HARD maintenance on the requested date.', $e->getMessage());
+            }
+        } finally {
+            $this->a->rollBack();
+            $other->prepare('DELETE FROM maintenance_windows WHERE id = ?')->execute([$closure]);
+        }
+    }
+
     public function test_a_later_time_in_the_same_room_still_books_once_the_first_commits(): void
     {
         [$customer, $room, $day] = $this->fixture();

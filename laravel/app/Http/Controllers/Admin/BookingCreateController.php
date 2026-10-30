@@ -218,9 +218,9 @@ class BookingCreateController extends Controller
     /* =====================================================================
        HOSTEL AT THE COUNTER (2026-10-27). PAY TO USE (DB-DECISIONS #26): the
        stay is NOT recorded unless it is paid — written approved and
-       paid_cash, with its payment row and System Receipt. sp_assign_bed opens
-       its own transaction, so the stay is committed first, then the beds,
-       then the approval and payment; a failing step removes the stay.
+       paid_cash, with its payment row and System Receipt. Each bed is its own
+       transaction (BookingRules::assignBeds), so the stay is committed first,
+       then the beds, then the approval and payment; a failing step removes the stay.
        ===================================================================== */
     private function hostel(Request $request, PDO $pdo, array $c): never
     {
@@ -295,11 +295,7 @@ class BookingCreateController extends Controller
             }
         };
         try {
-            /* The deadline housekeeping runs BEFORE the transaction (migration 15):
-               its UPDATEs lock every bookings row they scan, so inside the
-               transaction two submits a moment apart deadlocked on each other. */
-            $pdo->exec('CALL sp_expire_due_bookings()');
-            $pdo->beginTransaction();
+            BookingRules::beginBooking($pdo);
             if ($c['isNewWalkIn']) {
                 $this->insertWalkIn($pdo, $c);
             }
@@ -478,11 +474,7 @@ class BookingCreateController extends Controller
         /* ---- the write ---- */
         $queued = null;   /* the walk-in confirmation email, sent after commit */
         try {
-            /* The deadline housekeeping runs BEFORE the transaction (migration 15):
-               its UPDATEs lock every bookings row they scan, so inside the
-               transaction two submits a moment apart deadlocked on each other. */
-            $pdo->exec('CALL sp_expire_due_bookings()');
-            $pdo->beginTransaction();
+            BookingRules::beginBooking($pdo);
             if ($c['isNewWalkIn']) {
                 $this->insertWalkIn($pdo, $c);
             }

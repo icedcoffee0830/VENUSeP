@@ -108,12 +108,25 @@ final class BookingRules
         return self::overdueNotice($pdo, (int) session('customer_id'));
     }
 
+    /* Opens a new booking's transaction (booking-submit and the counter). The
+       deadline housekeeping runs just BEFORE it, never inside (migration 15): its
+       UPDATEs lock every bookings row they scan, so inside the transaction two
+       submits a moment apart deadlocked on each other's new booking row. */
+    public static function beginBooking(PDO $pdo): void
+    {
+        $pdo->exec('CALL sp_expire_due_bookings()');
+        $pdo->beginTransaction();
+    }
+
     /* One exact bed per guest, free on EVERY night of the stay; the
        UNIQUE(active_bed_id, night_date) index is the last-bed race guard. Two stays
        submitted at once can pick the same free bed: the second one's insert hits
        that index (1062), so it takes the next free bed instead (2026-10-30).
        Throws RuntimeException('no_bed') when no bed is left, PDOException otherwise
-       (a hard closure inside the stay is sp_assign_bed's SQLSTATE 45000). */
+       (a hard closure inside the stay is sp_assign_bed's SQLSTATE 45000).
+       Call it OUTSIDE a transaction: each bed is its own transaction (since
+       migration 15 sp_assign_bed leaves that to its caller), so a lost bed leaves
+       no half-written row behind and the retry reads the beds afresh. */
     public static function assignBeds(PDO $pdo, int $roomId, int $bookingId, array $occupantIds, string $checkIn, string $checkOut): void
     {
         $free = $pdo->prepare(
@@ -133,12 +146,17 @@ final class BookingRules
                 if ($bedId === false) {
                     throw new RuntimeException('no_bed');
                 }
+                /* inTransaction() asks the server: a database without migration 15
+                   has already committed or rolled back inside the procedure. */
+                $pdo->beginTransaction();
                 try {
                     $assign->execute([':b' => $bookingId, ':o' => $occId, ':bed' => (int) $bedId]);
                     $assign->closeCursor();
+                    if ($pdo->inTransaction()) { $pdo->commit(); }
                     break;
                 } catch (PDOException $e) {
                     $assign->closeCursor();
+                    if ($pdo->inTransaction()) { $pdo->rollBack(); }
                     if (($e->errorInfo[1] ?? null) !== 1062 || $try >= 5) {
                         throw $e;
                     }

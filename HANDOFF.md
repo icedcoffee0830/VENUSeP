@@ -278,24 +278,23 @@ broke were updated (commit 6d66941) but only syntax-checked.
      button area. Content needs Aron's / USeP's approval before go-live.
    - Meanwhile (localhost): keep the Google app in **Testing** and add teammates/teacher/panel as
      test users (Google Auth Platform → Audience → Test users).
-2. **Leftover post-pay wording** — still says "pay within 3 days" / shows the grace-end date
-   instead of "pay by the day after your event": `customer/room-reservation.blade.php` (~1205,
-   1405, 1798, 1801, 1825, 1828, 2040) + the JS `payPolicyFor` label / `payment_policy_for()` in
-   `legacy/includes/refund-policy.php` (also used by the counter reply in
-   `BookingCreateController` ~275, 476), `customer/venue-booking.blade.php:519`,
-   `legacy/includes/receipt-emails.php:154-159` (emails), `BookingDetailsController.php:103`,
-   `admin/payment-settings.blade.php:184,357`. Staff-side labels keep the grace date.
-3. **FAQ answer links in counter mode:** `faq_answer_html` / `faq_link_url`
-   (`legacy/includes/faqs.php` ~154-185) drop `?counter=1`, so counter staff clicking "your
-   booking history" in an answer land on customer sign-in. Render customer-only targets as plain
-   text in counter mode.
+2. **DONE (round 4, merged 2026-10-30):** customers are told "pay by the day after your event"
+   everywhere; staff keep the "Overdue after" date. Dashboard "Payment Overdue" card says "Needs
+   follow-up". Still open (needs Aron's OK): the seeded FAQ answers in the DB still say "due within
+   {grace_days} days" — content, edit in FAQ Management. Report: `helpers/_tools/round4-reports/cbook.md`.
+3. **DONE (round 4):** FAQ answer links in counter mode — customer-only targets become plain text,
+   booking-page links keep `?counter=1`. Phone check: only fix was the overdue notice's tap area.
 4. **DONE (round 3, merged 2026-10-30):** staff no longer see Edit Details / Reopen on other venues;
    Add Venue page sends staff back; a deadlock between two submits is a friendly 409; **migration 15**
    (`venusep_migration_15.sql`: sp_assign_bed leaves the transaction to the caller, maintenance
    re-check is a locking read, deadline expiry runs before the booking transaction). Applied to the
    Laravel DB copies + snapshot. Aron ran migration 15 on the real `venusep` DB too (2026-10-30, cmd,
    backup `C:/xamp5/venusep_backup_before_m15.sql`). Next migration: 16. Report: `helpers/_tools/round3-reports/abook.md`.
-5. **Run the browser flows** (`run-tests.bat`) — not run since round 2.
+5. **DONE 2026-10-30 23:41, all green after round 4:** PHPUnit 478 passed; page checker 0 failing
+   (the FAQ-editor "broken link" was a checker false alarm); flows 121/121. Fixed on the way: the
+   loop script closed itself after run 1; admin-settings step 9 and the refund-withdraw step raced
+   the page's own redirect/reload; VenueSlotRaceTest hit leftover far-future bookings (other tests
+   leave ~175 in `venusep_laravel_test`, so tests needing a free date must check, not guess).
 6. **Old site:** none of tonight's fixes are in the plain-PHP site (branch `Aron`) — Laravel only,
    by Aron's decision. The first night's old-site fixes sit on branch `bugfixes`, unmerged.
 7. **Push / merge:** nothing pushed. `laravel` exists only on this laptop. Push when Aron says.

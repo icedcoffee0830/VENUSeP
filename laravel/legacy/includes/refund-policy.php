@@ -186,13 +186,17 @@ function payment_policy_js()
 {
     return 'const PAY_POLICY = { prepay: ' . ($GLOBALS['REFUNDS_ENABLED'] ? 'true' : 'false') . ', graceDays: ' . postpay_grace_days() . " };
 "
-        . "/* payPolicyFor(firstIso, lastIso) -> { policy, payBy: Date, label, open, late, opensLabel, grace } — see includes/refund-policy.php */
+        . "/* payPolicyFor(firstIso, lastIso) -> { policy, payBy: Date, label, open, late, opensLabel, grace, overdueAfter } — see includes/refund-policy.php.
+"
+        . "   Post-pay: label = the day after the event, the date the customer is told (customer_pay_by_label());
+"
+        . "   payBy / overdueAfter = the grace end, when it actually turns Overdue (staff wording). */
 "
         . "function payPolicyFor(firstIso, lastIso){
 "
         . "  const grace=PAY_POLICY.graceDays;
 "
-        . "  if(!firstIso) return { policy: PAY_POLICY.prepay?'prepay':'postpay', payBy:null, label:'—', open:false, late:false, opensLabel:'', grace };
+        . "  if(!firstIso) return { policy: PAY_POLICY.prepay?'prepay':'postpay', payBy:null, label:'—', overdueAfter:'—', open:false, late:false, opensLabel:'', grace };
 "
         . "  const first=new Date(firstIso+'T00:00:00'), last=new Date((lastIso||firstIso)+'T00:00:00'), now=new Date();
 "
@@ -212,7 +216,7 @@ function payment_policy_js()
 "
         . "  const over=new Date(last.getTime()+86400000);
 "
-        . "  return { policy:'postpay', payBy, label:fmt(payBy), open: now>=over, late:false, opensLabel:'after '+fmt(last), grace };
+        . "  return { policy:'postpay', payBy, label:fmt(over), overdueAfter:fmt(payBy), open: now>=over, late:false, opensLabel:'after '+fmt(last), grace };
 "
         . "}
 ";

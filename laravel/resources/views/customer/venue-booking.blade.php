@@ -517,7 +517,7 @@
           <p>GCash or over the counter, at least one day before the event. Then your booking is confirmed.</p>
 @else
           <h3>Pay after your event</h3>
-          <p>Nothing to pay up front. Once your event is over, pay by GCash or over the counter within {{ (int) $POSTPAY_GRACE_DAYS }} days.</p>
+          <p>Nothing to pay up front. Once your event is over, pay by GCash or over the counter by the day after it.</p>
 @endif
         </div>
       </div>

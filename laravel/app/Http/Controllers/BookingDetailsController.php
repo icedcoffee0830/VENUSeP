@@ -100,7 +100,11 @@ class BookingDetailsController extends Controller
             'method'          => $b['method'],
             'paymentStatus'   => $bdIsStaff ? $b['paymentStatusStaff'] : $b['paymentStatus'],
             'payBy'           => in_array($b['paymentCode'], ['await_gcash', 'await_cash', 'overdue', 'await_event', 'locked', 'await_pos'], true)
-                                   ? $b['payment']['payByLabel'] : '',
+                                   ? customer_pay_by_label($b['payment']) : '',
+            /* post-pay, staff only: the grace end that turns it Overdue (the customer is told the day after) */
+            'overdueAfter'    => $bdIsStaff && $b['payment']['policy'] === 'postpay'
+                                   && in_array($b['paymentCode'], ['await_gcash', 'await_cash', 'overdue', 'await_event'], true)
+                                   ? ($b['payment']['graceEndsLabel'] ?? $b['payment']['payByLabel']) : '',
             'paidOn'          => !empty($b['paidAtIso']) ? date('F j, Y', strtotime($b['paidAtIso'])) : '',
         ];
 

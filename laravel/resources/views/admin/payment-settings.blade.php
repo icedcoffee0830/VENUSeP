@@ -181,7 +181,7 @@
                   @elseif ($rsEnabled)
                     <p class="rs-state"><strong>Customers may request refunds</strong> on bookings they make while this is ON. Those bookings are <strong>paid before the event</strong> (after approval, by the day before).</p>
                   @else
-                    <p class="rs-state"><strong>All new bookings are non-refundable</strong> and are <strong>paid after the event</strong> &mdash; payment opens the day after the last booked day and is due within {{ (int) $POSTPAY_GRACE_DAYS }} days; unpaid bookings go overdue, nothing is released. Customers must confirm they understand this before they book. This is USeP's normal policy.</p>
+                    <p class="rs-state"><strong>All new bookings are non-refundable</strong> and are <strong>paid after the event</strong> &mdash; payment opens and is due the day after the last booked day; unpaid bookings go overdue after {{ (int) $POSTPAY_GRACE_DAYS }} days, nothing is released. Customers must confirm they understand this before they book. This is USeP's normal policy.</p>
                   @endif
                 </div>
                 <div>
@@ -354,7 +354,7 @@
             'Customers <strong>can no longer request refunds</strong> on new bookings, and must confirm a booking is non-refundable before making it.',
             '<strong>' + plural(openRequests(), 'open refund request is', 'open refund requests are') + '</strong> still waiting. Staff can still finish them.',
             '<strong>' + plural(STAY_REFUNDABLE, 'booking', 'bookings') + '</strong> made while refunds were ON <strong>' + (STAY_REFUNDABLE === 1 ? 'stays' : 'stay') + ' refundable</strong>, because their customers were promised that.',
-            'New bookings switch to <strong>post-pay</strong>: nothing is paid until the event is over, then it is due within ' + {{ (int) $POSTPAY_GRACE_DAYS }} + ' days. Unpaid bookings go overdue instead of being released.',
+            'New bookings switch to <strong>post-pay</strong>: nothing is paid until the event is over, then it is due the day after the event. Unpaid bookings go overdue after ' + {{ (int) $POSTPAY_GRACE_DAYS }} + ' days instead of being released.',
             'Closures by USeP are not affected. Those customers are still offered a replacement or their money back.'
           ];
           list.innerHTML = items.map(function (t) { return '<li>' + t + '</li>'; }).join('');

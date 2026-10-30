@@ -106,125 +106,10 @@
   .g-seg{display:flex;border:1px solid rgba(0,0,0,.14);border-radius:9px;overflow:hidden;height:36px;background:#fff}
   .g-seg button{flex:1;border:none;background:none;font-size:12px;font-weight:600;color:#8a857d;cursor:pointer;padding:0}
   .g-seg button.on{background:#a11626;color:#fff}
-  /* the footer — crimson to black; the page is a column so it stays at the bottom on short screens */
-  body{display:flex;flex-direction:column;min-height:100vh}
-  #app{flex:1 0 auto}
-  /* 360 viewer: the scaled-down lightbox (not real fullscreen) */
-  #panoLightbox{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(10,4,5,.82);opacity:0;transition:opacity 220ms ease}
-  #panoLightbox.open{opacity:1}
-  #panoLightbox .pl-box{position:relative;width:min(1100px,92vw);aspect-ratio:16/9;max-height:82vh;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 30px 90px rgba(0,0,0,.6);transform:scale(.96);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
-  #panoLightbox.open .pl-box{transform:none}
-  #panoLightbox .pl-view{position:absolute;inset:0}
-  #panoLightbox .pl-close{position:absolute;top:10px;right:10px;z-index:5;width:38px;height:38px;border:0;border-radius:999px;background:rgba(255,255,255,.92);color:#1c1b19;font-size:26px;line-height:1;cursor:pointer}
-  @media (max-width:720px){#panoLightbox{padding:12px}#panoLightbox .pl-box{width:100%;aspect-ratio:4/3;max-height:70vh}}
-  .bk-footer{position:relative;color:#fff;background:linear-gradient(158deg,#8a1222 0%,#400d16 40%,#14080a 100%)}
-  .bk-footer a{color:#e6d7d5}
-  .bk-footer a:hover{color:#fff}
-  .bk-footer-wrap{max-width:1240px;margin:0 auto;padding:44px 28px 26px}
-  .bk-footer-grid{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:36px;padding-bottom:26px}
-  .bk-footer-logo{height:20px;width:auto;display:block;filter:invert(1)}
-  .bk-footer-about{margin:14px 0 0;max-width:300px;font-size:12.5px;line-height:1.66;color:#b29b9a}
-  .bk-footer-disc{margin-top:16px;display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);font-size:12.5px;font-weight:600;color:#e6d7d5}
-  .bk-footer-disc i{width:7px;height:7px;border-radius:50%;background:#d9930d;display:block}
-  .bk-footer h4{margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#96807e}
-  .bk-footer-links{display:grid;gap:8px}
-  .bk-footer-links a{font-size:12.5px}
-  .bk-footer-bottom{border-top:1px solid rgba(255,255,255,.1);padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12.5px;color:#96807e}
-  .bk-footer-bottom a{color:#96807e;margin-left:20px}
-  @media (max-width:720px){.bk-footer-wrap{padding:36px 18px 22px}.bk-footer-grid{grid-template-columns:1fr 1fr;gap:24px 16px}.bk-footer-brand{grid-column:1/-1}.bk-footer-bottom{display:grid;gap:10px}.bk-footer-bottom a{margin:0 16px 0 0}}
-  /* "Discover · More rooms" — the landing page's hostel cards, on a crimson band above the footer */
-  .bk-more{position:relative;overflow:hidden;color:#fff;background:linear-gradient(162deg,#7d1120 0%,#3c0c14 48%,#17080a 100%)}
-  .bk-more::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(900px 560px at 86% 2%,rgba(232,62,74,.3),transparent 62%),radial-gradient(800px 560px at 6% 100%,rgba(10,4,5,.62),transparent 66%)}
-  .bk-more-wrap{position:relative;max-width:1240px;margin:0 auto;padding:60px 28px 56px}
-  .bk-more-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:24px}
-  .bk-more-eyebrow{display:block;font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#f2d0cb;margin-bottom:10px}
-  .bk-more h2{margin:0;font-size:34px;font-weight:800;letter-spacing:-.024em;color:#fff}
-  .bk-more-all{font-size:14px;font-weight:700;color:#fff;padding-bottom:6px}
-  .bk-more-all:hover{color:#f2d0cb}
-  .bk-more-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
-  .bk-more-card{display:block;border-radius:20px;overflow:hidden;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.17);color:#fff;transition:transform 260ms cubic-bezier(.16,1,.3,1),box-shadow 260ms cubic-bezier(.16,1,.3,1)}
-  .bk-more-card:hover{transform:translateY(-4px);box-shadow:0 20px 48px rgba(10,4,5,.35);color:#fff}
-  .bk-more-ph{position:relative;overflow:hidden;aspect-ratio:16/10;background:linear-gradient(158deg,#2c181a,#82453f)}
-  .bk-more-ph-in{position:absolute;inset:0;transition:transform 700ms cubic-bezier(.16,1,.3,1)}
-  .bk-more-card:hover .bk-more-ph-in{transform:scale(1.045)}
-  .bk-more-art{display:block;width:100%;height:100%}
-  .bk-more-img{display:block;width:100%;height:100%;object-fit:cover}
-  .bk-more-scrim{position:absolute;inset:0;background:linear-gradient(180deg,transparent 44%,rgba(14,5,6,.64) 100%)}
-  .bk-more-tag{position:absolute;left:13px;bottom:13px;padding:5px 10px;border-radius:7px;background:rgba(255,255,255,.17);border:1px solid rgba(255,255,255,.24);color:#fff;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
-  .bk-more-badge{position:absolute;right:12px;top:12px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.95);font-size:12px;font-weight:700;color:#705e5e}
-  .bk-more-badge.is-closed{color:#8a5a12}
-  .bk-more-body{padding:18px 19px 20px}
-  .bk-more-body h3{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;color:#fff}
-  .bk-more-meta{margin:7px 0 0;font-size:12.5px;line-height:1.55;color:#d5b8b5}
-  .bk-more-price{margin:6px 0 0;font-size:13px;line-height:1.5;color:#d5b8b5}
-  /* usep_price_html() paints for a white page; recolour it for the dark card (UI only) */
-  .bk-more-meta s,.bk-more-price s{color:#ac8f8d!important}
-  .bk-more-meta strong,.bk-more-price strong{color:#fff!important}
-  .bk-more-meta span,.bk-more-price span{color:#f2d0cb!important}
-  .bk-more-meta span,.bk-more-price span{font-size:12px!important}   /* type floor: the 11px note from pricing.php */
-  #app span[style*="ui-monospace"]{font-size:12px!important}          /* type floor: the "room photo" placeholder labels */
-  /* ---- room page layout: photo strip on top, then details + booking panel side by side ---- */
-  .bk-cols{display:grid;grid-template-columns:minmax(0,1fr) 379px;gap:34px;align-items:start}
-  .bk-aside{position:sticky;top:88px}
-  /* ---- photo strip: swipe / drag only (no arrows, no thumbnails, no click-to-open) ---- */
-  .bk-gal{position:relative;margin:0 0 22px}
-  .bk-gal-track{display:flex;gap:10px;height:400px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;cursor:grab;-webkit-tap-highlight-color:transparent}
-  .bk-gal-track::-webkit-scrollbar{display:none}
-  .bk-gal-track:focus-visible{outline:2px solid rgba(161,22,38,.5);outline-offset:3px;border-radius:20px}
-  .bk-gal-track.drag{scroll-snap-type:none;cursor:grabbing;user-select:none}
-  .bk-gal-slide{position:relative;flex:0 0 auto;height:100%;aspect-ratio:3/2;border-radius:20px;overflow:hidden;background-color:#e9e7e2;background-size:cover;background-position:center;scroll-snap-align:start}
-  .bk-gal-slide::after{content:"";position:absolute;inset:auto 0 0 0;height:38%;background:linear-gradient(180deg,transparent,rgba(14,5,6,.5));pointer-events:none}
-  .bk-gal-slide.solo{flex-basis:100%;aspect-ratio:auto}
-  .bk-gal-slide.ph{display:flex;align-items:center;justify-content:center;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px)}
-  .bk-gal-slide.ph span{font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c}
-  .bk-gal-slide.ph::after{display:none}
-  .bk-gal-pill{position:absolute;top:14px;z-index:3;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;border:1px solid rgba(255,255,255,.28);background:rgba(20,8,10,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;font:600 12.5px/1 'Inter',system-ui,sans-serif;letter-spacing:.01em}
-  /* first slide: the 360° tour — the panorama as a still, tap to look around (a live viewer here would swallow the swipe) */
-  .bk-gal-360s{appearance:none;border:0;padding:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-family:inherit;text-align:center;user-select:none;-webkit-user-select:none}
-  .bk-gal-360s::before{content:"";position:absolute;inset:0;background:rgba(20,8,10,.34);transition:background 200ms ease}
-  .bk-gal-360s:hover::before{background:rgba(138,18,34,.42)}
-  .bk-gal-360s>*{position:relative;z-index:1}
-  .bk-360-ico{display:grid;place-items:center;width:58px;height:58px;margin-bottom:6px;border-radius:50%;border:1.5px solid rgba(255,255,255,.7);background:rgba(20,8,10,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-  .bk-gal-360s strong{font-size:20px;font-weight:750;letter-spacing:-.01em}
-  .bk-gal-360s small{font-size:13px;font-weight:500;color:#f2d0cb}
-  .bk-gal-count{right:14px;pointer-events:none}
-  .bk-gal-dots{position:absolute;left:0;right:0;bottom:14px;z-index:2;display:flex;justify-content:center;gap:6px;pointer-events:none}
-  .bk-gal-dots i{display:block;width:7px;height:7px;border-radius:999px;background:rgba(255,255,255,.6);box-shadow:0 1px 3px rgba(0,0,0,.35);transition:width 220ms ease,background 220ms ease}
-  .bk-gal-dots i.on{width:22px;background:#fff}
-  /* ---- booking panel: the landing page's crimson-to-black card ---- */
-  .bk-panel{position:relative;padding:22px 20px 22px;border-radius:24px;color:#fff;background:linear-gradient(162deg,#7d1120 0%,#3c0c14 48%,#17080a 100%);box-shadow:0 26px 64px rgba(138,18,34,.3)}
-  .bk-panel::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(420px 300px at 92% 0%,rgba(232,62,74,.3),transparent 62%),radial-gradient(360px 300px at 4% 100%,rgba(10,4,5,.6),transparent 66%)}
-  .bk-panel>*{position:relative}
-  .bk-panel a{color:#fff;text-decoration:underline;text-underline-offset:2px}
-  .bk-panel a:hover{color:#f2d0cb}
+@include('partials.booking-css-footer-viewer')
+@include('partials.booking-css-more-rooms')
   .bk-panel input{border-color:transparent!important;background:#fff}
-  .bk-panel input:focus,.bk-panel button:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:1px}
-  .bk-panel ::placeholder{color:#a5a19a}
-  .bk-eyebrow{display:block;margin-bottom:8px;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#f2d0cb}
-  .bk-go{width:100%;height:50px;border:none;border-radius:14px;font-size:15px;font-weight:700;transition:transform 160ms ease,background 160ms ease}
-  .bk-go.on{background:#fff;color:#8a1222;cursor:pointer}
-  .bk-go.on:hover{background:#fbeceb}
-  .bk-go.on:active{transform:scale(.98)}
-  .bk-go.off{background:rgba(255,255,255,.16);color:rgba(255,255,255,.62);cursor:not-allowed}
-  /* tablet + phone: everything stacks — photos, title, details, then the booking panel */
-  @media (max-width:900px){
-    .bk-cols{grid-template-columns:1fr;gap:26px}
-    .bk-aside{position:static}
-  }
-  @media (max-width:720px){
-    #app main{padding-left:16px!important;padding-right:16px!important}
-    .bk-gal{margin-bottom:18px}
-    .bk-gal-track{height:min(66vw,320px);gap:8px}
-    .bk-gal-slide{flex-basis:88%;aspect-ratio:auto;border-radius:16px}
-    .bk-gal-slide.solo{flex-basis:100%}
-    .bk-gal-pill{top:10px;height:32px;padding:0 11px}
-    .bk-360-ico{width:48px;height:48px}
-    .bk-gal-360s strong{font-size:17px}
-    .bk-gal-count{right:10px}
-    .bk-gal-dots{bottom:11px}
-    .bk-panel{padding:20px 16px;border-radius:20px}
-    /* 16px stops iOS Safari zooming the page when a field is focused; taller fields are easier to hit */
-    .bk-panel input{font-size:16px!important;height:46px!important}
+@include('partials.booking-css-panel')
     .bk-panel .g-seg{height:46px}
   }
   /* hostel roster on the crimson card */
@@ -303,45 +188,7 @@
   </div>
 </section>
 
-<!-- ==================== FOOTER — the landing page's, compact. Static: it sits
-     below #app in the DOM, so it is there on every screen the script draws. -->
-<footer class="bk-footer">
-  <div class="bk-footer-wrap">
-    <div class="bk-footer-grid">
-      <div class="bk-footer-brand">
-        <img class="bk-footer-logo" src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP">
-        <p class="bk-footer-about">Venue and hostel booking for the University of Southeastern Philippines, Tagum&ndash;Mabini Campus. Run by the campus venue office.</p>
-        <span class="bk-footer-disc"><i></i>{{ (int) $DISCOUNT_PERCENT }}% off for USeP students &amp; staff</span>
-      </div>
-      <div>
-        <h4>Book</h4>
-        <div class="bk-footer-links">
-          <a href="{{ route('customer.venues') . $cq }}#venue-listings">Browse venues</a>
-          <a href="{{ route('customer.venues') . $cq }}#hostel-listings">Hostel beds</a>
-@if (counter_mode()) {{-- counter mode: staff calendar; no customer-only links (2026-10-27) --}}
-          <a href="{{ route('admin.calendar') }}">Availability calendar</a>
-@else
-          <a href="{{ route('customer.calendar') }}">Availability calendar</a>
-          <a href="{{ route('customer.booking-history') }}">My bookings</a>
-@endif
-        </div>
-      </div>
-      <div>
-        <h4>Help</h4>
-        <div class="bk-footer-links">
-          <a href="{{ route('customer.faq') }}{{ counter_mode() ? '?counter=1' : '' }}">Frequently asked questions</a>
-          <a href="{{ route('customer.faq') }}{{ counter_mode() ? '?counter=1' : '' }}#gcash">How to pay by GCash</a>
-          <a href="{{ route('customer.faq') }}{{ counter_mode() ? '?counter=1' : '' }}#after">{{ $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy' }}</a>
-          <a href="{{ route('customer.faq') }}{{ counter_mode() ? '?counter=1' : '' }}#discount">USeP discount rules</a>
-        </div>
-      </div>
-    </div>
-    <div class="bk-footer-bottom">
-      <span>&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</span>
-      <span><a href="{{ route('customer.faq') }}{{ counter_mode() ? '?counter=1' : '' }}#after">Booking &amp; cancellation policy</a><a href="{{ route('customer.faq') }}{{ counter_mode() ? '?counter=1' : '' }}">Privacy</a></span>
-    </div>
-  </div>
-</footer>
+@include('partials.booking-footer')
 <script>
 /* Unlike room-reservation.php (which serves two venues), every room on this page
    belongs to the hostel — so gcAccount() below is constant. It is still a
@@ -885,141 +732,11 @@ function svgBed(s,c){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24
 function svgUsers(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`; }
 
 /* ---------- 360 panorama (opened from the photo strip's first slide) + photo gallery lightbox ---------- */
-/* One calibrated viewer for any box. CALIBRATION: the viewer assumes a full
-   sphere (360 x 180, a 2:1 image). Our panoramas are iPhone sweeps — much
-   wider than tall — so shown as a sphere they get squeezed into a narrow
-   corridor. Measure the image first and tell the viewer how many degrees it
-   really spans: an iPhone pano is shot in portrait, so its vertical field of
-   view is ~70 degrees; the horizontal span follows from the aspect ratio.
-   Panning stops at the image edges; zoom is capped so the VERTICAL view never
-   exceeds the image (no black above/below) — that cap depends on the box's
-   shape. A true 2:1 image (the sample) is still treated as a full sphere.
-   onReady(viewer) runs once it is up; stillWanted() lets the caller cancel. */
-function panoViewer(node, src, stillWanted, onReady){
-  const probe=new Image();
-  function build(aspect){
-    const full=aspect===null || Math.abs(aspect-2)<0.15;
-    const vaov=70, haov=full?360:Math.min(340, Math.round(vaov*aspect));
-    const box=node.getBoundingClientRect(), ratio=Math.max(0.5, box.width/Math.max(1,box.height));
-    const fitHfov=Math.floor(2*Math.atan(Math.tan(vaov/2*Math.PI/180)*ratio)*180/Math.PI)-2;
-    const opts={ type:'equirectangular', panorama:src, autoLoad:true, showControls:true, showFullscreenCtrl:false, compass:full,
-      mouseZoom:true, draggable:true, hfov:full?100:Math.min(fitHfov, Math.round(haov*0.55)), minHfov:45, maxHfov:full?120:Math.min(fitHfov, haov-10) };
-    if(!full){ opts.haov=haov; opts.vaov=vaov; opts.minYaw=-haov/2; opts.maxYaw=haov/2; opts.minPitch=-vaov/2; opts.maxPitch=vaov/2; }
-    const v=pannellum.viewer(node, opts); onReady(v); return v;
-  }
-  probe.onload=function(){ if(stillWanted()) build(probe.naturalWidth/Math.max(1,probe.naturalHeight)); };
-  probe.onerror=function(){ if(stillWanted()) build(null); };
-  probe.src=src;
-}
-
-/* "Expand" — our own button in place of the browser's fullscreen. Real
-   fullscreen stretched the image across the whole screen and looked blurry;
-   this opens a dimmed overlay with the panorama at a comfortable size
-   (up to 1100px wide, 16:9), same calibration, Esc / X / click outside closes. */
-function openPanoLightbox(src){
-  if(document.getElementById('panoLightbox')) return;
-  const wrap=document.createElement('div'); wrap.id='panoLightbox';
-  wrap.innerHTML='<div class="pl-box"><div class="pl-view"></div><button type="button" class="pl-close" aria-label="Close">&times;</button></div>';
-  document.body.appendChild(wrap); document.body.style.overflow='hidden';
-  let v=null; const close=function(){ if(v){ try{ v.destroy(); }catch(e){} } wrap.remove(); document.body.style.overflow=''; document.removeEventListener('keydown', onKey); };
-  function onKey(e){ if(e.key==='Escape') close(); }
-  document.addEventListener('keydown', onKey);
-  wrap.addEventListener('click', function(e){ if(e.target===wrap || e.target.closest('.pl-close')) close(); });
-  requestAnimationFrame(function(){ wrap.classList.add('open'); panoViewer(wrap.querySelector('.pl-view'), src, function(){ return wrap.isConnected; }, function(viewer){ v=viewer; }); });
-}
-
-/* "360° tour" — opens the panorama in the lightbox above. */
-function openRoomPano(){ const R=getRoom(); if(R) openPanoLightbox(R.panorama||SAMPLE_PANO); }
-
-/* Photo strip: native scroll-snap does the swiping on touch screens. render()
-   redraws #app on every keystroke, which would snap the strip back to photo 1
-   while someone types — so the position is remembered and put back here. Mouse
-   users get click-and-drag (touch and trackpads already scroll it natively). */
-var GALPOS={ room:null, left:0 };
-function mountGallery(){
-  const t=document.querySelector('#app .bk-gal-track'); if(!t) return;
-  if(GALPOS.room!==state.roomId) GALPOS={ room:state.roomId, left:0 };
-  const slides=Array.from(t.children), dots=Array.from(document.querySelectorAll('#app .bk-gal-dots i')), idxEl=document.querySelector('#app .bk-gal-idx');
-  const pos=function(i){ return slides[i].offsetLeft-slides[0].offsetLeft; };
-  const maxLeft=function(){ return Math.max(0,t.scrollWidth-t.clientWidth); };
-  const nearest=function(){
-    if(t.scrollLeft>=maxLeft()-2) return slides.length-1;
-    let best=0; for(let i=1;i<slides.length;i++) if(Math.abs(pos(i)-t.scrollLeft)<Math.abs(pos(best)-t.scrollLeft)) best=i;
-    return best;
-  };
-  const paint=function(){
-    GALPOS.left=t.scrollLeft;
-    const i=nearest();
-    dots.forEach(function(d,k){ d.classList.toggle('on',k===i); });
-    if(idxEl) idxEl.textContent=i+1;
-  };
-  t.scrollLeft=GALPOS.left;
-  paint();
-  t.addEventListener('scroll',paint,{passive:true});
-
-  let drag=null, moved=false;
-  const onMove=function(e){ if(!drag) return; const dx=e.clientX-drag.x; if(Math.abs(dx)>5) moved=true; t.scrollLeft=drag.left-dx; };
-  const onUp=function(e){
-    window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); window.removeEventListener('pointercancel',onUp);
-    if(!drag) return;
-    const dx=e.clientX-drag.x; let i=drag.from;
-    if(Math.abs(dx)>40) i=Math.max(0,Math.min(slides.length-1,i+(dx<0?1:-1)));
-    drag=null; t.classList.remove('drag');
-    t.style.scrollBehavior='smooth'; t.scrollLeft=Math.min(pos(i),maxLeft());
-    setTimeout(function(){ t.style.scrollBehavior=''; moved=false; },450);
-  };
-  t.addEventListener('pointerdown',function(e){
-    if(e.pointerType!=='mouse' || e.button!==0 || slides.length<2) return;
-    drag={ x:e.clientX, left:t.scrollLeft, from:nearest() }; moved=false;
-    t.classList.add('drag');
-    window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp); window.addEventListener('pointercancel',onUp);
-  });
-  /* a drag that ends over the 360° tile must not count as a tap on it */
-  t.addEventListener('click',function(e){ if(moved){ e.preventDefault(); e.stopPropagation(); } },true);
-}
-
+@include('partials.booking-panorama')
 /* Photo gallery lightbox — view-only, mounted outside #app. Shows the
    room's real uploaded photos (R.photoUrls); falls back to the numbered
    gradient placeholders when the room has none yet. */
-const GAL_GRADS=['#eef1f5,#dfe4ea','#f3eee9,#e6ddd3','#e9eef3,#d5e0ea','#eef3ee,#d9e6da','#f3eef1,#e6d5de','#eaf0f3,#d5e2ea','#f2efe8,#e4dccf','#eef3f0,#dbe7df'];
-function galGrad(i){ return 'background:linear-gradient(135deg,'+GAL_GRADS[i%GAL_GRADS.length]+')'; }
-var GAL_PHOTOS=[];
-function openGallery(){
-  const R=getRoom(); if(!R || document.getElementById('galOverlay')) return;
-  GAL_PHOTOS=R.photoUrls||[];
-  const n=GAL_PHOTOS.length||1;          /* no photos yet -> ONE placeholder tile, never a made-up count */
-  let thumbs='';
-  for(let i=0;i<n;i++){
-    const url=GAL_PHOTOS[i];
-    const bg=url?('background-size:cover;background-position:center;background-image:url(\''+url+'\')'):galGrad(i);
-    thumbs+='<button class="galThumb" data-i="'+i+'" onclick="galSelect('+i+')" style="border:2px solid transparent;border-radius:8px;cursor:pointer;padding:0;aspect-ratio:4/3;'+bg+';display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 10px ui-monospace,monospace">'+(url?'':'Photo '+(i+1))+'</button>';
-  }
-  const ov=document.createElement('div');
-  ov.id='galOverlay';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(20,18,15,.75);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px';
-  ov.innerHTML=
-    '<div style="background:#fff;border-radius:16px;max-width:960px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(0,0,0,.08)"><div style="font-size:15px;font-weight:660">'+esc(R.name)+' · Photos</div><button onclick="closeGallery()" style="background:none;border:none;font-size:22px;line-height:1;color:#8a857d;cursor:pointer">&times;</button></div>'
-    +'<div style="padding:16px 18px;overflow:auto">'
-    +'<div id="galBig"></div>'
-    +'<div style="font-size:12px;font-weight:600;color:#8a857d;text-transform:uppercase;letter-spacing:.04em;margin:16px 0 10px">All photos</div>'
-    +'<div id="galGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">'+thumbs+'</div>'
-    +'</div></div>';
-  ov.addEventListener('click',function(e){ if(e.target===ov) closeGallery(); });
-  document.body.appendChild(ov);
-  galSelect(0);
-}
-function galSelect(i){
-  const big=document.getElementById('galBig');
-  const url=GAL_PHOTOS[i];
-  if(big){
-    if(url){ big.setAttribute('style','background-size:cover;background-position:center;background-image:url(\''+url+'\');border-radius:12px;aspect-ratio:16/9'); big.textContent=''; }
-    else { big.setAttribute('style', galGrad(i)+';border-radius:12px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 14px ui-monospace,monospace'); big.textContent='Photo '+(i+1); }
-  }
-  const g=document.getElementById('galGrid');
-  if(g) g.querySelectorAll('.galThumb').forEach(function(b){ b.style.borderColor=(+b.getAttribute('data-i')===i)?'#a11626':'transparent'; });
-}
-function closeGallery(){ const ov=document.getElementById('galOverlay'); if(ov) ov.remove(); }
+@include('partials.booking-gallery')
 
 /* ---------- amenity icons ----------
    Same idea as the venue page's amenityIcon(), but matched to the HOSTEL
@@ -1466,72 +1183,7 @@ function pendingScreen(){
 /* ---------- screen: PAYMENT ---------- */
 /* Reuses the SHARED receipt checker (includes/gcash-checker.php) — same engine as
    the venue, pointed at the hostel staff's account via $gcAccount. */
-function receiptPanelHtml(){
-  const o=state.ocr;
-  const fileInput=`<input type="file" id="gcFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="checkReceipt(this)">`;
-  if(!o){
-    const on=state.agreeExact;
-    return fileInput+`
-    <div onclick="${on?'pickReceipt()':''}" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:26px 14px;text-align:center;background:#fff;${on?'cursor:pointer':'opacity:.55;cursor:not-allowed'}">
-      <div style="font-size:13.5px;font-weight:600;color:#4a463f">${on?'Tap to upload a screenshot of your GCash receipt':'Tick the exact-amount box above to enable the upload'}</div>
-      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · up to ${UPLOAD_MAX_MB} MB · keep the reference number and amount visible · checked instantly with OCR</div>
-    </div>`;
-  }
-  if(o.phase==='reading'){
-    return `
-    <div style="border:1px solid rgba(0,0,0,.12);border-radius:11px;padding:14px;background:#fff">
-      <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:9px">
-        <span style="font-size:13px;font-weight:600;color:#4a463f;overflow-wrap:anywhere">${esc(o.fileName)}</span>
-        <span id="gcBarLabel" style="font-size:12px;color:#8a857d;flex:none">${esc(o.label)} · ${Math.round((o.pct||0)*100)}%</span>
-      </div>
-      <div style="height:6px;border-radius:999px;background:#e7e4de;overflow:hidden">
-        <div id="gcBar" style="height:100%;width:${Math.round((o.pct||0)*100)}%;background:#a11626;border-radius:999px;transition:width .25s"></div>
-      </div>
-      <div style="font-size:12.5px;color:#a5a19a;margin-top:8px">Reading the receipt with OCR — runs in your browser, usually 5–15 seconds.</div>
-    </div>`;
-  }
-  const r=o.rec;
-  /* Verdict wording. Keys match the schema's gcash_receipts.verdict enum
-     (accepted / manual_review / rejected) so the app and the database speak one
-     vocabulary. "manual review" is NOT a problem the customer must fix — the
-     slot is held and staff decide — so it says so, and the issue list below
-     still tells them exactly what looked off. */
-  const V={
-    accepted:{ bg:'#f2faf5', bd:'#d4ebdd', fg:'#1c7a4f', t:'Receipt accepted — payment recorded', s:'All automatic checks passed. Staff give the final confirmation in GCash.' },
-    manual_review:{ bg:'#fdf7ee', bd:'#f3e3c8', fg:'#8a5a12', t:'Receipt received — a coordinator will check it', s:'Something did not match automatically, so a person will look at it. Your slot is held while they do — you do not need to resubmit.' },
-    rejected:{ bg:'#fdf2f2', bd:'#f2d8d8', fg:'#b23a3a', t:'Receipt rejected by the automatic check', s:'Fix the issues below, then upload a new receipt.' },
-  }[r.status];
-  const p=r.parsed;
-  const kv=[
-    ['Ref no.', p.refDisplay||p.ref||'—'],
-    ['Amount read', p.effAmountC!=null?centavosFmt(p.effAmountC):'—'],
-    ['Amount required', centavosFmt(gcExpectedCentavos())],   /* the number they can act on — shown even when a person is reviewing */
-    ['Date & time', p.datetime||'—'],
-    ['Sent to', p.receiverNumber||p.receiverNameMasked||p.receiverNameShort||'—'],
-  ];
-  const issues=[...r.reasons.map(c=>({c,hard:true})), ...r.flags.map(c=>({c,hard:false}))];
-  return fileInput+`
-  <div style="border:1px solid rgba(0,0,0,.12);border-radius:11px;overflow:hidden;background:#fff">
-    <div style="display:flex;gap:11px;align-items:flex-start;padding:13px 14px;background:${V.bg};border-bottom:1px solid ${V.bd}">
-      <div style="flex:1">
-        <div style="font-size:13.5px;color:${V.fg}">${V.t}</div>
-        <div style="font-size:12px;color:${V.fg};opacity:.85;margin-top:2px">${V.s}</div>
-      </div>
-      <button onclick="removeReceipt()" style="flex:none;background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;color:#4a463f;cursor:pointer">${r.status==='rejected'?'Try another':'Remove'}</button>
-    </div>
-    <div style="display:flex;gap:13px;padding:13px 14px">
-      ${o.thumb?`<img src="${o.thumb}" alt="receipt" style="width:64px;height:84px;object-fit:cover;border-radius:8px;border:1px solid rgba(0,0,0,.1);flex:none">`:''}
-      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;align-content:start">
-        ${kv.map(([k,v])=>`<div><div style="font-size:12px;color:#8a857d">${k}</div><div style="font-size:13px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${esc(v)}</div></div>`).join('')}
-      </div>
-    </div>
-    ${issues.length?`
-    <div style="padding:2px 14px 12px">
-      ${issues.map(i=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0"><span style="width:7px;height:7px;border-radius:999px;background:${i.hard?'#b23a3a':'#c99a3c'};margin-top:5px;flex:none"></span><span style="font-size:12.5px;color:#4a463f;line-height:1.45">${esc(GC_LABELS[i.c]||i.c)}</span></div>`).join('')}
-    </div>`:''}
-    ${r.confidence!=null?`<div style="padding:0 14px 11px;font-size:12px;color:#a5a19a">OCR confidence ${r.confidence}% · ${esc(o.fileName)}</div>`:''}
-  </div>`;
-}
+@include('partials.booking-receipt-panel')
 
 function paymentScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
@@ -1767,76 +1419,7 @@ render();
      (2) The static parts below the flow (More rooms, footer) reveal on scroll
          exactly as on the landing page, and replay up and down. */
   (function () {
-    if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return;
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    gsap.registerPlugin(ScrollTrigger);
-    ScrollTrigger.config({ ignoreMobileResize: true });
-    var EASE = 'power3.out';
-
-    /* ---- (1) screen entrance ---- */
-    /* The blocks to stagger: walk down from #app through single-child wrappers
-       until a node has several children — those are the screen's sections. */
-    function screenBlocks() {
-      var node = document.getElementById('app'), depth = 0;
-      while (node && node.children.length === 1 && depth < 5) { node = node.children[0]; depth++; }
-      if (!node || !node.children.length) return [];
-      var vis = function (el) { return el.offsetHeight > 0; };
-      var kids = Array.prototype.filter.call(node.children, vis);
-      if (kids.length <= 3) {                       /* two columns is too coarse: use their sections instead */
-        var out = [];
-        kids.forEach(function (k) {
-          var g = Array.prototype.filter.call(k.children, vis);
-          if (g.length >= 2 && g.length <= 8) out.push.apply(out, g); else out.push(k);
-        });
-        kids = out;
-      }
-      return kids.slice(0, 12);
-    }
-    /* Every block gets a scroll trigger, like the landing page: it rises in when
-       it scrolls into view and drops back out when it leaves, so scrolling up
-       and down replays the pop. The FIRST paint after a screen change is the
-       staggered entrance; on a same-screen re-render (typing, picking a date)
-       the blocks are re-armed silently so nothing jumps under your hands. */
-    var appTriggers = [], mode = 'scroll';
-    /* Re-arm the reveal for the blocks of the current screen. Two cases:
-         entrance — the screen changed: hide everything, stagger it in, and
-                    re-measure the whole page (it changed height).
-         instant  — a re-render mid-typing (every keystroke redraws #app): the
-                    same blocks are back as fresh DOM nodes, so just snap each
-                    one to the state it already had. Cheap on purpose: no
-                    pre-hide, no page-wide re-measure, and all style writes
-                    happen before all layout reads (no thrash). This is what
-                    keeps typing smooth on a phone. */
-    function armScreen(entrance) {
-      appTriggers.forEach(function (t) { t.kill(); }); appTriggers = [];
-      var blocks = screenBlocks();
-      if (!blocks.length) return;
-      mode = entrance ? 'entrance' : 'instant';
-      if (entrance) blocks.forEach(function (el) { gsap.set(el, { opacity: 0, y: 18, scale: .985 }); });   /* writes first */
-      var arming = true;                                                                                    /* then the reads — no writes until every trigger exists */
-      blocks.forEach(function (el, i) {
-        function paint(on) {
-          if (mode === 'instant') {              /* re-render mid-typing: snap to the right state */
-            if (arming) return;                  /* deferred to the batch below (one layout, not seven) */
-            gsap.set(el, { opacity: on ? 1 : 0, y: on ? 0 : 18, scale: on ? 1 : .985, clearProps: on ? 'transform' : '' });
-            return;
-          }
-          gsap.to(el, { opacity: on ? 1 : 0, y: on ? 0 : 18, scale: on ? 1 : .985,
-            duration: on ? .75 : .35, ease: EASE, overwrite: 'auto',
-            delay: (on && mode === 'entrance') ? i * .07 : 0,
-            clearProps: on ? 'transform' : '' });
-        }
-        appTriggers.push(ScrollTrigger.create({ trigger: el, start: 'top 92%', end: 'bottom top',
-          onToggle: function (s) { paint(s.isActive); }, onRefresh: function (s) { paint(s.isActive); } }));
-      });
-      arming = false;
-      if (entrance) ScrollTrigger.refresh();     /* the screen changed height: re-measure everything below it too */
-      else appTriggers.forEach(function (t) { t.vars.onRefresh(t); });   /* each new trigger already knows if it is in view: apply all states in one batch */
-      setTimeout(function () { mode = 'scroll'; }, 60);
-    }
-    /* PHONE CTA BAR. On a phone the booking form sits below the photos and the
-       description; this bar keeps "Reserve" one tap away and hides itself once
-       the form is on screen. Detail screen only; nothing on desktop. */
+@include('partials.booking-motion')
     (function () {
       if (!window.matchMedia || !window.matchMedia('(max-width: 720px)').matches) return;
       var bar = document.createElement('div'); bar.className = 'bk-cta'; bar.setAttribute('aria-hidden', 'true');
@@ -1891,40 +1474,6 @@ render();
     var foot = document.querySelector('.bk-footer .bk-footer-grid'); if (foot) reveal(foot.children, foot, { stagger: .08, rise: 16 });
   })();
 </script>
-<script>
-/* ============================================================
-   BROWSER BACK / FORWARD — the steps of this one-page flow are real history
-   entries, so the browser's Back button does what a customer expects:
-     review  → Back → edit details → Back → the landing page
-     payment → Back → the status page
-   Before submission every step is walkable. Once the request is SUBMITTED the
-   form is gone for good (pending/done REPLACE the entry instead of adding one),
-   so Back from there leaves the flow to the landing page rather than showing
-   an editable form for a booking that already exists.
-   ============================================================ */
-(function () {
-  if (typeof state === 'undefined' || typeof render !== 'function' || !window.history || !history.pushState) return;
-  var silent = false;                                  /* true while a popstate is being applied — do not push again */
-  var REPLACE = { pending: 1, done: 1 };               /* screens that stand in for the step before them */
-  var lastScreen = state.screen;
-  history.replaceState({ screen: state.screen }, '');
-  var prevRender = render;
-  render = function () {
-    prevRender.apply(this, arguments);
-    var now = state.screen;
-    if (now === lastScreen) return;
-    lastScreen = now;
-    if (silent) return;
-    (REPLACE[now] ? history.replaceState : history.pushState).call(history, { screen: now }, '');
-  };
-  window.addEventListener('popstate', function (e) {
-    var to = e.state && e.state.screen;
-    if (!to) return;
-    var submitted = state.submitted || (state.screen !== 'detail' && state.screen !== 'review');
-    if (submitted && (to === 'detail' || to === 'review')) { location.replace('{{ route('customer.venues') . $cq }}'); return; }
-    silent = true; state.screen = to; window.scrollTo(0, 0); render(); silent = false;
-  });
-})();
-</script>
+@include('partials.booking-history-nav')
 </body>
 </html>

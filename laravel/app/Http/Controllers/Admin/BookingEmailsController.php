@@ -43,17 +43,14 @@ class BookingEmailsController extends Controller
         if ($pdo === null) {
             $this->reply(503, ['ok' => false, 'message' => 'The database is unreachable.']);
         }
+        /* Own venue only for staff — reading the emails as well as resending them (2026-10-31). */
+        if (!staff_may_handle_booking($beBookingId)) {
+            $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can see its emails.']);
+        }
 
         if ($beIsPost) {
             if (($request->post('action') ?? '') !== 'resend') {
                 $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
-            }
-            /* Resending is acting on the booking: own venue only for staff (2026-10-27). */
-            $beVenue = $pdo->prepare('SELECT r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b');
-            $beVenue->execute([':b' => $beBookingId]);
-            $beVenueId = $beVenue->fetchColumn();
-            if ($beVenueId !== false && !staff_may_handle_venue($beVenueId)) {
-                $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can resend its emails.']);
             }
             $stmt = $pdo->prepare(
                 "SELECT id FROM email_outbox

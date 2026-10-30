@@ -62,16 +62,8 @@ class BookingActionController extends Controller
         /* STAFF ACT ONLY ON THEIR OWN VENUE'S BOOKINGS (decided 2026-10-27).
            Checked before the demo branch too. Admins handle every venue. */
         $scopeId = booking_id_from_reference($ref);
-        if ($scopeId !== null && staff_venue_scope() !== null) {
-            $scopePdo = venusep_db();
-            $scopeVenue = $scopePdo ? $scopePdo->prepare('SELECT r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b') : null;
-            if ($scopeVenue) {
-                $scopeVenue->execute([':b' => $scopeId]);
-                $venueOfBooking = $scopeVenue->fetchColumn();
-                if ($venueOfBooking !== false && !staff_may_handle_venue($venueOfBooking)) {
-                    $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can act on it.']);
-                }
-            }
+        if ($scopeId !== null && !staff_may_handle_booking($scopeId)) {
+            $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can act on it.']);
         }
 
         /* DEMO MODE — while the switch is on, nothing here writes: the reply

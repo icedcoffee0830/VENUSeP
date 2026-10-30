@@ -27,8 +27,7 @@ class ReceiptPdfController
     {
         legacy('auth', 'system-receipt');
 
-        $isStaff    = session()->has('user_id') && session()->has('account_type')
-                        && in_array(session('account_type'), ['admin', 'staff'], true);
+        $isStaff    = venusep_is_staff_session();
         $isCustomer = customer_logged_in();
         if (!$isStaff && !$isCustomer) {
             return self::deny();
@@ -48,7 +47,7 @@ class ReceiptPdfController
         $stmt = $pdo->prepare('SELECT customer_id FROM bookings WHERE id = :b');
         $stmt->execute([':b' => $bookingId]);
         $owner = $stmt->fetchColumn();
-        if ($owner === false || (!$isStaff && (int) $owner !== (int) session('customer_id'))) {
+        if ($owner === false || ($isStaff ? !staff_may_handle_booking($bookingId) : (int) $owner !== (int) session('customer_id'))) {
             return self::deny();
         }
 

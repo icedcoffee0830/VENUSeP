@@ -173,6 +173,31 @@ function staff_may_handle_venue($venueId)
     return $scope === null || ($scope !== 0 && $scope === (int) $venueId);
 }
 
+/* The venue STAFF lists are narrowed to (decided 2026-10-31: the three
+   departments never see each other's bookings): null = no narrowing (admins,
+   customers); a staff member's venue id; 0 = staff with no venue (sees nothing). */
+function staff_list_venue()
+{
+    return session('account_type') === 'staff' ? staff_venue_scope() : null;
+}
+
+/* May this staff session see / handle the booking? Admins and non-staff: yes
+   (their own checks apply). An unknown booking passes: the caller's 404 handles it. */
+function staff_may_handle_booking($bookingId)
+{
+    if (staff_list_venue() === null) {
+        return true;
+    }
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return false;
+    }
+    $st = $pdo->prepare('SELECT r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b');
+    $st->execute([':b' => (int) $bookingId]);
+    $venue = $st->fetchColumn();
+    return $venue === false || staff_may_handle_venue($venue);
+}
+
 /* ---- CUSTOMER SIDE — a staff session never counts as a customer. ---- */
 function customer_logged_in()
 {

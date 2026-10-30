@@ -23,8 +23,7 @@ class BookingDetailsController extends Controller
     {
         legacy('auth', 'db', 'bookings');
 
-        $bdIsStaff = session()->has('user_id') && session()->has('account_type')
-            && in_array(session('account_type'), ['admin', 'staff'], true);
+        $bdIsStaff = venusep_is_staff_session();
         $bdIsCustomer = !$bdIsStaff && customer_logged_in();
         if (!$bdIsStaff && !$bdIsCustomer) {
             $this->notFound();
@@ -38,7 +37,7 @@ class BookingDetailsController extends Controller
         } else {
             $b = booking_by_reference($ref);
         }
-        if (!$b) {
+        if (!$b || ($bdIsStaff && !staff_may_handle_booking($b['id']))) {   /* staff: own venue only */
             $this->notFound();
         }
         $isDemo = !empty($b['isDemo']);

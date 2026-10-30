@@ -23,8 +23,7 @@ class ValidIdViewController extends Controller
     {
         legacy('auth', 'db', 'bookings');
 
-        $viIsStaff = session()->has('user_id') && session()->has('account_type')
-            && in_array(session('account_type'), ['admin', 'staff'], true);
+        $viIsStaff = venusep_is_staff_session();
         $viIsCustomer = !$viIsStaff && customer_logged_in();
         if (!$viIsStaff && !$viIsCustomer) {
             return $this->notFound();
@@ -73,7 +72,7 @@ class ValidIdViewController extends Controller
         $own = $viPdo->prepare('SELECT customer_id FROM bookings WHERE id = :b');
         $own->execute([':b' => $viBookingId]);
         $ownerId = $own->fetchColumn();
-        if ($ownerId === false || (!$viIsStaff && (int) $ownerId !== (int) (session('customer_id') ?? 0))) {
+        if ($ownerId === false || ($viIsStaff ? !staff_may_handle_booking($viBookingId) : (int) $ownerId !== (int) (session('customer_id') ?? 0))) {
             return $this->notFound();
         }
         $viRows = bookings_query(['booking_id' => $viBookingId]);

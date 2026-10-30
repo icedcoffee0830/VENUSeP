@@ -27,13 +27,15 @@ class ReceiptTest extends TestCase
         $this->get(route('admin.receipt', ['booking' => 'nonsense']))->assertNotFound();
     }
 
-    public function test_staff_sees_any_venues_receipt(): void
+    public function test_another_venues_staff_get_404_and_the_admin_sees_the_receipt(): void
     {
-        // a venue-2 booking, paid (confirmed by the admin), opened by venue-1 staff
+        // a venue-2 booking, paid (confirmed by the admin): venue-1 staff may not open it
         [, $ref] = $this->seedVenueBooking('r5', 'approved', 'await_cash', 'cash');
         $this->actingAsAdmin()->postWithToken(route('admin.booking-action'), ['booking' => $ref, 'action' => 'confirm_payment'])->assertOk();
         $this->flushSession();
-        $this->actingAsStaff()->get(route('admin.receipt', ['booking' => $ref]))->assertOk()
+        $this->actingAsStaff()->get(route('admin.receipt', ['booking' => $ref]))->assertNotFound();
+        $this->flushSession();
+        $this->actingAsAdmin()->get(route('admin.receipt', ['booking' => $ref]))->assertOk()
             ->assertSee('System Receipt')->assertSee($ref)->assertSee('Amount paid')
             ->assertSee(route('root.receipt-pdf', ['booking' => $ref]), false)
             ->assertSee('class="receipt-page"', false);

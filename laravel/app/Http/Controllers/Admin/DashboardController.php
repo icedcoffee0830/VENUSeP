@@ -11,7 +11,7 @@ class DashboardController
     {
         /* The needs-action counts and the preview list come from the SAME builder the
            Booking Requests queue uses (legacy bookings.php). */
-        legacy('bookings', 'auth');                // auth: staff_venue_scope()
+        legacy('bookings');                        // + auth: staff_venue_scope(), staff_venue_sql()
         $adRows = booking_queue_rows();
 
         /* Today's bookings, money collected this quarter, the venue list —
@@ -30,6 +30,7 @@ class DashboardController
                   WHERE (CURDATE() BETWEEN vd.start_date AND vd.end_date
                          OR (hd.check_in_date <= CURDATE() AND hd.check_out_date > CURDATE()))
                     AND b.reservation_status IN ('approved', 'completed')"
+                 . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id = %d)', 'AND')
             )->fetchColumn();
             /* Money COLLECTED this quarter — the Quarterly Reports' own figure
                (report_quarters()), so the tile and the report cannot disagree. */

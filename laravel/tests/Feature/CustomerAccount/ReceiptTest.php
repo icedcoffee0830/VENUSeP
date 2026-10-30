@@ -99,13 +99,15 @@ class ReceiptTest extends TestCase
         $this->assertSame((string) strlen($res->getContent()), $res->headers->get('Content-Length'));
     }
 
-    public function test_pdf_is_404_for_a_guest_and_another_customer_but_staff_may_print_it(): void
+    public function test_pdf_is_404_for_a_guest_another_customer_and_another_venues_staff_but_an_admin_may_print_it(): void
     {
-        $url = route('root.receipt-pdf', ['booking' => $this->ref(self::BOOKING)]);
+        $url = route('root.receipt-pdf', ['booking' => $this->ref(self::BOOKING)]);   // venue 2
         $this->get($url)->assertNotFound()->assertSeeText('Not found.');
         $this->actingAsCustomer('jmdelacruz@usep.edu.ph')->get($url)->assertNotFound();
         $this->flushSession();
-        $this->actingAsStaff()->get($url)->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->actingAsStaff()->get($url)->assertNotFound();   // venue-1 staff
+        $this->flushSession();
+        $this->actingAsAdmin()->get($url)->assertOk()->assertHeader('Content-Type', 'application/pdf');
     }
 
     /* A suspended staff account loses its session on its next request (auth.php

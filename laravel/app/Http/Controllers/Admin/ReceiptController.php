@@ -7,18 +7,18 @@ use Illuminate\Http\Request;
 
 /* RECEIPT (STAFF VIEW) (was admin/receipt.php) — the VENUSeP System Receipt
    for any booking, reached from Transaction History's "Receipt" button.
-   Any booking, any staff member: the same "staff may see any booking's
-   documents" rule receipt-pdf and document-view follow. */
+   Staff: their own venue's bookings only (2026-10-31), like receipt-pdf and
+   document-view; admins: any. */
 class ReceiptController extends Controller
 {
     public function __invoke(Request $request)
     {
-        legacy('db', 'system-receipt');
+        legacy('auth', 'system-receipt');
 
         $arRef = (string) ($request->query('booking') ?? '');
         $arBookingId = booking_id_from_reference($arRef);
         $arPdo = venusep_db();
-        if ($arBookingId === null || $arPdo === null) {
+        if ($arBookingId === null || $arPdo === null || !staff_may_handle_booking($arBookingId)) {
             return $this->notFound();
         }
         $arReceipt = receipt_for_booking($arPdo, $arBookingId);

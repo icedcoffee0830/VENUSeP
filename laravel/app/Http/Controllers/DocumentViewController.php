@@ -26,8 +26,7 @@ class DocumentViewController extends Controller
     {
         legacy('auth', 'db', 'documents');
 
-        $isStaff    = session()->has('user_id') && session()->has('account_type')
-                        && in_array(session('account_type'), ['admin', 'staff'], true);
+        $isStaff    = venusep_is_staff_session();
         $isCustomer = customer_logged_in();
         if (!$isStaff && !$isCustomer) {
             return $this->deny();
@@ -49,14 +48,14 @@ class DocumentViewController extends Controller
         /* Fetch the row AND the booking's owner in one query. */
         if ($docId) {
             $stmt = $pdo->prepare(
-                'SELECT d.file_path, d.original_filename, d.mime_type, d.document_type AS kind, b.customer_id
+                'SELECT d.file_path, d.original_filename, d.mime_type, d.document_type AS kind, b.customer_id, b.id AS booking_id
                    FROM booking_documents d JOIN bookings b ON b.id = d.booking_id
                   WHERE d.id = :i'
             );
             $stmt->execute([':i' => $docId]);
         } else {
             $stmt = $pdo->prepare(
-                "SELECT g.file_path, g.original_filename, NULL AS mime_type, 'gcash_receipt' AS kind, b.customer_id
+                "SELECT g.file_path, g.original_filename, NULL AS mime_type, 'gcash_receipt' AS kind, b.customer_id, b.id AS booking_id
                    FROM gcash_receipts g JOIN bookings b ON b.id = g.booking_id
                   WHERE g.id = :i"
             );
@@ -67,8 +66,8 @@ class DocumentViewController extends Controller
             return $this->deny();
         }
 
-        /* THE PERMISSION CHECK — against the SESSION's customer id. */
-        if (!$isStaff && (int) $row['customer_id'] !== (int) session('customer_id')) {
+        /* THE PERMISSION CHECK — against the SESSION's customer id; staff: own venue only. */
+        if ($isStaff ? !staff_may_handle_booking($row['booking_id']) : (int) $row['customer_id'] !== (int) session('customer_id')) {
             return $this->deny();
         }
 

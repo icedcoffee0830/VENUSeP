@@ -5,8 +5,9 @@ namespace Tests\Feature\AdminBookings;
 use Tests\TestCase;
 
 /* document-view (the bytes) and valid-id-view (the viewer page) — used by
-   customers AND staff. Staff see any booking's documents; a customer only
-   their own; everyone else gets the same plain 404.
+   customers AND staff. Admins see any booking's documents, staff their own
+   venue's (2026-10-31); a customer only their own; everyone else gets the
+   same plain 404.
 
    Document 3 = booking 158's valid ID (customer 8, mesionaalexa@gmail.com).
    The test puts a tiny fake PNG at its path in THIS worktree's private
@@ -43,9 +44,15 @@ class DocumentAccessTest extends TestCase
         $this->assertPlain404($this->get(route('root.valid-id-view', ['doc' => 3])));
     }
 
-    public function test_staff_get_any_bookings_file_inline_with_the_safety_headers(): void
+    public function test_another_venues_staff_get_the_same_404(): void
     {
-        $res = $this->actingAsStaff()->get(route('root.document-view', ['doc' => 3]));   // venue 2 booking: staff still see it
+        $this->assertPlain404($this->actingAsStaff()->get(route('root.document-view', ['doc' => 3])));   // venue 2 booking, venue 1 staff
+        $this->assertPlain404($this->actingAsStaff()->get(route('root.valid-id-view', ['booking' => 'VB-2026-158'])));
+    }
+
+    public function test_an_admin_gets_any_bookings_file_inline_with_the_safety_headers(): void
+    {
+        $res = $this->actingAsAdmin()->get(route('root.document-view', ['doc' => 3]));
         $res->assertOk()->assertHeader('Content-Type', 'image/png')
             ->assertHeader('Content-Disposition', 'inline; filename="customer_id-3.png"')
             ->assertHeader('X-Content-Type-Options', 'nosniff')
@@ -74,7 +81,7 @@ class DocumentAccessTest extends TestCase
 
     public function test_viewer_page_for_staff_links_back_to_the_request(): void
     {
-        $this->actingAsStaff()->get(route('root.valid-id-view', ['booking' => 'VB-2026-158']))->assertOk()
+        $this->actingAsAdmin()->get(route('root.valid-id-view', ['booking' => 'VB-2026-158']))->assertOk()
             ->assertSee('<title>VENUSeP | Valid ID · VB-2026-158</title>', false)
             ->assertSee('src="' . route('root.document-view') . '?doc=3"', false)
             ->assertSee(json_encode(route('admin.booking-request', ['id' => 'VB-2026-158'])), false)
@@ -98,14 +105,17 @@ class DocumentAccessTest extends TestCase
        staff_session_refresh() now ends that session before this controller runs. */
     public function test_a_suspended_staff_session_sees_nothing(): void
     {
-        $this->actingAsStaff()->get(route('root.document-view', ['doc' => 3]))->assertOk();   // still active: allowed
-        \Illuminate\Support\Facades\DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 0]);
+        $staff = \Illuminate\Support\Facades\DB::table('staff')->where('user_id', \Illuminate\Support\Facades\DB::table('users')->where('email', 'staff@gmail.com')->value('id'));
+        $staff->update(['venue_id' => 2]);   // booking 158's venue, so only the suspension refuses
         try {
+            $this->actingAsStaff()->get(route('root.document-view', ['doc' => 3]))->assertOk();   // still active: allowed
+            \Illuminate\Support\Facades\DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 0]);
             $this->assertPlain404($this->actingAsStaff()->get(route('root.document-view', ['doc' => 3])));
             $this->assertPlain404($this->actingAsStaff()->get(route('root.valid-id-view', ['booking' => 'VB-2026-158'])));
             $this->assertFalse(session()->has('user_id'));
         } finally {
             \Illuminate\Support\Facades\DB::table('users')->where('email', 'staff@gmail.com')->update(['is_active' => 1]);
+            $staff->update(['venue_id' => 1]);
         }
     }
 

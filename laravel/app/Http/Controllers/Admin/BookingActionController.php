@@ -35,6 +35,8 @@ class BookingActionController extends Controller
 {
     use RepliesJson;
 
+    private const POSTPAY_NO_RELEASE = 'A pay-after-the-event booking is never released: the event already happened, so what is owed stays on record. Extend the deadline or follow up with the customer.';
+
     public function __invoke(Request $request)
     {
         legacy('auth', 'db', 'bookings', 'receipt-emails');
@@ -264,7 +266,11 @@ class BookingActionController extends Controller
             case 'override_confirm': $pay = 'confirmed'; break;
             case 'undo_rejection':   $pay = 'under_review'; break;
             case 'extend_deadline':  $pay = $demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash'; break;
-            case 'release_slot':     $res = 'released'; $pay = 'expired'; break;
+            case 'release_slot':
+                if ($demoAfter['payment']['policy'] === 'postpay') {
+                    $this->reply(409, ['ok' => false, 'message' => self::POSTPAY_NO_RELEASE]);
+                }
+                $res = 'released'; $pay = 'expired'; break;
             case 'record_or':
             case 'allow_receipt_attempts': break;   // documents, arrival and the attempt allowance change no status
             default:
@@ -533,10 +539,15 @@ class BookingActionController extends Controller
         }
 
         /* ---- OVERDUE: stop waiting — the reservation is released, as the
-                system does itself when a pre-pay hold lapses (released / expired). ---- */
+                system does itself when a pre-pay hold lapses (released / expired).
+                Never a POST-PAY booking (Aron, 2026-10-30): its event already
+                happened, so releasing it would write off what is owed. ---- */
         case 'release_slot':
             if ($bk['reservation_status'] !== 'approved' || $bk['payment_status'] !== 'overdue') {
                 $this->reply(409, ['ok' => false, 'message' => 'Only an approved booking with an overdue payment can be released.']);
+            }
+            if (!$bk['refunds_allowed'] && !$bk['pay_to_use']) {
+                $this->reply(409, ['ok' => false, 'message' => self::POSTPAY_NO_RELEASE]);
             }
             $this->setActor($pdo, $actor, 'Payment overdue; the slot was released by staff.' . ($note !== '' ? ' ' . $note : ''));
             /* trg_bookings_after_update frees the held slots / bed-nights. */

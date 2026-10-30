@@ -575,7 +575,10 @@
             ? `<button class="br-btn br-btn-primary" onclick="approveIdRes(true)">Approve with ${DISCOUNT_PERCENT}% discount</button><button class="br-btn" onclick="approveIdRes(false)">Approve at full price</button>`
             : `<button class="br-btn br-btn-primary" onclick="approveIdRes(false)">Approve ID &amp; reservation</button>`)
           + `<button class="br-btn" onclick="rejectRequest()">Reject request</button>`;
-        if (cur.pay === 'overdue') return `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
+        /* A post-pay booking is never released: its event already happened (Aron, 2026-10-30). */
+        if (cur.pay === 'overdue') return cur.postpay
+            ? `<button class="br-btn br-btn-primary" onclick="extendDeadline()">Extend 48 h</button>`
+            : `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
         if (OPEN_REFUND.includes(cur.pay)) return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button><button class="br-btn" onclick="openAction('fix')">Return for correction</button><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
         /* PAY TO USE (2026-10-27): no bed until the stay is paid. A receipt
            still under review is not paid; staff confirm it first. The OR is
@@ -838,7 +841,9 @@
               /* the hostel takes cash at the front desk; its OR comes later from the cashier */
               ? banner('bn-green', 'Paid in cash at the front desk', esc(cur.confirmedBy || 'Recorded by staff') + ' · the System Receipt is issued; the Official Receipt follows from the University Cashier.')
               : banner('bn-green', 'Paid at the cashier', esc(cur.confirmedBy || 'Recorded by staff') + ' · official receipt issued at the counter.');
-          case 'overdue': return banner('bn-red', 'Payment overdue', 'The pay-by deadline (' + esc(cur.payBy) + ') passed with no valid payment. The slot can be released or the deadline extended.') +
+          case 'overdue': return banner('bn-red', 'Payment overdue', 'The pay-by deadline (' + esc(cur.payBy) + ') passed with no valid payment. ' + (cur.postpay
+              ? 'The event already happened, so the booking is not released: the payment stays on record and can still be made. Extend the deadline or follow up with the customer.'
+              : 'The slot can be released or the deadline extended.')) +
             `<div class="br-kvgrid">${kv('Amount due', esc(cur.total))}${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}</div>`;
           case 'refund_requested':
           case 'refund_await_or':

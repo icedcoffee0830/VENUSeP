@@ -1,5 +1,7 @@
+{{-- ROOM FORM — event rooms and hostel rooms ($isHostel), one view: the two used to be
+     ~1,150 identical lines. --}}
 @extends('layouts.admin')
-@section('title', 'Room Form')
+@section('title', $isHostel ? 'Hostel Room Form' : 'Room Form')
 @section('active', 'Venue Management')
 
 @push('head')
@@ -513,8 +515,9 @@
       <!-- ==========================================================
            [4] PAGE CONTENT — the room form itself: back link, title,
            photo gallery + 360° panorama tile, room fields (name,
-           location, capacity, rate), the Maintenance window,
-           At-a-glance + Amenities chip pools, then the Save/Cancel footer.
+           location, capacity, rate — or a hostel room's beds, CR type,
+           rate per head/night), the Maintenance window, At-a-glance +
+           Amenities chip pools, then the Save/Cancel footer.
            [SIM] the pre-filled values and placeholder photos are
            sample data — the real app will load the room by its ?id=
            from the database (blank form = Add, loaded form = Edit).
@@ -524,8 +527,13 @@
           <div class="container-fluid">
             <div class="vm-page">
       <a class="vm-back" href="{{ route('admin.venue-management') }}">&larr; Back to Venue Management</a>
+      @if ($isHostel)
+      <h1 class="vm-title">{{ $roomId ? 'Edit Hostel Room' : 'Add Hostel Room' }}</h1>
+      <p class="vm-subtitle">Hostel rooms hold beds. Guests book a bed, not the room — so there is no capacity here, only how many beds exist and what one costs per night.@if (!$roomId) Photos can be added once the room is saved and has an id.@endif</p>
+      @else
       <h1 class="vm-title">{{ $roomId ? 'Edit Room Details' : 'Add Room' }}</h1>
       <p class="vm-subtitle">Rooms are the bookable units. Customers see these photos.@if (!$roomId) Photos can be added once the room is saved and has an id.@endif</p>
+      @endif
 
       <form class="vm-panel" onsubmit="return false">
         <input type="hidden" id="vmRoomId" value="{{ $roomId }}" />
@@ -583,15 +591,15 @@
         <div class="vm-row">
           <div class="vm-field">
             <label for="roomName">Room Name</label>
-            <input id="roomName" class="vm-control" type="text" value="{{ $roomFormRoom ? $roomFormRoom['name'] : '' }}" placeholder="e.g. Function Hall" />
+            <input id="roomName" class="vm-control" type="text" value="{{ $roomFormRoom ? $roomFormRoom['name'] : '' }}" placeholder="{{ $isHostel ? 'e.g. Hostel Room 1' : 'e.g. Function Hall' }}" />
           </div>
           <div class="vm-field">
             <label>Location (Venue)</label>
             <!-- Options come from includes/venues.php — every venue, data-driven.
                  The summary + saved value come from rooms.venue_id via the DB
-                 overlay in includes/venue-rooms.php. -->
+                 overlay in includes/venue-rooms.php / hostel-rooms.php. -->
             <details class="vm-dd" id="roomLoc">
-              <summary class="vm-dd-trigger">{{ $roomFormRoom ? $roomFormRoom['venue'] : 'Select a venue' }}</summary>
+              <summary class="vm-dd-trigger">{{ $roomFormRoom && isset($roomFormRoom['venue']) ? $roomFormRoom['venue'] : 'Select a venue' }}</summary>
               <ul class="vm-dd-menu" aria-label="Location options">
                 {!! venueOptions($venues) !!}
               </ul>
@@ -608,6 +616,37 @@
         </div>
 
         <div class="vm-top-fields">
+        @if ($isHostel)
+        <!-- No "Capacity". A hostel room's capacity IS its bed count, and how
+             full it is on a given night is counted from the guest roster — not
+             typed in here. Occupancy is a room x NIGHT fact; this form only
+             describes the room. -->
+        <div class="vm-row-3">
+          <div class="vm-field">
+            <label for="roomBeds">Beds</label>
+            <!-- the room's REAL values (2026-10-27) — these used to open at
+                 6 beds / ₱350 / communal for every room -->
+            <input id="roomBeds" class="vm-control" type="number" min="1" max="20" value="{{ $roomFormRoom ? (int) $roomFormRoom['beds'] : 6 }}" placeholder="e.g. 6" />
+            <div class="vm-hint" style="margin:.4rem 0 0">How many beds exist in the room. Beds with upcoming guests cannot be removed.</div>
+          </div>
+          <div class="vm-field">
+            <label>CR type</label>
+            <details class="vm-dd" id="roomCr">
+              <summary class="vm-dd-trigger">{{ ($roomFormRoom && $roomFormRoom['cr_type'] === 'private') ? 'Private CR' : 'Communal CR' }}</summary>
+              <ul class="vm-dd-menu" aria-label="CR type options">
+                <li class="vm-dd-option" data-rate="350">Communal CR</li>
+                <li class="vm-dd-option" data-rate="400">Private CR</li>
+              </ul>
+            </details>
+            <div class="vm-hint" style="margin:.4rem 0 0">Sets the rate and the room layout.</div>
+          </div>
+          <div class="vm-field">
+            <label for="roomRate">Rate (₱ per head, per night)</label>
+            <input id="roomRate" class="vm-control" type="number" min="0" step="0.01" value="{{ $roomFormRoom ? number_format((float) $roomFormRoom['rate'], 2, '.', '') : '350.00' }}" placeholder="0.00" />
+            <div class="vm-hint" style="margin:.4rem 0 0">Per bed, per night. A new rate applies to new bookings; existing stays keep their price.</div>
+          </div>
+        </div>
+        @else
         <div class="vm-row">
           <!-- the room's REAL capacity and rate (2026-10-27) — these used to open
                at 150 / ₱4,000 for every room, whatever it actually held -->
@@ -621,6 +660,7 @@
             <div class="vm-hint" style="margin:.4rem 0 0">A new rate applies to new bookings; existing ones keep their price.</div>
           </div>
         </div>
+        @endif
         <div class="vm-field">
           <label for="roomDesc">Description</label>
           <textarea id="roomDesc" class="vm-control" rows="3" placeholder="What the room is like, shown at the top of its page">{{ $roomFormRoom ? $roomFormRoom['description'] : '' }}</textarea>
@@ -692,6 +732,21 @@
         <hr class="vm-divider" />
 
         <h2 class="vm-section-head">At a glance</h2>
+        @if ($isHostel)
+        <p class="vm-hint">Shown on the guest's room page. A hostel room has no "best for" or "bookable hours" — nobody books a bed for an event, and a stay is counted in nights.</p>
+
+        <div class="vm-row">
+          <div class="vm-field">
+            <label for="roomCheckIn">Check-in from</label>
+            <input id="roomCheckIn" class="vm-control" type="time" value="{{ $roomFormRoom ? $roomFormRoom['checkIn'] : '14:00' }}" />
+            <div class="vm-hint" style="margin:.4rem 0 0">Saved with the room. Nights are counted from the dates, not the clock.</div>
+          </div>
+          <div class="vm-field">
+            <label for="roomCheckOut">Check-out by</label>
+            <input id="roomCheckOut" class="vm-control" type="time" value="{{ $roomFormRoom ? $roomFormRoom['checkOut'] : '12:00' }}" />
+          </div>
+        </div>
+        @else
         <p class="vm-hint">Shown on the customer's room page. Fill the free-text fields, then tap the attributes that apply. (Reservation fee uses the Rate above.)</p>
 
         <!-- "At a glance" — one line each of prose about the room (2026-10-27:
@@ -718,11 +773,12 @@
             <input id="roomAccess" class="vm-control" type="text" maxlength="255" value="{{ $roomFormRoom ? $roomFormRoom['accessible'] : '' }}" placeholder="e.g. Wheelchair accessible" />
           </div>
         </div>
+        @endif
 
         <hr class="vm-divider" />
 
         <h2 class="vm-section-head">Amenities</h2>
-        <p class="vm-hint">Tap every amenity this room offers. Each carries its own icon on the customer page.</p>
+        <p class="vm-hint">Tap every amenity this room offers. Each carries its own icon on the {{ $isHostel ? "guest's" : 'customer' }} page.</p>
         <div id="vmAmenityPool" class="vm-poolgrid"></div>
         </div>
         </div>
@@ -770,6 +826,20 @@
         var d = new Date(v + 'T00:00:00');
         return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', MT_FMT);
       }
+      // Hostel rooms: the rate follows the CR type: communal P350, private P400.
+      // Letting staff set them independently would create two facts about one price.
+      var CR_RATE = { 'Communal CR': '350.00', 'Private CR': '400.00' };
+      document.addEventListener('DOMContentLoaded', function () {
+        var cr = document.getElementById('roomCr');
+        if (!cr) return;
+        cr.querySelectorAll('.vm-dd-option').forEach(function (opt) {
+          opt.addEventListener('click', function () {
+            var rate = CR_RATE[opt.textContent.trim()];
+            var box = document.getElementById('roomRate');
+            if (rate && box) box.value = rate;
+          });
+        });
+      });
       function mtSync() {
         var on = document.getElementById('mtOn').checked;
         document.getElementById('mtBody').hidden = !on;
@@ -1087,15 +1157,25 @@
         body.append('room_id', VM_ROOM_ID || '');
         body.append('name', name);
         body.append('venue', venue);
-        body.append('room_type', 'event');
         /* every detail on the form, on create AND edit (2026-10-27) */
+        @if ($isHostel)
+        var crTrigger = document.querySelector('#roomCr .vm-dd-trigger');
+        body.append('room_type', 'hostel');
+        body.append('beds', document.getElementById('roomBeds').value);
+        body.append('cr_type', crTrigger && /private/i.test(crTrigger.textContent) ? 'private' : 'communal');
+        body.append('rate', document.getElementById('roomRate').value);
+        body.append('check_in_time', document.getElementById('roomCheckIn').value);
+        body.append('check_out_time', document.getElementById('roomCheckOut').value);
+        @else
+        body.append('room_type', 'event');
         body.append('capacity', document.getElementById('roomCap').value);
         body.append('fee', document.getElementById('roomRate').value);
-        body.append('description', document.getElementById('roomDesc').value);
         body.append('best_for', document.getElementById('roomBestFor').value);
         body.append('catering', document.getElementById('roomCatering').value);
         body.append('accessibility', document.getElementById('roomAccess').value);
-        body.append('maintenance', JSON.stringify(mtValue()));
+        @endif
+        body.append('description', document.getElementById('roomDesc').value);
+        body.append('maintenance', JSON.stringify(mtv));
         /* The ticked amenity KEYS. Always sent — an empty list is a real answer
            (the admin unticked everything), which is why room-save.php
            distinguishes "absent" from "empty". */
@@ -1108,7 +1188,7 @@
             /* move on only once OK is clicked — unlike alert(), the modal does
                not block, and navigating at once wiped it off the screen */
             venusepAlert(res.message || 'Room saved.', { tone: 'ok', title: 'Saved' }).then(function () {
-              location.href = (res.created && res.room_id)
+              location.href = (res.created && res.room_id && !@json($isHostel))
                 ? {!! json_encode(route('admin.room-form')) !!} + '?id=' + encodeURIComponent(res.room_id)
                 : {!! json_encode(route('admin.venue-management')) !!};
             });

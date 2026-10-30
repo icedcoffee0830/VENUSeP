@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Admin\CatalogDeleteController;
-use App\Http\Controllers\Admin\HostelRoomFormController;
 use App\Http\Controllers\Admin\RoomFormController;
 use App\Http\Controllers\Admin\RoomPhotosApiController;
 use App\Http\Controllers\Admin\RoomSaveController;
@@ -18,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/admin/venue-management', VenueManagementController::class)->middleware('staff')->name('admin.venue-management');
 Route::get('/admin/venue-form', VenueFormController::class)->middleware('staff')->name('admin.venue-form');
 Route::get('/admin/room-form', RoomFormController::class)->middleware('staff')->name('admin.room-form');
-Route::get('/admin/hostel-room-form', HostelRoomFormController::class)->middleware('staff')->name('admin.hostel-room-form');
+Route::get('/admin/hostel-room-form', [RoomFormController::class, 'hostel'])->middleware('staff')->name('admin.hostel-room-form');
 
 /* The JSON endpoints answer exactly as the old scripts did: their own 401
    "session ended" JSON (no redirecting guard) — see Concerns\RepliesJson. */

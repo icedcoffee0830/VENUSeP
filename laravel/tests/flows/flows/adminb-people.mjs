@@ -2,9 +2,10 @@
 // a customer registers with a name that contains "</script>" → staff see it as plain
 // text on Customer Management (no script runs) → staff disable the account: stored,
 // and the customer's open session ends → staff re-enable it: they can sign in again →
-// the counter search treats "%%%" literally → staff add a FAQ question with typed
-// HTML (customers see it as text), move it to another section by editing it (it goes
-// to the end there), then delete it.
+// the counter search treats "%%%" literally → five wrong passwords at the counter's
+// identity check lock the account (the right one is refused until it runs out) →
+// staff add a FAQ question with typed HTML (customers see it as text), move it to
+// another section by editing it (it goes to the end there), then delete it.
 
 const STAFF = 'staff@gmail.com';
 
@@ -42,7 +43,7 @@ async function toggleCustomer(ctx, page, row, label, okLabel = label) {
 
 export default {
   name: 'adminb-people',
-  title: 'Customer accounts (disable / enable, search) and FAQ edit / delete',
+  title: 'Customer accounts (disable / enable, search, counter attempt limit) and FAQ edit / delete',
 
   async run(ctx) {
     const { step, expect, dbOne } = ctx;
@@ -116,6 +117,44 @@ export default {
       expect.equal(found.results.length, 1, 'results for the email');
       expect.equal(found.results[0].name, s.name, 'name in the search result');
       expect.match(found.results[0].phone, /^0917•+2244$/, 'masked phone');
+      return page;
+    });
+
+    await step('Counter identity check: 5 wrong passwords lock the account, staff are told how long', async () => {
+      const page = s.staff;
+      await page.goto(ctx.url('/customer/room-reservation?room=r2&counter=1'));
+      await expect.text(page, 'Counter booking');
+      /* straight to the "who is this for" screen: the booking form in front of it
+         is covered by the hostel-and-counter flow and plays no part here */
+      await page.evaluate(() => { state.screen = 'who'; render(); });
+      await expect.text(page, 'Who is this booking for?');
+      await page.locator('#bkSearch').fill(s.email.split('@')[0]);
+      const hit = page.locator('button', { hasText: s.email });
+      await expect.visible(hit, 'the counter search never listed ' + s.email);
+      await hit.first().click();
+
+      const confirmWith = async (pw) => {
+        await page.locator('#bkPassword').fill(pw);
+        const res = page.waitForResponse((r) => r.url().includes('/admin/customer-verify')).catch(() => null);
+        await page.getByRole('button', { name: 'Confirm identity' }).click();
+        const r = await res;
+        if (!r) ctx.fail('Confirm identity sent no request to /admin/customer-verify');
+        return r.status();
+      };
+      for (let i = 1; i <= 4; i++) {
+        expect.equal(await confirmWith('Wrong#' + i), 401, `HTTP status of wrong password #${i}`);
+        await expect.text(page, 'That password did not match.');
+      }
+      expect.equal(await confirmWith('Wrong#5'), 423, 'HTTP status of wrong password #5');
+      await expect.text(page, 'Too many wrong passwords for this account, so it is locked for 10 seconds.');
+      const u = await dbOne(`SELECT reauth_lock_level, reauth_locked_until > NOW() AS locked FROM users WHERE id = ?`, [s.userId]);
+      expect.equal(Number(u.reauth_lock_level), 1, 'users.reauth_lock_level');
+      expect.equal(Number(u.locked), 1, 'users.reauth_locked_until is in the future');
+
+      // while locked, even the right password is refused
+      expect.equal(await confirmWith(ctx.password), 423, 'HTTP status of the right password while locked');
+      await expect.text(page, 'Too many wrong passwords for this account');
+      expect.equal(await page.getByText('Identity confirmed', { exact: false }).count(), 0, 'identity confirmed while locked');
       return page;
     });
 

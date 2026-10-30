@@ -17,6 +17,8 @@ use PDOException;
    CSRF: Laravel's check (an expired page gets the old 400 JSON, bootstrap/app.php). */
 class ProfileSaveController
 {
+    const PHOTO_MAX_BYTES = 7 * 1024 * 1024;
+
     /* pf_reply(): the JSON reply, ending the request like the old exit. */
     private function reply(int $status, array $data): never
     {
@@ -88,6 +90,26 @@ class ProfileSaveController
         if ($phone !== '' && $phoneNorm === null) {
             $this->reply(400, ['ok' => false, 'field' => 'contact_number',
                 'message' => 'Enter a mobile number in the form 09XX XXX XXXX.']);
+        }
+
+        /* A NEW email needs the current password, like a new password: the email is
+           where reset links go, so a session alone must not be able to move it. A
+           Google-only account (no password) shows the fresh Google confirmation
+           instead — the same proof as its first password (#23), not spent here. */
+        $acct = $pdo->prepare('SELECT email, password_hash FROM users WHERE id = :u');
+        $acct->execute([':u' => $userId]);
+        $acct = $acct->fetch();
+        if ($acct && strtolower((string) $acct['email']) !== $email) {
+            if ($acct['password_hash'] === null) {
+                if (!($isCustomer && google_proof_valid('google_reauth', $userId))) {
+                    $this->reply(403, ['ok' => false, 'field' => 'email', 'reauth' => true,
+                        'message' => 'To change your email, first confirm it’s you with Google (Account Security, below).']);
+                }
+            } elseif (!password_verify((string) $post->get('current_password', ''), $acct['password_hash'])) {
+                $this->reply(401, ['ok' => false, 'field' => 'current_password', 'message' => $post->get('current_password', '') === ''
+                    ? 'Enter your current password to change your email.'
+                    : 'That is not your current password.']);
+            }
         }
 
         try {
@@ -275,6 +297,10 @@ class ProfileSaveController
         $file = $request->files->get('photo');
         if (!$file || $file->getError() !== UPLOAD_ERR_OK) {
             $this->reply(400, ['ok' => false, 'message' => 'Choose a picture to upload.']);
+        }
+        /* 7 MB, the one limit for every upload (Aron, 2026-10-30). */
+        if ($file->getSize() > self::PHOTO_MAX_BYTES) {
+            $this->reply(400, ['ok' => false, 'message' => 'This file is over 7 MB. Choose a smaller photo or a screenshot.']);
         }
         /* The same validator room photos use. PDFs are deliberately NOT accepted. */
         $err = '';

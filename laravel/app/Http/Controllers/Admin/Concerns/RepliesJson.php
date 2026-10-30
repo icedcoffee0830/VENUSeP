@@ -25,24 +25,14 @@ trait RepliesJson
         );
     }
 
-    /* The old "logged-in admin/staff session" check of the JSON endpoints. */
+    /* The old "logged-in admin/staff session" check of the JSON endpoints. The
+       session is already fresh: staff_session_refresh() (EnforceTwoFactor, every
+       request) re-read the account before this ran — a suspended one has no
+       session left (401 here), a demoted admin is already 'staff'. */
     protected function requireStaffJson(): void
     {
         if (!session()->has('user_id') || !in_array(session('account_type'), ['admin', 'staff'], true)) {
             $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
-        }
-        /* These routes have no page guard (staff_session_heal()), so the account is
-           re-read here: a suspended one is refused, a demoted admin acts as staff. */
-        legacy('db');
-        $pdo = venusep_db();
-        if ($pdo !== null) {
-            $st = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :id');
-            $st->execute([':id' => (int) session('user_id')]);
-            $row = $st->fetch();
-            if (!$row || !(bool) $row['is_active'] || !in_array($row['account_type'], ['admin', 'staff'], true)) {
-                $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
-            }
-            session(['account_type' => $row['account_type']]);
         }
     }
 

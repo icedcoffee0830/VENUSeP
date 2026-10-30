@@ -178,6 +178,7 @@
 @if ($customerProfile['photo'] !== '')
                   <button class="btn-profile" type="button" id="avatarRemove"><i class="bi bi-trash" aria-hidden="true"></i>Remove</button>
 @endif
+                  <small class="signin-note" id="avatarHint" style="display:block">PNG, JPG or WebP, up to 7 MB.</small>
                   <div class="profile-validation" id="avatarMessage" aria-live="polite"></div>
                 </aside>
 
@@ -187,7 +188,13 @@
                     <form id="customerProfileForm" action="" method="post" novalidate>
                       <div class="profile-form-grid">
                         <div class="profile-form-group"><label for="fullName">Full Name</label><input class="form-control" id="fullName" name="full_name" type="text" autocomplete="name" value="{{ $customerProfile['name'] }}" aria-describedby="fullNameValidation" required><small class="profile-validation" id="fullNameValidation" aria-live="polite"></small></div>
-                        <div class="profile-form-group"><label for="email">Email Address</label><input class="form-control" id="email" name="email" type="email" autocomplete="email" value="{{ $customerProfile['email'] }}" aria-describedby="emailValidation" required><small class="profile-validation" id="emailValidation" aria-live="polite"></small></div>
+                        <div class="profile-form-group"><label for="email">Email Address</label><input class="form-control" id="email" name="email" type="email" autocomplete="email" value="{{ $customerProfile['email'] }}" data-original="{{ strtolower($customerProfile['email']) }}" aria-describedby="emailValidation" required><small class="profile-validation" id="emailValidation" aria-live="polite"></small></div>
+                        {{-- Shown only while the email is being changed: a new email needs the current password (profile-save). --}}
+                        @if ($cpHasPassword)
+                        <div class="profile-form-group" id="emailPasswordGroup" hidden><label for="emailPassword">Current Password <span style="font-weight:400;color:#8a857d">(to change your email)</span></label><input class="form-control" id="emailPassword" name="current_password" type="password" autocomplete="current-password" aria-describedby="emailPasswordValidation"><small class="profile-validation" id="emailPasswordValidation" aria-live="polite"></small></div>
+                        @elseif (!$cpReauthOk)
+                        <div class="profile-form-group" id="emailPasswordGroup" hidden><p class="signin-note" role="status">To change your email, first confirm it&rsquo;s you with Google (Account Security, below).</p></div>
+                        @endif
                         <div class="profile-form-group"><label for="contactNumber">Contact Number</label><input class="form-control" id="contactNumber" name="contact_number" type="tel" autocomplete="tel" value="{{ $customerProfile['phone'] }}" aria-describedby="contactNumberValidation" required><small class="profile-validation" id="contactNumberValidation" aria-live="polite"></small></div>
                         <div class="profile-form-group"><label for="universityId">USeP ID number <span style="font-weight:400;color:#8a857d">(optional)</span></label><input class="form-control" id="universityId" name="university_id_no" type="text" value="{{ $customerProfile['universityId'] }}" placeholder="e.g. 2023-00412"><small class="profile-validation">Staff check your uploaded ID against this when applying the USeP discount.</small></div>
                         <div class="profile-form-group full-width"><label for="address">Address</label><input class="form-control" id="address" name="address" type="text" autocomplete="street-address" value="{{ $customerProfile['address'] }}" required></div>
@@ -407,13 +414,21 @@
                 if (!res.ok) {
                   out.textContent = '';
                   const map = { full_name: ['fullName', 'fullNameValidation'], email: ['email', 'emailValidation'],
-                                contact_number: ['contactNumber', 'contactNumberValidation'] };
+                                contact_number: ['contactNumber', 'contactNumberValidation'],
+                                current_password: ['emailPassword', 'emailPasswordValidation'] };
                   const t = res.field && map[res.field];
-                  if (t) { const f = document.getElementById(t[0]); setFieldError(f, t[1], res.message); f.focus(); }
+                  const f = t && document.getElementById(t[0]);
+                  if (f) { setFieldError(f, t[1], res.message); f.focus(); }
                   else { out.textContent = res.message || 'Nothing was saved.'; }
                   return;
                 }
                 out.textContent = res.message;
+                /* The saved email is the new "current" one: the password field goes away again. */
+                const em = document.getElementById('email');
+                em.dataset.original = em.value.trim().toLowerCase();
+                const ep = document.getElementById('emailPassword');
+                if (ep) ep.value = '';
+                toggleEmailPassword();
                 /* Repaint the summary card beside the form — leaving the old
                    name there after a rename would look like the save failed. */
                 document.getElementById('profileSummaryName').textContent = document.getElementById('fullName').value.trim();
@@ -423,8 +438,18 @@
           profileForm.querySelectorAll('input').forEach(function (field) {
             field.addEventListener('input', function () { setFieldError(field, field.getAttribute('aria-describedby'), ''); });
           });
+          /* A new email needs the current password: show that field only while the email differs. */
+          function toggleEmailPassword() {
+            const group = document.getElementById('emailPasswordGroup');
+            const em = document.getElementById('email');
+            if (group) group.hidden = em.value.trim().toLowerCase() === em.dataset.original;
+          }
+          document.getElementById('email').addEventListener('input', toggleEmailPassword);
           profileForm.addEventListener('reset', function () {
             window.setTimeout(function () {
+              toggleEmailPassword();
+              const ep = document.getElementById('emailPassword');
+              if (ep) setFieldError(ep, 'emailPasswordValidation', '');
               profileFields.forEach(function (cfg) { const f = document.getElementById(cfg[0]); if (f) setFieldError(f, cfg[1], ''); });
               document.getElementById('profileSuccessMessage').textContent = '';
             }, 0);

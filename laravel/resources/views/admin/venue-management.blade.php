@@ -969,8 +969,10 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
+@if ($vmMyVenue === null || $room['venue'] === $vmMyVenue) {{-- staff: own venue's rooms only --}}
               <a class="vm-edit-link" href="{{ route('admin.room-form', ['id' => $room['id']]) }}"><span class="plus">✎</span> Edit Room</a>
               <button type="button" class="vm-toggle-link{{ $room['active'] ? '' : ' is-off' }}" data-toggle-id="{{ $room['id'] }}" data-toggle-name="{{ $room['name'] }}">{{ $room['active'] ? 'Disable' : 'Enable' }}</button>
+@endif
 @if (admin_is_admin())
               <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="{{ $room['id'] }}" data-delete-name="{{ $room['name'] }}">Delete</button>
 @endif
@@ -1046,8 +1048,10 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
+@if ($vmMyVenue === null || $room['venue'] === $vmMyVenue) {{-- staff: own venue's rooms only --}}
               <a class="vm-edit-link" href="{{ route('admin.hostel-room-form', ['id' => $room['id']]) }}"><span class="plus">✎</span> Edit Room</a>
               <button type="button" class="vm-toggle-link{{ $room['active'] ? '' : ' is-off' }}" data-toggle-id="{{ $room['id'] }}" data-toggle-name="{{ $room['name'] }}">{{ $room['active'] ? 'Disable' : 'Enable' }}</button>
+@endif
 @if (admin_is_admin())
               <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="{{ $room['id'] }}" data-delete-name="{{ $room['name'] }}">Delete</button>
 @endif

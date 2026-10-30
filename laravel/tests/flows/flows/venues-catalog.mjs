@@ -164,8 +164,8 @@ export default {
       s.staff = page;
       const before = await dbOne(`SELECT is_active FROM rooms WHERE room_code = ?`, [OTHER_VENUE_ROOM]);
       await page.goto(ctx.url('/admin/venue-management'));
-      await page.locator(`[data-toggle-id="${OTHER_VENUE_ROOM}"]`).click();
-      await modal(ctx, page, { expect: /belongs to another venue/ });
+      /* the card has no Edit/Disable for another venue's room (the server refuses it too) */
+      expect.equal(await page.locator(`[data-toggle-id="${OTHER_VENUE_ROOM}"]`).count(), 0, `Disable buttons on ${OTHER_VENUE_ROOM}`);
       const after = await dbOne(`SELECT is_active FROM rooms WHERE room_code = ?`, [OTHER_VENUE_ROOM]);
       expect.equal(after.is_active, before.is_active, `${OTHER_VENUE_ROOM} is_active`);
 

@@ -158,6 +158,9 @@ function faq_answer_html($answer, $forEditor = false)
         $safe = preg_match('#^(https?://[^"<>]+|[a-z0-9_./-]+\.php(\?[^"<>]*)?(\#[a-z0-9-]+)?|\#[a-z0-9-]+)$#i', $url);
         if ($safe && !$forEditor) {
             $url = faq_link_url($url);   /* Laravel: stored "page.php" links -> the page's route */
+            if ($url === null) {
+                return $m[1];            /* counter mode, customer-only page: the words, no link */
+            }
         }
         return $safe ? '<a href="' . $url . '">' . $m[1] . '</a>' : $m[1];
     }, $html);
@@ -173,7 +176,11 @@ function faq_answer_html($answer, $forEditor = false)
 /* Laravel: the answers store the old relative page links ("booking-history.php",
    "faq.php#gcash", "../customer/booking-history.php") — a customer page each. On
    display they become that page's route; the editor keeps the stored form so a
-   save round-trips it. A page with no route keeps its name without ".php". */
+   save round-trips it. A page with no route keeps its name without ".php".
+   COUNTER MODE (staff at the counter, ?counter=1): only the booking pages and
+   the FAQ work there, and they keep the flag; any other page is the customer's
+   own (booking history, transaction history, profile…) and would land staff on
+   the customer sign-in, so it returns null and the answer shows just the words. */
 function faq_link_url($url)
 {
     if (!preg_match('#^(?:[a-z0-9_./-]*/)?([a-z0-9_-]+)\.php(\?[^"<>\#]*)?(\#[a-z0-9-]+)?$#i', $url, $p)) {
@@ -181,6 +188,13 @@ function faq_link_url($url)
     }
     $renames = ['venusep_venue_booking' => 'customer.venues'];
     $name = isset($renames[$p[1]]) ? $renames[$p[1]] : 'customer.' . $p[1];
+    $query = isset($p[2]) ? $p[2] : '';
+    if (function_exists('counter_mode') && counter_mode()) {
+        if (!in_array($name, ['customer.venues', 'customer.room-reservation', 'customer.hostel-reservation', 'customer.faq'], true)) {
+            return null;
+        }
+        $query = ($query === '' ? '?' : $query . '&') . 'counter=1';
+    }
     $base = \Illuminate\Support\Facades\Route::has($name) ? route($name) : $p[1];
-    return $base . (isset($p[2]) ? $p[2] : '') . (isset($p[3]) ? $p[3] : '');
+    return $base . $query . (isset($p[3]) ? $p[3] : '');
 }

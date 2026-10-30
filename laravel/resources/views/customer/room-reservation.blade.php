@@ -351,6 +351,8 @@ const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSO
    understand before the request can be submitted. Whatever it is at submit time
    is what the booking keeps (bookings.refunds_allowed) — it never changes later. */
 const REFUNDS_ENABLED = {{ $REFUNDS_ENABLED ? 'true' : 'false' }};
+/* The upload cap for every file (Aron 2026-10-30: 7 MB) — documents.php's DOC_MAX_BYTES, the size the server refuses above. */
+const UPLOAD_MAX_MB = {{ intdiv(DOC_MAX_BYTES, 1048576) }};
 /* PAYMENT TIMING follows the same switch (DB-DECISIONS #18). The rule and the
    date math come from includes/refund-policy.php — the same function every
    customer page uses — so this page never computes a deadline of its own.
@@ -1084,6 +1086,9 @@ function uploadId(input){
   const f=input.files && input.files[0];
   input.value='';
   if(!f) return;
+  /* over the cap: refused here with the same words, no shrinking (2026-10-30) */
+  if(f.size > UPLOAD_MAX_MB*1048576){ state.submitError='This file is over '+UPLOAD_MAX_MB+' MB. Choose a smaller photo or a screenshot.'; render(); return; }
+  state.submitError=null;
   if(state.idFile){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
   /* The File itself is kept, not just a preview URL: submitRequest() has to
      actually upload it. It used to hold only {name, url}, which was all a
@@ -1777,7 +1782,7 @@ function reviewScreen(){
       </div>`:`
       <div onclick="document.getElementById('idFileInput').click()" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:22px 14px;text-align:center;cursor:pointer;background:#fff">
         <div style="font-size:13.5px;font-weight:600;color:#4a463f">Upload a photo of your valid ID</div>
-        <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · make sure the name and photo are readable</div>
+        <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · up to ${UPLOAD_MAX_MB} MB · make sure the name and photo are readable</div>
       </div>`}
     </div>`}
 
@@ -1883,7 +1888,7 @@ function receiptPanelHtml(){
     return fileInput+`
     <div onclick="${on?'pickReceipt()':''}" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:26px 14px;text-align:center;background:#fff;${on?'cursor:pointer':'opacity:.55;cursor:not-allowed'}">
       <div style="font-size:13.5px;font-weight:600;color:#4a463f">${on?'Tap to upload a screenshot of your GCash receipt':'Tick the exact-amount box above to enable the upload'}</div>
-      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · keep the reference number and amount visible · checked instantly with OCR</div>
+      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · up to ${UPLOAD_MAX_MB} MB · keep the reference number and amount visible · checked instantly with OCR</div>
     </div>`;
   }
   if(o.phase==='reading'){

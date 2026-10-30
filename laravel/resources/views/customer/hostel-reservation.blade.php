@@ -352,6 +352,8 @@ const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSO
    before submitting. ON leaves the hostel's refund text as it was — hostel refund
    REQUESTS are still a separate, undecided flow (venue-only, 2026-09-09). */
 const REFUNDS_ENABLED = {{ $REFUNDS_ENABLED ? 'true' : 'false' }};
+/* The upload cap for every file (Aron 2026-10-30: 7 MB) — documents.php's DOC_MAX_BYTES, the size the server refuses above. */
+const UPLOAD_MAX_MB = {{ intdiv(DOC_MAX_BYTES, 1048576) }};
 /* PAYMENT TIMING: the hostel is PAY TO USE (decided 2026-10-27, DB-DECISIONS
    #26), whatever the refund switch says — venues still follow it (#18). Payment
    opens at approval (GCash from Pay now, or cash at the front desk) and is due
@@ -678,6 +680,9 @@ function nextDay(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+
    record whenever they arrive, so nobody thinks a paid stay is unpaid. */
 function uploadId(input){
   const f=input.files && input.files[0]; if(!f) return;
+  /* over the cap: refused here with the same words, no shrinking (2026-10-30) */
+  if(f.size > UPLOAD_MAX_MB*1048576){ state.submitError='This file is over '+UPLOAD_MAX_MB+' MB. Choose a smaller photo or a screenshot.'; input.value=''; render(); return; }
+  state.submitError=null;
   if(state.idFile && state.idFile.url){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
   /* keep the File itself — submitRequest() has to upload it, not just preview it */
   state.idFile={ name:f.name, url:URL.createObjectURL(f), file:f };
@@ -1374,7 +1379,7 @@ function reviewScreen(){
         </div>`:`
         <div onclick="document.getElementById('idFile').click()" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:24px 14px;text-align:center;background:#fff;cursor:pointer">
           <div style="font-size:13.5px;font-weight:600;color:#4a463f">Tap to upload your valid ID</div>
-          <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG, JPG or PDF · school or government ID</div>
+          <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG, JPG or PDF · up to ${UPLOAD_MAX_MB} MB · school or government ID</div>
         </div>`}
     </div>`}
 
@@ -1469,7 +1474,7 @@ function receiptPanelHtml(){
     return fileInput+`
     <div onclick="${on?'pickReceipt()':''}" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:26px 14px;text-align:center;background:#fff;${on?'cursor:pointer':'opacity:.55;cursor:not-allowed'}">
       <div style="font-size:13.5px;font-weight:600;color:#4a463f">${on?'Tap to upload a screenshot of your GCash receipt':'Tick the exact-amount box above to enable the upload'}</div>
-      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · keep the reference number and amount visible · checked instantly with OCR</div>
+      <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · up to ${UPLOAD_MAX_MB} MB · keep the reference number and amount visible · checked instantly with OCR</div>
     </div>`;
   }
   if(o.phase==='reading'){

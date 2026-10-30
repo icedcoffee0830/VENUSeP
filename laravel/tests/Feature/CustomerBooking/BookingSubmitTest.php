@@ -78,12 +78,15 @@ class BookingSubmitTest extends TestCase
         $this->assertSame($before, DB::table('bookings')->count());
     }
 
-    public function test_an_id_over_8mb_is_refused(): void
+    /* the cap is documents.php's (7 MB from 2026-10-30, owned by cacct): its number, not a copy */
+    public function test_an_id_over_the_upload_cap_is_refused(): void
     {
         $before = DB::table('bookings')->count();
-        $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
-            'id_document' => $this->idFileFrom('id.pdf', str_repeat('x', 8 * 1024 * 1024 + 1)),
-        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'That file is larger than 8MB.']);
+        legacy('documents');
+        $res = $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
+            'id_document' => $this->idFileFrom('id.pdf', str_repeat('x', DOC_MAX_BYTES + 1)),
+        ]))->assertStatus(400)->assertJson(['ok' => false]);
+        $this->assertMatchesRegularExpression('/\b' . intdiv(DOC_MAX_BYTES, 1048576) . ' ?MB\b/', $res->json('message'));
         $this->assertSame($before, DB::table('bookings')->count());
     }
 

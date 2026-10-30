@@ -17,7 +17,7 @@ class HostelReservationController extends Controller
 
     public function __invoke(Request $request)
     {
-        extract(legacy('auth', 'hostel-rooms', 'room-photos', 'payment-settings', 'customer-bookings'));
+        extract(legacy('auth', 'documents', 'hostel-rooms', 'room-photos', 'payment-settings', 'customer-bookings'));
         $pricingJs = self::legacyOutput('pricing');          /* USeP discount rate + the account check */
         $checkerJs = self::legacyOutput('gcash-checker');
         $counterBookerJs = self::legacyOutput('counter-booker');

@@ -27,7 +27,8 @@ class VenusepCheckTest extends TestCase
             Route::get('/_vc/pending', PendingController::class)->name('root.zzcheck-pending');
             Route::get('/_vc/throws', fn () => throw new \RuntimeException('boom from a page'))->name('root.zzcheck-throws');
             Route::get('/_vc/broken', fn () => '<html><body><img src="/assets/img/no-such-image.png">'
-                . '<a href="booking-request.php?id=1">old link</a></body></html>')->name('root.zzcheck-broken');
+                . '<a href="booking-request.php?id=1">old link</a>'
+                . '<div contenteditable="true"><a href="../customer/no-such-page.php">being edited</a></div></body></html>')->name('root.zzcheck-broken');
             Route::get('/_vc/php-error', fn () => '<p><b>Warning</b>:  Undefined variable $room in page.php on line 3</p>')
                 ->name('root.zzcheck-php-error');
             Route::get('/_vc/no-csrf', fn () => '<form id="saveForm" method="POST" action="' . route('customer.index') . '"></form>')
@@ -116,6 +117,7 @@ class VenusepCheckTest extends TestCase
         $this->assertSame('fail', $r['result']);
         $this->assertStringContainsString('missing asset: <img src="/assets/img/no-such-image.png">', $texts);
         $this->assertStringContainsString('broken link: <a href="booking-request.php?id=1">', $texts);
+        $this->assertStringNotContainsString('no-such-page.php', $texts);   // inside an editing box: not a link to follow
     }
 
     public function test_php_error_text_fails_and_a_post_form_without_csrf_warns(): void

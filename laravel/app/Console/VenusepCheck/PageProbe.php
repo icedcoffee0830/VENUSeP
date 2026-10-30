@@ -231,7 +231,8 @@ final class PageProbe
 
         $problems = [];
         $seen = [];
-        $refs = ['//a[@href]' => 'href', '//link[@href]' => 'href', '//script[@src]' => 'src', '//img[@src]' => 'src',
+        /* links inside an editing box (the FAQ answer editor) are text being edited, not links to follow */
+        $refs = ['//a[@href][not(ancestor::*[@contenteditable="true"])]' => 'href','//link[@href]' => 'href', '//script[@src]' => 'src', '//img[@src]' => 'src',
             '//iframe[@src]' => 'src', '//source[@src]' => 'src', '//form[@action]' => 'action'];
         foreach ($refs as $query => $attr) {
             foreach ($xp->query($query) as $el) {

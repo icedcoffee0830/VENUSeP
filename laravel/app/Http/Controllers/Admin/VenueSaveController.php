@@ -87,6 +87,15 @@ class VenueSaveController extends Controller
                    creation because changing it later would orphan every room already
                    filed under it. */
                 $venueType = ($post->get('venue_type') ?? '') === 'hostel' ? 'hostel' : 'event';
+                /* The hostel is ONE venue (Aron 2026-10-30): Add Venue is for event
+                   venues, so a second hostel venue is refused. */
+                if ($venueType === 'hostel') {
+                    $hostel = $pdo->query("SELECT name FROM venues WHERE venue_type = 'hostel' ORDER BY id LIMIT 1")->fetchColumn();
+                    if ($hostel !== false) {
+                        $this->reply(409, ['ok' => false, 'error' => 'hostel_exists',
+                            'message' => 'There is already a hostel venue (' . $hostel . '). Add Venue is for event venues; add hostel rooms to the hostel instead.']);
+                    }
+                }
 
                 /* venue_code is UNIQUE and is what a human reads in a URL or an export,
                    so it is derived from the name rather than being a bare number:

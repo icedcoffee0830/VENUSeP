@@ -24,13 +24,13 @@ class VenueSaveTest extends VenuesTestCase
     public function test_admin_creates_a_venue_then_edits_it(): void
     {
         $this->actingAsAdmin();
-        $res = $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Port Test Hall', 'description' => 'A hall', 'venue_type' => 'hostel'])
+        $res = $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Port Test Hall', 'description' => 'A hall'])
             ->assertOk()->assertJson(['ok' => true, 'created' => true, 'code' => 'PORT-TEST-HALL',
                 'message' => 'Venue created. You can add its photo and rooms now.']);
         $id = (int) $res->json('venue_id');
         try {
             $row = DB::table('venues')->where('id', $id)->first();
-            $this->assertSame('hostel', $row->venue_type);
+            $this->assertSame('event', $row->venue_type);
             $this->assertSame('A hall', $row->description);
 
             $this->postForm('admin.venue-save', ['venue_id' => (string) $id, 'name' => 'Port Test Hall 2', 'description' => 'Renamed'])
@@ -43,6 +43,18 @@ class VenueSaveTest extends VenuesTestCase
         } finally {
             $this->dropVenue($id);
         }
+    }
+
+    /* Aron 2026-10-30: the hostel is one venue — a second hostel venue is refused
+       (the form never sends venue_type; this is the tampered post). */
+    public function test_a_second_hostel_venue_is_refused(): void
+    {
+        $before = DB::table('venues')->count();
+        $this->actingAsAdmin();
+        $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Second Hostel', 'venue_type' => 'hostel'])
+            ->assertStatus(409)->assertJson(['ok' => false, 'error' => 'hostel_exists',
+                'message' => 'There is already a hostel venue (USeP Hostel). Add Venue is for event venues; add hostel rooms to the hostel instead.']);
+        $this->assertSame($before, DB::table('venues')->count());
     }
 
     /* Aron 2026-10-30: adding a venue is admin-only — no button for staff, and

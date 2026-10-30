@@ -1,7 +1,7 @@
 /* =====================================================================
    CUSTOMER AUTH PAGES — login, forgot password, reset password.
    Moved here unchanged from customer-login.php's inline <style> so the
-   three pages share one copy. (customer-register.php keeps its own copy.)
+   pages share one copy (customer-register adds two phone rules of its own).
    ===================================================================== */
 /* ==================================================================
    AUTH UI — split layout (customer-login + customer-register share it)

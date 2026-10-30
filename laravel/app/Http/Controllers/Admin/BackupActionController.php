@@ -165,8 +165,10 @@ class BackupActionController
             return $this->bk(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was restored.']);
         }
 
-        /* an uploaded file is kept among the backups, then restored from there */
-        if ($archive === null) {
+        /* an uploaded file is kept among the backups (the newest 10, like the
+           others), then restored from there */
+        $uploaded = $archive === null;
+        if ($uploaded) {
             $name = 'venusep-backup-' . date('Ymd-His') . '-uploaded.tar.gz';
             $dest = backup_dir() . '/' . $name;
             try {
@@ -182,10 +184,16 @@ class BackupActionController
             $m['size'] = filesize($dest);
             file_put_contents(substr($dest, 0, -strlen('.tar.gz')) . '.json', json_encode($m + ['uploaded_by' => $actorLabel], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             $archive = $dest;
+            backup_prune();
         }
 
         $pre = backup_restore($archive, $actor, $actorLabel, $err);
         if ($pre === null) {
+            /* a refused upload is not a backup of this system: it must not stay
+               in the list (the admin still has the file they chose) */
+            if ($uploaded) {
+                backup_delete(basename($archive));
+            }
             return $this->bk(409, ['ok' => false, 'message' => $err]);
         }
         /* backup_sign_everyone_out() emptied the session store; this request's own

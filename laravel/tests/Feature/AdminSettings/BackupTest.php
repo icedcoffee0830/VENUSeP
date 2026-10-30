@@ -77,7 +77,9 @@ class BackupTest extends TestCase
 
     /* A dump names its own database and the mysql client follows it, so a backup of
        another copy would be restored over THAT database. Refused before the safety
-       copy; the name used here does not exist, so even an unfixed restore only fails. */
+       copy; the name used here does not exist, so even an unfixed restore only fails.
+       The stored upload is pruned like any backup (newest 10) and, once refused,
+       removed from the list. */
     public function test_restore_refuses_a_backup_of_another_database(): void
     {
         legacy('backup');
@@ -92,6 +94,10 @@ class BackupTest extends TestCase
         $tar->buildFromDirectory($src);
         $tar->compress(\Phar::GZ);
         unset($tar);
+        /* ten older backups: storing the upload makes eleven, pruned to the newest 10 */
+        for ($i = 0; $i < 10; $i++) {
+            file_put_contents($dir . sprintf('/venusep-backup-20000101-0000%02d-manual.tar.gz', $i), 'x');
+        }
 
         $this->useKnownAdminPassword();
         try {
@@ -103,6 +109,9 @@ class BackupTest extends TestCase
                            . DB::connection()->getDatabaseName() . '". Restoring it would overwrite "venusep_admina_zz_other", so it was refused.']);
             $made = array_diff(glob($dir . '/*') ?: [], $before);
             $this->assertSame([], array_values(array_filter($made, fn ($f) => str_contains($f, 'pre-restore'))), 'no safety copy was needed');
+            $this->assertSame([], array_values(array_filter($made, fn ($f) => str_contains($f, 'uploaded'))), 'the refused upload is not kept');
+            $this->assertFileDoesNotExist($dir . '/venusep-backup-20000101-000000-manual.tar.gz', 'storing the upload pruned to the newest 10');
+            $this->assertFileExists($dir . '/venusep-backup-20000101-000001-manual.tar.gz');
         } finally {
             foreach (array_diff(glob($dir . '/*') ?: [], $before) as $f) {
                 @unlink($f);

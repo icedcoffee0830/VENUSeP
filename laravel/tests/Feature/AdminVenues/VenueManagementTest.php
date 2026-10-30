@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\AdminVenues;
 
+use Illuminate\Support\Facades\DB;
+
 class VenueManagementTest extends VenuesTestCase
 {
     public function test_guest_and_customer_are_sent_to_the_staff_sign_in(): void
@@ -41,6 +43,22 @@ class VenueManagementTest extends VenuesTestCase
             ->assertDontSee(route('admin.room-form', ['id' => 'r5']), false)
             ->assertDontSee('data-toggle-id="h1"', false)
             ->assertDontSee(route('admin.hostel-room-form', ['id' => 'h1']), false);
+    }
+
+    /* A hostel rate with centavos shows them (was rounded to the peso); a whole
+       rate stays without ".00". */
+    public function test_hostel_rate_keeps_its_centavos_on_the_card(): void
+    {
+        $h2 = (int) DB::table('rooms')->where('room_code', 'h2')->value('id');
+        $old = DB::table('hostel_room_details')->where('room_id', $h2)->value('rate_per_head_per_night');
+        DB::table('hostel_room_details')->where('room_id', $h2)->update(['rate_per_head_per_night' => 350.50]);
+        try {
+            $this->actingAsStaff()->get(route('admin.venue-management'))->assertOk()
+                ->assertSee('₱350.50/head')
+                ->assertDontSee('₱351/head');
+        } finally {
+            DB::table('hostel_room_details')->where('room_id', $h2)->update(['rate_per_head_per_night' => $old]);
+        }
     }
 
     public function test_admins_get_the_delete_buttons(): void

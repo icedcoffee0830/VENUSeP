@@ -1056,7 +1056,7 @@ function vmMaint($m, $today) {
               <button type="button" class="vm-delete-link" data-delete-entity="room" data-delete-id="{{ $room['id'] }}" data-delete-name="{{ $room['name'] }}">Delete</button>
 @endif
             </div>
-            <span class="vm-price">₱{{ number_format($room['rate']) }}/head</span>
+            <span class="vm-price">₱{{ usep_peso($room['rate']) }}/head</span>
           </div>
         </div>
 @endforeach

@@ -47,6 +47,25 @@ class RefundSubmitTest extends TestCase
             ->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'There is no open refund request to withdraw.']);
     }
 
+    /* A document the store would refuse (here an .heic photo — the form's
+       accept="image/*" lets a phone pick one) must stop the filing with a reason,
+       not be dropped silently after the request was saved. */
+    public function test_a_document_the_store_refuses_files_nothing_and_says_why(): void
+    {
+        $this->makeBooking36Refundable();
+        try {
+            $before = DB::table('refunds')->count();
+            $this->asRafael()->post(route('customer.refund-submit'), $this->filing([
+                'support' => [UploadedFile::fake()->createWithContent('gcash.heic', 'not a supported image')],
+            ]))->assertStatus(400)->assertExactJson(['ok' => false,
+                'message' => '"gcash.heic": Upload a JPG, PNG, WEBP or PDF. Nothing was filed.']);
+            $this->assertSame($before, DB::table('refunds')->count());
+            $this->assertSame('confirmed', DB::table('bookings')->where('id', 36)->value('payment_status'));
+        } finally {
+            $this->restoreBooking36();
+        }
+    }
+
     public function test_file_then_withdraw(): void
     {
         $this->makeBooking36Refundable();

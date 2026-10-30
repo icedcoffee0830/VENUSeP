@@ -123,24 +123,18 @@
                     <label for="payment-status-filter">Payment Status</label>
                     <select id="payment-status-filter">
                       <option value="">All</option>
-                      <option value="Paid">Paid</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Payment pending">Payment pending</option>
-                      <option value="Payment due">Payment due</option>
-                      <option value="Overdue">Overdue</option>
-                      <option value="Unpaid">Unpaid</option>
-                      <option value="Refunded">Refunded</option>
+                      @foreach ($paymentLabels as $label)
+                      <option value="{{ $label }}">{{ $label }}</option>
+                      @endforeach
                     </select>
                   </div>
                   <div class="th-field">
                     <label for="booking-status-filter">Booking Status</label>
                     <select id="booking-status-filter">
                       <option value="">All</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Approved">Approved</option>
-                      <option value="Rejected">Rejected</option>
-                      <option value="Completed">Completed</option>
-                      <option value="Cancelled">Cancelled</option>
+                      @foreach ($bookingLabels as $label)
+                      <option value="{{ $label }}">{{ $label }}</option>
+                      @endforeach
                     </select>
                   </div>
                   <div class="th-field">

@@ -32,6 +32,20 @@ class RefundRequestTest extends TestCase
             ->assertOk()->assertSee('We could not find booking ' . $this->ref(36) . ' on your account.');
     }
 
+    /* Booking 31 (msantos): staff returned its refund for correction, so its payment
+       reads "Refund - action needed" — not refundable, but the customer must reach
+       the form to fix and resubmit it ("Fix and resubmit" in Booking History). */
+    public function test_a_refund_returned_for_correction_opens_the_form_to_resubmit(): void
+    {
+        $this->actingAsCustomer('msantos@usep.edu.ph')
+            ->get(route('customer.refund-request', ['booking' => $this->ref(31)]))
+            ->assertOk()
+            ->assertDontSee('Refund not available')
+            ->assertSee('id="rr-form"', false)
+            ->assertSee('const RR_RESUBMIT = true;', false)
+            ->assertSee('"status":"fix"', false);
+    }
+
     public function test_a_refundable_booking_shows_the_form(): void
     {
         $this->makeBooking36Refundable();

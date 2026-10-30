@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Customer;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use PDOException;
 
 /* =====================================================================
@@ -160,6 +161,21 @@ class RefundSubmitController
             }
         }
 
+        /* The documents are checked BEFORE anything is filed: a file the store would
+           refuse (wrong type, over 8MB) used to be dropped silently after the request
+           was saved, so the customer believed the required receipts were attached. */
+        $supportFiles = $request->file('support', []);
+        $supportFiles = array_filter(is_array($supportFiles) ? $supportFiles : [$supportFiles]);
+        foreach ($supportFiles as $file) {
+            if (!$file instanceof UploadedFile) {
+                return self::reply(400, ['ok' => false, 'message' => 'Invalid request.']);
+            }
+            $err = 'The upload did not arrive.';
+            if (!$file->isValid() || doc_validate($file->getPathname(), $file->getClientOriginalName(), $err) === null) {
+                return self::reply(400, ['ok' => false, 'message' => '"' . $file->getClientOriginalName() . '": ' . $err . ' Nothing was filed.']);
+            }
+        }
+
         try {
             $pdo->beginTransaction();
 
@@ -201,8 +217,7 @@ class RefundSubmitController
         /* Supporting documents, stored outside the web root. A failure here does
            not throw the request away — staff can chase a missing document. */
         $stored = 0; $failed = 0;
-        foreach ((array) $request->file('support', []) as $file) {
-            if (!$file || !$file->isValid()) { continue; }
+        foreach ($supportFiles as $file) {
             $err = '';
             $ok = doc_store($id, 'refund_support', $file->getPathname(), $file->getClientOriginalName(), (int) session('user_id'), $err);
             $ok === null ? $failed++ : $stored++;

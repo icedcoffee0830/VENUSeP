@@ -203,7 +203,8 @@ export default {
       const ok = page.locator('.vz-modal [data-vz="ok"]');
       await expect.visible(ok, 'no "Cash received?" confirmation');
       await ok.click();
-      await expect.text(page, /Check the guest in/, 20_000);
+      // paid — but the stay starts in a few days, so check-in is not offered yet (2026-10-30)
+      await expect.text(page, /check-in opens on/, 20_000);
       const b = await dbOne(`SELECT payment_status FROM bookings WHERE id = ?`, [s.bookingId]);
       expect.equal(b.payment_status, 'paid_cash', 'payment_status');
       const r = await dbOne(`SELECT COUNT(*) AS n FROM system_receipts WHERE booking_id = ?`, [s.bookingId]);

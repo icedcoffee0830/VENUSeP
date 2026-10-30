@@ -129,7 +129,7 @@ class BookingRequestController extends Controller
             'total'     => $b['amount'],
             'payBy'     => $b['payment']['payByLabel'],
             'method'    => strtolower($b['method']),
-            'submitted' => date('M j, Y · g:i A', strtotime($b['bookingDateIso'])),
+            'submitted' => date('M j, Y · g:i A', strtotime($b['submittedAt'])),
             'res'       => $b['reservationCode'],
             'pay'       => $b['paymentCode'],
             'neverApproved' => $b['neverApproved'],   /* expired before anyone approved it (2026-10-27) */
@@ -171,6 +171,7 @@ class BookingRequestController extends Controller
                 'pos'       => $b['pos'] !== '' ? $b['pos'] : null,
                 'or'        => $b['officialReceipt'] !== '' ? $b['officialReceipt'] : null,
                 'checkedIn' => $b['checkedIn'],
+                'checkInOpen' => $b['eventDateIso'] <= date('Y-m-d'),   /* not before the first night (2026-10-30) */
                 /* pay before using the bed (2026-10-27, DB-DECISIONS #26) */
                 'payToUse'  => $b['payToUse'],
                 'methodChosen' => $b['methodCode'] !== null,
@@ -184,6 +185,8 @@ class BookingRequestController extends Controller
                 'endIso'  => $b['endDateIso'],
                 'feeDay'  => '₱' . number_format($b['days'] > 0 ? $b['roomPrice'] / $b['days'] : $b['roomPrice']),
                 'days'    => $b['days'],
+                /* the policy THIS booking was made under, not the live switch (DB-DECISIONS #18) */
+                'prepay'  => $b['refundsAllowed'],
                 'sched'   => $sched,
             ];
         }

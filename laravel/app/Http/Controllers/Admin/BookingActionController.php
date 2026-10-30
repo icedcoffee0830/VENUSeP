@@ -149,6 +149,8 @@ class BookingActionController extends Controller
                 'method'     => $after['method'],          /* Cash received turns a stay into a cash booking */
                 'attempts'        => $after['receiptAttempts'],
                 'attemptsAllowed' => $after['receiptAttemptsAllowed'],
+                /* the timeline as a reload would show it: real time, real actor */
+                'tl'              => booking_history_events($after),
             ] : null,
         ]);
     }
@@ -165,6 +167,55 @@ class BookingActionController extends Controller
     private function clearActor(PDO $pdo): void
     {
         $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
+    }
+
+    /* Confirm the payment and issue its System Receipt (inside the caller's
+       transaction). Returns the outbox id of a walk-in's receipt email, or null.
+       A database error undoes the confirmation; a problem building the EMAIL
+       must not — the payment is real. */
+    private function confirmPayment(PDO $pdo, int $bookingId, int $actor, string $note, bool $asCash): ?int
+    {
+        $receiptId = payment_confirm($pdo, $bookingId, $actor, $note, $asCash);
+        if ($receiptId === null) {
+            return null;
+        }
+        try {
+            return queue_walkin_receipt($pdo, $bookingId, $receiptId, $actor);
+        } catch (\Throwable $mailErr) {
+            if ($mailErr instanceof PDOException) {
+                throw $mailErr;
+            }
+            error_log('VENUSeP walk-in receipt email for booking ' . $bookingId . ': ' . $mailErr->getMessage());
+            return null;
+        }
+    }
+
+    /* The booking's latest GCash upload — the one a rejection, an undo or an
+       override is about — with its flags decoded, or null. */
+    private function lastUpload(PDO $pdo, int $bookingId): ?array
+    {
+        $s = $pdo->prepare('SELECT id, payment_id, verdict, flags_json FROM gcash_receipts WHERE booking_id = :b ORDER BY id DESC LIMIT 1');
+        $s->execute([':b' => $bookingId]);
+        $up = $s->fetch();
+        if (!$up) {
+            return null;
+        }
+        $flags = json_decode((string) $up['flags_json'], true);
+        $up['flags'] = is_array($flags) ? $flags : [];
+        $up['payment_id'] = $up['payment_id'] !== null ? (int) $up['payment_id'] : null;
+        $up['rejected'] = $up['verdict'] === 'rejected' || in_array('rejected_by_staff', $up['flags'], true);
+        return $up;
+    }
+
+    /* An action that changes no status (paperwork, arrival, the attempt
+       allowance): the trigger never sees it, so its timeline row is written here. */
+    private function timeline(PDO $pdo, int $bookingId, string $code, int $actor, string $note, ?array $meta = null): void
+    {
+        $pdo->prepare(
+            'INSERT INTO booking_timeline (booking_id, action_code, performed_by_user_id, note, metadata_json)
+             VALUES (:b, :c, :u, :n, :m)'
+        )->execute([':b' => $bookingId, ':c' => $code, ':u' => $actor, ':n' => $note,
+                    ':m' => $meta !== null ? json_encode($meta) : null]);
     }
 
     /* What each action would have produced in demo mode, so the screen still moves. */
@@ -206,7 +257,14 @@ class BookingActionController extends Controller
                 if (!empty($demoAfter['payToUse']) && !in_array($pay, ['confirmed', 'paid_cash'], true)) {
                     $this->reply(409, ['ok' => false, 'message' => 'Not paid yet. The guest pays before using the bed.']);
                 }
+                if ($demoAfter['eventDateIso'] > date('Y-m-d')) {
+                    $this->reply(409, ['ok' => false, 'message' => 'Too early: check-in opens on ' . date('M j, Y', strtotime($demoAfter['eventDateIso'])) . ', the first night of the stay.']);
+                }
                 break;
+            case 'override_confirm': $pay = 'confirmed'; break;
+            case 'undo_rejection':   $pay = 'under_review'; break;
+            case 'extend_deadline':  $pay = $demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash'; break;
+            case 'release_slot':     $res = 'released'; $pay = 'expired'; break;
             case 'record_or':
             case 'allow_receipt_attempts': break;   // documents, arrival and the attempt allowance change no status
             default:
@@ -257,8 +315,13 @@ class BookingActionController extends Controller
 
         /* ---- REJECT the request. The booking keeps its history; the slot frees. ---- */
         case 'reject':
-            if (in_array($bk['reservation_status'], ['rejected', 'cancelled', 'completed'], true)) {
+            if (in_array($bk['reservation_status'], ['rejected', 'cancelled', 'completed', 'released'], true)) {
                 $this->reply(409, ['ok' => false, 'message' => 'That booking is already closed.']);
+            }
+            /* Rejecting answers a REQUEST. An approved booking may already be paid,
+               and this would lock its payment with no refund (found 2026-10-30). */
+            if ($bk['reservation_status'] !== 'pending') {
+                $this->reply(409, ['ok' => false, 'message' => 'Only a pending request can be rejected.']);
             }
             $this->setActor($pdo, $actor, $note !== '' ? $note : 'Request rejected.');
             /* trg_bookings_after_update releases the held slots and bed-nights. */
@@ -278,10 +341,12 @@ class BookingActionController extends Controller
             if ($pos === '') {
                 $this->reply(400, ['ok' => false, 'message' => 'Enter the POS number.']);
             }
+            $pdo->beginTransaction();
             $pdo->prepare(
                 'UPDATE hostel_booking_details SET pos_number = :p, pos_recorded_at = NOW() WHERE booking_id = :b'
             )->execute([':p' => mb_substr($pos, 0, 100), ':b' => $bookingId]);
-            /* Payment only opens now if this booking pre-pays. */
+            /* Payment only opens now if this booking pre-pays — the status change
+               writes the timeline itself; otherwise the POS is paperwork, logged here. */
             if ($bk['refunds_allowed'] && !$bk['pay_to_use'] && $bk['payment_status'] === 'await_pos') {
                 $this->setActor($pdo, $actor, 'POS ' . $pos . ' recorded; payment unlocked.');
                 $pdo->prepare(
@@ -290,7 +355,10 @@ class BookingActionController extends Controller
                       WHERE id = :b2"
                 )->execute([':b' => $bookingId, ':u' => $actor, ':b2' => $bookingId]);
                 $this->clearActor($pdo);
+            } else {
+                $this->timeline($pdo, $bookingId, 'pos_recorded', $actor, 'POS ' . $pos . ' recorded (CEDU).');
             }
+            $pdo->commit();
             break;
 
         /* ---- HOSTEL: the University Cashier issued the Official Receipt.
@@ -303,16 +371,23 @@ class BookingActionController extends Controller
             if ($or === '') {
                 $this->reply(400, ['ok' => false, 'message' => 'Enter the Official Receipt number.']);
             }
+            $pdo->beginTransaction();
             $pdo->prepare(
                 'UPDATE hostel_booking_details SET official_receipt_no = :o, official_receipt_recorded_at = NOW()
                   WHERE booking_id = :b'
             )->execute([':o' => mb_substr($or, 0, 100), ':b' => $bookingId]);
+            $this->timeline($pdo, $bookingId, 'or_recorded', $actor, 'Official Receipt ' . $or . ' recorded (University Cashier).');
+            $pdo->commit();
             break;
 
         /* ---- HOSTEL: the guest arrived. PAY TO USE (2026-10-27): no bed until paid. ---- */
         case 'check_in':
             if ($bk['booking_type'] !== 'hostel') {
                 $this->reply(400, ['ok' => false, 'message' => 'Only a hostel booking has a check-in.']);
+            }
+            /* A rejected, cancelled or released stay has no bed to check into. */
+            if ($bk['reservation_status'] !== 'approved') {
+                $this->reply(409, ['ok' => false, 'message' => 'Only an approved stay can be checked in.']);
             }
             if ($bk['pay_to_use'] && !in_array($bk['payment_status'], ['confirmed', 'paid_cash'], true)) {
                 $this->reply(409, ['ok' => false, 'message' => $bk['payment_status'] === 'under_review'
@@ -321,9 +396,23 @@ class BookingActionController extends Controller
                         ? 'Not paid yet. The guest chose to pay cash at the front desk — take it first (Cash received).'
                         : 'Not paid yet. The guest pays before using the bed — by GCash in Pay now, or by choosing cash at the front desk there.')]);
             }
+            /* Not before the stay begins (Aron, 2026-10-30): the bed is booked from the check-in date. */
+            $stay = $pdo->prepare('SELECT check_in_date, check_in_date > CURDATE() AS early, checked_in FROM hostel_booking_details WHERE booking_id = :b');
+            $stay->execute([':b' => $bookingId]);
+            $stay = $stay->fetch();
+            if ($stay && $stay['checked_in']) {
+                $this->reply(409, ['ok' => false, 'message' => 'The guest is already checked in.']);
+            }
+            if ($stay && $stay['early']) {
+                $this->reply(409, ['ok' => false,
+                    'message' => 'Too early: check-in opens on ' . date('M j, Y', strtotime($stay['check_in_date'])) . ', the first night of the stay.']);
+            }
+            $pdo->beginTransaction();
             $pdo->prepare(
                 'UPDATE hostel_booking_details SET checked_in = 1, checked_in_at = NOW() WHERE booking_id = :b'
             )->execute([':b' => $bookingId]);
+            $this->timeline($pdo, $bookingId, 'checked_in', $actor, 'Guest checked in.');
+            $pdo->commit();
             break;
 
         /* ---- HOSTEL, PAY TO USE: the guest paid CASH at the front desk. ---- */
@@ -358,28 +447,121 @@ class BookingActionController extends Controller
             /* ONE transaction: the payment, its ledger row and its System Receipt
                land together or not at all. */
             $pdo->beginTransaction();
-            $receiptId = payment_confirm($pdo, $bookingId, $actor,
+            $queued = $this->confirmPayment($pdo, $bookingId, $actor,
                 $note !== '' ? $note : ($asCash ? 'Cash received at the front desk.' : 'Payment confirmed.'), $asCash);
-            if ($receiptId !== null) {
-                /* A database error here undoes the confirmation; a problem
-                   building the EMAIL must not — the payment is real. */
-                try {
-                    $queued = queue_walkin_receipt($pdo, $bookingId, $receiptId, $actor);
-                } catch (\Throwable $mailErr) {
-                    if ($mailErr instanceof PDOException) {
-                        throw $mailErr;
-                    }
-                    error_log('VENUSeP walk-in receipt email for booking ' . $bookingId . ': ' . $mailErr->getMessage());
-                }
-            }
             $pdo->commit();
+            break;
+
+        /* ================= §7 — decided 2026-10-30 (Aron: "build real saving") =================
+           These four only changed the screen. Each is now a real write with a
+           timeline entry (the status-change trigger writes it, with the actor). */
+
+        /* ---- A receipt was rejected (by staff or by the checker) but staff then
+                FOUND the payment in the venue's GCash Transaction History. ---- */
+        case 'override_confirm': {
+            $verifiedRef = trim((string) ($request->post('ref') ?? ''));
+            if ($verifiedRef === '' || $note === '') {
+                $this->reply(400, ['ok' => false, 'message' => 'Both the verified reference number and a note are required.']);
+            }
+            $up = $this->lastUpload($pdo, $bookingId);
+            if ($bk['payment_status'] !== 'await_gcash' || !$up || !$up['rejected']) {
+                $this->reply(409, ['ok' => false, 'message' => 'There is no rejected receipt waiting on this booking, so there is nothing to override.']);
+            }
+            /* A duplicate is the checker's strongest signal: only an admin may overrule it. */
+            if (array_intersect(['duplicate_ref', 'duplicate_file'], $up['flags']) && session('account_type') !== 'admin') {
+                $this->reply(403, ['ok' => false, 'message' => 'This receipt was rejected as a duplicate. Only an administrator can override that.']);
+            }
+            $why = 'Override — verified ref ' . mb_substr($verifiedRef, 0, 100) . ' in GCash. ' . $note;
+            $pdo->beginTransaction();
+            /* The checker's verdict stays on record; the receipt gains who overruled it and why. */
+            $pdo->prepare(
+                "UPDATE gcash_receipts
+                    SET reviewed_by_user_id = :u, reviewed_at = NOW(), override_note = :n,
+                        flags_json = JSON_ARRAY_APPEND(COALESCE(flags_json, JSON_ARRAY()), '$', 'overridden_by_staff')
+                  WHERE id = :r"
+            )->execute([':u' => $actor, ':n' => $why, ':r' => $up['id']]);
+            /* Settle the SAME payment row the upload created, rather than a second one. */
+            if ($up['payment_id'] !== null) {
+                $pdo->prepare("UPDATE payments SET payment_record_status = 'under_review' WHERE id = :p AND payment_record_status = 'rejected'")
+                    ->execute([':p' => $up['payment_id']]);
+            }
+            $queued = $this->confirmPayment($pdo, $bookingId, $actor, $why, false);
+            $pdo->commit();
+            break;
+        }
+
+        /* ---- Take back a STAFF rejection: the receipt is under review again.
+                Only while the customer has not moved on (no newer upload, no cash choice). ---- */
+        case 'undo_rejection': {
+            $up = $this->lastUpload($pdo, $bookingId);
+            if ($bk['payment_status'] !== 'await_gcash' || !$up || !in_array('rejected_by_staff', $up['flags'], true)) {
+                $this->reply(409, ['ok' => false, 'message' => 'There is no staff rejection to undo: the customer may already have sent another receipt or chosen to pay in cash.']);
+            }
+            $pdo->beginTransaction();
+            $pdo->prepare(
+                "UPDATE gcash_receipts
+                    SET reviewed_by_user_id = NULL, reviewed_at = NULL, override_note = NULL,
+                        flags_json = JSON_REMOVE(flags_json, JSON_UNQUOTE(JSON_SEARCH(flags_json, 'one', 'rejected_by_staff')))
+                  WHERE id = :r"
+            )->execute([':r' => $up['id']]);
+            if ($up['payment_id'] !== null) {
+                $pdo->prepare("UPDATE payments SET payment_record_status = 'under_review' WHERE id = :p AND payment_record_status = 'rejected'")
+                    ->execute([':p' => $up['payment_id']]);
+            }
+            $this->setActor($pdo, $actor, 'Rejection withdrawn; the receipt is under review again.' . ($note !== '' ? ' ' . $note : ''));
+            $pdo->prepare("UPDATE bookings SET payment_status = 'under_review', updated_by_user_id = :u WHERE id = :b")
+                ->execute([':u' => $actor, ':b' => $bookingId]);
+            $this->clearActor($pdo);
+            $pdo->commit();
+            break;
+        }
+
+        /* ---- OVERDUE: give the customer 48 more hours from now. ---- */
+        case 'extend_deadline': {
+            if ($bk['reservation_status'] !== 'approved' || $bk['payment_status'] !== 'overdue') {
+                $this->reply(409, ['ok' => false, 'message' => 'Only an overdue payment can be extended.']);
+            }
+            $until = $pdo->query('SELECT DATE_ADD(NOW(), INTERVAL 48 HOUR)')->fetchColumn();
+            $this->setActor($pdo, $actor, 'Pay-by deadline extended 48 hours, to ' . date('M j, Y g:i A', strtotime($until)) . '.'
+                . ($note !== '' ? ' ' . $note : ''));
+            $pdo->prepare(
+                "UPDATE bookings SET payment_status = IF(payment_method = 'cash', 'await_cash', 'await_gcash'),
+                        current_deadline_at = :d, updated_by_user_id = :u WHERE id = :b"
+            )->execute([':d' => $until, ':u' => $actor, ':b' => $bookingId]);
+            $this->clearActor($pdo);
+            break;
+        }
+
+        /* ---- OVERDUE: stop waiting — the reservation is released, as the
+                system does itself when a pre-pay hold lapses (released / expired). ---- */
+        case 'release_slot':
+            if ($bk['reservation_status'] !== 'approved' || $bk['payment_status'] !== 'overdue') {
+                $this->reply(409, ['ok' => false, 'message' => 'Only an approved booking with an overdue payment can be released.']);
+            }
+            $this->setActor($pdo, $actor, 'Payment overdue; the slot was released by staff.' . ($note !== '' ? ' ' . $note : ''));
+            /* trg_bookings_after_update frees the held slots / bed-nights. */
+            $pdo->prepare(
+                "UPDATE bookings SET reservation_status = 'released', payment_status = 'expired', updated_by_user_id = :u WHERE id = :b"
+            )->execute([':u' => $actor, ':b' => $bookingId]);
+            $this->clearActor($pdo);
             break;
 
         /* ---- The receipt was wrong. Only the payment goes back. ---- */
         case 'reject_payment':
-            if ($note === '') {
+            /* Only a receipt waiting for review can be rejected: from any other
+               state this reopened payment on a booking that was already paid. */
+            if ($bk['payment_status'] !== 'under_review') {
+                $this->reply(409, ['ok' => false, 'message' => 'There is no receipt waiting for review on this booking.']);
+            }
+            /* A reason from the list, plus an optional note — required for "Other". */
+            $reason = trim((string) ($request->post('reason') ?? ''));
+            if (!in_array($reason, receipt_reject_reasons(), true)) {
                 $this->reply(400, ['ok' => false, 'message' => 'A reason is required — the customer reads it.']);
             }
+            if ($reason === 'Other' && $note === '') {
+                $this->reply(400, ['ok' => false, 'message' => 'Write the reason in the note — the customer reads it.']);
+            }
+            $note = $reason === 'Other' ? $note : $reason . ($note !== '' ? ' — ' . $note : '');
             $pdo->beginTransaction();
             /* The receipt keeps the CHECKER's verdict; it gains who decided,
                when and why (DB-DECISIONS #6). */
@@ -425,13 +607,9 @@ class BookingActionController extends Controller
             $pdo->beginTransaction();
             $pdo->prepare('UPDATE bookings SET receipt_attempts_allowed = :n, updated_by_user_id = :u WHERE id = :b')
                 ->execute([':n' => $newAllowed, ':u' => $actor, ':b' => $bookingId]);
-            /* Not a status change, so the timeline trigger would not see it — written here. */
-            $pdo->prepare(
-                "INSERT INTO booking_timeline (booking_id, action_code, performed_by_user_id, note, metadata_json)
-                 VALUES (:b, 'receipt_attempts_allowed', :u, :n, :m)"
-            )->execute([':b' => $bookingId, ':u' => $actor,
-                        ':n' => '5 more GCash receipt attempts (now ' . $newAllowed . ' in total): ' . $note,
-                        ':m' => json_encode(['allowed_before' => (int) $a['receipt_attempts_allowed'], 'allowed_after' => $newAllowed])]);
+            $this->timeline($pdo, $bookingId, 'receipt_attempts_allowed', $actor,
+                '5 more GCash receipt attempts (now ' . $newAllowed . ' in total): ' . $note,
+                ['allowed_before' => (int) $a['receipt_attempts_allowed'], 'allowed_after' => $newAllowed]);
             $pdo->commit();
             break;
         }

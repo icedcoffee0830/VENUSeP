@@ -29,6 +29,25 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/refund-policy.php';   /* payment_policy_for(), $REFUNDS_ENABLED */
 require_once __DIR__ . '/documents.php';       /* doc_path() — only advertise files that exist */
 
+/* A hostel stay paid in cash: the staff label (and the badge the staff pages draw). */
+if (!defined('HOSTEL_PAID_CASH_LABEL')) {
+    define('HOSTEL_PAID_CASH_LABEL', 'Paid at the front desk');
+}
+
+/* Why staff reject a GCash receipt (Aron, 2026-10-30). The customer reads the
+   reason; "Other" must be explained in the note. One list for the staff page
+   and the server that checks it. */
+if (!function_exists('receipt_reject_reasons')) {
+    function receipt_reject_reasons() {
+        return [
+            'Reference number not found in the Transaction History',
+            'Amount doesn\'t match',
+            'Receipt image is unreadable',
+            'Other',
+        ];
+    }
+}
+
 /* The customer-facing reference for a booking. Shared by both portals so a
    customer quoting "VB-2026-142" and a staff member searching for it are
    talking about the same row. */
@@ -203,6 +222,7 @@ function booking_shape(array $row) {
 
         'bookingDate'   => date('F j, Y', strtotime($row['submitted_at'])),
         'bookingDateIso'=> date('Y-m-d', strtotime($row['submitted_at'])),
+        'submittedAt'   => (string) $row['submitted_at'],           // the full timestamp: the date alone reads as 12:00 AM
 
         'roomPrice'     => (float) $row['room_price'],
         'discountPercent' => (float) $row['discount_percent'],
@@ -281,6 +301,12 @@ function booking_shape(array $row) {
                          . ' date, so the request expired. Nothing was charged.';
     } elseif ($row['reservation_status'] === 'released') {
         $b['expiryNote'] = 'Not paid by the deadline, so the ' . ($b['type'] === 'hostel' ? 'beds were' : 'date was') . ' released.';
+    }
+
+    /* The hostel takes cash at its own front desk, not the University Cashier
+       (DB-DECISIONS #26), so the lookup table's "Paid at cashier" is a venue's words. */
+    if ($isHostel && $row['payment_status'] === 'paid_cash') {
+        $b['paymentStatusStaff'] = HOSTEL_PAID_CASH_LABEL;
     }
 
     $b['refundable'] = cb_is_refundable($b);
@@ -402,7 +428,7 @@ function booking_queue_action(array $b) {
         case 'await_pos':      return 'Get the POS from CEDU · payment is locked until then';
         case 'await_event':    return 'Post-pay · payment opens ' . $b['payment']['opensLabel'] . ', due ' . $due;
         case 'await_gcash':    return 'Pay by ' . $due . ' · customer notified';
-        case 'await_cash':     return 'Pay at cashier by ' . $due;
+        case 'await_cash':     return ($b['type'] === 'hostel' ? 'Pay at the front desk by ' : 'Pay at cashier by ') . $due;
         case 'under_review':
             /* the last allowed attempt is with staff — there is no next try */
             $limit = !empty($b['receiptLimitReached']) ? 'All ' . $b['receiptAttemptsAllowed'] . ' receipt attempts used · ' : '';
@@ -451,6 +477,7 @@ function booking_queue_rows() {
             'dates'    => booking_date_label($b),
             'res'      => $b['reservationCode'],
             'pay'      => booking_queue_pay_key($b),
+            'payLabel' => $b['paymentStatusStaff'],   // per booking: a hostel's cash is paid at the front desk
             'act'      => booking_queue_action($b),
             'cls'      => booking_queue_class($b),
             'cat'      => booking_queue_category($b),
@@ -873,7 +900,7 @@ function booking_history_events(array $b) {
     $pdo = venusep_db();
     $events = [];
     $events[] = [
-        'w' => date('M j · g:i A', strtotime($b['bookingDateIso'])) . ' — Customer',
+        'w' => date('M j · g:i A', strtotime($b['submittedAt'])) . ' — Customer',
         'x' => 'Booking submitted',
         'm' => $b['type'] === 'hostel'
                  ? $b['beds'] . ' bed' . ($b['beds'] == 1 ? '' : 's') . ' for ' . $b['nights'] . ' night' . ($b['nights'] == 1 ? '' : 's') . ', all guests named.'
@@ -900,6 +927,9 @@ function booking_history_events(array $b) {
                 'counter_identity_confirmed' => 'Account confirmed by password',
                 'counter_no_email'           => 'No email, receipt printed',
                 'receipt_attempts_allowed'   => 'More receipt attempts allowed',
+                'pos_recorded'               => 'POS recorded',
+                'or_recorded'                => 'Official Receipt recorded',
+                'checked_in'                 => 'Guest checked in',
             ];
             foreach ($stmt->fetchAll() as $t) {
                 $code = (string) $t['action_code'];

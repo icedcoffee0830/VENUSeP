@@ -184,6 +184,13 @@
       /* Last line of defence: a code with no badge must still open the page. */
       function resBadge(code) { return RES[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
       function payBadge(code) { return PAY[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
+      /* The header's payment wording. The hostel is paid before the bed is used,
+         and takes its cash at the front desk, not the University Cashier (#26). */
+      function payText() {
+        if (cur.payToUse && cur.pay === 'await_gcash') return 'Payment due before check-in';
+        if (cur.kind === 'hostel' && cur.pay === 'paid_cash') return {!! json_encode(HOSTEL_PAID_CASH_LABEL) !!};
+        return payBadge(cur.pay).t;
+      }
 
       /* A refund claim that is still OPEN — staff can still decide it. All four
          map to the same panel and the same three outcomes; the difference
@@ -235,6 +242,8 @@
             cur.total = out.booking.total;
             cur.discountPct = out.booking.discount;
             cur.payBy = out.booking.payBy;
+            /* the timeline exactly as a reload shows it — real time, real actor */
+            if (out.booking.tl) cur.tl = out.booking.tl;
           }
           if (typeof onOk === 'function') onOk(out);
           acting = false; render(); return true;
@@ -382,9 +391,6 @@
         if (rec) gcRemember(rec);        /* consume ref + file hash only once the refund really landed */
         cur.pay = 'refunded'; cur.confirmedBy = 'You · just now';
         cur.payoutOpen = false; cur.payoutErr = null;
-        cur.tl.push({ w: now(), x: 'Refund completed', m: 'Sent to ' + to + (refNo ? ' (GCash ref ' + refNo + ')' : "")
-          + (payoutVerified() ? ', receipt verified.' : ', recorded without a verified receipt: ' + note)
-          + ' The booking is now closed and its date released.' });
         state.ocr = null;
         render();
       }
@@ -542,6 +548,13 @@
           </div>`;
       }
 
+      /* Not before the first night of the stay (Aron, 2026-10-30) — the server refuses it too. */
+      function checkInAction() {
+        return cur.checkInOpen
+          ? `<button class="br-btn br-btn-primary" onclick="checkIn()">Check the guest in</button>`
+          : `<span class="none">Paid &mdash; check-in opens on ${esc(cur.checkIn)}</span>`;
+      }
+
       /* which buttons make sense right now (reservation-level, in the header) */
       function hdrActions() {
         /* A finished booking is a RECORD, not a task. Most bookings in the
@@ -569,7 +582,7 @@
            paperwork for later and holds nothing up. */
         if (cur.kind === 'hostel' && cur.payToUse && cur.res === 'approved' && !cur.checkedIn) {
           if (cur.pay === 'confirmed' || cur.pay === 'paid_cash') {
-            return `<button class="br-btn br-btn-primary" onclick="checkIn()">Check the guest in</button>`;
+            return checkInAction();
           }
           /* Cash received only once the GUEST chose the front desk in Pay now
              (2026-10-28); if they cancel that, it goes away again. */
@@ -581,7 +594,7 @@
            OR in hand, because that is what the guest is asked to show. */
         if (cur.kind === 'hostel' && cur.pay === 'confirmed' && !cur.checkedIn) {
           return cur.or
-            ? `<button class="br-btn br-btn-primary" onclick="checkIn()">Check the guest in</button>`
+            ? checkInAction()
             : `<span class="none">Record the OR before check-in — the guest has to show it</span>`;
         }
         if (cur.kind === 'hostel' && cur.checkedIn) return `<span class="none">Guest checked in &check;</span>`;
@@ -624,7 +637,7 @@
         amount_mismatch: 'wrong amount', receiver_mismatch: 'wrong receiver',
         amount_unreadable: 'amount unreadable', receiver_unreadable: 'receiver unreadable',
         low_confidence: 'low OCR confidence', attempt_limit_reached: 'last allowed attempt',
-        rejected_by_staff: 'rejected by staff',
+        rejected_by_staff: 'rejected by staff', overridden_by_staff: 'confirmed by staff override',
       };
       const ATT_VERDICT = { accepted: 'Accepted', manual_review: 'Manual review', rejected: 'Rejected' };
       function attemptsUsedUp() { return (cur.attempts || []).length >= (cur.attemptsAllowed || 5); }
@@ -667,7 +680,6 @@
         staffAction('allow_receipt_attempts', { note: note }, function (out) {
           if (out.booking && out.booking.attemptsAllowed) cur.attemptsAllowed = out.booking.attemptsAllowed;
           cur.attNote = '';
-          cur.tl.push({ w: now(), x: 'More receipt attempts allowed', m: '5 more GCash receipt attempts: ' + note });
         });
       }
 
@@ -740,7 +752,7 @@
           /* The GUEST decides how they pay, in Pay now (2026-10-28). Cash received
              is offered only after they chose the front desk — which also closes
              GCash for them until they cancel the choice. */
-          if (cur.pay === 'await_gcash') {
+          if (cur.pay === 'await_gcash' && !rejectedUpload()) {   /* a rejected upload gets the override / undo box below */
             return banner('bn-amber', 'Payment due before check-in — waiting for the guest',
                 'The guest pays by GCash from Pay now, or chooses to pay cash here at the front desk. Cash received appears once they choose cash. If it is not paid by the end of the check-in day, the beds are released.') +
               `<div class="br-kvgrid">${kv('Pay by', 'end of ' + esc(cur.checkIn))}${kv('Amount due', esc(cur.total))}${kv('Guest’s plan', 'Not chosen yet &mdash; GCash is open')}</div>`;
@@ -767,9 +779,11 @@
                <div style="margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="recordPos()">Record POS &amp; unlock payment</button></div>
              </div>`;
         }
-        switch (cur.pay) {
+        /* A rejected upload (by staff or the checker) keeps payment open
+           (await_gcash), so the override / undo box is drawn from the upload itself. */
+        switch (rejectedUpload() ? 'rejected' : cur.pay) {
           case 'locked': return banner('bn-gray', 'Payment is locked', 'The customer cannot pay until you approve the ID and the reservation.') +
-            `<div class="br-kvgrid">${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}${PAY_POLICY.prepay
+            `<div class="br-kvgrid">${kv('Method chosen', cur.method === 'cash' ? 'Cash · walk-in' : 'GCash')}${cur.prepay
               ? kv('Pay-by once approved', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')
               : kv('Payment timing', 'Post-pay <span class="soft">(opens after the event, due ' + PAY_POLICY.graceDays + ' days later)</span>')}</div>`;
           case 'await_event': return banner('bn-gray', 'Payment opens after the event', 'Post-pay booking: nothing is owed until the event is over. The customer cannot pay early. The system opens payment the day after the last booked day.') +
@@ -779,15 +793,11 @@
           case 'await_cash': return banner('bn-amber', 'Awaiting cash payment at the cashier', 'The customer chose to pay in cash, so GCash is closed for them until they cancel that choice — then this button goes away. Confirm here once the cashier records the payment.') +
             `<div class="br-kvgrid">${kv('Pay by', esc(cur.payBy))}${kv('Amount due', esc(cur.total))}${kv('Where', 'USeP Cashier — Venue Reservations Window', true)}</div>
              <div style="margin-top:0.8rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Record cash payment</button></div>`;
-          /* NEITHER of the next two states exists in the database: an uploaded
-             receipt always lands in `under_review` (customer/payment-submit.php,
-             DB-DECISIONS #6) and rejecting one reopens `await_gcash`/`await_cash`
-             so the customer can resubmit. They are kept because they are the only
-             place the override-and-confirm box lives; reaching it again needs a
-             decision about how a rejected receipt should be recorded, which is a
-             separate question from this page rendering. */
+          /* `auto_pass` is not a database state (an upload always lands in
+             `under_review`, DB-DECISIONS #6); `rejected` is reached through
+             rejectedUpload() above. */
           case 'auto_pass': return banner('bn-green', 'All automatic checks passed', 'Exact amount · correct receiver · fresh reference · genuine receipt markers.') + receiptBlock() +
-            `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="rejectPay()">Reject after GCash check</button></div>
+            `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="openRejectPay()">Reject after GCash check</button></div>` + rejectPayPanel() + `
              <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.55rem">Find the reference number in the business GCash Transaction History before confirming.</div>`;
           /* Manual review is now the COMMON path, not a rarity — so it has to say
              out loud that the customer is waiting on US. The pay-by deadline must
@@ -801,16 +811,17 @@
             flags(cur.receipt.flags, '#c99a3c') +
             `<div class="br-banner bn-gray" style="margin-top:0.7rem"><div>Slot is held while this is with you
               <span class="s">Pay-by deadline: <strong>${esc(cur.payBy)}</strong>. The customer has already paid and cannot act further — clear this before the deadline, or extend it. Do not let it lapse to overdue.</span></div></div>` +
-            `<div style="display:flex;gap:0.5rem;margin-top:0.7rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="rejectPay()">Reject receipt</button></div>`;
+            `<div style="display:flex;gap:0.5rem;margin-top:0.7rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="openRejectPay()">Reject receipt</button></div>` + rejectPayPanel();
           /* WHO rejected it matters, and matters more now the scanner rejects
              less: after DB-DECISIONS #6 most rejections are a staff decision, and
              labelling those "auto-rejected" told staff the machine did something
              they did themselves — while the reason line underneath said otherwise. */
-          case 'rejected': return banner('bn-red',
-              cur.rejectedByStaff ? 'Receipt rejected by staff' : 'Receipt auto-rejected',
-              (cur.rejectedByStaff ? 'Checked against GCash and refused. ' : 'The automatic check refused it. ')
-              + 'Customer was told to fix and resubmit. Slot held for the 48-hour window (until ' + esc(cur.resubmitBy || cur.payBy) + '), bounded by the pay-by deadline.') +
-            flags(cur.rejects || [], '#b23a3a') +
+          case 'rejected': { const up = rejectedUpload(), byStaff = up.flags.includes('rejected_by_staff');
+            return banner('bn-red',
+              byStaff ? 'Receipt rejected by staff' : 'Receipt auto-rejected',
+              (byStaff ? 'Checked against GCash and refused. ' : 'The automatic check refused it. ')
+              + 'The customer was told to send another receipt. The slot stays held until the pay-by deadline (' + esc(cur.payBy) + ').') +
+            flags(byStaff ? [up.staffNote || 'No reason recorded'] : up.flags.map(f => ATT_FLAG_TEXT[f] || String(f).replace(/_/g, ' ')), '#b23a3a') +
             `<div class="br-ovr">
               <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.4rem">Override &amp; confirm payment (staff)</div>
               <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.5;margin-bottom:0.6rem">Use only after finding the payment in the business GCash Transaction History. <strong>Duplicate-receipt rejections can only be overridden by an admin.</strong> The auto-check verdict stays on record either way.</div>
@@ -819,9 +830,9 @@
               ${cur.ovrErr ? `<div style="color:#b23a3a;font-size:0.74rem;margin-top:0.35rem">${esc(cur.ovrErr)}</div>` : ''}
               <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
                 <button class="br-btn br-btn-primary" onclick="overrideConfirm()">Override &amp; confirm</button>
-                ${cur.rejectedByStaff ? `<button class="br-btn" onclick="undoRejection()">&larr; Undo rejection</button>` : ""}
+                ${byStaff ? `<button class="br-btn" onclick="undoRejection()">&larr; Undo rejection</button>` : ""}
               </div>
-            </div>`;
+            </div>`; }
           case 'confirmed': return banner('bn-green', 'Payment confirmed', 'Confirmed by ' + esc(cur.confirmedBy || 'staff') + '. The reference number is permanently locked.') + (cur.receipt ? receiptBlock() : '');
           case 'paid_cash': return isHostel()
               /* the hostel takes cash at the front desk; its OR comes later from the cashier */
@@ -933,7 +944,7 @@
             <div>
               <div style="display:flex;flex-wrap:wrap;gap:0.45rem;justify-content:flex-end;margin-bottom:0.6rem">
                 <span class="br-badge ${resBadge(cur.res).c}">${esc(resBadge(cur.res).t)}</span>
-                <span class="br-badge ${payBadge(cur.pay).c}">${esc(cur.payToUse && cur.pay === 'await_gcash' ? 'Payment due before check-in' : payBadge(cur.pay).t)}</span>
+                <span class="br-badge ${payBadge(cur.pay).c}">${esc(payText())}</span>
               </div>
               <div class="br-actions">${hdrActions()}</div>
               ${cur.actionError && !cur.attErr ? `<div role="alert" style="color:#b23a3a;font-size:0.78rem;margin-top:0.4rem;text-align:right">${esc(cur.actionError)}</div>` : ''}
@@ -971,7 +982,7 @@
                   <div class="br-kvgrid">
                     ${kv('Room', esc(cur.room))}${kv('Venue', esc(cur.venue))}
                     ${kv(cur.days > 1 ? 'Dates' : 'Date', esc(cur.dates))}${kv('Attendees', cur.attendees + ' / ' + cur.capacity + (over ? ' <span style="color:#8a5a12">· over capacity</span>' : ''))}
-                    ${kv('Fee', esc(cur.total) + ' <span class="soft">(' + esc(cur.feeDay) + '/day × ' + cur.days + ')</span>')}${cur.pay === 'await_event' || (!PAY_POLICY.prepay && ['pending','locked'].includes(cur.pay))
+                    ${kv('Fee', esc(cur.total) + ' <span class="soft">(' + esc(cur.feeDay) + '/day × ' + cur.days + ')</span>')}${!cur.prepay
                       ? kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(post-pay · ' + PAY_POLICY.graceDays + ' days after the event)</span>')
                       : kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(1 day before the event)</span>')}
                   </div>
@@ -1092,8 +1103,6 @@
           </div></div>`;
       }
 
-      /* demo actions — update statuses + timeline in-page (no persistence) */
-      function now() { return 'Jul 14, 2026 — You (staff)'; }
       /* Recompute and LOCK the price at approval. DB-DECISIONS #2: the booking
          stores the % it received, so changing the live rate later never rewrites
          it. The rate the customer was quoted at booking is the rate they get. */
@@ -1107,15 +1116,6 @@
       function approveIdRes(withDiscount) {
         staffAction('approve', { discount: withDiscount ? '1' : '0' }, function () {
           cur.idStatus = 'approved';
-          cur.tl.push({ w: now(), x: 'Affiliation ' + (withDiscount ? 'confirmed' : 'not confirmed'),
-            m: withDiscount
-              ? cur.discountPct + '% USeP discount applied from ' + cur.idLabel + '. Price locked at ' + cur.total + '.'
-              : 'ID accepted but it does not prove USeP affiliation. Full price ' + cur.total + '.' });
-          cur.tl.push({ w: now(), x: 'ID + reservation approved',
-            m: cur.payToUse ? 'Payment open: GCash online, or cash at the front desk, by the end of ' + cur.checkIn + '.'
-             : cur.pay === 'await_pos'  ? 'Payment stays locked until the POS comes back from CEDU.'
-             : cur.pay === 'await_event' ? 'Post-pay booking: payment opens after the last day and is due by ' + cur.payBy + '.'
-             : 'Payment unlocked. Pay-by deadline ' + cur.payBy + '.' });
         });
       }
 
@@ -1128,7 +1128,6 @@
         cur.posErr = null;
         staffAction('record_pos', { pos: val }, function () {
           cur.pos = val;
-          cur.tl.push({ w: now(), x: 'POS received from CEDU', m: val + ' recorded.' + (cur.payToUse ? '' : cur.pay === 'await_event' ? ' This booking post-pays, so payment still opens after check-out.' : ' Payment unlocked for the guest.') });
         });
       }
 
@@ -1142,7 +1141,6 @@
           cur.methodChosen = true;
           loadMail();                      /* a receipt was just issued (and maybe emailed) */
           cur.confirmedBy = 'You · just now';
-          cur.tl.push({ w: now(), x: 'Cash received', m: cur.total + ' paid in cash at the front desk.' });
         });
       }
 
@@ -1154,7 +1152,6 @@
         if (!val) return;
         staffAction('record_or', { or: val }, function () {
           cur.or = val;
-          cur.tl.push({ w: now(), x: 'Official Receipt recorded', m: val + ' issued by the University Cashier. Needed at check-in.' });
         });
       }
 
@@ -1162,69 +1159,111 @@
       function checkIn() {
         staffAction('check_in', {}, function () {
           cur.checkedIn = true;
-          cur.tl.push({ w: now(), x: 'Guest checked in', m: cur.payToUse
-            ? 'Paid stay; guest matched against the valid ID.'
-            : 'POS ' + (cur.pos || '—') + ' and OR ' + (cur.or || '—') + ' presented and matched against the valid ID.' });
         });
       }
 
       function rejectRequest() {
-        staffAction('reject', { note: 'Reservation released back to availability.' }, function () {
-          cur.tl.push({ w: now(), x: 'Request rejected', m: 'Held dates released back to availability. Customer notified.' });
-        });
+        staffAction('reject', { note: 'Reservation released back to availability.' });
       }
 
       function confirmPay() {
-        const cash = cur.method === 'cash';
         staffAction('confirm_payment', {}, function () {
           loadMail();                      /* a receipt was just issued (and maybe emailed) */
           cur.confirmedBy = 'You · just now';
-          cur.tl.push({ w: now(), x: cash ? 'Cash payment recorded' : 'Payment confirmed',
-            m: cash ? 'Recorded at the cashier.' : 'Reference matched in GCash Transaction History. Reference locked.' });
         });
       }
 
+      /* REJECT A RECEIPT (Aron, 2026-10-30): staff pick why from a short list,
+         plus a note — required for "Other". The customer reads the result, in
+         the same words the server stores (reason — note). */
+      const REJECT_REASONS = {!! json_encode(receipt_reject_reasons(), JSON_UNESCAPED_UNICODE) !!};
+      function rejectMessage() {
+        const note = (cur.rejNote || '').trim();
+        if (!cur.rejReason) return '';
+        return cur.rejReason === 'Other' ? note : cur.rejReason + (note ? ' — ' + note : '');
+      }
+      function rejectPayPanel() {
+        if (!cur.rejOpen) return '';
+        const msg = rejectMessage();
+        return `<div class="br-ovr">
+            <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">Reject this receipt</div>
+            <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.55;margin-bottom:0.8rem">Payment reopens so the customer can upload another receipt before the deadline. This one stays on record and cannot be used again. Be plain about why: they read it.</div>
+            <div class="br-fld">
+              <label for="rejReason">Why is it being rejected</label>
+              <select id="rejReason" onchange="readRejectPay(); render()">
+                <option value="">Choose a reason…</option>
+                ${REJECT_REASONS.map(r => `<option${cur.rejReason === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="br-fld">
+              <label for="rejNote">Note to the customer ${cur.rejReason === 'Other' ? '(required)' : '(optional)'}</label>
+              <textarea id="rejNote" rows="2" placeholder="e.g. the amount sent was ₱500 short.">${esc(cur.rejNote || '')}</textarea>
+            </div>
+            ${msg ? `<div class="br-preview">The customer will see: <b>${esc(msg)}</b></div>` : ''}
+            ${cur.rejErr ? `<div role="alert" style="color:#b23a3a;font-size:0.74rem;margin-bottom:0.55rem">${esc(cur.rejErr)}</div>` : ''}
+            <div style="display:flex;gap:0.5rem">
+              <button class="br-btn br-btn-primary" onclick="rejectPay()">Reject and tell the customer</button>
+              <button class="br-btn" onclick="cur.rejOpen = false; render()">Cancel</button>
+            </div>
+          </div>`;
+      }
+      function openRejectPay() { cur.rejOpen = true; cur.rejErr = null; render(); }
+      function readRejectPay() {
+        const r = document.getElementById('rejReason'), n = document.getElementById('rejNote');
+        if (r) cur.rejReason = r.value;
+        if (n) cur.rejNote = n.value;
+      }
       function rejectPay() {
-        const why = 'Rejected by staff after checking GCash — the reference was not found in the Transaction History.';
-        staffAction('reject_payment', { note: why }, function () {
-          cur.rejectedByStaff = true;      /* a person decided this, not the scanner */
+        readRejectPay();
+        if (!cur.rejReason) { cur.rejErr = 'Choose a reason — the customer sees it.'; render(); return; }
+        if (cur.rejReason === 'Other' && !(cur.rejNote || '').trim()) { cur.rejErr = 'Write the reason in the note — the customer sees it.'; render(); return; }
+        const why = rejectMessage();
+        staffAction('reject_payment', { reason: cur.rejReason, note: (cur.rejNote || '').trim() }, function () {
+          cur.rejOpen = false; cur.rejReason = ''; cur.rejNote = ''; cur.rejErr = null;
           /* the server marked the upload under review (the latest) — show it without a reload */
           const lastUp = (cur.attempts || []).slice(-1)[0];
           if (lastUp && !lastUp.flags.includes('rejected_by_staff')) { lastUp.flags.push('rejected_by_staff'); lastUp.staffNote = why; }
-          cur.rejects = [why + ' (receipt kept on record; the same receipt cannot be used again)'];
-          cur.tl.push({ w: now(), x: 'Receipt rejected', m: 'Payment reopened so the customer can resubmit before the deadline.' });
         });
       }
-      /* Take back a rejection STAFF made and return the receipt to where it was —
-         the confirm / reject choice. Only offered for staff rejections: an
-         auto-rejection is a duplicate or a total mismatch, and the considered way
-         back from those is Override & confirm with a written reason.
-         The timeline keeps both entries; undoing a decision is itself a decision. */
-      function undoRejection() {
-        cur.pay = cur.prevPay || 'under_review';
-        cur.rejectedByStaff = false;
-        cur.rejects = []; cur.resubmitBy = null;   /* the 48-hour window dies with the rejection */
-        cur.tl.push({ w: now(), x: 'Rejection withdrawn', m: 'Staff took the rejection back; the receipt is under review again.' });
-        render();
+      /* The latest upload, when it was rejected (by staff or by the checker) and
+         payment is open again for another one — or null. */
+      function rejectedUpload() {
+        const up = (cur.attempts || []).slice(-1)[0];
+        return cur.pay === 'await_gcash' && up && (up.verdict === 'rejected' || up.flags.includes('rejected_by_staff')) ? up : null;
       }
+      /* Take back a rejection STAFF made: the receipt is under review again.
+         Only offered for staff rejections: an auto-rejection is a duplicate or
+         a total mismatch, and the considered way back from those is Override &
+         confirm with a written reason. The timeline keeps both entries. */
+      function undoRejection() {
+        staffAction('undo_rejection', {}, function () {
+          const up = (cur.attempts || []).slice(-1)[0];
+          if (up) { up.flags = up.flags.filter(f => f !== 'rejected_by_staff'); up.staffNote = ''; }
+        });
+      }
+      /* Staff found the payment in the venue's GCash history after all. */
       function overrideConfirm() {
         cur.ovrRef = (document.getElementById('ovrRef') || {}).value || '';
         cur.ovrNote = (document.getElementById('ovrNote') || {}).value || '';
         if (!cur.ovrRef.trim() || !cur.ovrNote.trim()) { cur.ovrErr = 'Both the verified reference number and a note are required.'; render(); return; }
-        cur.ovrErr = ''; cur.pay = 'confirmed'; cur.confirmedBy = 'You (override) · just now';
-        cur.tl.push({ w: now(), x: 'Override — payment confirmed manually', m: 'Verified ref ' + cur.ovrRef.trim() + ' in GCash. Note: ' + cur.ovrNote.trim() + ' (Auto-check verdict kept on record.)' });
-        render();
+        cur.ovrErr = '';
+        staffAction('override_confirm', { ref: cur.ovrRef.trim(), note: cur.ovrNote.trim() }, function () {
+          const up = (cur.attempts || []).slice(-1)[0];
+          if (up) up.flags.push('overridden_by_staff');
+          cur.ovrRef = ''; cur.ovrNote = '';
+          loadMail();                      /* a receipt was just issued (and maybe emailed) */
+          cur.confirmedBy = 'You (override) · just now';
+        });
       }
-      function releaseSlot() {
-        cur.res = 'released';
-        cur.tl.push({ w: now(), x: 'Slot released', m: 'Payment deadline passed; the dates are bookable again. Customer notified.' });
-        render();
+      /* OVERDUE: stop waiting and free the dates — no undo, so ask first. */
+      async function releaseSlot() {
+        if (!(await venusepConfirm('Release ' + cur.id + '? The reservation ends, its payment is marked expired and the customer is told. This cannot be undone.',
+              { title: 'Release the slot?', okLabel: 'Release the slot' }))) return;
+        staffAction('release_slot', {});
       }
+      /* OVERDUE: 48 more hours from now to pay. */
       function extendDeadline() {
-        cur.pay = cur.method === 'cash' ? 'await_cash' : 'await_gcash';
-        cur.payBy = 'Jul 16, 2026 (extended +48 h)';
-        cur.tl.push({ w: now(), x: 'Deadline extended 48 hours', m: 'New pay-by: Jul 16, 2026. Customer notified.' });
-        render();
+        staffAction('extend_deadline', {});
       }
       /* NOT a denial. A paperwork problem hands the request back with a bounded
          window to fix it; the claim is untouched, and so is the booking. */
@@ -1268,13 +1307,11 @@
         if (deny) {
           cur.pay = 'refund_denied';
           cur.denyReason = msg;
-          cur.tl.push({ w: now(), x: 'Refund denied', m: msg + '. Final — the customer would need to book again. The booking itself is unaffected.' });
         } else {
           cur.pay = 'refund_correction';
           cur.refund = cur.refund || {};
           cur.refund.stage = 'Returned for correction';
           cur.refund.docs = 'Returned to the customer: ' + msg;
-          cur.tl.push({ w: now(), x: 'Returned for correction', m: msg + ' · 48 hours to resubmit. Not a denial — the booking is unaffected.' });
         }
         cur.actionMode = null; cur.actNote = ""; cur.actReason = ""; cur.actErr = null;
         render();
@@ -1310,7 +1347,7 @@
           const res = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' });
           const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });
           if (!out.ok) { cur.outcomeError = out.message || 'Nothing was recorded.'; return false; }
-          if (out.booking) { cur.res = out.booking.res; cur.pay = out.booking.pay; }
+          if (out.booking) { cur.res = out.booking.res; cur.pay = out.booking.pay; if (out.booking.tl) cur.tl = out.booking.tl; }
           return true;
         } catch (e) {
           cur.outcomeError = 'Could not reach the server, so nothing was recorded.';

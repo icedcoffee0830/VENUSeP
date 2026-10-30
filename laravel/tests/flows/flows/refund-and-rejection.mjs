@@ -168,6 +168,8 @@ export default {
       await page.goto(ctx.url('/admin/booking-request?id=' + encodeURIComponent(s.ref)));
       await expect.text(page, 'Needs manual review');
       await page.getByRole('button', { name: 'Reject receipt' }).click();
+      await page.locator('#rejReason').selectOption('Reference number not found in the Transaction History');
+      await page.getByRole('button', { name: 'Reject and tell the customer' }).click();
       await expect.text(page, 'Awaiting GCash payment', 20_000);
       const b = await dbOne(`SELECT payment_status, staff_notes FROM bookings WHERE id = ?`, [s.bookingId]);
       expect.equal(b.payment_status, 'await_gcash', 'payment_status after the rejection (payment reopened)');

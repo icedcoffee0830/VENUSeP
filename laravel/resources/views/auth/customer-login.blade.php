@@ -84,7 +84,7 @@
             <p class="auth-subtitle">Sign in to book venues and hostel beds.</p>
           </div>
           @if ($loginNotice !== '')<p class="auth-notice" role="status">{{ $loginNotice }}</p>@endif
-          @if ($accountDisabled)<p class="auth-notice" id="accountDisabledNotice" role="alert"><strong>Account disabled.</strong> This account has been disabled, so it can&rsquo;t sign in. If you think this is a mistake, contact the venue office.</p>@endif
+          @if ($accountDisabled)<p class="auth-notice" id="accountDisabledNotice" role="status"><strong>Account disabled.</strong> This account has been disabled, so it can&rsquo;t sign in. If you think this is a mistake, contact the venue office.</p>@endif
 
           <!-- the form below is unchanged: same names, same POST, same PHP error output -->
           <form id="customerLoginForm" action="" method="post" novalidate data-auth-form="login">

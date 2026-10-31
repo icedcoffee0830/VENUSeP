@@ -1,0 +1,3 @@
+# Keeps .env, storage (IDs, receipts, backups), logs and code away from the web
+# when Apache serves this folder. Only public/ is served; it allows itself.
+Require all denied

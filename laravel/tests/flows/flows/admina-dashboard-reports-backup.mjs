@@ -90,9 +90,11 @@ export default {
       return page;
     });
 
-    await step('Staff make a backup; they are offered no Download', async () => {
+    await step('Staff are kept out of backups; the admin makes one', async () => {
       s.staff = await ctx.loginStaff(STAFF);
-      const page = s.staff;
+      await s.staff.goto(ctx.url('/admin/backup-restore'));
+      await expect.url(s.staff, /\/admin\/dashboard/);
+      const page = s.admin;
       await page.goto(ctx.url('/admin/backup-restore'));
       s.rowsBefore = await page.locator('tr[data-file]').count();
       await page.locator('#brCreate').click();
@@ -102,8 +104,6 @@ export default {
       expect.equal(await page.locator('tr[data-file]').count(), s.rowsBefore + 1, 'backups listed');
       s.file = await page.locator('tr[data-file]').first().getAttribute('data-file');
       expect.match(s.file, /^venusep-backup-\d{8}-\d{6}-manual\.tar\.gz$/, 'backup file name');
-      expect.equal(await page.locator('a', { hasText: 'Download' }).count(), 0, 'Download links shown to staff');
-      await expect.text(page, 'Only an administrator can download, restore or delete a backup.');
       return page;
     }, { timeout: 180_000 });
 

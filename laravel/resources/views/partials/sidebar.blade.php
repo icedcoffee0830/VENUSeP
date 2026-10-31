@@ -25,8 +25,8 @@
         ['Customer Management', route('admin.customer-management'),    'bi-person-badge', 'admin'],   /* admins only (2026-10-31) */
         ['Reports',             route('admin.reports'),                'bi-bar-chart'],
         ['Payment Settings',    route('admin.payment-settings'),       'bi-wallet2'],
-        ['FAQ Management',      route('admin.faq-management'),         'bi-question-circle'],   /* admin-added FAQ entries (2026-09-18) */
-        ['Backup & Restore',    route('admin.backup-restore'),         'bi-database-check'],    /* staff: back up; admins: download / restore (2026-10-27) */
+        ['FAQ Management',      route('admin.faq-management'),         'bi-question-circle', 'admin'],   /* admin-added FAQ entries (2026-09-18) */
+        ['Backup & Restore',    route('admin.backup-restore'),         'bi-database-check', 'admin'],    /* staff: back up; admins: download / restore (2026-10-27) */
         ['Settings',            route('admin.profile'),                'bi-gear'],
         ['Log Out',             route('admin.logout'),                 'bi-box-arrow-right'],   /* ends the session */
       ];

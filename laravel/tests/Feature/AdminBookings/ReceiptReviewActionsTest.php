@@ -135,6 +135,29 @@ class ReceiptReviewActionsTest extends TestCase
     }
 
     /* §7 Override & confirm: a rejected receipt, then staff find the money in GCash. */
+    /* Staff decide a refund on the papers, so they can open them; the viewer repeats the venue check. */
+    public function test_venue_staff_can_open_the_refund_documents(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'refund_requested');
+        DB::table('refunds')->insert(['booking_id' => $id, 'reason_category' => 'other', 'reason' => 'test',
+            'amount_requested' => 100, 'refund_status' => 'requested']);
+        $relative = 'bookings/' . $id . '/refund_support_test.png';
+        $file = getenv('VENUSEP_DOC_ROOT') . '/' . $relative;
+        @mkdir(dirname($file), 0700, true);
+        file_put_contents($file, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='));
+        $doc = DB::table('booking_documents')->insertGetId(['booking_id' => $id, 'document_type' => 'refund_support',
+            'file_path' => $relative, 'original_filename' => 'official-receipt.png', 'mime_type' => 'image/png']);
+        try {
+            $this->actingAsStaff()->get(route('admin.booking-request', ['id' => $ref]))->assertOk()
+                ->assertSee('"files":[{"id":' . $doc . ',"name":"official-receipt.png"}]', false)
+                ->assertSee('1 document(s) submitted');
+            $this->get(route('root.document-view', ['doc' => $doc]))->assertOk();
+        } finally {
+            @unlink($file);
+            @rmdir(dirname($file));
+        }
+    }
+
     /* Refunds are always full (Aron): a posted amount is ignored, so ₱1 cannot close a ₱5,000 booking. */
     public function test_a_refund_payout_is_always_the_full_amount(): void
     {

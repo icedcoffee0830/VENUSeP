@@ -122,8 +122,8 @@ export default {
       return page;
     });
 
-    await step('Staff add a FAQ question with typed HTML → customers see it as text', async () => {
-      const page = s.staff;
+    await step('The admin adds a FAQ question with typed HTML → customers see it as text', async () => {
+      const page = s.admin;
       s.faqQ = `Flow people question ${ctx.uniq}?`;
       await page.goto(ctx.url('/admin/faq-management'));
       await page.locator('#fqSection').selectOption('cash');
@@ -148,8 +148,8 @@ export default {
       return guest;
     });
 
-    await step('Staff edit the question into "After you book" → it is the last one there', async () => {
-      const page = s.staff;
+    await step('The admin edits the question into "After you book" → it is the last one there', async () => {
+      const page = s.admin;
       await page.goto(ctx.url('/admin/faq-management'));
       const row = page.locator(`#faq-${s.faqId}`);
       await row.locator(`[data-edit="faq-${s.faqId}"]`).click();
@@ -167,8 +167,8 @@ export default {
       return page;
     });
 
-    await step('Staff delete the question → gone for customers too', async () => {
-      const page = s.staff;
+    await step('The admin deletes the question → gone for customers too', async () => {
+      const page = s.admin;
       await page.locator(`[data-delete="${s.faqId}"]`).click();
       await expect.visible(page.locator('#fqModal'), 'the delete dialog did not open');
       expect.equal((await page.locator('#fqModalQ').textContent()).trim(), s.faqQ, 'question shown in the delete dialog');

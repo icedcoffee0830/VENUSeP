@@ -22,7 +22,7 @@ class FaqManagementTest extends TestCase
     public function test_staff_sees_every_section_with_live_values_and_working_links(): void
     {
         $pct = (int) DB::table('system_settings')->where('setting_key', 'discount_percent')->value('setting_value') ?: 20;
-        $this->actingAsStaff()->get(route('admin.faq-management'))->assertOk()
+        $this->actingAsAdmin()->get(route('admin.faq-management'))->assertOk()
             ->assertSee('FAQ Management')
             ->assertSee('Add a question')
             ->assertSee('Paying with GCash')
@@ -33,6 +33,15 @@ class FaqManagementTest extends TestCase
             ->assertSee('action="' . route('admin.faq-save') . '"', false);
     }
 
+    /* Aron 2026-10-31: what every customer reads is the admin's to change. */
+    public function test_staff_are_kept_out(): void
+    {
+        $this->actingAsStaff()->get(route('admin.faq-management'))->assertRedirect(route('admin.dashboard'));
+        $this->withSession(['_token' => 'tok'])->post(route('admin.faq-save'), ['_token' => 'tok', 'action' => 'toggle', 'id' => 1])
+            ->assertRedirect(route('admin.dashboard'));
+        $this->get(route('admin.dashboard'))->assertDontSee(route('admin.faq-management'), false)->assertDontSee(route('admin.backup-restore'), false);
+    }
+
     public function test_admin_sees_the_page_and_a_flash_message(): void
     {
         $this->actingAsAdmin()->get(route('admin.faq-management', ['msg' => 'builtin']))->assertOk()
@@ -41,7 +50,7 @@ class FaqManagementTest extends TestCase
 
     public function test_add_then_delete_an_added_question(): void
     {
-        $this->actingAsStaff();
+        $this->actingAsAdmin();
         $res = $this->post(route('admin.faq-save'), [
             'action' => 'add', 'section' => 'cash', 'policy' => 'refunds_on',
             'question' => 'Port test question?', 'answer' => "Line one\r\n- a\r\n- b",
@@ -61,7 +70,7 @@ class FaqManagementTest extends TestCase
 
     public function test_validation_and_refusals(): void
     {
-        $this->actingAsStaff();
+        $this->actingAsAdmin();
         $this->post(route('admin.faq-save'), ['action' => 'add', 'section' => 'cash', 'question' => '', 'answer' => 'x'])
             ->assertRedirect(route('admin.faq-management') . '?msg=question&keep=1');
         $this->post(route('admin.faq-save'), ['action' => 'add', 'section' => 'nope', 'question' => 'q', 'answer' => 'x'])
@@ -78,7 +87,7 @@ class FaqManagementTest extends TestCase
        Up/Down arrows could not order the two. It now goes to the end of the new section. */
     public function test_editing_a_question_into_another_section_puts_it_last_there(): void
     {
-        $this->actingAsStaff();
+        $this->actingAsAdmin();
         $this->post(route('admin.faq-save'), ['action' => 'add', 'section' => 'cash', 'policy' => 'any',
             'question' => 'Section move test?', 'answer' => 'x']);
         $id = DB::table('faqs')->where('question', 'Section move test?')->value('id');
@@ -104,7 +113,7 @@ class FaqManagementTest extends TestCase
        refusal, and saving or hiding a question that is gone is not "saved". */
     public function test_a_question_that_no_longer_exists_says_so(): void
     {
-        $this->actingAsStaff();
+        $this->actingAsAdmin();
         foreach (['delete', 'toggle'] as $action) {
             $this->post(route('admin.faq-save'), ['action' => $action, 'id' => 999999])
                 ->assertRedirect(route('admin.faq-management') . '?msg=missing');
@@ -138,7 +147,7 @@ class FaqManagementTest extends TestCase
         try {
             $this->get(route('customer.faq'))->assertOk()
                 ->assertSee('Communal rate: ' . $shown . '.', false);
-            $this->actingAsStaff()->get(route('admin.faq-management'))->assertOk()
+            $this->actingAsAdmin()->get(route('admin.faq-management'))->assertOk()
                 ->assertSee('Hostel rate &middot; communal CR<small>' . $shown . ' per head, per night</small>', false);
         } finally {
             DB::table('faqs')->where('id', $id)->delete();
@@ -169,7 +178,7 @@ class FaqManagementTest extends TestCase
 
     public function test_toggle_twice_and_move_round_trip(): void
     {
-        $this->actingAsStaff();
+        $this->actingAsAdmin();
         $before = DB::table('faqs')->where('id', 26)->value('is_active');
         $this->post(route('admin.faq-save'), ['action' => 'toggle', 'id' => 26])->assertRedirect(route('admin.faq-management') . '?msg=toggled');
         $this->assertNotSame((int) $before, (int) DB::table('faqs')->where('id', 26)->value('is_active'));

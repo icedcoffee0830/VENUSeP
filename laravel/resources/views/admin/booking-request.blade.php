@@ -839,7 +839,12 @@
                whose claim was purged) while the booking still carries a refund
                payment status — the panel has to open either way. */
             return banner(returned || pendingOR ? 'bn-amber' : 'bn-gray', head,
-                          esc(cur.refund ? cur.refund.docs : 'No refund paperwork is on file for this booking.'))
+                          esc(cur.refund ? cur.refund.docs : 'No refund paperwork is on file for this booking.')
+                          + (cur.refund && cur.refund.files && cur.refund.files.length
+                              ? '<div style="margin-top:0.4rem">' + cur.refund.files.map(function (f) {
+                                  return '<a href="{{ route('root.valid-id-view') }}?doc=' + f.id + '" style="display:inline-block;margin-right:0.8rem;padding:0.2rem 0;text-decoration:underline">' + esc(f.name) + '</a>';
+                                }).join('') + '</div>'
+                              : ""))
               + refundReasonBlock()
               + actionPanel()
               + payoutPanel()

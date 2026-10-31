@@ -93,7 +93,7 @@ class CustomerLoginController
                 $loginError = 'Please enter a valid email address.';
             } elseif ($password === '') {
                 $loginError = 'Please enter your password.';
-            } elseif (($lock = SignInThrottle::secondsLeft($email)) > 0) {
+            } elseif (($lock = SignInThrottle::enter($email)) > 0) {
                 $loginError = SignInThrottle::message($lock);   // the password is not even checked
             } else {
                 $stmt = $pdo->prepare(

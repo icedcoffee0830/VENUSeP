@@ -21,5 +21,5 @@ Route::match(['get', 'post'], '/admin/customer-save', [CustomerController::class
    gets the old 400 JSON instead of Laravel's 419 page. */
 Route::match(['get', 'post'], '/admin/customer-search', [CounterCustomerController::class, 'search'])->name('admin.customer-search');
 Route::match(['get', 'post'], '/admin/customer-verify', [CounterCustomerController::class, 'verify'])->name('admin.customer-verify');
-Route::middleware('staff')->get('/admin/faq-management', [FaqController::class, 'index'])->name('admin.faq-management');
-Route::middleware('staff')->match(['get', 'post'], '/admin/faq-save', [FaqController::class, 'save'])->name('admin.faq-save');
+Route::middleware('staff:admin')->get('/admin/faq-management', [FaqController::class, 'index'])->name('admin.faq-management');
+Route::middleware('staff:admin')->match(['get', 'post'], '/admin/faq-save', [FaqController::class, 'save'])->name('admin.faq-save');

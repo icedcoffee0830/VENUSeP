@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\Auth;
 
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 
 /* WRONG-PASSWORD LIMIT on both sign-in pages (customer + staff/admin).
-   The same ladder as the users.reauth_* lockout (RefundSwitchController):
-   5 wrong in a row = one lock, each lock longer than the last — 10s, 30s,
+   7 wrong in a row (Aron 2026-10-31) = one lock, each lock longer than the last — 10s, 30s,
    1m, 5m, then 15m. A correct password starts it over.
 
    Kept in the cache, keyed by the TYPED email, not in users.reauth_*:
@@ -18,13 +18,29 @@ use Illuminate\Support\Facades\Cache;
    A lock level is forgotten a day after the last wrong attempt. */
 final class SignInThrottle
 {
-    const ATTEMPTS_PER_LOCK = 5;
+    const ATTEMPTS_PER_LOCK = 7;
     const LOCK_SECONDS = [10, 30, 60, 300, 900];   // lock #1, #2, #3, #4, #5 and later
     const FORGET_AFTER = 86400;
 
     private static function key(string $email): string
     {
         return 'signin-throttle:' . sha1(mb_strtolower(trim($email)));
+    }
+
+    /* The start of one sign-in. Attempts on one email run one at a time, held until the
+       request ends, so many sent at once cannot all pass this check before any is counted.
+       Returns seconds to wait; 0 = this email may try. */
+    public static function enter(string $email): int
+    {
+        $lock = Cache::lock(self::key($email) . ':busy', 10);
+        try {
+            $lock->block(5);
+        } catch (LockTimeoutException $e) {
+            return self::LOCK_SECONDS[0];
+        }
+        app()->terminating(fn () => $lock->release());
+
+        return self::secondsLeft($email);
     }
 
     /* Seconds left on a running lock; 0 = this email may try. */

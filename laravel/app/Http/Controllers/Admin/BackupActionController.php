@@ -42,7 +42,10 @@ class BackupActionController
         if (!session()->has('user_id') || !in_array($type, ['admin', 'staff'], true)) {
             return $this->bk(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
         }
-        $isAdmin = $type === 'admin';
+        /* Admin only (Aron 2026-10-31): a backup holds everyone's IDs and password hashes. */
+        if ($type !== 'admin') {
+            return $this->bk(403, ['ok' => false, 'message' => 'Only an administrator can use backups.']);
+        }
         $actor = (int) session('user_id');
         $pdo = venusep_db();
         $actorLabel = 'user #' . $actor;
@@ -54,9 +57,6 @@ class BackupActionController
 
         /* ---- download: admins only; streams the file ---- */
         if ($request->isMethod('get') && $request->query->has('download')) {
-            if (!$isAdmin) {
-                return $this->bk(403, ['ok' => false, 'message' => 'Only an administrator can download a backup.']);
-            }
             $path = backup_path((string) $request->query('download'));
             if ($path === null) {
                 return $this->bk(404, ['ok' => false, 'message' => 'That backup no longer exists.']);
@@ -82,10 +82,6 @@ class BackupActionController
                 return $this->bk(500, ['ok' => false, 'message' => $err]);
             }
             return $this->bk(200, ['ok' => true, 'file' => $file, 'message' => 'Backup made: ' . $file]);
-        }
-
-        if (!$isAdmin) {
-            return $this->bk(403, ['ok' => false, 'message' => 'Only an administrator can do that.']);
         }
 
         if ($action === 'delete') {

@@ -73,7 +73,7 @@ class AdminLoginController
                     $loginError = 'Please enter your password.';
                 } elseif (!$asAdmin && !isset($departments[$selectedDepartment])) {
                     $loginError = 'Please select a department.';
-                } elseif (($lock = SignInThrottle::secondsLeft($email)) > 0) {
+                } elseif (($lock = SignInThrottle::enter($email)) > 0) {
                     $loginError = SignInThrottle::message($lock);   // the password is not even checked
                 } else {
                     /* The department is a venue: staff.venue_id for a staff account.

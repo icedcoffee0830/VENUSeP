@@ -25,12 +25,10 @@ class BackupTest extends TestCase
         $this->actingAsCustomer()->get(route('admin.backup-restore'))->assertRedirect(route('admin.admin-login'));
     }
 
-    public function test_staff_sees_back_up_only(): void
+    /* Aron 2026-10-31: backups are the admin's alone. */
+    public function test_staff_are_kept_out_of_backups(): void
     {
-        $this->actingAsStaff()->get(route('admin.backup-restore'))->assertOk()
-            ->assertSee('Backup &amp; Restore', false)->assertSee('Back up now')
-            ->assertSee('Only an administrator can download, restore or delete a backup.')
-            ->assertDontSee('Restore from a downloaded backup');
+        $this->actingAsStaff()->get(route('admin.backup-restore'))->assertRedirect(route('admin.dashboard'));
     }
 
     public function test_admin_sees_restore(): void
@@ -45,15 +43,17 @@ class BackupTest extends TestCase
         $this->post(route('admin.backup-action'), ['action' => 'create'])->assertStatus(401)
             ->assertExactJson(['ok' => false, 'message' => 'Your session has ended. Log in again.']);
         $this->actingAsStaff()->withTestCsrf();
-        $this->get(route('admin.backup-action'))->assertStatus(405)->assertHeader('Allow', 'GET, POST');
         $this->get(route('admin.backup-action', ['download' => 'x']))->assertStatus(403)
-            ->assertJson(['message' => 'Only an administrator can download a backup.']);
+            ->assertJson(['message' => 'Only an administrator can use backups.']);
+        foreach (['create', 'delete', 'restore'] as $action) {
+            $this->post(route('admin.backup-action'), ['_token' => 'test-csrf-token', 'action' => $action, 'file' => 'x', 'password' => 'x'])
+                ->assertStatus(403)->assertJson(['message' => 'Only an administrator can use backups.']);
+        }
+        $this->flushSession();
+        $this->actingAsAdmin()->withTestCsrf();
+        $this->get(route('admin.backup-action'))->assertStatus(405)->assertHeader('Allow', 'GET, POST');
         $this->post(route('admin.backup-action'), ['_token' => 'bad', 'action' => 'create'])->assertStatus(400)
             ->assertJson(['message' => 'This page has expired. Reload it and try again.']);
-        $this->post(route('admin.backup-action'), ['_token' => 'test-csrf-token', 'action' => 'delete', 'file' => 'x'])
-            ->assertStatus(403)->assertJson(['message' => 'Only an administrator can do that.']);
-        $this->post(route('admin.backup-action'), ['_token' => 'test-csrf-token', 'action' => 'restore', 'password' => 'x'])
-            ->assertStatus(403);
     }
 
     public function test_restore_guards_never_restore(): void
@@ -149,7 +149,7 @@ class BackupTest extends TestCase
     public function test_a_real_dump_names_only_this_database(): void
     {
         legacy('backup');
-        $res = $this->actingAsStaff()->withTestCsrf()
+        $res = $this->actingAsAdmin()->withTestCsrf()
             ->post(route('admin.backup-action'), ['_token' => 'test-csrf-token', 'action' => 'create']);
         $res->assertOk();
         $path = backup_path($res->json('file'));
@@ -169,7 +169,7 @@ class BackupTest extends TestCase
     {
         $this->assertStringStartsWith('venusep_laravel_test', DB::connection()->getDatabaseName());   // never the real database
 
-        $res = $this->actingAsStaff()->withTestCsrf()
+        $res = $this->actingAsAdmin()->withTestCsrf()
             ->post(route('admin.backup-action'), ['_token' => 'test-csrf-token', 'action' => 'create']);
         $res->assertOk()->assertJson(['ok' => true]);
         $file = $res->json('file');

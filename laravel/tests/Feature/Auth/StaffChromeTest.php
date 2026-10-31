@@ -38,7 +38,9 @@ class StaffChromeTest extends TestCase
         $sidebar = $this->sidebar($html);
         $this->assertStringNotContainsString(route('admin.staff'), $sidebar);
         $this->assertStringContainsString(route('admin.payment-settings'), $sidebar);   // staff see it read-only (#16)
-        $this->assertStringContainsString(route('admin.backup-restore'), $sidebar);     // staff may back up (#25)
+        $this->assertStringNotContainsString(route('admin.backup-restore'), $sidebar);  // admins only (2026-10-31)
+        $this->assertStringNotContainsString(route('admin.faq-management'), $sidebar);  // admins only (2026-10-31)
+        $this->assertStringNotContainsString(route('admin.customer-management'), $sidebar);
     }
 
     public function test_an_admin_sees_their_name_the_admin_role_and_staff_management(): void

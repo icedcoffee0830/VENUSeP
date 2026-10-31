@@ -89,7 +89,9 @@ class BookingRequestController extends Controller
                 'completed'               => 'Refunded',
                 'withdrawn'               => 'Withdrawn by the customer',
             ];
+            $refundFiles = booking_refund_documents($b['id']);
             $refund = [
+                'files'     => $refundFiles,
                 'stage'     => $stageMap[$rf['refund_status']] ?? $rf['refund_status'],
                 'orPending' => (bool) $rf['official_receipt_pending'],
                 'reason'    => str_replace('_', ' ', $rf['reason_category']),
@@ -98,7 +100,7 @@ class BookingRequestController extends Controller
                 'filed'     => date('M j, Y', strtotime($rf['requested_at'])),
                 'docs'      => $rf['refund_status'] === 'returned_for_correction'
                                 ? 'Returned to the customer: ' . ($rf['notes'] ?: 'correction requested')
-                                : 'VENUSeP System Receipt + proof of payment submitted · '
+                                : ($refundFiles ? count($refundFiles) . ' document(s) submitted · ' : 'No documents attached · ')
                                   . ($rf['official_receipt_pending'] ? 'Official Receipt NOT yet provided' : 'Official Receipt provided'),
             ];
         }

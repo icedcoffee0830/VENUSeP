@@ -372,6 +372,29 @@ function booking_by_reference($ref) {
     return $rows ? $rows[0] : null;
 }
 
+/* Every paper filed with a refund request (document-view repeats the permission check). */
+function booking_refund_documents($bookingId) {
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return [];
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT id, original_filename, file_path FROM booking_documents
+                                WHERE booking_id = :b AND document_type = 'refund_support' ORDER BY id");
+        $stmt->execute([':b' => (int) $bookingId]);
+    } catch (PDOException $e) {
+        return [];
+    }
+    $out = [];
+    foreach ($stmt->fetchAll() as $r) {
+        $path = doc_path($r['file_path']);
+        if ($path !== null && is_file($path)) {
+            $out[] = ['id' => (int) $r['id'], 'name' => (string) $r['original_filename']];
+        }
+    }
+    return $out;
+}
+
 /* The named guests on a hostel booking, with the exact bed each one holds.
    Loaded on demand — only the request-detail page shows a roster. */
 function booking_occupants($bookingId) {

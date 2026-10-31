@@ -458,9 +458,12 @@ class BookingActionController extends Controller
         /* ---- A receipt was rejected (by staff or by the checker) but staff then
                 FOUND the payment in the venue's GCash Transaction History. ---- */
         case 'override_confirm': {
-            $verifiedRef = trim((string) ($request->post('ref') ?? ''));
+            $verifiedRef = preg_replace('/\D/', '', (string) ($request->post('ref') ?? ''));
             if ($verifiedRef === '' || $note === '') {
                 $this->reply(400, ['ok' => false, 'message' => 'Both the verified reference number and a note are required.']);
+            }
+            if (strlen($verifiedRef) < 10 || strlen($verifiedRef) > 16) {
+                $this->reply(400, ['ok' => false, 'message' => 'A GCash reference number has 10 to 16 digits.']);
             }
             $up = $this->lastUpload($pdo, $bookingId);
             if ($bk['payment_status'] !== 'await_gcash' || !$up || !$up['rejected']) {
@@ -470,7 +473,13 @@ class BookingActionController extends Controller
             if (array_intersect(['duplicate_ref', 'duplicate_file'], $up['flags']) && session('account_type') !== 'admin') {
                 $this->reply(403, ['ok' => false, 'message' => 'This receipt was rejected as a duplicate. Only an administrator can override that.']);
             }
-            $why = 'Override — verified ref ' . mb_substr($verifiedRef, 0, 100) . ' in GCash. ' . $note;
+            /* The same rule again for the reference typed here: only an admin may reuse another booking's. */
+            $usedRef = $pdo->prepare('SELECT 1 FROM gcash_receipts WHERE active_reference = :r AND booking_id <> :b LIMIT 1');
+            $usedRef->execute([':r' => $verifiedRef, ':b' => $bookingId]);
+            if ($usedRef->fetchColumn() && session('account_type') !== 'admin') {
+                $this->reply(403, ['ok' => false, 'message' => 'That reference is already on another booking. Only an administrator can confirm it.']);
+            }
+            $why = 'Override — verified ref ' . $verifiedRef . ' in GCash. ' . $note;
             $pdo->beginTransaction();
             /* The checker's verdict stays on record; the receipt gains who overruled it and why. */
             $pdo->prepare(
@@ -675,10 +684,7 @@ class BookingActionController extends Controller
                                    . 'If you are recording an exception, write why in the note.']);
                 }
                 $payoutRef = trim((string) ($request->post('payout_reference') ?? ''));
-                $amount    = ($request->post('amount') ?? '') !== '' ? (float) $request->post('amount') : (float) $refund['amount_requested'];
-                if ($amount <= 0 || $amount > (float) $refund['amount_requested']) {
-                    $this->reply(400, ['ok' => false, 'message' => 'The refunded amount cannot exceed what was requested.']);
-                }
+                $amount    = (float) $refund['amount_requested'];   // refunds are always full: never a posted amount
                 $this->setActor($pdo, $actor, 'Refund paid out' . ($payoutRef !== '' ? ' · GCash ref ' . $payoutRef : '') . ($note !== '' ? ' · ' . $note : ''));
                 $pdo->prepare(
                     "UPDATE refunds SET refund_status = 'completed', amount_approved = :a,

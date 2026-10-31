@@ -18,7 +18,16 @@ class UploadLimitTest extends TestCase
 
     private function fileOf(string $name, int $bytes): UploadedFile
     {
-        return UploadedFile::fake()->createWithContent($name, str_repeat('x', $bytes));
+        return UploadedFile::fake()->createWithContent($name, '%PDF-' . str_repeat('x', $bytes - 5));
+    }
+
+    public function test_a_text_file_named_pdf_is_refused(): void
+    {
+        legacy('documents');
+        $fake = UploadedFile::fake()->createWithContent('id.pdf', 'just some text');
+        $err = '';
+        $this->assertNull(doc_validate($fake->getPathname(), 'id.pdf', $err));
+        $this->assertSame('That file is not a valid PDF.', $err);
     }
 
     public function test_doc_validate_takes_exactly_7mb_and_refuses_one_byte_more(): void

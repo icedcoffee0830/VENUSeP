@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Customer\BookingRules;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDO;
@@ -72,8 +73,8 @@ class RoomSaveController extends Controller
         $from   = (string) ($m['from'] ?? '');
         $until  = ($m['until'] ?? null) === null || $m['until'] === '' ? null : (string) $m['until'];
         $reason = trim((string) ($m['reason'] ?? ''));
-        $iso = '/^\d{4}-\d{2}-\d{2}$/';
-        if (!preg_match($iso, $from) || ($until !== null && (!preg_match($iso, $until) || $until < $from))) {
+        /* real calendar dates: 2031-02-30 was stored as 0000-00-00, closing the room for every date up to the end */
+        if (!BookingRules::isDate($from) || ($until !== null && (!BookingRules::isDate($until) || $until < $from))) {
             $this->reply(400, ['ok' => false, 'error' => 'bad_maintenance', 'message' => 'Set the maintenance dates: a start date, and an end date on or after it (or tick "no set return date").']);
         }
         if ($reason === '' || mb_strlen($reason) > 500) {
@@ -237,6 +238,10 @@ class RoomSaveController extends Controller
             $this->reply(400, ['ok' => false, 'error' => 'bad_fee', 'message' => 'Enter a rate of ₱0 or more.']);
         }
         $hostelGiven = $roomType === 'hostel' && $post->has('rate');
+        /* A NEW room states its price: leaving the fields out used to create a free one. */
+        if ($isNewRoom && ($roomType === 'hostel' ? !$hostelGiven : (!$capGiven || !$feeGiven))) {
+            $this->reply(400, ['ok' => false, 'error' => 'missing_price', 'message' => 'A new room needs its capacity and rate.']);
+        }
         $hRate  = $money($post->get('rate'));
         $hBeds  = $whole($post->get('beds'));
         $hCr    = ($post->get('cr_type') ?? '') === 'private' ? 'private' : 'communal';
@@ -472,7 +477,7 @@ class RoomSaveController extends Controller
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             /* uq_rooms_venue_name: two rooms with the same name in one venue would be
                indistinguishable in every dropdown and every booking reference. */
-            if ($e->getCode() === '23000') {
+            if ($e->getCode() === '23000' && stripos($e->getMessage(), 'uq_rooms_venue_name') !== false) {
                 $this->reply(409, ['ok' => false, 'error' => 'duplicate',
                     'message' => 'That location already has a room with this name.']);
             }

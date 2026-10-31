@@ -135,6 +135,26 @@ class ReceiptReviewActionsTest extends TestCase
     }
 
     /* §7 Override & confirm: a rejected receipt, then staff find the money in GCash. */
+    /* Refunds are always full (Aron): a posted amount is ignored, so ₱1 cannot close a ₱5,000 booking. */
+    public function test_a_refund_payout_is_always_the_full_amount(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'refund_requested');
+        $total = (float) DB::table('bookings')->where('id', $id)->value('total_amount');
+        $refund = DB::table('refunds')->insertGetId(['booking_id' => $id, 'reason_category' => 'other', 'reason' => 'test',
+            'amount_requested' => $total, 'refund_status' => 'requested']);
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'refund_complete', 'amount' => '1', 'payout_reference' => '1234567890123'])->assertOk();
+        $this->assertSame($total, (float) DB::table('refunds')->where('id', $refund)->value('amount_approved'));
+    }
+
+    public function test_override_needs_a_real_looking_reference(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'await_gcash');
+        $this->seedReceipt($id);
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'reject_payment', 'reason' => "Amount doesn't match"])->assertOk();
+        $this->act(['booking' => $ref, 'action' => 'override_confirm', 'ref' => 'not-a-reference', 'note' => 'x'])
+            ->assertStatus(400)->assertJson(['ok' => false]);
+    }
+
     public function test_override_confirms_a_rejected_receipt_with_a_receipt_issued(): void
     {
         [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'await_gcash');
@@ -155,14 +175,14 @@ class ReceiptReviewActionsTest extends TestCase
     public function test_override_of_a_duplicate_is_admin_only_and_needs_a_rejected_receipt(): void
     {
         [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'await_gcash');
-        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'override_confirm', 'ref' => '1', 'note' => 'x'])
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'override_confirm', 'ref' => '1234567890123', 'note' => 'x'])
             ->assertStatus(409);   // no receipt at all
         $this->seedReceipt($id, 'rejected', ['duplicate_ref']);   // the checker refused it; payment stays open
-        $this->act(['booking' => $ref, 'action' => 'override_confirm', 'ref' => '1', 'note' => 'x'])
+        $this->act(['booking' => $ref, 'action' => 'override_confirm', 'ref' => '1234567890123', 'note' => 'x'])
             ->assertStatus(403)->assertJson(['message' => 'This receipt was rejected as a duplicate. Only an administrator can override that.']);
         $this->assertSame('await_gcash', $this->booking($id)->payment_status);
 
-        $this->actingAsAdmin()->act(['booking' => $ref, 'action' => 'override_confirm', 'ref' => '1', 'note' => 'Checked: a genuine second transfer.'])
+        $this->actingAsAdmin()->act(['booking' => $ref, 'action' => 'override_confirm', 'ref' => '1234567890123', 'note' => 'Checked: a genuine second transfer.'])
             ->assertOk()->assertJson(['booking' => ['pay' => 'confirmed']]);
         $this->assertSame(1, DB::table('payments')->where('booking_id', $id)->where('payment_record_status', 'confirmed')->count());
     }

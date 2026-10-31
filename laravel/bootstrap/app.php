@@ -16,6 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'customer' => \App\Http\Middleware\EnsureCustomer::class,
             'booking.access' => \App\Http\Middleware\BookingAccess::class,
         ]);
+        /* Laravel exempts only "password", so a pasted "abc " was saved as "abc" and failed at sign-in. */
+        $middleware->trimStrings(except: ['new_password', 'confirm_new_password', 'confirm_password', 'creator_password']);
         $middleware->web(append: [
             \App\Http\Middleware\EnforceTwoFactor::class,
         ]);

@@ -25,10 +25,23 @@ class RoomSaveTest extends VenuesTestCase
             ->assertStatus(400)->assertJson(['error' => 'bad_venue', 'message' => 'Unknown location.']);
         $this->postForm('admin.room-save', ['room_id' => 'h1', 'name' => 'X', 'venue' => 'USeP Hostel', 'room_type' => 'event'])
             ->assertStatus(409)->assertJson(['error' => 'wrong_type']);
-        $this->postForm('admin.room-save', ['room_id' => '', 'name' => 'X', 'venue' => 'USeP Hostel', 'room_type' => 'event'])
+        $this->postForm('admin.room-save', ['room_id' => '', 'name' => 'X', 'venue' => 'USeP Hostel', 'room_type' => 'event', 'capacity' => '40', 'fee' => '1500'])
             ->assertStatus(409)->assertJson(['error' => 'type_mismatch', 'message' => 'Event rooms can only be added to an event venue.']);
         $this->postForm('admin.room-save', ['room_id' => 'r1', 'name' => 'X', 'venue' => 'Bahay Alumni', 'room_type' => 'event',
             'maintenance' => json_encode(['on' => true, 'tier' => 'hard', 'from' => '2030-01-01', 'until' => null, 'reason' => ''])])
+            ->assertStatus(400)->assertJson(['error' => 'bad_maintenance']);
+    }
+
+    public function test_a_new_room_must_state_its_price_and_maintenance_dates_must_be_real(): void
+    {
+        $this->actingAsStaff();
+        $this->postForm('admin.room-save', ['room_id' => '', 'name' => 'No Price Room', 'venue' => 'Bahay Alumni', 'room_type' => 'event'])
+            ->assertStatus(400)->assertJson(['error' => 'missing_price']);
+        $this->postForm('admin.room-save', ['room_id' => '', 'name' => 'No Rate Hostel', 'venue' => 'Bahay Alumni', 'room_type' => 'hostel'])
+            ->assertStatus(400)->assertJson(['error' => 'missing_price']);
+        $this->assertSame(0, DB::table('rooms')->whereIn('name', ['No Price Room', 'No Rate Hostel'])->count());
+        $this->postForm('admin.room-save', ['room_id' => 'r1', 'name' => 'Alumni Grand Ballroom', 'venue' => 'Bahay Alumni', 'room_type' => 'event',
+            'maintenance' => json_encode(['on' => true, 'tier' => 'hard', 'from' => '2031-02-30', 'until' => '2031-03-01', 'reason' => 'x'])])
             ->assertStatus(400)->assertJson(['error' => 'bad_maintenance']);
     }
 

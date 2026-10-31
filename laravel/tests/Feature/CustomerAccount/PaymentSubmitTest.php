@@ -107,6 +107,19 @@ class PaymentSubmitTest extends TestCase
         }
     }
 
+    /* A refused request changes nothing, the payment method included. */
+    public function test_a_refused_gcash_submit_leaves_the_payment_method_alone(): void
+    {
+        DB::table('bookings')->where('id', self::BOOKING)->update(['payment_method' => 'cash']);
+        try {
+            $this->asCustomerWithToken()->post(route('customer.payment-submit'), ['_token' => 'test-token', 'booking' => $this->ref(self::BOOKING), 'method' => 'gcash'])
+                ->assertStatus(400);
+            $this->assertSame('cash', DB::table('bookings')->where('id', self::BOOKING)->value('payment_method'));
+        } finally {
+            DB::table('bookings')->where('id', self::BOOKING)->update(['payment_method' => 'gcash']);
+        }
+    }
+
     /* A customer cannot write staff flags onto their own upload. */
     public function test_flags_the_checker_cannot_produce_are_dropped(): void
     {

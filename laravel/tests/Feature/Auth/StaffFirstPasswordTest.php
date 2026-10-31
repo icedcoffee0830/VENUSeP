@@ -81,6 +81,15 @@ class StaffFirstPasswordTest extends TestCase
         $this->assertTrue(password_verify(self::PASSWORD, DB::table('users')->where('id', $victim->id)->value('password_hash')));
     }
 
+    /* Sign-in does not trim, so saving must not either: "abc " has to keep working as "abc ". */
+    public function test_a_new_password_keeps_its_spaces(): void
+    {
+        $staff = $this->makeAccount('staff');
+        $this->signInAs($staff, 'staff');
+        $this->save(['current_password' => self::PASSWORD, 'new_password' => 'Trail#1234 ', 'confirm_new_password' => 'Trail#1234 '])->assertOk();
+        $this->assertTrue(password_verify('Trail#1234 ', DB::table('users')->where('id', $staff->id)->value('password_hash')));
+    }
+
     public function test_wrong_current_passwords_lock_and_a_change_cancels_reset_links(): void
     {
         $staff = $this->makeAccount('staff');

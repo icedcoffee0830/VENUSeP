@@ -80,6 +80,9 @@ function doc_validate($tmpPath, $originalName, &$error) {
             $error = 'That file is not a valid image.';
             return null;
         }
+    } elseif (file_get_contents($tmpPath, false, null, 0, 5) !== '%PDF-') {
+        $error = 'That file is not a valid PDF.';
+        return null;
     }
     return $ext === 'jpeg' ? 'jpg' : $ext;
 }

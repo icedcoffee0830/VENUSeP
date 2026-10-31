@@ -366,7 +366,9 @@ class BookingSubmitController extends Controller
                    Remove the booking rather than leave a half-held one behind. */
                 $pdo->prepare('DELETE FROM bookings WHERE id = :b')->execute([':b' => $bookingId]);
                 return self::reply(409, ['ok' => false,
-                    'message' => 'There are not enough free beds for every night of that stay. Please pick different dates or fewer beds.']);
+                    'message' => ($e instanceof PDOException && stripos($e->getMessage(), 'maintenance') !== false)
+                        ? 'The room is closed for maintenance during that stay. Please pick different dates.'
+                        : 'There are not enough free beds for every night of that stay. Please pick different dates or fewer beds.']);
             }
         }
 

@@ -154,15 +154,19 @@ class PaymentSubmitController
             return self::reply(409, ['ok' => false, 'message' => $why]);
         }
 
-        /* The customer may switch method at the payment step. */
-        if ($method !== $booking['payment_method']) {
-            $pdo->prepare('UPDATE bookings SET payment_method = :m WHERE id = :b')
-                ->execute([':m' => $method, ':b' => $id]);
-        }
+        /* The customer may switch method at the payment step: saved only with a request that
+           goes through (cash here, GCash inside its transaction below). */
+        $saveMethod = function () use ($pdo, $method, $booking, $id) {
+            if ($method !== $booking['payment_method']) {
+                $pdo->prepare('UPDATE bookings SET payment_method = :m WHERE id = :b')
+                    ->execute([':m' => $method, ':b' => $id]);
+            }
+        };
 
         /* CASH — nothing to submit. The customer pays at the office and staff
            record it, which is what creates the payment row. */
         if ($method === 'cash') {
+            $saveMethod();
             $pdo->prepare('SET @venusep_actor_user_id = :a, @venusep_action_note = :n')
                 ->execute([':a' => (int) session('user_id'),
                            ':n' => $booking['pay_to_use'] ? 'Guest will pay cash at the front desk.' : 'Customer will pay in cash.']);
@@ -233,6 +237,7 @@ class PaymentSubmitController
         /* RECORD THE ATTEMPT — every one, whatever its verdict. */
         try {
             $pdo->beginTransaction();
+            $saveMethod();
 
             /* Lock this booking's row: two uploads at the same moment must not both be
                counted as "attempt 5", nor both slip past a closed payment. */

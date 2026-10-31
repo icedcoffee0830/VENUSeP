@@ -148,12 +148,13 @@ class CustomerProfileTest extends TestCase
         $tmp = tempnam(sys_get_temp_dir(), 'av');
         file_put_contents($tmp, $png);
         $this->post(route('root.profile-save'), ['action' => 'photo'])->assertStatus(400)->assertJson(['message' => 'Choose a picture to upload.']);
-        $this->post(route('root.profile-save'), ['action' => 'photo', 'photo' => new UploadedFile($tmp, 'me.png', 'image/png', null, true)])
-            ->assertOk()->assertExactJson(['ok' => true, 'photo' => 'assets/img/avatars/c' . $c->id . '.png', 'message' => 'Photo updated.']);
-        $this->assertFileExists(public_path('assets/img/avatars/c' . $c->id . '.png'));
-        $this->get(route('customer.customer-profile'))->assertSee('src="' . asset('assets/img/avatars/c' . $c->id . '.png') . '"', false);
+        $photo = $this->post(route('root.profile-save'), ['action' => 'photo', 'photo' => new UploadedFile($tmp, 'me.png', 'image/png', null, true)])
+            ->assertOk()->assertJson(['ok' => true, 'message' => 'Photo updated.'])->json('photo');
+        $this->assertMatchesRegularExpression('~^assets/img/avatars/c' . $c->id . '-[0-9a-f]{16}\.png$~', $photo);   // not guessable
+        $this->assertFileExists(public_path($photo));
+        $this->get(route('customer.customer-profile'))->assertSee('src="' . asset($photo) . '"', false);
         $this->post(route('root.profile-save'), ['action' => 'photo', 'remove' => '1'])->assertOk()->assertJson(['photo' => null]);
-        $this->assertFileDoesNotExist(public_path('assets/img/avatars/c' . $c->id . '.png'));
+        $this->assertFileDoesNotExist(public_path($photo));
         $this->assertNull(DB::table('customers')->where('user_id', $c->id)->value('photo_path'));
     }
 }

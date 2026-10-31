@@ -255,7 +255,8 @@ function backup_delete($file) {
 
 /* Keep the newest BACKUP_KEEP. */
 function backup_prune() {
-    $all = backup_list();
+    /* A pre-restore copy is the way back from a bad restore: routine backups never push it out. */
+    $all = array_filter(backup_list(), function ($b) { return strpos($b['file'], '-pre-restore.') === false; });
     foreach (array_slice($all, BACKUP_KEEP) as $b) {
         backup_delete($b['file']);
     }

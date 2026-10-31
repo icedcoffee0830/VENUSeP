@@ -115,6 +115,8 @@ class ProfileSaveController
         try {
             $pdo->beginTransaction();
             $pdo->prepare('UPDATE users SET email = :e WHERE id = :u')->execute([':e' => $email, ':u' => $userId]);
+            /* a reset link mailed to the old address stops working */
+            $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE user_id = :u AND used_at IS NULL')->execute([':u' => $userId]);
 
             if ($isCustomer) {
                 $pdo->prepare(
@@ -173,11 +175,23 @@ class ProfileSaveController
             $this->reply(500, ['ok' => false, 'message' => VENUSEP_PASSWORD_SETUP_ERROR]);
         }
         try {
-            $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = :u');
+            /* FOR UPDATE + reauth_verify(): the one lockout for "type your password again",
+               so a stolen session cannot guess the current password without limit. */
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare('SELECT id, password_hash, reauth_failed_attempts, reauth_lock_level,
+                                          CASE WHEN reauth_locked_until > NOW()
+                                               THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
+                                     FROM users WHERE id = :u FOR UPDATE');
             $stmt->execute([':u' => $userId]);
-            $hash = $stmt->fetchColumn();
+            $acct = $stmt->fetch();
+            if (!$acct) {
+                $pdo->rollBack();
+                $this->reply(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
+            }
+            $hash = $acct['password_hash'];
             $firstPassword = $hash === null;
             if ($firstPassword) {
+                $pdo->rollBack();
                 /* The proof is spent here, whatever happens next. */
                 $proofOk = $isCustomer && google_proof_valid('google_reauth', $userId);
                 google_proof_clear('google_reauth');
@@ -191,16 +205,25 @@ class ProfileSaveController
                     $this->reply(409, ['ok' => false, 'message' => 'A password was set for this account meanwhile. Reload the page.']);
                 }
             } else {
-                if ($hash === false || !password_verify($current, $hash)) {
-                    $this->reply(401, ['ok' => false, 'field' => 'current_password', 'message' => 'That is not your current password.']);
+                if ($no = reauth_verify($pdo, $acct, $current)) {
+                    $this->reply(isset($no['locked']) ? 423 : 401, ['ok' => false, 'field' => 'current_password',
+                        'message' => isset($no['locked'])
+                            ? 'Too many wrong passwords. Try again in ' . $no['locked'] . ' seconds.'
+                            : 'That is not your current password.']);
                 }
                 if (password_verify($new, $hash)) {
+                    $pdo->commit();
                     $this->reply(400, ['ok' => false, 'field' => 'new_password', 'message' => 'Choose a password different from your current one.']);
                 }
                 $pdo->prepare('UPDATE users SET password_hash = :h, password_changed_at = NOW() WHERE id = :u')
                     ->execute([':h' => venusep_password_hash($new), ':u' => $userId]);
+                $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE user_id = :u AND used_at IS NULL')->execute([':u' => $userId]);
+                $pdo->commit();
             }
         } catch (PDOException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             error_log('VENUSeP profile-save (password): ' . $e->getMessage());
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so your password was not changed.']);
         }
@@ -277,11 +300,8 @@ class ProfileSaveController
         $stem = ($isCustomer ? 'c' : 's') . $userId;
 
         $clear = function () use ($dir, $stem) {
-            foreach (ROOM_PHOTO_ALLOWED_EXT as $ext) {
-                $p = $dir . '/' . $stem . '.' . $ext;
-                if (is_file($p)) {
-                    @unlink($p);
-                }
+            foreach (array_merge(glob($dir . '/' . $stem . '.*') ?: [], glob($dir . '/' . $stem . '-*') ?: []) as $p) {
+                @unlink($p);
             }
         };
         $table = $isCustomer ? 'customers' : 'staff';
@@ -317,7 +337,9 @@ class ProfileSaveController
         }
 
         $clear();
-        $dest = $dir . '/' . $stem . '.' . $ext;
+        /* public files: the random part keeps people from walking c1.jpg, c2.jpg... */
+        $name = $stem . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $dest = $dir . '/' . $name;
         $moved = is_uploaded_file($tmp) ? move_uploaded_file($tmp, $dest) : copy($tmp, $dest);
         if (!$moved) {
             $this->reply(500, ['ok' => false, 'message' => 'Could not save the picture.']);
@@ -325,7 +347,7 @@ class ProfileSaveController
         @chmod($dest, 0644);
 
         /* Stored RELATIVE (assets/img/avatars/...): the pages show it with asset(). */
-        $path = $webBase . '/' . $stem . '.' . $ext;
+        $path = $webBase . '/' . $name;
         $pdo->prepare("UPDATE {$table} SET photo_path = :p WHERE user_id = :u")
             ->execute([':p' => $path, ':u' => $userId]);
 

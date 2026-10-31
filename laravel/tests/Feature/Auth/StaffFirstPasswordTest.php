@@ -81,6 +81,23 @@ class StaffFirstPasswordTest extends TestCase
         $this->assertTrue(password_verify(self::PASSWORD, DB::table('users')->where('id', $victim->id)->value('password_hash')));
     }
 
+    public function test_wrong_current_passwords_lock_and_a_change_cancels_reset_links(): void
+    {
+        $staff = $this->makeAccount('staff');
+        $this->signInAs($staff, 'staff');
+        $pw = ['new_password' => 'Mine-Only-2026', 'confirm_new_password' => 'Mine-Only-2026'];
+        for ($i = 0; $i < 4; $i++) {
+            $this->save(['current_password' => 'wrong'] + $pw)->assertStatus(401)->assertJson(['field' => 'current_password']);
+        }
+        $this->save(['current_password' => 'wrong'] + $pw)->assertStatus(423);
+        $this->save(['current_password' => self::PASSWORD] + $pw)->assertStatus(423);   // locked even for the right one
+        DB::table('users')->where('id', $staff->id)->update(['reauth_locked_until' => null]);
+
+        $reset = DB::table('password_resets')->insertGetId(['user_id' => $staff->id, 'token_hash' => hash('sha256', 'x' . $staff->id), 'expires_at' => now()->addMinutes(30)]);
+        $this->save(['current_password' => self::PASSWORD] + $pw)->assertOk();
+        $this->assertNotNull(DB::table('password_resets')->where('id', $reset)->value('used_at'));
+    }
+
     /* A session signed in before the password changed ends, for staff as for customers. */
     public function test_a_password_change_ends_older_staff_sessions_but_not_the_one_that_made_it(): void
     {

@@ -80,6 +80,27 @@ class BackupTest extends TestCase
        copy; the name used here does not exist, so even an unfixed restore only fails.
        The stored upload is pruned like any backup (newest 10) and, once refused,
        removed from the list. */
+    public function test_routine_backups_never_prune_the_pre_restore_copy(): void
+    {
+        legacy('backup');
+        $dir = backup_dir();
+        $before = glob($dir . '/*') ?: [];
+        $safety = $dir . '/venusep-backup-19990101-000000-pre-restore.tar.gz';
+        file_put_contents($safety, 'x');
+        for ($i = 0; $i < 12; $i++) {
+            file_put_contents($dir . sprintf('/venusep-backup-20000101-0000%02d-manual.tar.gz', $i), 'x');
+        }
+        try {
+            backup_prune();
+            $this->assertFileExists($safety);
+            $this->assertFileDoesNotExist($dir . '/venusep-backup-20000101-000000-manual.tar.gz');
+        } finally {
+            foreach (array_diff(glob($dir . '/*') ?: [], $before) as $f) {
+                @unlink($f);
+            }
+        }
+    }
+
     public function test_restore_refuses_a_backup_of_another_database(): void
     {
         legacy('backup');

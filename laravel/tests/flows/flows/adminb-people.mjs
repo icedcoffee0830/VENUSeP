@@ -75,9 +75,9 @@ export default {
       return s.cust;
     });
 
-    await step('Staff open Customer Management: the name is plain text, no script ran', async () => {
-      s.staff = await ctx.loginStaff(STAFF);
-      const page = s.staff;
+    await step('The admin opens Customer Management: the name is plain text, no script ran', async () => {
+      s.admin = await ctx.loginAdmin();
+      const page = s.admin;
       const row = await customerRow(ctx, page, s.email);
       expect.ok((await row.textContent()).includes('</script><script>window.__adminbPwned=1</script>'), 'the row does not show the name as typed');
       expect.equal(await page.evaluate(() => typeof window.__adminbPwned), 'undefined', 'a script from the customer name ran on the staff page');
@@ -85,8 +85,8 @@ export default {
       return page;
     });
 
-    await step('Staff disable the account → stored, and the customer is signed out', async () => {
-      const page = s.staff;
+    await step('The admin disables the account → stored, and the customer is signed out', async () => {
+      const page = s.admin;
       await toggleCustomer(ctx, page, await customerRow(ctx, page, s.email), 'Disable');
       expect.equal((await dbOne(`SELECT is_active FROM users WHERE id = ?`, [s.userId])).is_active, 0, 'users.is_active after Disable');
       const row = await customerRow(ctx, page, s.email);
@@ -97,8 +97,8 @@ export default {
       return page;
     });
 
-    await step('Staff re-enable the account → stored, the customer can sign in again', async () => {
-      const page = s.staff;
+    await step('The admin re-enables the account → stored, the customer can sign in again', async () => {
+      const page = s.admin;
       await toggleCustomer(ctx, page, await customerRow(ctx, page, s.email), 'Enable', 'Re-enable');   // the button says Enable, the dialog Re-enable
       expect.equal((await dbOne(`SELECT is_active FROM users WHERE id = ?`, [s.userId])).is_active, 1, 'users.is_active after Enable');
       const again = await ctx.loginCustomer(s.email);
@@ -106,8 +106,11 @@ export default {
       return again;
     });
 
-    await step('Counter customer search: "%%%" matches nothing, part of the email finds them', async () => {
+    await step('Staff are kept out of Customer Management; counter search: "%%%" matches nothing, part of the email finds them', async () => {
+      s.staff = await ctx.loginStaff(STAFF);
       const page = s.staff;
+      await page.goto(ctx.url('/admin/customer-management'));
+      await expect.url(page, /\/admin\/dashboard/);
       const search = (q) => page.evaluate(async (u) => (await fetch(u, { credentials: 'same-origin' })).json(),
         ctx.url('/admin/customer-search?q=' + encodeURIComponent(q)));
       const wild = await search('%%%');

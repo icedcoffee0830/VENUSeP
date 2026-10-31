@@ -273,15 +273,21 @@ export default {
       return page;
     });
 
-    await step('The new staff member signs in, must replace the password the admin gave them, then reaches the dashboard', async () => {
-      const page = await ctx.newPage('new staff ' + s.newEmail);
+    /* signs in with a password an admin chose; ends held on the password form */
+    const signInHeld = async (label, password) => {
+      const page = await ctx.newPage(label + ' ' + s.newEmail);
       await page.goto(ctx.url('/admin/admin-login'));
       await ctx.pickDepartment(page, s.newEmail);
       await page.locator('#adminEmail').fill(s.newEmail);
-      await page.locator('#adminPassword').fill(ctx.password);
+      await page.locator('#adminPassword').fill(password);
       await page.locator('#adminLoginForm button[type="submit"]').click();
       await page.waitForURL(/\/admin\/profile\?password=required/);
       await expect.text(page, 'Set your own password to continue.');
+      return page;
+    };
+
+    await step('The new staff member signs in, must replace the password the admin gave them, then reaches the dashboard', async () => {
+      const page = await signInHeld('new staff', ctx.password);
 
       // any other page sends them back here until it is done
       await page.goto(ctx.url('/admin/booking-requests'));
@@ -302,6 +308,36 @@ export default {
       expect.ok((await dbOne(`SELECT password_changed_at FROM users WHERE id = ?`, [s.newId])).password_changed_at,
         'users.password_changed_at not set after the change');
       return page;
+    });
+
+    await step('The admin resets their forgotten password: the old one stops working, and they must replace the temporary one', async () => {
+      const page = s.admin;
+      await page.goto(ctx.url('/admin/staff'));
+      await page.locator('#table-filter').fill(s.newEmail);
+      const row = page.locator('.tabulator-row', { hasText: s.newEmail });
+      await row.getByRole('button', { name: 'Reset password' }).click();
+      const tempPassword = 'Temp#Flow2026';
+      await modal(ctx, page, { expect: /Reset the password of/, fill: tempPassword, ok: 'Reset password' });
+      await modal(ctx, page, { expect: /Give them the temporary password/ });
+      const u = await dbOne(`SELECT password_changed_at FROM users WHERE id = ?`, [s.newId]);
+      expect.equal(u.password_changed_at, null, 'users.password_changed_at after the reset');
+
+      const old = await ctx.newPage('old password ' + s.newEmail);
+      await old.goto(ctx.url('/admin/admin-login'));
+      await ctx.pickDepartment(old, s.newEmail);
+      await old.locator('#adminEmail').fill(s.newEmail);
+      await old.locator('#adminPassword').fill(s.newPassword);
+      await Promise.all([old.waitForLoadState('load'), old.locator('#adminLoginForm button[type="submit"]').click()]);
+      await expect.text(old, /Invalid email or password/i);
+
+      const held = await signInHeld('reset staff', tempPassword);
+      s.newPassword = 'MyOwn#Again2026';
+      await held.locator('#pw-current').fill(tempPassword);
+      await held.locator('#pw-new').fill(s.newPassword);
+      await held.locator('#pw-confirm').fill(s.newPassword);
+      await held.getByRole('button', { name: 'Change password' }).click();
+      await held.waitForURL(/\/admin\/dashboard/);
+      return held;
     });
 
     await step('The admin suspends the new account → it can no longer sign in', async () => {

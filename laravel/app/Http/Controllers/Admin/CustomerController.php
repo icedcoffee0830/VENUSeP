@@ -9,10 +9,10 @@ use PDOException;
    CUSTOMER MANAGEMENT + CUSTOMER SAVE — ported from admin/customer-management.php
    and admin/customer-save.php.
 
-   ADMIN AND STAFF. Unlike Staff Management (admin-only — staff managing
-   their own side would be a conflict of interest), disabling a CUSTOMER is
-   ordinary front-desk work: the same people who verify a customer's identity
-   at the counter are the ones who need to shut off an abusive account.
+   ADMIN ONLY (Aron 2026-10-31). A customer is not tied to one venue, so
+   disabling one shuts them out of all three departments, and the roster shows
+   the personal details of customers another department served. Staff keep the
+   counter's own customer search and see the customer on their venue's bookings.
 
    THE ROSTER is account holders only. Walk-ins (no user_id, no login) are
    excluded on purpose: there is no account there to disable.
@@ -74,8 +74,8 @@ class CustomerController
         if (!$request->isMethod('post')) {
             return $this->reply(405, ['ok' => false, 'message' => 'Use POST.'])->header('Allow', 'POST');
         }
-        if (!venusep_is_staff_session() || !CounterCustomerController::staffStillActive()) {
-            return $this->reply(403, ['ok' => false, 'message' => 'Only admin or staff can manage customer accounts.']);
+        if (session('account_type') !== 'admin' || !CounterCustomerController::staffStillActive()) {
+            return $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can manage customer accounts.']);
         }
         $token = $request->input('csrf', $request->input('_token', $request->header('X-CSRF-TOKEN')));
         if (!csrf_valid($token)) {

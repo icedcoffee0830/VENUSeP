@@ -13,7 +13,7 @@ Route::middleware('staff:admin')->get('/admin/staff', [StaffController::class, '
 /* JSON for the page's JS: own admin-only 403/400 JSON (no redirecting middleware, own CSRF check). */
 Route::match(['get', 'post'], '/admin/staff-save', [StaffController::class, 'save'])->name('admin.staff-save');
 Route::middleware('staff:admin')->get('/admin/admin-register', [StaffController::class, 'register'])->name('admin.admin-register');
-Route::middleware('staff')->get('/admin/customer-management', [CustomerController::class, 'index'])->name('admin.customer-management');
+Route::middleware('staff:admin')->get('/admin/customer-management', [CustomerController::class, 'index'])->name('admin.customer-management');
 /* JSON for the page's JS: own 403/400 JSON (no redirecting middleware, own CSRF check). */
 Route::match(['get', 'post'], '/admin/customer-save', [CustomerController::class, 'save'])->name('admin.customer-save');
 /* JSON endpoints for the counter booker's JS: they answer "Staff only." as JSON themselves (no

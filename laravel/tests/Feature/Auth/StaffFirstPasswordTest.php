@@ -46,6 +46,41 @@ class StaffFirstPasswordTest extends TestCase
         $this->get(route('admin.profile'))->assertOk()->assertDontSee('Set your own password to continue.');
     }
 
+    private function reset(int $userId, string $password)
+    {
+        return $this->withSession(['_token' => 'tok'])->withHeader('X-CSRF-TOKEN', 'tok')
+            ->post(route('admin.staff-save'), ['action' => 'reset_password', 'user_id' => $userId, 'new_password' => $password]);
+    }
+
+    /* Reset links are customer-only: this is how staff who forgot theirs get back in. */
+    public function test_an_admin_resets_a_staff_password_and_the_staff_member_must_replace_it(): void
+    {
+        $staff = $this->makeAccount('staff');
+        DB::table('users')->where('id', $staff->id)->update(['password_changed_at' => now()]);
+        $this->actingAsAdmin();
+        $this->reset($staff->id, 'short')->assertStatus(400)->assertJson(['ok' => false, 'field' => 'new_password']);
+        $this->reset($staff->id, 'Temp-Pass-2026')->assertOk()->assertJson(['ok' => true]);
+        $u = DB::table('users')->where('id', $staff->id)->first();
+        $this->assertTrue(password_verify('Temp-Pass-2026', $u->password_hash));
+        $this->assertFalse(password_verify(self::PASSWORD, $u->password_hash));
+        $this->assertNull($u->password_changed_at);
+        $this->flushSession();
+        $this->signInAs($staff, 'staff')->get(route('admin.dashboard'))
+            ->assertRedirect(route('admin.profile', ['password' => 'required']));
+    }
+
+    public function test_another_admin_cannot_be_reset_and_staff_cannot_reset_anyone(): void
+    {
+        $other = $this->makeAccount('admin');
+        $this->actingAsAdmin();
+        $this->reset($other->id, 'Temp-Pass-2026')->assertStatus(403)->assertJson(['ok' => false]);
+        $this->flushSession();
+        $victim = $this->makeAccount('staff');
+        $this->actingAsStaff();
+        $this->reset($victim->id, 'Temp-Pass-2026')->assertStatus(403)->assertJson(['ok' => false]);
+        $this->assertTrue(password_verify(self::PASSWORD, DB::table('users')->where('id', $victim->id)->value('password_hash')));
+    }
+
     public function test_admins_and_staff_with_their_own_password_are_not_held(): void
     {
         DB::table('users')->where('email', 'admin@gmail.com')->update(['password_changed_at' => null]);   // the rule is staff-only

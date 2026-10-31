@@ -121,8 +121,9 @@ export default {
       return s.cust;
     });
 
-    await step('Staff disable that customer in Customer Management', async () => {
-      const page = s.staff;
+    await step('The admin disables that customer in Customer Management', async () => {
+      s.admin = await ctx.loginAdmin();
+      const page = s.admin;
       await page.goto(ctx.url('/admin/customer-management'));
       await page.locator('#table-filter').fill(CUSTOMER);
       const row = page.locator('.tabulator-row', { hasText: CUSTOMER });

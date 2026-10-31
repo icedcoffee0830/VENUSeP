@@ -579,6 +579,19 @@
         staffAction(body, function () { window.location.reload(); });
       };
 
+      const resetPassword = async function (row) {
+        const pw = await venusepPrompt(
+          'Choose a temporary password and give it to them yourself. They must replace it when they sign in. Their old password stops working now.',
+          { title: 'Reset the password of ' + row.name + '?', label: 'Temporary password (at least 8 characters)',
+            autocomplete: 'off', okLabel: 'Reset password', danger: true });
+        if (pw === null) return;
+        const body = new FormData();
+        body.append('action', 'reset_password');
+        body.append('user_id', row.id);
+        body.append('new_password', pw);
+        staffAction(body, function (res) { venusepAlert(res.message, { tone: 'ok', title: 'Password reset' }); });
+      };
+
       const table = new Tabulator('#users-table', {
         data: data,
         layout: 'fitColumns',
@@ -646,7 +659,7 @@
           {
             title: '',
             field: 'id',
-            width: 130,
+            width: 230,
             hozAlign: 'center',
             headerSort: false,
             formatter: function (cell) {
@@ -658,12 +671,16 @@
                 return '<span style="color:#8a857d;font-size:.78rem">you</span>';
               }
               const suspend = row.status === 'Active';
-              return '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
+              const reset = row.role === 'Staff'
+                ? '<button type="button" class="btn-staff-reset" style="cursor:pointer;border:1px solid #d5d0c8;color:#1f1e1e;background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600;margin-right:.3rem">Reset password</button>'
+                : '';
+              return reset + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
                 (suspend ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
                 ';background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600">' +
                 (suspend ? 'Suspend' : 'Reactivate') + '</button>';
             },
             cellClick: function (e, cell) {
+              if (e.target.closest('.btn-staff-reset')) { resetPassword(cell.getRow().getData()); return; }
               if (!e.target.closest('.btn-staff-toggle')) return;
               toggleActive(cell.getRow().getData());
             },

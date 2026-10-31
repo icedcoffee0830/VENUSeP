@@ -94,8 +94,9 @@ class BackupTest extends TestCase
         $tar->buildFromDirectory($src);
         $tar->compress(\Phar::GZ);
         unset($tar);
-        /* ten older backups: storing the upload makes eleven, pruned to the newest 10 */
-        for ($i = 0; $i < 10; $i++) {
+        /* older backups up to ten (a real one may already be here): storing the upload makes eleven, pruned to the newest 10 */
+        $older = 10 - count(glob($dir . '/*.tar.gz') ?: []);
+        for ($i = 0; $i < $older; $i++) {
             file_put_contents($dir . sprintf('/venusep-backup-20000101-0000%02d-manual.tar.gz', $i), 'x');
         }
 

@@ -22,7 +22,7 @@
         ['Transaction History', route('admin.transaction-history'),    'bi-receipt'],
         ['Calendar',            route('admin.calendar'),               'bi-calendar-event'],
         ['Staff Management',    route('admin.staff'),                  'bi-people', 'admin'],   /* admins only (staff:admin) */
-        ['Customer Management', route('admin.customer-management'),    'bi-person-badge'],
+        ['Customer Management', route('admin.customer-management'),    'bi-person-badge', 'admin'],   /* admins only (2026-10-31) */
         ['Reports',             route('admin.reports'),                'bi-bar-chart'],
         ['Payment Settings',    route('admin.payment-settings'),       'bi-wallet2'],
         ['FAQ Management',      route('admin.faq-management'),         'bi-question-circle'],   /* admin-added FAQ entries (2026-09-18) */

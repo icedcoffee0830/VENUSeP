@@ -164,6 +164,9 @@ function notif_words(array $r, string $accountType): array
             return [($r['actor_name'] ?: 'An administrator') . ($r['kind'] === 'account_suspended' ? ' suspended ' : ' reactivated ')
                     . (($d['role'] ?? '') === 'admin' ? 'admin' : 'staff') . ' account ' . ($d['email'] ?? '') . '.',
                     'admin/venusep_staffManagement.php'];
+        case 'account_password_reset':
+            return [($r['actor_name'] ?: 'An administrator') . ' reset the password of ' . ($d['email'] ?? 'a staff member') . '.',
+                    'admin/venusep_staffManagement.php'];
         case 'staff_moved':
             return [($r['actor_name'] ?: 'An administrator') . ' moved ' . ($d['email'] ?? 'a staff member') . ' to ' . ($d['venue'] ?? 'another venue') . '.',
                     'admin/venusep_staffManagement.php'];

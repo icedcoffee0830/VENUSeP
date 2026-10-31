@@ -456,7 +456,7 @@
           <form class="settings-form" id="vpPwForm" novalidate>
             @if ($vpMustChange)
             <div class="form-field form-field-full" role="alert" style="padding:.7rem .85rem;border-radius:8px;background:#fcf6f4;border:1px solid #efe0db;color:#4a4440;font-size:.85rem;line-height:1.5">
-              <strong>Set your own password to continue.</strong> Your account was created by an administrator, who chose the password you signed in with. Replace it with one only you know — this is needed once.
+              <strong>Set your own password to continue.</strong> An administrator chose the password you signed in with. Replace it with one only you know.
             </div>
             @endif
             <div class="form-field form-field-full">

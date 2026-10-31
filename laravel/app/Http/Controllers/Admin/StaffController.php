@@ -15,11 +15,12 @@ use PDOException;
    Suspended map onto users.is_active, the only account state there is.
 
    STAFF SAVE — an ADMIN editing SOMEBODY ELSE'S account. JSON.
-     POST action=update|set_venue|set_active, user_id
+     POST action=update|set_venue|set_active|reset_password, user_id
        update:     full_name, email, employee_no, position_role, phone[, venue_id]
        set_venue:  venue_id (required for a staff account — no unassigned staff;
                    the DB trigger trg_staff_venue_required says the same)
        set_active: active=0|1
+       reset_password: new_password — STAFF accounts only
    · ADMIN ONLY, re-checked here — answered as JSON, not a redirect.
    · The target must be a STAFF-SIDE account.
    · SELF-LOCKOUT GUARDS: no suspending yourself, no suspending the LAST
@@ -288,6 +289,37 @@ class StaffController
                 $this->notify($pdo, 'staff_moved', $actor, ['email' => $email, 'venue' => $venue['name']]);
             }
             return $this->reply(200, ['ok' => true, 'message' => 'Account updated.']);
+        }
+
+        /* RESET PASSWORD — reset links are customer-only, so this is how a staff member
+           who forgot theirs gets back in (Aron 2026-10-31). The admin chooses a temporary
+           password; password_changed_at goes back to NULL, so the staff member must replace
+           it (EnforceTwoFactor). Never another admin's: that would be a way to take over
+           an account with the same power. */
+        if ($action === 'reset_password') {
+            if ($user['account_type'] !== 'staff') {
+                return $this->reply(403, ['ok' => false, 'message' => 'Only a staff account can be reset here.']);
+            }
+            $new = (string) $request->input('new_password', '');
+            if (strlen($new) < 8) {
+                return $this->reply(400, ['ok' => false, 'field' => 'new_password', 'message' => 'Use a password of at least 8 characters.']);
+            }
+            legacy('passwords');
+            if (!venusep_password_ready()) {
+                return $this->reply(500, ['ok' => false, 'message' => VENUSEP_PASSWORD_SETUP_ERROR]);
+            }
+            try {
+                $pdo->prepare('UPDATE users SET password_hash = :h, password_changed_at = NULL, reauth_failed_attempts = 0,
+                                      reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :u')
+                    ->execute([':h' => venusep_password_hash($new), ':u' => $target]);
+            } catch (PDOException $e) {
+                error_log('VENUSeP staff-save (reset_password): ' . $e->getMessage());
+                return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the password was not changed.']);
+            }
+            \App\Http\Controllers\Auth\SignInThrottle::passed((string) $user['email']);   // a forgotten password often means a sign-in lock too
+            $this->notify($pdo, 'account_password_reset', $actor, ['email' => $user['email']]);
+            return $this->reply(200, ['ok' => true,
+                'message' => 'Password reset. Give them the temporary password; they must replace it when they sign in.']);
         }
 
         /* SUSPEND / REACTIVATE */

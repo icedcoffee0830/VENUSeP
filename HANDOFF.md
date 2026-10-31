@@ -350,4 +350,9 @@ files deleted. Skipped: the admin sign-in pages' CSS copy (~140 lines; the share
 **Tests:** full run at deb65b1: page checker 0 failing, flows 121 of 122 steps passed. The failure was a
 real bug (Suspend clipped in Staff Management), fixed; admin-settings then passed 12 of 12.
 
+**Speed:** PHP's OPcache was off in `C:\xamp5\php\php.ini`, so Laravel recompiled on every click. Measured
+signed in as staff (built-in server, flow DB): about 500 ms per page off, 50-85 ms on. The go-live server needs
+it on too, along with `APP_DEBUG=false`, `config:cache` and `route:cache`. Do NOT run those caches on this
+laptop: with a cached config, tests can hit the dev database instead of `venusep_laravel_test`.
+
 **No migration needed for any of this.** The real `venusep` DB stays at migration 15.

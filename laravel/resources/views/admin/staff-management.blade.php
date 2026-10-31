@@ -659,7 +659,7 @@
           {
             title: '',
             field: 'id',
-            width: 230,
+            width: 155,
             hozAlign: 'center',
             headerSort: false,
             formatter: function (cell) {
@@ -672,12 +672,12 @@
               }
               const suspend = row.status === 'Active';
               const reset = row.role === 'Staff'
-                ? '<button type="button" class="btn-staff-reset" style="cursor:pointer;border:1px solid #d5d0c8;color:#1f1e1e;background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600;margin-right:.3rem">Reset password</button>'
+                ? '<button type="button" class="btn-staff-reset" style="cursor:pointer;border:1px solid #d5d0c8;color:#1f1e1e;background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600">Reset password</button>'
                 : '';
-              return reset + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
+              return '<div style="display:flex;flex-direction:column;align-items:center;gap:.3rem">' + reset + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
                 (suspend ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
                 ';background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600">' +
-                (suspend ? 'Suspend' : 'Reactivate') + '</button>';
+                (suspend ? 'Suspend' : 'Reactivate') + '</button></div>';
             },
             cellClick: function (e, cell) {
               if (e.target.closest('.btn-staff-reset')) { resetPassword(cell.getRow().getData()); return; }

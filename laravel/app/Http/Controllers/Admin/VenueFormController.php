@@ -25,6 +25,9 @@ class VenueFormController extends Controller
         if ($venueId === 0 && !admin_is_admin()) {
             return redirect()->route('admin.venue-management');
         }
+        if (!staff_sees_venue($venueId)) {   // another department's venue: not theirs to see (Aron 2026-10-31)
+            return redirect()->route('admin.venue-management');
+        }
 
         /* ASSIGNED STAFF (2026-10-27): the real staff.venue_id rows. Every staff member
            handles exactly one venue, so the picker MOVES people here from the venue
@@ -43,6 +46,7 @@ class VenueFormController extends Controller
                 $vfStaff = [];
             }
         }
+        $vfStaff = array_values(array_filter($vfStaff, function ($s) { return staff_sees_venue($s['venue_id']); }));
         $vfHere   = array_values(array_filter($vfStaff, function ($s) use ($venueId) { return $venueId && (int) $s['venue_id'] === $venueId; }));
         $vfOthers = array_values(array_filter($vfStaff, function ($s) use ($venueId) { return !$venueId || (int) $s['venue_id'] !== $venueId; }));
 

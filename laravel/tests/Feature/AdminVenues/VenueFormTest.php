@@ -32,6 +32,13 @@ class VenueFormTest extends VenuesTestCase
             ->assertDontSee('➕ Add Staff');
     }
 
+    /* The departments never see each other's things (Aron 2026-10-31). */
+    public function test_staff_are_kept_out_of_another_venues_form_and_see_only_their_own_people(): void
+    {
+        $this->actingAsStaff()->get(route('admin.venue-form', ['id' => 2]))->assertRedirect(route('admin.venue-management'));
+        $this->get(route('admin.venue-form', ['id' => 1]))->assertOk()->assertDontSee('Jake Emerson');
+    }
+
     /* Add Venue is admin-only (Aron 2026-10-30): staff opening the Add page (no id,
        or an unknown id, which behaves like Add) go back to Venue Management. */
     public function test_staff_opening_add_venue_are_sent_back_to_venue_management(): void

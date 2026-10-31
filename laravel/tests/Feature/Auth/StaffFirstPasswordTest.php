@@ -81,6 +81,23 @@ class StaffFirstPasswordTest extends TestCase
         $this->assertTrue(password_verify(self::PASSWORD, DB::table('users')->where('id', $victim->id)->value('password_hash')));
     }
 
+    /* A session signed in before the password changed ends, for staff as for customers. */
+    public function test_a_password_change_ends_older_staff_sessions_but_not_the_one_that_made_it(): void
+    {
+        $staff = $this->makeAccount('staff');
+        DB::table('users')->where('id', $staff->id)->update(['password_changed_at' => now()->subMinute()]);
+        $this->signInAs($staff, 'staff')->withSession(['auth_at' => time()])->get(route('admin.dashboard'))->assertOk();
+
+        DB::table('users')->where('id', $staff->id)->update(['password_changed_at' => now()->addMinute()]);
+        $this->withSession(['auth_at' => time()])->get(route('admin.dashboard'))->assertRedirect(route('admin.admin-login'));
+        $this->assertFalse(session()->has('user_id'));
+
+        DB::table('users')->where('id', $staff->id)->update(['password_changed_at' => now()->subMinute()]);
+        $this->signInAs($staff, 'staff')->withSession(['auth_at' => time()]);
+        $this->save(['current_password' => self::PASSWORD, 'new_password' => 'Mine-Only-2026', 'confirm_new_password' => 'Mine-Only-2026'])->assertOk();
+        $this->get(route('admin.dashboard'))->assertOk();
+    }
+
     public function test_admins_and_staff_with_their_own_password_are_not_held(): void
     {
         DB::table('users')->where('email', 'admin@gmail.com')->update(['password_changed_at' => null]);   // the rule is staff-only

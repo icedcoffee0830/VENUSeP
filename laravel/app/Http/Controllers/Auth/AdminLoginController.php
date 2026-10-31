@@ -187,6 +187,7 @@ class AdminLoginController
             'username' => $user['username'],
             'account_type' => $user['account_type'],
             'department' => $department,   // the venue id of the card picked at sign-in
+            'auth_at' => time(),           // staff_session_refresh(): a later password change ends this session
             /* Only a sign-in that went through the code sets this; EnforceTwoFactor
                ends any admin session without it. Never set on the password-only path. */
             'tfa_passed' => $passedCode,

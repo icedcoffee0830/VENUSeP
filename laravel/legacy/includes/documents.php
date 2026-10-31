@@ -34,15 +34,10 @@ define('DOC_MAX_BYTES', 7 * 1024 * 1024);                  // 7 MB — the one l
 define('DOC_TOO_BIG_MESSAGE', 'This file is over 7 MB. Choose a smaller photo or a screenshot.');
 define('DOC_ALLOWED_EXT', ['jpg', 'jpeg', 'png', 'webp', 'pdf']);
 
-/* Where the private files live. Outside the web root by construction. */
+/* Where the private files live: VENUSEP_DOC_ROOT through config (getenv is empty
+   once config:cache is on), else Laravel's private storage. Never under public/. */
 function doc_root() {
-    $env = getenv('VENUSEP_DOC_ROOT');
-    if (is_string($env) && $env !== '') {
-        return rtrim(str_replace('\\', '/', $env), '/');
-    }
-    /* __DIR__ is <web root>/VENUSeP/includes, so three levels up leaves
-       htdocs behind entirely. */
-    return dirname(dirname(dirname(__DIR__))) . '/venusep-private';
+    return rtrim(str_replace('\\', '/', (string) (config('venusep.doc_root') ?: storage_path('app/venusep-private'))), '/');
 }
 
 function doc_ensure_dir($sub) {

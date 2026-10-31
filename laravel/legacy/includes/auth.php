@@ -116,7 +116,7 @@ function staff_session_refresh(): void
         return;                       // offline: do not log anyone out over a hiccup
     }
     try {
-        $stmt = $pdo->prepare('SELECT account_type, is_active, password_changed_at IS NULL AS must_change FROM users WHERE id = :u');
+        $stmt = $pdo->prepare('SELECT account_type, is_active, password_changed_at IS NULL AS must_change, UNIX_TIMESTAMP(password_changed_at) AS changed_ts FROM users WHERE id = :u');
         $stmt->execute([':u' => (int) session('user_id')]);
         $row = $stmt->fetch();
     } catch (PDOException $e) {
@@ -125,6 +125,12 @@ function staff_session_refresh(): void
     if (!$row || !(bool) $row['is_active'] || !in_array($row['account_type'], ['admin', 'staff'], true)) {
         venusep_logout();
         session(['staff_suspended_notice' => true]);
+        return;
+    }
+    /* Signed in before the password last changed: a stolen or forgotten session ends here,
+       like customer_session_heal(). (profile-save moves auth_at for the session that changed it.) */
+    if (session()->has('auth_at') && (int) $row['changed_ts'] > (int) session('auth_at')) {
+        venusep_logout();
         return;
     }
     session(['account_type' => $row['account_type'],

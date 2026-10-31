@@ -170,10 +170,9 @@ export default {
       expect.equal(after.is_active, before.is_active, `${OTHER_VENUE_ROOM} is_active`);
 
       const venue = await dbOne(`SELECT id, name FROM venues WHERE id = 2`);
+      /* staff are sent away from another venue's form (VenueSaveTest covers the server's refusal to save it) */
       await page.goto(ctx.url('/admin/venue-form?id=' + venue.id));
-      await page.locator('#venueName').fill(venue.name + ' X');
-      await page.getByRole('button', { name: 'Save Changes' }).click();
-      await modal(ctx, page, { expect: /belongs to another venue/ });
+      await expect.url(page, /\/admin\/venue-management/);
       expect.equal((await dbOne(`SELECT name FROM venues WHERE id = 2`)).name, venue.name, 'venues.name');
       return page;
     });

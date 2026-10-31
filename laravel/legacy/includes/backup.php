@@ -76,7 +76,7 @@ function backup_file_sets() {
 
 /* mysqldump / mysql from XAMPP's own mysql/bin (or VENUSEP_MYSQL_BIN). */
 function backup_mysql_bin($tool) {
-    $env = getenv('VENUSEP_MYSQL_BIN');
+    $env = config('venusep.mysql_bin');
     /* LARAVEL: the XAMPP root is found from PHP itself (php/php.exe on the
        command line, apache/bin/httpd.exe under Apache) — the app folder can
        now sit at any depth under htdocs. */

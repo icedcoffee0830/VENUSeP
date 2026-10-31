@@ -319,10 +319,6 @@
       function closePayout() { cur.payoutOpen = false; cur.payoutErr = null; state.ocr = null; render(); }
       function setPayoutTo(v){ cur.payoutTo = v; }
 
-      /* [SIM] Nobody is sending real money to produce a test screenshot, so these
-         feed SYNTHETIC receipt text through the REAL parser and the REAL verdict
-         engine. What you see is the engine's own answer, not a canned one — which
-         also makes this the test harness for the three-verdict rule. */
       /* Where the destination came from, and a loud warning when the customer's
          declared account is NOT the one on their record — that is exactly what a
          redirected refund looks like, and it is the one thing software can flag
@@ -344,22 +340,6 @@
           out += line('#1c7a4f', '&#10003; Matches the number on their account.');
         return out;
       }
-      function simulateReceipt(kind) {
-        if (!normMobile(payoutTarget())) { cur.payoutErr = 'Enter the GCash number first — without it the check has nothing to compare the receipt against.'; render(); return; }
-        const acct = gcAccount();
-        const owed = refundCentavos();
-        const num  = kind === 'wrongnum' ? '09991112222' : (acct.number || '09171234567');
-        const amt  = ((kind === 'wrongamt' ? Math.round(owed / 2) : owed) / 100).toFixed(2);
-        const ref  = String(Date.now()).slice(-13);
-        const text = kind === 'unreadable' ? "" : [
-          'Sent via GCash', 'JU....L D.. C.', num, 'Ref No. ' + ref,
-          'Sep 09, 2026 10:12 AM', 'Total Amount Sent PHP ' + amt, 'Amount PHP ' + amt
-        ].join('\n');
-        state.ocr = { phase: 'done', pct: 1, label: 'Simulated', fileName: '[SIM] ' + kind + '.png', thumb: null,
-                      rec: evaluateReceipt({ text: text, sha: 'sim-' + ref, confidence: kind === 'unreadable' ? 12 : 93 }, owed) };
-        render();
-      }
-
       async function completeRefund() {
         const note = ((document.getElementById('payoutNote') || {}).value || "").trim();
         const to   = normMobile(payoutTarget());
@@ -486,15 +466,6 @@
             </div>
             ${busy ? `<div style="font-size:0.76rem;color:var(--vm-muted);margin-bottom:0.7rem" id="gcBarLabel">${esc(o.label)}</div>` : ""}
             ${verdict}
-            <div style="border-top:1px dashed var(--vm-border);margin:0.8rem 0 0.7rem;padding-top:0.7rem">
-              <div style="font-size:0.7rem;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--vm-label);margin-bottom:0.4rem">[SIM] Simulate a receipt — runs the real engine</div>
-              <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
-                <button class="br-btn" onclick="simulateReceipt('pass')">Passes</button>
-                <button class="br-btn" onclick="simulateReceipt('wrongamt')">Wrong amount</button>
-                <button class="br-btn" onclick="simulateReceipt('wrongnum')">Wrong number</button>
-                <button class="br-btn" onclick="simulateReceipt('unreadable')">Unreadable</button>
-              </div>
-            </div>
             <div class="br-fld">
               <label for="payoutNote">Note ${payoutVerified() ? '(optional)' : '(required if the receipt does not verify)'}</label>
               <textarea id="payoutNote" rows="2" placeholder="e.g. screenshot unreadable — payment confirmed in the GCash transaction history.">${esc(cur.payoutNote || "")}</textarea>

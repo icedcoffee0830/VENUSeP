@@ -204,7 +204,12 @@ class PaymentSubmitController
         $amountOk     = $claimCentavos === null ? null : ($claimCentavos === $owedCentavos);
         $receiverOk   = self::numberMatches($claimNumber, $booking['mobile_number']);
 
-        $flags = array_values(array_unique(array_filter($clientFlags, 'is_string')));
+        /* Only what the browser's checker can say (gcash-checker.php): a customer cannot
+           write "rejected_by_staff" or "overridden_by_staff" onto their own upload. */
+        $flags = array_values(array_intersect(array_unique(array_filter($clientFlags, 'is_string')), [
+            'unreadable', 'likeness_uncertain', 'ref_format', 'ref_unreadable', 'receiver_mismatch', 'receiver_unreadable',
+            'amount_mismatch', 'amount_unreadable', 'amounts_inconsistent', 'date_unreadable', 'date_future', 'date_stale', 'low_confidence',
+        ]));
         if ($amountOk === false)   { $flags[] = 'amount_mismatch'; }
         if ($amountOk === null)    { $flags[] = 'amount_unreadable'; }
         if ($receiverOk === false) { $flags[] = 'receiver_mismatch'; }

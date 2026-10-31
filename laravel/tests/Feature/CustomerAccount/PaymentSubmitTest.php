@@ -107,6 +107,20 @@ class PaymentSubmitTest extends TestCase
         }
     }
 
+    /* A customer cannot write staff flags onto their own upload. */
+    public function test_flags_the_checker_cannot_produce_are_dropped(): void
+    {
+        try {
+            $this->postGcash(['flags' => json_encode(['rejected_by_staff', 'overridden_by_staff', 'date_stale'])])->assertOk();
+            $flags = json_decode((string) DB::table('gcash_receipts')->where('booking_id', self::BOOKING)->value('flags_json'), true);
+            $this->assertContains('date_stale', $flags);
+            $this->assertNotContains('rejected_by_staff', $flags);
+            $this->assertNotContains('overridden_by_staff', $flags);
+        } finally {
+            $this->undoGcashUploads();
+        }
+    }
+
     /* A GCash upload with these OCR claims (the matching account and amount by default). */
     private function postGcash(array $claims = []): TestResponse
     {

@@ -15,7 +15,7 @@ class TransactionHistoryController extends Controller
         $transactionRows = transaction_rows();     // every customer — this is the staff view
 
         return view('admin.transaction-history', [
-            'transactionRowsJson' => json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]',
+            'transactionRowsJson' => json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?: '[]',
         ]);
     }
 }

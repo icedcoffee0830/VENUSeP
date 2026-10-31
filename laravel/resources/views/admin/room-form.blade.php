@@ -1240,7 +1240,7 @@
         // Hard-coded pools. `on:true` = pre-selected (this is the Edit state).
         /* THE REAL VOCABULARY, grouped, with this room's own selections ticked.
            Built in PHP above from includes/amenities.php. */
-        var AMENITY_POOL = {!! json_encode($rfPool, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+        var AMENITY_POOL = {!! json_encode($rfPool, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 
         var CHECK = '<svg class="vm-chip-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 

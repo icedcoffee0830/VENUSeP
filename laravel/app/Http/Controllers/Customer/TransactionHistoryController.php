@@ -18,7 +18,7 @@ class TransactionHistoryController
 
         return view('customer.transaction-history', [
             'customerContact' => $customerContact,
-            'transactionRowsJson' => json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]',
+            'transactionRowsJson' => json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?: '[]',
             /* The filters match a row's label exactly, so they offer the labels rows
                carry: the lookup tables' customer_label (+ "Expired", bookings.php's
                word for a request released before anyone approved it). */

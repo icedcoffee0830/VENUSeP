@@ -427,7 +427,7 @@
     <script>
       document.addEventListener('DOMContentLoaded', function () {
         const CSRF = @json(csrf_token());
-        const REFUNDS = {!! json_encode($bhRefunds, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+        const REFUNDS = {!! json_encode($bhRefunds, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
         const refs = Object.keys(REFUNDS);
         if (!refs.length) return;
 

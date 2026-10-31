@@ -14,7 +14,7 @@ class CalendarController extends Controller
         $calendarEvents = calendar_events();          // no customer id = all customers
 
         return view('admin.calendar', [
-            'calendarEventsJson' => json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]',
+            'calendarEventsJson' => json_encode($calendarEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?: '[]',
         ]);
     }
 }

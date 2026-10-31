@@ -193,7 +193,7 @@
 /* Unlike room-reservation.php (which serves two venues), every room on this page
    belongs to the hostel — so gcAccount() below is constant. It is still a
    function because that is the checker's contract. */
-const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 /* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
    OFF = the stay is non-refundable and the guest must tick that they understand
    before submitting. ON leaves the hostel's refund text as it was — a stay booked
@@ -232,7 +232,7 @@ const LAST_CHECKIN = ADVANCE_DAYS==null ? null : (function(){ const d=new Date(N
    Venue Management can never disagree about what exists. photoUrls/panorama
    are merged in from includes/room-photos.php — whatever was uploaded on
    admin Venue Management (Edit Room -> Edit photos / 360°). */
-const ROOMS    = {!! json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+const ROOMS    = {!! json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const RATES    = {!! json_encode($HOSTEL_RATES) !!};
 const CR_LABEL = {!! json_encode($HOSTEL_CR_LABEL) !!};
 const HOSTEL   = {!! json_encode($HOSTEL_VENUE) !!};
@@ -246,7 +246,7 @@ const ACCOUNT = {!! json_encode([
   'role'  => $customerContact['universityId'] !== '' ? 'USeP · ' . $customerContact['universityId'] : 'Customer',
   'email' => $customerContact['email'],
   'phone' => $customerContact['phone'],
-], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const CSRF = {!! json_encode(csrf_token()) !!};
 
 /* Is this a showcase? The "Demo only" panels below stand in for people and

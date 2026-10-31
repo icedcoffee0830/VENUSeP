@@ -208,7 +208,7 @@
          startIso/endIso so approve() can compute the pay-by for either policy. */
       {!! payment_policy_js() !!}
       /* EVERY request, from the database, keyed by its real reference. */
-      const DATA = {!! json_encode($brqData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+      const DATA = {!! json_encode($brqData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
       const CSRF = {!! json_encode(csrf_token()) !!};
 
       /* ============================================================

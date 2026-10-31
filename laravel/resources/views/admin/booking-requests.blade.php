@@ -182,7 +182,7 @@
          hand-written array of 15 invented requests; it is now whatever the
          database actually holds, so the customer side and this page can never
          again disagree about which bookings exist. */
-      const BR = {!! json_encode($brRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+      const BR = {!! json_encode($brRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
       const TABS = [
         { k: 'all',     t: 'All' },
         { k: 'id',      t: 'Pending ID review' },

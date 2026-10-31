@@ -192,7 +192,7 @@
 @include('partials.booking-footer')
 <script>
 /* Every venue's GCash account, from the gcash_accounts table. */
-const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 /* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
    OFF = this booking is non-refundable, and the customer must tick that they
    understand before the request can be submitted. Whatever it is at submit time
@@ -211,7 +211,7 @@ const UPLOAD_MAX_MB = {{ intdiv(DOC_MAX_BYTES, 1048576) }};
    so this page, the landing page and admin Venue Management cannot disagree.
    photoUrls/panorama are merged in from includes/room-photos.php — whatever
    was uploaded on admin Venue Management (Edit Room -> Edit photos / 360°). */
-const ROOMS = {!! json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+const ROOMS = {!! json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 </script>
 {!! $counterBookerJs !!}{{-- legacy counter-booker.php: the counter's "who" step, shared with the hostel page --}}
 <script>
@@ -266,7 +266,7 @@ const ACCOUNT = {!! json_encode([
   'role'  => $customerContact['universityId'] !== '' ? 'USeP · ' . $customerContact['universityId'] : 'Customer',
   'email' => $customerContact['email'],
   'phone' => $customerContact['phone'],
-], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const CSRF = {!! json_encode(csrf_token()) !!};
 
 /* Is this a showcase? The "Demo only" panels below stand in for people and

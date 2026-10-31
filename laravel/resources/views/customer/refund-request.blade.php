@@ -333,7 +333,7 @@
          other machine. It is a row now, so the server simply knows. -->
     <script>
       const CSRF        = @json(csrf_token());
-      const RR_EXISTING = {!! json_encode($rrExisting, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!};
+      const RR_EXISTING = {!! json_encode($rrExisting, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
       const RR_RESUBMIT = {{ $rrResubmit ? 'true' : 'false' }};
     </script>
 

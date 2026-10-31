@@ -600,7 +600,7 @@
         paginationSizeSelector: [10, 25, 50, 100],
         movableColumns: true,
         columns: [
-          { title: '#', field: 'id', width: 70, headerSort: true },
+          { title: '#', field: 'id', width: 55, headerSort: true },
           { title: 'Name', field: 'name', headerFilter: 'input' },
           { title: 'Email', field: 'email', headerFilter: 'input' },
           {
@@ -609,7 +609,7 @@
             formatter: roleBadge,
             headerFilter: 'list',
             headerFilterParams: { values: ['', 'Staff'] },
-            width: 150,
+            width: 100,
             hozAlign: 'center',
           },
           {
@@ -628,7 +628,7 @@
               if (!filterValue) return true;
               return String(rowValue) === String(filterValue);
             },
-            width: 175,
+            width: 145,
             cellEdited: function (cell) {
               const row = cell.getRow().getData();
               const body = new FormData();
@@ -647,13 +647,13 @@
                the system can send an invitation, so no account could ever have
                entered or left that state. */
             headerFilterParams: { values: ['', 'Active', 'Suspended'] },
-            width: 140,
+            width: 105,
             hozAlign: 'center',
           },
           {
             title: 'Last sign-in',
             field: 'lastLogin',
-            width: 130,
+            width: 120,
             hozAlign: 'center',
           },
           {

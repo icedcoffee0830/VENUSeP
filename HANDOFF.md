@@ -306,12 +306,48 @@ broke were updated (commit 6d66941) but only syntax-checked.
    leave ~175 in `venusep_laravel_test`, so tests needing a free date must check, not guess).
 6. **Old site:** none of tonight's fixes are in the plain-PHP site (branch `Aron`) — Laravel only,
    by Aron's decision. The first night's old-site fixes sit on branch `bugfixes`, unmerged.
-7. **Push / merge:** nothing pushed. `laravel` exists only on this laptop. Push when Aron says.
-8. **Clean-up:** helper worktrees in `C:\xamp5\htdocs\VENUSeP-laravel-helpers\` and their `lv-*`
-   branches are all merged into `laravel` and can be deleted; the `venusep_laravel_flows_*` and
-   `venusep_laravel_test_*` DB copies too. Loosen `C:\xamp5\htdocs\VENUSeP\.claude\settings.local.json`
-   when the overnight rules aren't wanted any more.
-9. **Later (decided, not now):** staff only *see* their own venue's lists/calendar/details —
-   with the separate staff UI. The shrinking phase (legacy includes -> Laravel classes).
+7. **Push / merge:** Aron decided 2026-10-31: fast-forward `laravel` into his own `Aron` branch and push
+   that; he merges to `main` himself once everything is done.
+8. **DONE 2026-10-31:** helper worktrees, `lv-*` branches and spare DB copies are gone. KEEP
+   `VENUSeP-laravel-helpers\_tools`: the flow tester's snapshot and all reports live there, and it is
+   NOT in git. Still to do: loosen `C:\xamp5\htdocs\VENUSeP\.claude\settings.local.json` when the
+   overnight rules aren't wanted any more.
+9. **Later (decided, not now):** the shrinking phase (legacy includes -> Laravel classes).
    Code-size notes: `legacy/includes/bookings.php` ~1,100 lines and
    `admin/booking-request.blade.php` ~1,380 lines — split when touched next.
+
+## 12. 2026-10-31 — staff separation, clean-up, passwords
+
+**Staff see only their own venue, everywhere** (Aron). One rule in `legacy/includes/auth.php`:
+`staff_list_venue()`, `staff_sees_venue()`, `staff_venue_sql()`, `staff_may_handle_booking()`. Applied
+where lists are built (`bookings_all()`, reports, `venues.php`, `venue-rooms.php`, `hostel-rooms.php`,
+`payment-settings.php`) plus Venue Management, Dashboard and Payment Settings. Another venue's booking
+pages, documents and receipts answer 404. Admins and customers are not narrowed. Hostel rates are worked
+out before the narrowing so the FAQ's values stay whole. Known rough edge: a staff member opening another
+venue's room form by URL gets the blank Add form (saving is refused by the server).
+
+**Customer Management is admin-only** (page, save, sidebar). The counter's customer search stays for staff.
+
+**Passwords.** Staff with `users.password_changed_at` NULL are held on Profile until they set their own
+(`EnforceTwoFactor`; JSON gets 403). Every existing staff account is NULL, so each is asked once, on the
+real site too. Admin Profile gained a Change password card; keeping the same password is refused. Staff
+Management has Reset password (staff only, never another admin): temporary password, NULL again.
+**Gap:** reset links are customer-only, so a locked-out ADMIN still has no way back in through the site.
+
+**Lockout:** `reauth_verify()` in `auth.php` is the one copy of the 5-wrong-then-lock ladder.
+
+**Clean-up (about 2,450 lines removed, no visible change):** one room form (`$isHostel`), `partials/booking-*`,
+`partials/calendar-css`, `partials/people-css-shell`, register page uses `customer-auth.css`, 3 dead legacy
+files deleted. Skipped: the admin sign-in pages' CSS copy (~140 lines; the shared file adds rules they lack).
+
+**Traps found:**
+- Legacy lists load once per PHP process, so one test must not sign in as staff and then as admin.
+- Other tests leave far-future bookings in `venusep_laravel_test`: pick a date that is really free.
+- A killed flow run can leave a backup in `storage/app/venusep-private/backups`.
+- Do not edit code while flows run: they read the working copy.
+- MySQL or a server started by a Claude session stops when that session ends. Start MySQL from XAMPP.
+
+**Tests:** full run at deb65b1: page checker 0 failing, flows 121 of 122 steps passed. The failure was a
+real bug (Suspend clipped in Staff Management), fixed; admin-settings then passed 12 of 12.
+
+**No migration needed for any of this.** The real `venusep` DB stays at migration 15.

@@ -197,6 +197,11 @@
       .form-label { display: inline-block; margin-bottom: 0.35rem; color: #111; font-weight: 700; font-size: 0.78rem; }
       .form-control { width: 100%; min-height: 34px; padding: 0.42rem 0.55rem; border: 1px solid var(--venusep-border); border-radius: 6px; font: inherit; background: #fff; color: #111; }
       textarea.form-control { min-height: 78px; resize: vertical; }
+      .pw-field { position: relative; }
+      .pw-field .form-control { padding-right: 2.5rem; }
+      .pw-eye { position: absolute; top: 0; right: 0; bottom: 0; width: 2.5rem; border: 0; background: transparent; color: #6b675f; cursor: pointer; }
+      .pw-eye:hover { color: #1d1b1b; }
+      .pw-eye:focus-visible { outline: 2px solid #1d1b1b; outline-offset: -2px; border-radius: 6px; }
       .form-control:focus { outline: none; border-color: #1d1b1b; box-shadow: 0 0 0 0.15rem rgba(29, 27, 27, 0.14); }
       .form-actions { display: flex; gap: 0.55rem; margin-top: 0.1rem; }
       .btn-primary-dark, .btn-outline-dark { min-height: 34px; padding: 0.35rem 0.75rem; border-radius: 6px; font-weight: 800; font-size: 0.78rem; }
@@ -300,7 +305,7 @@
         pointer-events: none;
       }
 
-            @media (max-width: 1100px) { .profile-layout { grid-template-columns: 1fr; } }
+            @media (max-width: 1100px) { .profile-layout { grid-template-columns: 1fr !important; } }
       @media (max-width: 767.98px) {
         :root { --venusep-sidebar-width: 0px; --venusep-header-height: 56px; }
         .app-sidebar { transform: translateX(-100%); }
@@ -461,15 +466,15 @@
             @endif
             <div class="form-field form-field-full">
               <label class="form-label" for="pw-current">{{ $vpMustChange ? 'Password you were given' : 'Current password' }}</label>
-              <input class="form-control" id="pw-current" name="current_password" type="password" autocomplete="current-password" required{{ $vpMustChange ? ' autofocus' : '' }}/>
+              <div class="pw-field"><input class="form-control" id="pw-current" name="current_password" type="password" autocomplete="current-password" required{{ $vpMustChange ? ' autofocus' : '' }}/><button class="pw-eye" type="button" data-password-toggle="pw-current" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div>
             </div>
             <div class="form-field">
               <label class="form-label" for="pw-new">New password</label>
-              <input class="form-control" id="pw-new" name="new_password" type="password" autocomplete="new-password" minlength="8" required/>
+              <div class="pw-field"><input class="form-control" id="pw-new" name="new_password" type="password" autocomplete="new-password" minlength="8" required/><button class="pw-eye" type="button" data-password-toggle="pw-new" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div>
             </div>
             <div class="form-field">
               <label class="form-label" for="pw-confirm">Confirm new password</label>
-              <input class="form-control" id="pw-confirm" name="confirm_new_password" type="password" autocomplete="new-password" minlength="8" required/>
+              <div class="pw-field"><input class="form-control" id="pw-confirm" name="confirm_new_password" type="password" autocomplete="new-password" minlength="8" required/><button class="pw-eye" type="button" data-password-toggle="pw-confirm" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div>
             </div>
             <div class="form-field form-field-full">
               <div id="vpPwMessage" role="status" aria-live="polite" style="font-size:.85rem;min-height:1.2em"></div>
@@ -483,6 +488,16 @@
               const form = document.getElementById('vpPwForm');
               const out = document.getElementById('vpPwMessage');
               if (!form) return;
+              const setShown = function (toggle, show) {
+                document.getElementById(toggle.dataset.passwordToggle).type = show ? 'text' : 'password';
+                toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                toggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+                toggle.querySelector('i').className = 'bi ' + (show ? 'bi-eye-slash' : 'bi-eye');
+              };
+              const toggles = form.querySelectorAll('[data-password-toggle]');
+              toggles.forEach(function (toggle) {
+                toggle.addEventListener('click', function () { setShown(toggle, toggle.getAttribute('aria-pressed') !== 'true'); });
+              });
               form.addEventListener('submit', function (e) {
                 e.preventDefault();
                 const body = new FormData(form);
@@ -500,6 +515,7 @@
                       return;
                     }
                     form.reset();
+                    toggles.forEach(function (toggle) { setShown(toggle, false); });
                     @if ($vpMustChange)
                     location.replace(@json(route('admin.dashboard')));   // the password is their own now: on to work
                     @endif

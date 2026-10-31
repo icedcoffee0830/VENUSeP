@@ -127,6 +127,12 @@
       /* ---- admin only: the department picker (one radio card per active venue) ---- */
       .department-label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px 4px; }
       .department-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .admin-check { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; font-size: 13.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
+      .admin-check input { width: 16px; height: 16px; margin: 2px 0 0; flex: none; accent-color: var(--crimson); }
+      .admin-check small { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
+      .department-options.is-off { opacity: .45; }
+      .department-options.is-off .department-card { cursor: not-allowed; }
+      .department-options.is-off .department-card-header { pointer-events: none; }
       .department-card { display: block; cursor: pointer; margin: 0; }
       .department-card-header { position: relative; display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1.5px solid var(--border); border-radius: 16px; background: #fff; transition: border-color .18s, box-shadow .18s; }
       .department-card input { position: absolute; opacity: 0; pointer-events: none; }
@@ -180,8 +186,12 @@
           <form id="adminLoginForm" action="" method="post" novalidate data-auth-form="login">
             @csrf
             <div class="form-group">
+              <label class="admin-check" for="loginAsAdmin">
+                <input type="checkbox" name="as_admin" id="loginAsAdmin" value="1" @checked($asAdmin) />
+                <span>I am signing in as an administrator<small>Administrators oversee all departments, so none needs to be selected.</small></span>
+              </label>
               <span class="department-label">Department</span>
-              <div class="department-options" role="radiogroup" aria-label="Department" aria-describedby="departmentValidation">
+              <div class="department-options{{ $asAdmin ? ' is-off' : '' }}" role="radiogroup" aria-label="Department" aria-describedby="departmentValidation">
                 {{-- One card per active venue. Staff pick their own venue (checked on the
                      server after the password); nothing is pre-picked. --}}
                 @foreach ($departments as $deptId => $dept)
@@ -189,7 +199,7 @@
                   <span class="department-card-header">
                     <span class="department-icon"><i class="bi {{ $dept['icon'] }}" aria-hidden="true"></i></span>
                     <span class="department-copy"><strong>{{ $dept['name'] }}</strong><span>{{ $dept['line'] }}</span></span>
-                    <input type="radio" name="department" id="loginDepartment{{ $deptId }}" value="{{ $deptId }}" @checked($selectedDepartment === $deptId) required />
+                    <input type="radio" name="department" id="loginDepartment{{ $deptId }}" value="{{ $deptId }}" @checked(!$asAdmin && $selectedDepartment === $deptId) @disabled($asAdmin) required />
                   </span>
                 </label>
                 @endforeach
@@ -282,6 +292,19 @@
           );
         });
 
+        /* An administrator has no department to pick: the cards switch off (a disabled radio is not sent). */
+        const asAdmin = form.querySelector('[name="as_admin"]');
+        if (asAdmin) {
+          asAdmin.addEventListener('change', function () {
+            form.querySelector('.department-options').classList.toggle('is-off', asAdmin.checked);
+            form.querySelectorAll('[name="department"]').forEach(function (radio) {
+              radio.disabled = asAdmin.checked;
+              if (asAdmin.checked) radio.checked = false;
+            });
+            setFieldState(form.querySelector('[name="department"]'), 'departmentValidation', '');
+          });
+        }
+
         // The browser validates the fields; PHP performs the real authentication.
         form.addEventListener('submit', function (event) {
           const email = form.querySelector('[name="email"]');
@@ -294,7 +317,7 @@
           if (loginMessage) loginMessage.classList.remove('is-error');
 
           const selectedDepartment = form.querySelector('[name="department"]:checked');
-          if (department) {
+          if (department && !(asAdmin && asAdmin.checked)) {
             const error = selectedDepartment ? '' : 'Please select a department.';
             setFieldState(department, 'departmentValidation', error);
             hasError = hasError || Boolean(error);

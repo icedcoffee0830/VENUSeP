@@ -50,6 +50,7 @@ class AdminLoginController
            must pick its own venue; an admin may pick any. */
         $departments = $pdo !== null ? $this->departments($pdo) : [];
         $selectedDepartment = (int) $request->request->get('department', 0);
+        $asAdmin = $request->request->has('as_admin');   // "signing in as an administrator": no department to pick
 
         /* A two-step sign-in step (DB-DECISIONS #20); the flow itself is tfa_login_step(). */
         $tfaError = '';
@@ -70,7 +71,7 @@ class AdminLoginController
                     $loginError = 'Please enter a valid email address.';
                 } elseif ($password === '') {
                     $loginError = 'Please enter your password.';
-                } elseif (!isset($departments[$selectedDepartment])) {
+                } elseif (!$asAdmin && !isset($departments[$selectedDepartment])) {
                     $loginError = 'Please select a department.';
                 } elseif (($lock = SignInThrottle::secondsLeft($email)) > 0) {
                     $loginError = SignInThrottle::message($lock);   // the password is not even checked
@@ -100,6 +101,9 @@ class AdminLoginController
                     } elseif (!(bool) $user['is_active']) {
                         /* Only AFTER the password checked out, so this reveals nothing to a stranger. */
                         $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
+                    } elseif ($asAdmin && $user['account_type'] !== 'admin') {
+                        /* Only AFTER the password checked out, like the department check below. */
+                        $loginError = 'This account is not an administrator. Clear the checkbox and select your department.';
                     } elseif ($user['account_type'] === 'staff' && (int) $user['staff_venue_id'] !== $selectedDepartment) {
                         /* Only AFTER the password checked out, so it hints nothing to a stranger.
                            (A staff row always has a venue: the database trigger insists.) */
@@ -131,7 +135,7 @@ class AdminLoginController
 
         $response = response()->view('auth.admin-login', compact(
             'loginError', 'tfaView', 'tfaCsrf', 'tfaLock', 'tfaSecret', 'tfaError', 'pending',
-            'departments', 'selectedDepartment'
+            'departments', 'selectedDepartment', 'asAdmin'
         ));
         if ($tfaView !== 'password') {
             $response->header('Cache-Control', 'no-store');   // the secret and the recovery codes must never be cached

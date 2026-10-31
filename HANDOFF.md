@@ -334,6 +334,11 @@ real site too. Admin Profile gained a Change password card; keeping the same pas
 Management has Reset password (staff only, never another admin): temporary password, NULL again.
 **Gap:** reset links are customer-only, so a locked-out ADMIN still has no way back in through the site.
 
+**Staff sign-in:** "I am signing in as an administrator" checkbox switches the Department cards off; admins may
+still pick a card. Staff who tick it are refused after the password check.
+**Undecided (Aron: later):** "Forgot Password?" on the staff sign-in page is a dead link (`href="#"` in
+`auth/admin-login.blade.php`). Staff get a new password from an admin (Reset password); admins have no way back.
+
 **Lockout:** `reauth_verify()` in `auth.php` is the one copy of the 5-wrong-then-lock ladder.
 
 **Clean-up (about 2,450 lines removed, no visible change):** one room form (`$isHostel`), `partials/booking-*`,

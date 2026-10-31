@@ -72,6 +72,25 @@ class AdminDepartmentPickerTest extends TestCase
             ->assertRedirect(route('admin.dashboard'))->assertSessionHas('user_id', $staff->id)->assertSessionHas('department', 1);
     }
 
+    /* Aron 2026-10-31: the checkbox replaces the card for an administrator. */
+    public function test_an_administrator_ticks_the_box_instead_of_picking_a_card(): void
+    {
+        $admin = $this->makeAccount('admin');   // no 2FA yet: the password step leads to the phone set-up
+        $this->post($this->url(), ['email' => $admin->email, 'password' => self::PASSWORD, 'as_admin' => '1'])
+            ->assertRedirect($this->url());
+        $this->assertSame(0, session('tfa_pending')['department']);
+    }
+
+    public function test_staff_cannot_tick_the_box_and_a_stranger_learns_nothing_from_it(): void
+    {
+        $staff = $this->makeAccount('staff');
+        $this->post($this->url(), ['email' => $staff->email, 'password' => 'wrong-password', 'as_admin' => '1'])
+            ->assertOk()->assertSee('Invalid email or password.')->assertDontSee('not an administrator')->assertSessionMissing('user_id');
+        $this->post($this->url(), ['email' => $staff->email, 'password' => self::PASSWORD, 'as_admin' => '1'])
+            ->assertOk()->assertSee('This account is not an administrator.')->assertSessionMissing('user_id')
+            ->assertSee('id="loginAsAdmin" value="1" checked', false);
+    }
+
     public function test_an_admin_may_pick_any_card(): void
     {
         foreach (['BAHAY-ALUMNI', 'USEP-VENUES', 'USEP-HOSTEL'] as $code) {

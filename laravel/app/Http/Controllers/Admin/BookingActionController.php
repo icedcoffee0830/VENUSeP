@@ -11,7 +11,6 @@ use App\Support\Status;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
-use PDO;
 use PDOException;
 
 /* =====================================================================
@@ -40,9 +39,6 @@ class BookingActionController extends Controller
 {
     use RepliesJson;
     use Concerns\BookingSettlementActions;
-
-    /* A booking that owes nothing yet: force cancel can end it. */
-    private const UNPAID = ['locked', 'await_event', 'await_gcash', 'await_cash', 'await_pos'];
 
     private const POSTPAY_NO_RELEASE = 'A pay-after-the-event booking is never released: the event already happened, so what is owed stays on record. Extend the deadline or follow up with the customer.';
 
@@ -95,20 +91,20 @@ class BookingActionController extends Controller
 
         $queued = null;   /* an email this action queued; sent only after the action is committed */
         try {
-            $queued = $this->apply($request, $pdo, $action, $bk, $bookingId, $actor, $note);
+            $queued = $this->apply($request, $action, $bk, $actor, $note);
         } catch (HttpResponseException $r) {
-            /* A refusal mid-action. The old endpoint exit()ed here, which closed
-               its connection: no open transaction, no actor variables survived. */
+            /* A refusal mid-action. The old endpoint exit()ed here, which closed its
+               connection: no open transaction survived. The query files' saves undo
+               themselves; the two that keep a plain PDO transaction (the payment
+               reversal, the date move) are undone here. */
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $this->clearActor($pdo);
             throw $r;
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $this->clearActor($pdo);
             /* 45000 is a procedure refusing on a real rule — shown verbatim. */
             if ($e instanceof PDOException && $e->getCode() === '45000') {
                 $this->reply(409, ['ok' => false, 'message' => $e->errorInfo[2] ?? $e->getMessage()]);
@@ -153,20 +149,6 @@ class BookingActionController extends Controller
         ]);
     }
 
-    /* The timeline is written by trg_bookings_after_update on every status
-       change; these two session variables tell it WHO acted and WHY. Set
-       before each UPDATE, cleared after. */
-    private function setActor(PDO $pdo, int $actor, string $note): void
-    {
-        $pdo->prepare('SET @venusep_actor_user_id = :a')->execute([':a' => $actor]);
-        $pdo->prepare('SET @venusep_action_note = :n')->execute([':n' => $note !== '' ? $note : null]);
-    }
-
-    private function clearActor(PDO $pdo): void
-    {
-        $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
-    }
-
     /* A receipt the checker could read must show exactly what is owed. An unreadable
        amount is left to staff, who check the office's GCash app. */
     private function refuseWrongAmount(?array $upload, array $bk): void
@@ -176,22 +158,11 @@ class BookingActionController extends Controller
         }
     }
 
-    /* An action that changes no status (paperwork, arrival, the attempt
-       allowance): the trigger never sees it, so its timeline row is written here. */
-    private function timeline(PDO $pdo, int $bookingId, string $code, int $actor, string $note, ?array $meta = null): void
-    {
-        $pdo->prepare(
-            'INSERT INTO booking_timeline (booking_id, action_code, performed_by_user_id, note, metadata_json)
-             VALUES (:b, :c, :u, :n, :m)'
-        )->execute([':b' => $bookingId, ':c' => $code, ':u' => $actor, ':n' => $note,
-                    ':m' => $meta !== null ? json_encode($meta) : null]);
-    }
-
     /* Paperwork never lands on a booking that has ended (Aron 2026-11-01). A completed
        one still can: a post-pay stay is paid, and its paperwork arrives, after it. */
     private function refuseOnClosedBooking(array $bk, string $what): void
     {
-        if (in_array($bk['reservation_status'], ['rejected', 'cancelled', 'released'], true)) {
+        if (in_array($bk['reservation_status'], [Status::REJECTED, Status::CANCELLED, Status::RELEASED], true)) {
             $this->reply(409, ['ok' => false, 'message' => $what . ' cannot be recorded on a closed booking.']);
         }
     }
@@ -653,50 +624,48 @@ class BookingActionController extends Controller
     }
 
     /* The action itself. Returns the outbox id of an email it queued, or null. */
-    private function apply(Request $request, PDO $pdo, string $action, array $bk, int $bookingId, int $actor, string $note): ?int
+    private function apply(Request $request, string $action, array $bk, int $actor, string $note): ?int
     {
         $queued = null;
         switch ($action) {
 
-        /* ---- APPROVE the ID + the reservation. Optionally grant the USeP rate. ---- */
-        case 'approve': $this->approve($request, $bk, $actor, $note); break;
+        /* The request, and the hostel paperwork */
+        case 'approve':                $this->approve($request, $bk, $actor, $note); break;
+        case 'reject':                 $this->reject($bk, $actor, $note); break;
+        case 'record_pos':             $this->recordPos($request, $bk, $actor); break;
+        case 'record_or':              $this->recordOfficialReceipt($request, $bk, $actor); break;
+        case 'check_in':               $this->checkIn($bk, $actor); break;
 
-        case 'reject':     $this->reject($bk, $actor, $note); break;
-        case 'record_pos': $this->recordPos($request, $bk, $actor); break;
-        case 'record_or':  $this->recordOfficialReceipt($request, $bk, $actor); break;
-        case 'check_in':   $this->checkIn($bk, $actor); break;
-
-        case 'cash_received':    $queued = $this->cashReceived($bk, $actor, $note); break;
-        case 'confirm_payment':  $queued = $this->confirmPayment($bk, $actor, $note); break;
-
-        /* §7 (Aron, 2026-10-30): these four used to change only the screen. Each is a real
-           save now, with a History line written by the status-change trigger. */
-        case 'override_confirm': $queued = $this->overrideConfirm($request, $bk, $actor, $note); break;
-        case 'undo_rejection':   $this->undoRejection($bk, $actor, $note); break;
-        case 'extend_deadline':  $this->extendDeadline($bk, $actor, $note); break;
-        case 'release_slot':     $this->releaseSlot($bk, $actor, $note); break;
-
+        /* The payment. §7 (Aron, 2026-10-30): override, undo, extend and release used to
+           change only the screen; each is a real save now. */
+        case 'cash_received':          $queued = $this->cashReceived($bk, $actor, $note); break;
+        case 'confirm_payment':        $queued = $this->confirmPayment($bk, $actor, $note); break;
+        case 'override_confirm':       $queued = $this->overrideConfirm($request, $bk, $actor, $note); break;
+        case 'undo_rejection':         $this->undoRejection($bk, $actor, $note); break;
+        case 'extend_deadline':        $this->extendDeadline($bk, $actor, $note); break;
+        case 'release_slot':           $this->releaseSlot($bk, $actor, $note); break;
         case 'reject_payment':         $this->rejectPayment($request, $bk, $actor, $note); break;
         case 'allow_receipt_attempts': $this->allowReceiptAttempts($bk, $actor, $note); break;
 
         /* THE REFUND CHAIN (staff decisions): requested -> (returned_for_correction) ->
            approved -> completed, or -> rejected, or the customer withdraws it. Only
            'completed' closes the booking and frees its date. */
-        case 'refund_file':      $this->fileRefund($request, $bk, $actor, $note); break;
-        case 'refund_add_proof': $this->addRefundProof($request, $bk, $actor); break;
-        case 'refund_approve':   $this->approveRefund($bk, $actor); break;
-        case 'refund_return':    $this->returnRefund($bk, $actor, $note); break;
-        case 'refund_deny':      $this->denyRefund($bk, $actor, $note); break;
-        case 'refund_complete':  $this->payOutRefund($request, $bk, $actor, $note); break;
+        case 'refund_file':            $this->fileRefund($request, $bk, $actor, $note); break;
+        case 'refund_add_proof':       $this->addRefundProof($request, $bk, $actor); break;
+        case 'refund_approve':         $this->approveRefund($bk, $actor); break;
+        case 'refund_return':          $this->returnRefund($bk, $actor, $note); break;
+        case 'refund_deny':            $this->denyRefund($bk, $actor, $note); break;
+        case 'refund_complete':        $this->payOutRefund($request, $bk, $actor, $note); break;
 
-        case 'force_cancel':       $this->forceCancel($request, $pdo, $bk, $bookingId, $actor, $note); break;
-        case 'write_off_request':  $this->writeOffRequest($pdo, $bk, $bookingId, $actor, $note); break;
-        case 'write_off_approve':  $this->writeOffDecide($pdo, $bk, $bookingId, $actor, $note, true); break;
-        case 'write_off_decline':  $this->writeOffDecide($pdo, $bk, $bookingId, $actor, $note, false); break;
-        case 'reverse_payment':    $this->reversePayment($request, $pdo, $bk, $bookingId, $actor, $note); break;
-        case 'refund_outside':     $this->recordOutsideRefund($request, $bk, $actor, $note); break;
-        case 'check_out':          $this->checkOut($bk, $actor); break;
-        case 'move_date':          $this->moveDate($request, $pdo, $bk, $bookingId, $actor); break;
+        /* Outside the normal flow: in Concerns/BookingSettlementActions.php */
+        case 'force_cancel':           $this->forceCancel($request, $bk, $actor, $note); break;
+        case 'write_off_request':      $this->writeOffRequest($bk, $actor, $note); break;
+        case 'write_off_approve':      $this->approveWriteOff($bk, $actor); break;
+        case 'write_off_decline':      $this->declineWriteOff($bk, $actor, $note); break;
+        case 'reverse_payment':        $this->reversePayment($request, $bk, $actor, $note); break;
+        case 'refund_outside':         $this->recordOutsideRefund($request, $bk, $actor, $note); break;
+        case 'check_out':              $this->checkOut($bk, $actor); break;
+        case 'move_date':              $this->moveDate($request, $bk, $actor); break;
 
         default:
             $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);

@@ -32,6 +32,7 @@ class PaymentQueriesTest extends TestCase
             ['overrideRejectedUpload', [99999999, 99999999, null, self::ACTOR, 'x']],
             ['undoStaffRejection', [99999999, 99999999, null, self::ACTOR, 'x']],
             ['rejectReceiptUnderReview', [99999999, 'x', self::ACTOR, 'x']],
+            ['markPaymentReversed', [99999999, 'x', self::ACTOR, 'x']],
         ];
     }
 

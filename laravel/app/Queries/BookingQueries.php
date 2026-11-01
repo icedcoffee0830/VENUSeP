@@ -12,14 +12,19 @@ use Illuminate\Support\Facades\DB;
      payment_status: see the payment_statuses table, and app/Support/Status.php
    hostel_booking_details: one row per hostel booking: the stay's dates, POS, Official Receipt,
      check-in and check-out.
+   venue_booking_details: one row per venue booking: the event and its first and last day.
+   venue_booking_slots: one row per day a venue booking holds its room.
+   bed_reservations, bed_reservation_nights: the bed each hostel guest has, and each night of it.
    booking_timeline: the booking's History, one row per event.
-   Read only: rooms, venues, customers, and gcash_receipts (counted).
+   Read only: rooms, venues, customers, hostel_occupants, and gcash_receipts (counted).
+   notifications are written by the legacy notify_* helpers (legacy/includes/notifications.php).
 
    Triggers that fire here:
      trg_bookings_after_update: on a status change, writes the booking's History line
        and frees its dates when the booking closes.
      trg_bookings_type_upd: refuses a booking whose type does not match its room.
-     trg_booking_timeline_notify: a new History line may notify the customer or staff. */
+     trg_booking_timeline_notify: a new History line may notify the customer or staff.
+   Procedures: sp_approve_booking, sp_add_venue_slot; fn_payment_deadline works out a pay-by date. */
 class BookingQueries
 {
     use SavesWithHistory;
@@ -65,6 +70,28 @@ class BookingQueries
             FROM bookings b
             WHERE b.id = ?
         ", [$id]);
+    }
+
+    /* How many days a venue booking holds now (its slots not yet released). */
+    public static function countHeldVenueDays(int $id): int
+    {
+        return (int) DB::selectOne("
+            SELECT COUNT(*) AS days
+            FROM venue_booking_slots s
+            WHERE s.booking_id = ?
+              AND s.released_at IS NULL
+        ", [$id])->days;
+    }
+
+    /* The guests on a hostel booking, in the order they were added. */
+    public static function findOccupantIds(int $id): array
+    {
+        return array_map(fn ($row) => (int) $row->id, DB::select("
+            SELECT o.id
+            FROM hostel_occupants o
+            WHERE o.booking_id = ?
+            ORDER BY o.id
+        ", [$id]));
     }
 
     /* The database's time 48 hours from now: deadlines run on the database's clock. */
@@ -224,5 +251,136 @@ class BookingQueries
             self::writeHistory($id, 'receipt_attempts_allowed', $actor, $note,
                 ['allowed_before' => $allowedBefore, 'allowed_after' => $allowedAfter]);
         });
+    }
+
+    /* Cancel an approved booking that owes nothing yet; the History trigger frees its dates.
+       The WHERE repeats that rule (the same list as Status::UNPAID), so a payment arriving a
+       moment ago wins: false then, and nothing is saved. The customer and the admins are told. */
+    public static function markForceCancelled(int $id, string $reason, int $actor, string $note): bool
+    {
+        return self::saveAs($actor, $note, function () use ($id, $reason, $actor) {
+            $cancelled = DB::update("
+                UPDATE bookings
+                SET reservation_status = 'cancelled',
+                    payment_status = 'locked',
+                    cancelled_at = NOW(),
+                    staff_notes = ?,
+                    updated_by_user_id = ?
+                WHERE id = ?
+                  AND reservation_status = 'approved'
+                  AND payment_status IN ('locked', 'await_event', 'await_gcash', 'await_cash', 'await_pos')
+            ", [$reason, $actor, $id]);
+            if ($cancelled === 0) {
+                return false;
+            }
+            legacy('notifications');
+            notify_booking_parties(DB::connection()->getPdo(), $id, 'booking_cancelled', $actor, ['note' => $reason]);
+            return true;
+        });
+    }
+
+    /* Staff ask an administrator to write off an overdue debt; the administrators are told. */
+    public static function saveWriteOffRequest(int $id, string $reason, int $actor, string $note): void
+    {
+        self::saveAs($actor, $note, function () use ($id, $reason, $actor, $note) {
+            self::mustChange('saveWriteOffRequest', DB::update("
+                UPDATE bookings
+                SET write_off_reason = ?,
+                    write_off_requested_by = ?,
+                    write_off_requested_at = NOW()
+                WHERE id = ?
+            ", [$reason, $actor, $id]));
+            self::writeHistory($id, 'write_off_requested', $actor, $note);
+            legacy('notifications');
+            notify_refund_needs_admin(DB::connection()->getPdo(), $id, $actor, 'write_off_requested');
+        });
+    }
+
+    /* An administrator writes the debt off: the booking is completed and owes nothing more. */
+    public static function markWrittenOff(int $id, int $actor, string $note): void
+    {
+        self::saveAs($actor, $note, function () use ($id, $actor) {
+            self::mustChange('markWrittenOff', DB::update("
+                UPDATE bookings
+                SET reservation_status = 'completed',
+                    payment_status = 'written_off',
+                    updated_by_user_id = ?
+                WHERE id = ?
+            ", [$actor, $id]));
+        });
+    }
+
+    /* An administrator turns a write-off down: the request is cleared, the debt stays. */
+    public static function clearWriteOffRequest(int $id, int $actor, string $note): void
+    {
+        self::saveAs($actor, $note, function () use ($id, $actor, $note) {
+            self::mustChange('clearWriteOffRequest', DB::update("
+                UPDATE bookings
+                SET write_off_reason = NULL,
+                    write_off_requested_by = NULL,
+                    write_off_requested_at = NULL
+                WHERE id = ?
+            ", [$id]));
+            self::writeHistory($id, 'write_off_declined', $actor, $note);
+        });
+    }
+
+    /* Put a venue booking on new dates: its old slots go, sp_add_venue_slot adds one per new
+       day (it refuses, SIGNAL 45000, a day the room or the office cannot take), and the
+       booking's dates follow. Runs inside the transaction the caller opened. */
+    public static function moveVenueSlots(int $id, string $from, string $to, string $start, string $end): void
+    {
+        self::mustChange('moveVenueSlots', DB::delete("
+            DELETE FROM venue_booking_slots
+            WHERE booking_id = ?
+        ", [$id]));
+        for ($day = $from; $day <= $to; $day = date('Y-m-d', strtotime($day . ' +1 day'))) {
+            DB::statement('CALL sp_add_venue_slot(?, ?, ?, ?)', [$id, $day, $start . ':00', $end . ':00']);
+        }
+        self::mustChange('moveVenueSlots', DB::update("
+            UPDATE venue_booking_details
+            SET start_date = ?,
+                end_date = ?
+            WHERE booking_id = ?
+        ", [$from, $to, $id]));
+    }
+
+    /* Take a hostel stay off its beds and put it on new dates. The beds are assigned
+       again afterwards, outside any transaction (BookingRules::assignBeds). */
+    public static function clearBedsAndSetStayDates(int $id, string $checkIn, string $checkOut, int $actor, string $note): void
+    {
+        self::saveAs($actor, $note, function () use ($id, $checkIn, $checkOut) {
+            /* none is normal: a stay may have no guests on beds yet */
+            DB::delete("
+                DELETE FROM bed_reservation_nights
+                WHERE booking_id = ?
+            ", [$id]);
+            DB::delete("
+                DELETE FROM bed_reservations
+                WHERE booking_id = ?
+            ", [$id]);
+            self::mustChange('clearBedsAndSetStayDates', DB::update("
+                UPDATE hostel_booking_details
+                SET check_in_date = ?,
+                    check_out_date = ?
+                WHERE booking_id = ?
+            ", [$checkIn, $checkOut, $id]));
+        });
+    }
+
+    /* Record a date move: one more move counted (an office closure does not count), the
+       pay-by deadline worked out again unless it is paid, the History line, and the customer
+       and admins told. Runs inside the transaction the caller opened. */
+    public static function saveDateMove(int $id, bool $officeClosed, int $actor, string $note): void
+    {
+        self::mustChange('saveDateMove', DB::update("
+            UPDATE bookings
+            SET date_moves = date_moves + ?,
+                current_deadline_at = IF(payment_status IN ('confirmed', 'paid_cash'), current_deadline_at, fn_payment_deadline(?))
+            WHERE id = ?
+        ", [$officeClosed ? 0 : 1, $id, $id]));
+        self::writeHistory($id, 'date_moved', $actor, $note);
+        legacy('notifications');
+        notify_booking_parties(DB::connection()->getPdo(), $id, 'booking_moved', $actor, ['note' => $note]);
     }
 }

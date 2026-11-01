@@ -6,8 +6,8 @@ use App\Support\Status;
 use Illuminate\Support\Facades\DB;
 use PDOException;
 
-/* The SQL behind the staff's decisions about money: confirming a payment and judging a
-   GCash receipt. Columns: venusep_schema.sql (search "CREATE TABLE <name>").
+/* The SQL behind the staff's decisions about money: confirming a payment, judging a
+   GCash receipt, reversing a payment. Columns: venusep_schema.sql (search "CREATE TABLE <name>").
 
    payments: the money's own record, one row per transfer or cash payment.
      payment_record_status: submitted, under_review, confirmed, rejected, refunded
@@ -15,10 +15,13 @@ use PDOException;
      verdict (the checker's): accepted, rejected, manual_review
      flags_json: what the checker and staff found, e.g. duplicate_ref, rejected_by_staff,
      overridden_by_staff
+   system_receipts: the System Receipt issued for a confirmed payment; voided on a reversal.
    bookings: the payment_status changes here too (BookingQueries has the bookings notes).
+   users: an administrator's own row, locked for the password check before a reversal.
+   Confirming a payment is done by payment_confirm() (legacy/includes/system-receipt.php).
 
    Triggers that fire here: trg_bookings_after_update and trg_booking_timeline_notify, on
-   the booking (see BookingQueries). None on payments or gcash_receipts. */
+   the booking (see BookingQueries). None on payments, gcash_receipts or system_receipts. */
 class PaymentQueries
 {
     use SavesWithHistory;
@@ -141,6 +144,59 @@ class PaymentQueries
                 WHERE booking_id = ?
                   AND payment_record_status IN ('submitted', 'under_review')
             ", [$bookingId]);
+        });
+    }
+
+    /* The signed-in administrator's row, locked until the reversal commits, with what
+       reauth_verify() (legacy/includes/auth.php) needs to check the password: two wrong
+       tries at the same moment must both count. */
+    public static function lockAccountForPasswordCheck(int $userId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT u.id, u.password_hash, u.account_type, u.is_active,
+                   u.reauth_failed_attempts, u.reauth_lock_level,
+                   CASE WHEN u.reauth_locked_until > NOW()
+                        THEN TIMESTAMPDIFF(SECOND, NOW(), u.reauth_locked_until)
+                        ELSE 0 END AS lock_seconds
+            FROM users u
+            WHERE u.id = ?
+            FOR UPDATE
+        ", [$userId]);
+        return $row ? (array) $row : null;
+    }
+
+    /* Reverse a payment (a fake receipt, or the wrong booking): its payment row is rejected,
+       its System Receipt voided, and the booking owes again, with 48 hours to pay. The
+       customer and the admins are told. Runs inside the transaction the caller opened for
+       the password check. */
+    public static function markPaymentReversed(int $bookingId, string $reason, int $actor, string $note): void
+    {
+        self::signedAs($actor, $note, function () use ($bookingId, $reason, $actor) {
+            /* none is fine: an older paid booking may have no payment row or receipt */
+            DB::update("
+                UPDATE payments
+                SET payment_record_status = 'rejected'
+                WHERE booking_id = ?
+                  AND payment_record_status = 'confirmed'
+            ", [$bookingId]);
+            DB::update("
+                UPDATE system_receipts
+                SET voided_at = NOW(),
+                    voided_by_user_id = ?,
+                    void_reason = ?
+                WHERE booking_id = ?
+                  AND voided_at IS NULL
+            ", [$actor, $reason, $bookingId]);
+            self::mustChange('markPaymentReversed', DB::update("
+                UPDATE bookings
+                SET reservation_status = IF(reservation_status = 'completed', 'approved', reservation_status),
+                    payment_status = IF(payment_method = 'cash', 'await_cash', 'await_gcash'),
+                    current_deadline_at = DATE_ADD(NOW(), INTERVAL 48 HOUR),
+                    updated_by_user_id = ?
+                WHERE id = ?
+            ", [$actor, $bookingId]));
+            legacy('notifications');
+            notify_booking_parties(DB::connection()->getPdo(), $bookingId, 'payment_reversed', $actor, ['note' => $reason]);
         });
     }
 

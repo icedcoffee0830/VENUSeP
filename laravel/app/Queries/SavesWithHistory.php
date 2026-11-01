@@ -11,15 +11,21 @@ use RuntimeException;
    action writes itself. Used by BookingQueries, PaymentQueries and RefundQueries. */
 trait SavesWithHistory
 {
-    /* One save, all or nothing. The two @ variables tell the History trigger who is
-       changing the booking and why, because a trigger cannot see who is signed in.
-       A procedure may set its own note instead: sp_approve_booking does.
-       Returns whatever the save returns. */
+    /* One save, all or nothing, signed for the History trigger. Returns whatever the save returns. */
     private static function saveAs(int $actor, string $note, callable $save): mixed
+    {
+        return self::signedAs($actor, $note, fn () => DB::transaction($save));
+    }
+
+    /* The two @ variables tell the History trigger who is changing the booking and why,
+       because a trigger cannot see who is signed in. A procedure may set its own note
+       instead: sp_approve_booking does. On its own only for a save inside a transaction
+       the caller opened (the payment reversal). */
+    private static function signedAs(int $actor, string $note, callable $write): mixed
     {
         DB::statement('SET @venusep_actor_user_id = ?, @venusep_action_note = ?', [$actor, $note]);
         try {
-            return DB::transaction($save);
+            return $write();
         } finally {
             /* even after a refusal, or the next save would be logged under this person */
             DB::statement('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');

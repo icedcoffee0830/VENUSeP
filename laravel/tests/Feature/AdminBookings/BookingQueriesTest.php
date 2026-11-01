@@ -72,6 +72,12 @@ class BookingQueriesTest extends TestCase
             ['extendPayByDeadline', ['2030-01-01 00:00:00', self::ACTOR, 'x']],
             ['releaseOverdue', [self::ACTOR, 'x']],
             ['allowMoreReceiptAttempts', [5, 10, self::ACTOR, 'x']],
+            ['saveWriteOffRequest', ['x', self::ACTOR, 'x']],
+            ['markWrittenOff', [self::ACTOR, 'x']],
+            ['clearWriteOffRequest', [self::ACTOR, 'x']],
+            ['moveVenueSlots', ['2030-01-01', '2030-01-01', '09:00', '12:00']],
+            ['clearBedsAndSetStayDates', ['2030-01-01', '2030-01-02', self::ACTOR, 'x']],
+            ['saveDateMove', [false, self::ACTOR, 'x']],
         ];
     }
 
@@ -97,6 +103,14 @@ class BookingQueriesTest extends TestCase
         }
         $this->assertNull(DB::table('hostel_booking_details')->where('booking_id', $id)->value('pos_number'));
         $this->assertNull(DB::selectOne('SELECT @venusep_actor_user_id AS who')->who);
+    }
+
+    /* A payment that arrived a moment ago wins over a force cancel: an answer, not a broken save. */
+    public function test_force_cancelling_a_paid_booking_is_false_and_saves_nothing(): void
+    {
+        [$id] = $this->seedVenueBooking('r1', 'approved', 'confirmed');
+        $this->assertFalse(BookingQueries::markForceCancelled($id, 'x', self::ACTOR, 'x'));
+        $this->assertSame('approved', $this->booking($id)->reservation_status);
     }
 
     public function test_saving_the_same_values_is_not_mistaken_for_a_broken_where(): void

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\BookingQueries;
+use App\Support\Status;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -115,7 +117,7 @@ class BookingActionController extends Controller
             $this->clearActor($pdo);
             /* 45000 is a procedure refusing on a real rule — shown verbatim. */
             if ($e instanceof PDOException && $e->getCode() === '45000') {
-                $this->reply(409, ['ok' => false, 'message' => $e->getMessage()]);
+                $this->reply(409, ['ok' => false, 'message' => $e->errorInfo[2] ?? $e->getMessage()]);
             }
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
@@ -264,6 +266,28 @@ class BookingActionController extends Controller
         }
     }
 
+    /* Staff approve a pending request, with or without the USeP discount. */
+    private function approve(Request $request, array $booking, int $actor, string $note): void
+    {
+        // Check
+        if ($booking['reservation_status'] === Status::RELEASED && $booking['approved_at'] === null) {
+            $this->reply(409, ['ok' => false, 'message' => 'This request has expired: it was not approved before its date, so the slot was released.']);
+        }
+        if ($booking['reservation_status'] !== Status::PENDING) {
+            $this->reply(409, ['ok' => false, 'message' => 'Only a pending booking can be approved.']);
+        }
+        $withDiscount = !empty($request->post('discount'));
+        if ($withDiscount && !$booking['is_usep_affiliated']) {
+            $this->reply(400, ['ok' => false, 'message' => 'This booking did not claim USeP affiliation.']);
+        }
+
+        // Save: the rate shown when they booked, kept on the booking
+        $percent = $withDiscount ? (int) $booking['quoted_discount'] : 0;
+        $discount = round((float) $booking['room_price'] * $percent / 100, 2);
+        BookingQueries::approve((int) $booking['id'], $withDiscount, $percent, $discount, $actor,
+            $note !== '' ? $note : ($withDiscount ? 'ID verified; USeP rate applied.' : 'ID verified.'));
+    }
+
     /* The action itself. Returns the outbox id of an email it queued, or null. */
     private function apply(Request $request, PDO $pdo, string $action, array $bk, int $bookingId, int $actor, string $note): ?int
     {
@@ -271,32 +295,7 @@ class BookingActionController extends Controller
         switch ($action) {
 
         /* ---- APPROVE the ID + the reservation. Optionally grant the USeP rate. ---- */
-        case 'approve':
-            if ($bk['reservation_status'] === 'released' && $bk['approved_at'] === null) {
-                $this->reply(409, ['ok' => false, 'message' => 'This request has expired: it was not approved before its date, so the slot was released.']);
-            }
-            if ($bk['reservation_status'] !== 'pending') {
-                $this->reply(409, ['ok' => false, 'message' => 'Only a pending booking can be approved.']);
-            }
-            $withDiscount = !empty($request->post('discount'));
-            if ($withDiscount && !$bk['is_usep_affiliated']) {
-                $this->reply(400, ['ok' => false, 'message' => 'This booking did not claim USeP affiliation.']);
-            }
-            /* Snapshot the rate ONTO the booking. */
-            $pct    = $withDiscount ? (int) $bk['quoted_discount'] : 0;   /* the rate shown when they booked (2026-11-01) */
-            $amount = round((float) $bk['room_price'] * $pct / 100, 2);
-            $this->setActor($pdo, $actor, $note !== '' ? $note : ($withDiscount ? 'ID verified; USeP rate applied.' : 'ID verified.'));
-            $pdo->prepare(
-                'UPDATE bookings
-                    SET affiliation_verified = :v, discount_percent = :p, discount_amount = :d,
-                        total_amount = room_price - :d2, updated_by_user_id = :u
-                  WHERE id = :b'
-            )->execute([':v' => $withDiscount ? 1 : 0, ':p' => $pct, ':d' => $amount,
-                        ':d2' => $amount, ':u' => $actor, ':b' => $bookingId]);
-            /* The procedure decides what 'approved' MEANS for this booking. */
-            $pdo->prepare('CALL sp_approve_booking(:b, :a)')->execute([':b' => $bookingId, ':a' => $actor]);
-            $this->clearActor($pdo);
-            break;
+        case 'approve': $this->approve($request, $bk, $actor, $note); break;
 
         /* ---- REJECT the request. The booking keeps its history; the slot frees. ---- */
         case 'reject':

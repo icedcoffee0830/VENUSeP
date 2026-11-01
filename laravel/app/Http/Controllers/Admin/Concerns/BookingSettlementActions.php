@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin\Concerns;
 
 use App\Http\Controllers\Customer\BookingRules;
 use App\Queries\BookingQueries;
+use App\Queries\RefundQueries;
+use App\Support\Status;
 use Illuminate\Http\Request;
 use PDO;
 
@@ -146,14 +148,15 @@ trait BookingSettlementActions
 
     /* A REFUND THE SCHOOL MADE OUTSIDE THE SYSTEM (staff): recorded so the system reflects
        it. The system never offers this, so it works with the refund switch off. */
-    private function recordOutsideRefund(Request $request, PDO $pdo, array $bk, int $bookingId, int $actor, string $note): void
+    private function recordOutsideRefund(Request $request, array $booking, int $actor, string $note): void
     {
         $reasons = ['closure' => 'venue_unavailable', 'school' => 'other', 'other' => 'other'];
         $labels = ['closure' => 'Office closure', 'school' => 'School decision', 'other' => 'Other'];
         $key = (string) $request->post('reason');
         $ref = mb_substr(trim((string) $request->post('cashier_reference')), 0, 100);
         $on = (string) $request->post('refunded_on');
-        if (!in_array($bk['payment_status'], ['confirmed', 'paid_cash', 'refund_denied'], true)) {
+        // Check
+        if (!in_array($booking['payment_status'], [Status::CONFIRMED, Status::PAID_CASH, Status::REFUND_DENIED], true)) {
             $this->reply(409, ['ok' => false, 'message' => 'Only a paid booking with no refund in progress can have this recorded.']);
         }
         if (!isset($reasons[$key]) || $note === '') {
@@ -166,24 +169,12 @@ trait BookingSettlementActions
         if (!$files) {
             $this->reply(400, ['ok' => false, 'message' => "Attach the proof from the Cashier's record."]);
         }
-        $words = 'Refunded outside the system by the school. ' . $labels[$key] . ': ' . mb_substr($note, 0, 400) . ' Cashier reference ' . $ref . ', ' . date('M j, Y', strtotime($on)) . '.';
 
-        $pdo->beginTransaction();
-        $pdo->prepare(
-            "INSERT INTO refunds (booking_id, refund_status, reason_category, reason, amount_requested, amount_approved,
-                                  requested_by_user_id, reviewed_by_user_id, reviewed_at, completed_at, outside_system, cashier_reference, refunded_on)
-             SELECT b.id, 'completed', :c, :r, b.total_amount, b.total_amount, :u, :u2, NOW(), NOW(), 1, :ref, :on FROM bookings b WHERE b.id = :b"
-        )->execute([':c' => $reasons[$key], ':r' => mb_substr($note, 0, 2000), ':u' => $actor, ':u2' => $actor, ':ref' => $ref, ':on' => $on, ':b' => $bookingId]);
-        $this->setActor($pdo, $actor, $words);
-        $pdo->prepare(
-            "UPDATE bookings SET reservation_status = 'cancelled', payment_status = 'refunded', cancelled_at = NOW(), updated_by_user_id = :u WHERE id = :b"
-        )->execute([':u' => $actor, ':b' => $bookingId]);
-        $this->clearActor($pdo);
-        $pdo->prepare("UPDATE payments SET payment_record_status = 'refunded' WHERE booking_id = :b AND payment_record_status = 'confirmed'")
-            ->execute([':b' => $bookingId]);
-        notify_refund_needs_admin($pdo, $bookingId, $actor, 'refund_recorded');
-        $pdo->commit();
-        $this->storeRefundFiles($bookingId, $files, $actor);
+        // Save, then the proof once it is committed
+        RefundQueries::saveOutsideRefund((int) $booking['id'], $reasons[$key], mb_substr($note, 0, 2000), $ref, $on, $actor,
+            'Refunded outside the system by the school. ' . $labels[$key] . ': ' . mb_substr($note, 0, 400)
+            . ' Cashier reference ' . $ref . ', ' . date('M j, Y', strtotime($on)) . '.');
+        $this->storeRefundFiles((int) $booking['id'], $files, $actor);
     }
 
     /* MOVE A DATE: same length, same price. Staff once, unless the office closed. */

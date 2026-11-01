@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use App\Queries\BookingQueries;
 use App\Queries\PaymentQueries;
+use App\Queries\RefundQueries;
 use App\Support\Status;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -513,6 +514,144 @@ class BookingActionController extends Controller
             '5 more GCash receipt attempts (now ' . $newAllowed . ' in total): ' . $note);
     }
 
+    /* WALK-IN REFUND (Aron 2026-11-01): a walk-in has no account to file from, so staff
+       file it, on the same rule as a customer. The receipt (printed or emailed) must be
+       this booking's. Lost: staff attach the proof they found, and the request waits in
+       'under_review' until an administrator approves it. */
+    private function fileRefund(Request $request, array $booking, int $actor, string $note): void
+    {
+        legacy('documents', 'notifications', 'system-receipt');
+        $id = (int) $booking['id'];
+        // Check
+        if ($booking['customer_user_id'] !== null) {
+            $this->reply(409, ['ok' => false, 'message' => 'The customer files this refund from their own account.']);
+        }
+        $row = bookings_query(['booking_id' => $id])[0] ?? null;
+        if (!$row || !$row['refundable']) {
+            $this->reply(409, ['ok' => false, 'message' => !$booking['refunds_allowed']
+                ? 'This booking was made under the non-refundable policy.'
+                : 'This booking is not eligible for a refund: it must be paid, and its event still ahead.']);
+        }
+        if ($note === '') {
+            $this->reply(400, ['ok' => false, 'message' => 'Write why the guest is asking for a refund.']);
+        }
+        $lost  = !empty($request->post('receipt_lost'));
+        $files = $this->refundFiles($request, 'support');
+        if ($lost && !$files) {
+            $this->reply(400, ['ok' => false, 'message' => 'Attach the proof you found, so an administrator can approve it.']);
+        }
+        if (!$lost) {
+            $issued = receipt_for_booking(venusep_db(), $id);
+            if (!$issued || strcasecmp(trim((string) $request->post('receipt_number')), $issued['number']) !== 0) {
+                $this->reply(400, ['ok' => false, 'message' => 'That receipt number does not match this booking. Check it, or tick "The receipt was lost".']);
+            }
+        }
+        $category = (string) $request->post('reason_category');
+        if (!in_array($category, ['event_cancelled', 'schedule_conflict', 'wrong_room', 'venue_unavailable', 'payment_error'], true)) {
+            $category = 'other';
+        }
+
+        // Save, then the files once it is committed
+        RefundQueries::saveWalkInRefund($id, $lost, $category, mb_substr($note, 0, 2000), $actor,
+            $lost ? 'Walk-in refund filed; the receipt was lost, so an administrator must approve the proof.'
+                  : 'Walk-in refund filed by staff; receipt checked.');
+        $this->storeRefundFiles($id, $files, $actor);
+    }
+
+    /* Staff looked into a missing receipt: more proof for the administrator to read. */
+    private function addRefundProof(Request $request, array $booking, int $actor): void
+    {
+        // Check
+        $files = $this->refundFiles($request, 'support');
+        if (!$files) {
+            $this->reply(400, ['ok' => false, 'message' => 'Choose a file to attach.']);
+        }
+        if (!RefundQueries::hasOpenRefund((int) $booking['id'])) {
+            $this->reply(409, ['ok' => false, 'message' => 'There is no open refund request on this booking.']);
+        }
+
+        // Save: the files are the whole action
+        $this->storeRefundFiles((int) $booking['id'], $files, $actor);
+    }
+
+    /* An administrator accepts the proof for a missing receipt; the payout can then be recorded. */
+    private function approveRefund(array $booking, int $actor): void
+    {
+        // Check
+        if (session('account_type') !== 'admin') {
+            $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can approve this refund.']);
+        }
+
+        // Save: the save itself finds the refund waiting for this approval, or none
+        if (!RefundQueries::markRefundApproved((int) $booking['id'], $actor, 'Proof for the missing receipt accepted by an administrator.')) {
+            $this->reply(409, ['ok' => false, 'message' => 'This refund is not waiting for an approval.']);
+        }
+    }
+
+    /* The checks every refund decision shares: the booking's latest refund, still open,
+       and a reason when the customer will read one. Returns that refund. */
+    private function openRefund(array $booking, bool $reasonRequired, string $note): array
+    {
+        $refund = RefundQueries::findLatestRefund((int) $booking['id']);
+        if (!$refund) {
+            $this->reply(404, ['ok' => false, 'message' => 'There is no refund request on this booking.']);
+        }
+        /* The customer can withdraw while this page is open — re-read, not trusted. */
+        if (!in_array($refund['refund_status'], Status::REFUND_OPEN, true)) {
+            $this->reply(409, ['ok' => false,
+                'message' => 'This request is no longer open — it was ' . str_replace('_', ' ', $refund['refund_status'])
+                           . ' while this page was open. Nothing has been recorded.']);
+        }
+        if ($reasonRequired && $note === '') {
+            $this->reply(400, ['ok' => false, 'message' => 'A reason is required — the customer reads it.']);
+        }
+        return $refund;
+    }
+
+    /* Send a refund back to the customer to fix: PAPERWORK, not a denial. */
+    private function returnRefund(array $booking, int $actor, string $note): void
+    {
+        // Check
+        $refund = $this->openRefund($booking, true, $note);
+        if ($booking['customer_user_id'] === null) {
+            $this->reply(409, ['ok' => false, 'message' => 'A walk-in has no account to correct this from. Deny it, or fix it with the guest here.']);
+        }
+
+        // Save
+        RefundQueries::markRefundReturned((int) $refund['id'], (int) $booking['id'], $note, $actor, 'Refund returned for correction: ' . $note);
+    }
+
+    /* Deny a refund. FINAL — but this booking keeps its date and its paid status. */
+    private function denyRefund(array $booking, int $actor, string $note): void
+    {
+        // Check
+        $refund = $this->openRefund($booking, true, $note);
+
+        // Save
+        RefundQueries::markRefundDenied((int) $refund['id'], (int) $booking['id'], $note, $actor, 'Refund denied: ' . $note);
+    }
+
+    /* THE PAYOUT. Cash or GCash: the staff's call (Aron 2026-11-01). The proof file is optional. */
+    private function payOutRefund(Request $request, array $booking, int $actor, string $note): void
+    {
+        // Check
+        $refund = $this->openRefund($booking, false, $note);
+        /* A missing receipt needs an administrator's approval first (Aron 2026-11-01). */
+        if ($refund['refund_status'] === Status::UNDER_REVIEW || ($refund['official_receipt_pending'] && $refund['refund_status'] !== Status::APPROVED)) {
+            $this->reply(403, ['ok' => false, 'message' => 'The receipt is missing: an administrator has to approve the proof before this is paid.']);
+        }
+        $proof = $this->refundFiles($request, 'proof');
+
+        // Save, then the proof once it is committed. Refunds are always full: never a posted amount.
+        $inCash    = $request->post('payout_method') === 'cash';
+        $payoutRef = $inCash ? '' : trim((string) ($request->post('payout_reference') ?? ''));
+        $payoutTo  = $inCash ? null : cb_normalise_mobile((string) $request->post('payout_to'));
+        RefundQueries::markRefundPaidOut((int) $refund['id'], (int) $booking['id'], (float) $refund['amount_requested'], $inCash, $payoutTo,
+            $payoutRef !== '' ? mb_substr($payoutRef, 0, 100) : null, $note !== '' ? $note : null, $actor,
+            'Refund paid out' . ($inCash ? ' in cash' : '') . ($payoutRef !== '' ? ' · GCash ref ' . $payoutRef : '') . ($note !== '' ? ' · ' . $note : ''));
+        $this->storeRefundFiles((int) $booking['id'], $proof, $actor);
+    }
+
     /* The action itself. Returns the outbox id of an email it queued, or null. */
     private function apply(Request $request, PDO $pdo, string $action, array $bk, int $bookingId, int $actor, string $note): ?int
     {
@@ -540,186 +679,24 @@ class BookingActionController extends Controller
         case 'reject_payment':         $this->rejectPayment($request, $bk, $actor, $note); break;
         case 'allow_receipt_attempts': $this->allowReceiptAttempts($bk, $actor, $note); break;
 
-        /* ================= THE REFUND CHAIN (staff decisions) =================
-           requested -> (returned_for_correction) -> approved -> completed, or
-           -> rejected, or the customer withdraws it. Only 'completed' closes
-           the booking and frees its date.
-           ===================================================================== */
-        /* WALK-IN REFUND (Aron 2026-11-01): a walk-in has no account to file from, so staff
-           file it, on the same rule as a customer. The receipt (printed or emailed) must be
-           this booking's. Lost: staff attach the proof they found, and the request waits in
-           'under_review' until an administrator approves it. */
-        case 'refund_file': {
-            legacy('documents', 'notifications', 'system-receipt');
-            if ($bk['customer_user_id'] !== null) {
-                $this->reply(409, ['ok' => false, 'message' => 'The customer files this refund from their own account.']);
-            }
-            $row = bookings_query(['booking_id' => $bookingId])[0] ?? null;
-            if (!$row || !$row['refundable']) {
-                $this->reply(409, ['ok' => false, 'message' => !$bk['refunds_allowed']
-                    ? 'This booking was made under the non-refundable policy.'
-                    : 'This booking is not eligible for a refund: it must be paid, and its event still ahead.']);
-            }
-            if ($note === '') {
-                $this->reply(400, ['ok' => false, 'message' => 'Write why the guest is asking for a refund.']);
-            }
-            $lost  = !empty($request->post('receipt_lost'));
-            $files = $this->refundFiles($request, 'support');
-            if ($lost && !$files) {
-                $this->reply(400, ['ok' => false, 'message' => 'Attach the proof you found, so an administrator can approve it.']);
-            }
-            if (!$lost) {
-                $issued = receipt_for_booking($pdo, $bookingId);
-                if (!$issued || strcasecmp(trim((string) $request->post('receipt_number')), $issued['number']) !== 0) {
-                    $this->reply(400, ['ok' => false, 'message' => 'That receipt number does not match this booking. Check it, or tick "The receipt was lost".']);
-                }
-            }
-            $category = (string) $request->post('reason_category');
-            if (!in_array($category, ['event_cancelled', 'schedule_conflict', 'wrong_room', 'venue_unavailable', 'payment_error'], true)) {
-                $category = 'other';
-            }
-            $pdo->beginTransaction();
-            $paid = $pdo->prepare("SELECT id FROM payments WHERE booking_id = :b AND payment_record_status = 'confirmed' ORDER BY id DESC LIMIT 1");
-            $paid->execute([':b' => $bookingId]);
-            $pdo->prepare(
-                'INSERT INTO refunds (booking_id, payment_id, refund_status, reason_category, reason, amount_requested, requested_by_user_id)
-                 SELECT b.id, :p, :s, :c, :r, b.total_amount, :u FROM bookings b WHERE b.id = :b'
-            )->execute([':p' => $paid->fetchColumn() ?: null, ':s' => $lost ? 'under_review' : 'requested', ':c' => $category,
-                        ':r' => mb_substr($note, 0, 2000), ':u' => $actor, ':b' => $bookingId]);
-            $this->setActor($pdo, $actor, $lost ? 'Walk-in refund filed; the receipt was lost, so an administrator must approve the proof.'
-                                                : 'Walk-in refund filed by staff; receipt checked.');
-            $pdo->prepare("UPDATE bookings SET payment_status = 'refund_requested', updated_by_user_id = :u WHERE id = :b")
-                ->execute([':u' => $actor, ':b' => $bookingId]);
-            $this->clearActor($pdo);
-            if ($lost) {
-                notify_refund_needs_admin($pdo, $bookingId, $actor);
-            }
-            $pdo->commit();
-            $this->storeRefundFiles($bookingId, $files, $actor);
-            break;
-        }
-
-        /* Staff looked into a missing receipt: more proof for the administrator to read. */
-        case 'refund_add_proof': {
-            $files = $this->refundFiles($request, 'support');
-            if (!$files) {
-                $this->reply(400, ['ok' => false, 'message' => 'Choose a file to attach.']);
-            }
-            $open = $pdo->prepare("SELECT COUNT(*) FROM refunds WHERE booking_id = :b AND refund_status IN ('requested', 'under_review', 'returned_for_correction', 'approved')");
-            $open->execute([':b' => $bookingId]);
-            if (!$open->fetchColumn()) {
-                $this->reply(409, ['ok' => false, 'message' => 'There is no open refund request on this booking.']);
-            }
-            $this->storeRefundFiles($bookingId, $files, $actor);
-            break;
-        }
-
-        /* An administrator accepts the proof for a missing receipt; the payout can then be recorded. */
-        case 'refund_approve': {
-            if (session('account_type') !== 'admin') {
-                $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can approve this refund.']);
-            }
-            $pdo->beginTransaction();
-            $done = $pdo->prepare(
-                "UPDATE refunds SET refund_status = 'approved', reviewed_by_user_id = :u, reviewed_at = NOW()
-                  WHERE booking_id = :b AND (refund_status = 'under_review' OR (refund_status = 'requested' AND official_receipt_pending = 1))"
-            );
-            $done->execute([':u' => $actor, ':b' => $bookingId]);
-            if ($done->rowCount() === 0) {
-                $this->reply(409, ['ok' => false, 'message' => 'This refund is not waiting for an approval.']);
-            }
-            $this->timeline($pdo, $bookingId, 'refund_approved', $actor, 'Proof for the missing receipt accepted by an administrator.');
-            $pdo->commit();
-            break;
-        }
+        /* THE REFUND CHAIN (staff decisions): requested -> (returned_for_correction) ->
+           approved -> completed, or -> rejected, or the customer withdraws it. Only
+           'completed' closes the booking and frees its date. */
+        case 'refund_file':      $this->fileRefund($request, $bk, $actor, $note); break;
+        case 'refund_add_proof': $this->addRefundProof($request, $bk, $actor); break;
+        case 'refund_approve':   $this->approveRefund($bk, $actor); break;
+        case 'refund_return':    $this->returnRefund($bk, $actor, $note); break;
+        case 'refund_deny':      $this->denyRefund($bk, $actor, $note); break;
+        case 'refund_complete':  $this->payOutRefund($request, $bk, $actor, $note); break;
 
         case 'force_cancel':       $this->forceCancel($request, $pdo, $bk, $bookingId, $actor, $note); break;
         case 'write_off_request':  $this->writeOffRequest($pdo, $bk, $bookingId, $actor, $note); break;
         case 'write_off_approve':  $this->writeOffDecide($pdo, $bk, $bookingId, $actor, $note, true); break;
         case 'write_off_decline':  $this->writeOffDecide($pdo, $bk, $bookingId, $actor, $note, false); break;
         case 'reverse_payment':    $this->reversePayment($request, $pdo, $bk, $bookingId, $actor, $note); break;
-        case 'refund_outside':     $this->recordOutsideRefund($request, $pdo, $bk, $bookingId, $actor, $note); break;
+        case 'refund_outside':     $this->recordOutsideRefund($request, $bk, $actor, $note); break;
         case 'check_out':          $this->checkOut($bk, $actor); break;
         case 'move_date':          $this->moveDate($request, $pdo, $bk, $bookingId, $actor); break;
-
-        case 'refund_return':
-        case 'refund_deny':
-        case 'refund_complete': {
-            $rf = $pdo->prepare('SELECT * FROM refunds WHERE booking_id = :b ORDER BY id DESC LIMIT 1');
-            $rf->execute([':b' => $bookingId]);
-            $refund = $rf->fetch();
-            if (!$refund) {
-                $this->reply(404, ['ok' => false, 'message' => 'There is no refund request on this booking.']);
-            }
-            /* The customer can withdraw while this page is open — re-read, not trusted. */
-            if (!in_array($refund['refund_status'], ['requested', 'under_review', 'returned_for_correction', 'approved'], true)) {
-                $this->reply(409, ['ok' => false,
-                    'message' => 'This request is no longer open — it was ' . str_replace('_', ' ', $refund['refund_status'])
-                               . ' while this page was open. Nothing has been recorded.']);
-            }
-            if ($note === '' && $action !== 'refund_complete') {
-                $this->reply(400, ['ok' => false, 'message' => 'A reason is required — the customer reads it.']);
-            }
-
-            if ($action === 'refund_return') {
-                if ($bk['customer_user_id'] === null) {
-                    $this->reply(409, ['ok' => false, 'message' => 'A walk-in has no account to correct this from. Deny it, or fix it with the guest here.']);
-                }
-                /* PAPERWORK, not a denial. */
-                $this->setActor($pdo, $actor, 'Refund returned for correction: ' . $note);
-                $pdo->prepare(
-                    "UPDATE refunds SET refund_status = 'returned_for_correction', reviewed_by_user_id = :u,
-                            reviewed_at = NOW(), notes = :n, correction_due_at = DATE_ADD(NOW(), INTERVAL 48 HOUR)
-                      WHERE id = :r"
-                )->execute([':u' => $actor, ':n' => $note, ':r' => $refund['id']]);
-                $pdo->prepare("UPDATE bookings SET payment_status = 'refund_correction', updated_by_user_id = :u WHERE id = :b")
-                    ->execute([':u' => $actor, ':b' => $bookingId]);
-                $this->clearActor($pdo);
-
-            } elseif ($action === 'refund_deny') {
-                /* FINAL — but this booking keeps its date and its paid status. */
-                $this->setActor($pdo, $actor, 'Refund denied: ' . $note);
-                $pdo->prepare(
-                    "UPDATE refunds SET refund_status = 'rejected', reviewed_by_user_id = :u,
-                            reviewed_at = NOW(), notes = :n WHERE id = :r"
-                )->execute([':u' => $actor, ':n' => $note, ':r' => $refund['id']]);
-                $pdo->prepare("UPDATE bookings SET payment_status = 'refund_denied', updated_by_user_id = :u WHERE id = :b")
-                    ->execute([':u' => $actor, ':b' => $bookingId]);
-                $this->clearActor($pdo);
-
-            } else {
-                /* THE PAYOUT. A missing receipt needs an administrator's approval first (Aron 2026-11-01). */
-                if ($refund['refund_status'] === 'under_review' || ($refund['official_receipt_pending'] && $refund['refund_status'] !== 'approved')) {
-                    $this->reply(403, ['ok' => false, 'message' => 'The receipt is missing: an administrator has to approve the proof before this is paid.']);
-                }
-                /* Cash or GCash: the staff's call (Aron 2026-11-01). The proof file is optional. */
-                legacy('documents');
-                $proof     = $this->refundFiles($request, 'proof');
-                $inCash    = $request->post('payout_method') === 'cash';
-                $payoutRef = $inCash ? '' : trim((string) ($request->post('payout_reference') ?? ''));
-                $payoutTo  = $inCash ? null : cb_normalise_mobile((string) $request->post('payout_to'));
-                $amount    = (float) $refund['amount_requested'];   // refunds are always full: never a posted amount
-                $this->setActor($pdo, $actor, 'Refund paid out' . ($inCash ? ' in cash' : '') . ($payoutRef !== '' ? ' · GCash ref ' . $payoutRef : '') . ($note !== '' ? ' · ' . $note : ''));
-                $pdo->prepare(
-                    "UPDATE refunds SET refund_status = 'completed', amount_approved = :a,
-                            refund_to_number = IF(:cash, NULL, COALESCE(:t, refund_to_number)),
-                            payout_reference = :p, reviewed_by_user_id = :u, reviewed_at = COALESCE(reviewed_at, NOW()),
-                            completed_at = NOW(), notes = CONCAT_WS(' | ', NULLIF(notes,''), :n)
-                      WHERE id = :r"
-                )->execute([':a' => $amount, ':cash' => $inCash ? 1 : 0, ':t' => $payoutTo, ':p' => $payoutRef !== '' ? mb_substr($payoutRef, 0, 100) : null,
-                            ':u' => $actor, ':n' => $note !== '' ? $note : null, ':r' => $refund['id']]);
-                /* ONLY NOW is the booking closed and its date freed. */
-                $pdo->prepare(
-                    "UPDATE bookings SET reservation_status = 'cancelled', payment_status = 'refunded',
-                            cancelled_at = NOW(), updated_by_user_id = :u WHERE id = :b"
-                )->execute([':u' => $actor, ':b' => $bookingId]);
-                $pdo->prepare("UPDATE payments SET payment_record_status = 'refunded' WHERE booking_id = :b AND payment_record_status = 'confirmed'")
-                    ->execute([':b' => $bookingId]);
-                $this->clearActor($pdo);
-                $this->storeRefundFiles($bookingId, $proof, $actor);
-            }
-            break;
-        }
 
         default:
             $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);

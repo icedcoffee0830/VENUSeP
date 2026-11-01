@@ -69,6 +69,9 @@ class BookingQueriesTest extends TestCase
             ['saveOfficialReceiptNumber', ['O', self::ACTOR, 'x']],
             ['markCheckedIn', [self::ACTOR, 'x']],
             ['markCheckedOut', [self::ACTOR, 'x']],
+            ['extendPayByDeadline', ['2030-01-01 00:00:00', self::ACTOR, 'x']],
+            ['releaseOverdue', [self::ACTOR, 'x']],
+            ['allowMoreReceiptAttempts', [5, 10, self::ACTOR, 'x']],
         ];
     }
 

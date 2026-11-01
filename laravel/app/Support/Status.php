@@ -6,7 +6,8 @@ namespace App\Support;
    The full lists, with what each word means: venusep_schema.sql (reservation_statuses, payment_statuses). */
 final class Status
 {
-    /* bookings.reservation_status: where the booking itself stands */
+    /* bookings.reservation_status: where the booking itself stands.
+       gcash_receipts.verdict also uses 'rejected'. */
     public const PENDING = 'pending';
     public const APPROVED = 'approved';
     public const REJECTED = 'rejected';

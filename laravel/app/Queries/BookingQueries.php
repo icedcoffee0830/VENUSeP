@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
    hostel_booking_details: one row per hostel booking: the stay's dates, POS, Official Receipt,
      check-in and check-out.
    booking_timeline: the booking's History, one row per event.
-   Read only: rooms, venues, customers.
+   Read only: rooms, venues, customers, and gcash_receipts (counted).
 
    Triggers that fire here:
      trg_bookings_after_update: on a status change, writes the booking's History line
@@ -54,6 +54,23 @@ class BookingQueries
             WHERE h.booking_id = ?
         ", [$id]);
         return $row ? (array) $row : null;
+    }
+
+    /* How many GCash receipts the booking may upload, and how many it has. */
+    public static function findReceiptAttempts(int $id): array
+    {
+        return (array) DB::selectOne("
+            SELECT b.receipt_attempts_allowed AS allowed,
+                   (SELECT COUNT(*) FROM gcash_receipts g WHERE g.booking_id = b.id) AS used
+            FROM bookings b
+            WHERE b.id = ?
+        ", [$id]);
+    }
+
+    /* The database's time 48 hours from now: deadlines run on the database's clock. */
+    public static function timeIn48Hours(): string
+    {
+        return DB::selectOne('SELECT DATE_ADD(NOW(), INTERVAL 48 HOUR) AS until')->until;
     }
 
     /* Approve a pending request: save the discount, then let sp_approve_booking
@@ -161,6 +178,51 @@ class BookingQueries
                   AND released_at IS NULL
             ", [$id]);
             self::writeHistory($id, 'checked_out', $actor, $note);
+        });
+    }
+
+    /* Reopen an overdue payment until $until (one more extension counted). */
+    public static function extendPayByDeadline(int $id, string $until, int $actor, string $note): void
+    {
+        self::saveAs($actor, $note, function () use ($id, $until, $actor) {
+            self::mustChange('extendPayByDeadline', DB::update("
+                UPDATE bookings
+                SET payment_status = IF(payment_method = 'cash', 'await_cash', 'await_gcash'),
+                    deadline_extensions = deadline_extensions + 1,
+                    current_deadline_at = ?,
+                    updated_by_user_id = ?
+                WHERE id = ?
+            ", [$until, $actor, $id]));
+        });
+    }
+
+    /* Stop waiting for an overdue payment: the booking is released, and the History
+       trigger frees its held dates or beds. */
+    public static function releaseOverdue(int $id, int $actor, string $note): void
+    {
+        self::saveAs($actor, $note, function () use ($id, $actor) {
+            self::mustChange('releaseOverdue', DB::update("
+                UPDATE bookings
+                SET reservation_status = 'released',
+                    payment_status = 'expired',
+                    updated_by_user_id = ?
+                WHERE id = ?
+            ", [$actor, $id]));
+        });
+    }
+
+    /* Raise how many GCash receipts the booking may upload; the History line keeps both numbers. */
+    public static function allowMoreReceiptAttempts(int $id, int $allowedBefore, int $allowedAfter, int $actor, string $note): void
+    {
+        self::saveAs($actor, $note, function () use ($id, $allowedBefore, $allowedAfter, $actor, $note) {
+            self::mustChange('allowMoreReceiptAttempts', DB::update("
+                UPDATE bookings
+                SET receipt_attempts_allowed = ?,
+                    updated_by_user_id = ?
+                WHERE id = ?
+            ", [$allowedAfter, $actor, $id]));
+            self::writeHistory($id, 'receipt_attempts_allowed', $actor, $note,
+                ['allowed_before' => $allowedBefore, 'allowed_after' => $allowedAfter]);
         });
     }
 }

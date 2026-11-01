@@ -1142,7 +1142,8 @@
         } catch (e) {
           mail = Object.assign(mail, { loaded: true, data: null, error: 'Could not reach the server.', busy: 0 });
         }
-        render();
+        /* a redraw would empty a form staff are filling in; the list shows on the next one */
+        if (!cur.fileRefundOpen && !cur.payoutOpen) render();
       }
 
       async function resendMail(id) {

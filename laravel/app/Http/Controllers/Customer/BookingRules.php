@@ -99,6 +99,7 @@ final class BookingRules
         try {
             $v = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'hostel_advance_booking_max_days'")->fetchColumn();
         } catch (PDOException $e) {
+            sql_failed($e);
             return null;
         }
         return ($v === false || (int) $v <= 0) ? null : (int) $v;
@@ -138,7 +139,7 @@ final class BookingRules
             $stmt->execute(($roomCode === null ? [] : [':room' => $roomCode]) + ($customerId === null ? [] : [':c' => $customerId]));
             $rows = $stmt->fetchAll();
         } catch (PDOException $e) {
-            error_log('VENUSeP overdue check: ' . $e->getMessage());
+            sql_failed($e);
             return [];
         }
         $out = [];

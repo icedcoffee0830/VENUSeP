@@ -220,7 +220,7 @@ class BookingSubmitController extends Controller
                    Anything else goes to the SERVER LOG. */
                 $refused = in_array($e->getCode(), ['45000', '40001'], true);
                 if (!$refused) {
-                    error_log('VENUSeP booking-submit (venue): ' . $e->getMessage());
+                    sql_failed($e);
                 }
                 $msg = $refused
                     ? venue_slot_refusal_message($e)
@@ -310,7 +310,7 @@ class BookingSubmitController extends Controller
                 $pdo->commit();
             } catch (PDOException $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }
-                error_log('VENUSeP booking-submit (hostel): ' . $e->getMessage());
+                sql_failed($e);
                 return self::reply(500, ['ok' => false, 'message' => 'Something went wrong, so your booking was not submitted.']);
             }
 
@@ -323,6 +323,9 @@ class BookingSubmitController extends Controller
                 /* Not enough beds for the whole stay, or a hard closure inside it.
                    Remove the booking rather than leave a half-held one behind. */
                 $pdo->prepare('DELETE FROM bookings WHERE id = :b')->execute([':b' => $bookingId]);
+                if ($e instanceof PDOException) {
+                    sql_failed($e);
+                }
                 return self::reply(409, ['ok' => false,
                     'message' => ($e instanceof PDOException && stripos($e->getMessage(), 'maintenance') !== false)
                         ? 'The room is closed for maintenance during that stay. Please pick different dates.'
@@ -342,7 +345,7 @@ class BookingSubmitController extends Controller
         try {
             notify_new_request($pdo, $bookingId, (int) session('user_id'));
         } catch (PDOException $e) {
-            error_log('VENUSeP booking-submit (notify): ' . $e->getMessage());
+            sql_failed($e, optional: true);
         }
 
         $submitted = $pdo->prepare('SELECT submitted_at FROM bookings WHERE id = :b');

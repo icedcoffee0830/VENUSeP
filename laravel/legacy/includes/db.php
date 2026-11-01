@@ -13,6 +13,7 @@
    ===================================================================== */
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 if (!defined('VENUSEP_TZ')) {
     define('VENUSEP_TZ', 'Asia/Manila');
@@ -39,7 +40,30 @@ function venusep_db()
     try {
         return DB::connection()->getPdo();
     } catch (Throwable $e) {
+        /* Pages ask many times; an outage gets one line per request, and its own 503 page. */
+        static $told = false;
+        if (!$told) {
+            $told = true;
+            sql_failed($e, optional: true);
+        }
         return null;
+    }
+}
+
+/* A catch around a query reports here, after its own rollback and clean-up, then goes on
+   to its friendly reply. laravel.log is the one place to look for SQL errors. With APP_DEBUG
+   on the error is rethrown, so it is seen instead of "Something went wrong" or an empty list.
+   A refusal is an answer, not a failure: a procedure's SIGNAL 45000, a deadlock (40001) and
+   a duplicate key (1062) are never rethrown, whatever the caller does with them.
+   $optional: work that must not cost the action around it (a notification, an email).
+   No stack trace in the line: its arguments could carry part of a password. */
+function sql_failed(Throwable $e, bool $optional = false): void
+{
+    $refusal = $e instanceof PDOException
+        && (in_array($e->getCode(), ['45000', '40001'], true) || ($e->errorInfo[1] ?? null) === 1062);
+    Log::error('SQL failed at ' . $e->getFile() . ':' . $e->getLine() . ': ' . $e->getMessage());
+    if (!$refusal && !$optional && config('app.debug')) {
+        throw $e;
     }
 }
 
@@ -70,6 +94,7 @@ function venue_cleanup_gap_minutes()
                 $gap = (int) $v;
             }
         } catch (PDOException $e) {
+            sql_failed($e);
             /* keep the default */
         }
     }
@@ -99,10 +124,10 @@ function venusep_expire_due_bookings()
                 legacy('bookings', 'receipt-emails');
                 mail_status_sweep($pdo);
             } catch (\Throwable $e) {
-                error_log('VENUSeP status emails: ' . $e->getMessage());
+                sql_failed($e, optional: true);
             }
         });
     } catch (\Throwable $e) {
-        error_log('VENUSeP sp_expire_due_bookings: ' . $e->getMessage());
+        sql_failed($e);
     }
 }

@@ -95,6 +95,7 @@ class RefundSubmitController
                 $pdo->commit();
             } catch (PDOException $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }
+                sql_failed($e);
                 return self::reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
             }
             return self::reply(200, ['ok' => true, 'status' => 'withdrawn', 'message' => 'Request withdrawn. Your booking is unchanged.']);
@@ -193,6 +194,7 @@ class RefundSubmitController
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            sql_failed($e);
             return self::reply(500, ['ok' => false, 'message' => 'Something went wrong, so your request was not filed.']);
         }
 

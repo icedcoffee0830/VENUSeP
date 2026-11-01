@@ -144,7 +144,7 @@ class ProfileSaveController
                 $this->reply(409, ['ok' => false, 'field' => 'email',
                     'message' => 'That email address is already used by another account.']);
             }
-            error_log('VENUSeP profile-save (details): ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was saved.']);
         }
 
@@ -224,7 +224,7 @@ class ProfileSaveController
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            error_log('VENUSeP profile-save (password): ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so your password was not changed.']);
         }
 
@@ -236,7 +236,7 @@ class ProfileSaveController
         try {
             remember_forget_all($pdo, $userId);
         } catch (PDOException $e) {
-            error_log('VENUSeP profile-save (forget remembered devices): ' . $e->getMessage());
+            sql_failed($e, optional: true);
         }
         remember_cookie_clear();
         $this->reply(200, ['ok' => true, 'message' => $firstPassword
@@ -256,7 +256,7 @@ class ProfileSaveController
             $stmt->execute([':u' => $userId]);
             $acct = $stmt->fetch();
         } catch (PDOException $e) {
-            error_log('VENUSeP profile-save (' . $action . '): ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
         }
         if (!$acct) {
@@ -286,7 +286,7 @@ class ProfileSaveController
             $pdo->prepare('UPDATE users SET google_sub = NULL WHERE id = :u AND password_hash IS NOT NULL')
                 ->execute([':u' => $userId]);
         } catch (PDOException $e) {
-            error_log('VENUSeP profile-save (google_unlink): ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so Google is still connected.']);
         }
         $this->reply(200, ['ok' => true, 'message' => 'Google was disconnected. Sign in with your email and password from now on.']);
@@ -435,7 +435,7 @@ class ProfileSaveController
             remember_forget_all($pdo, $userId);
             $this->reply(200, ['ok' => true, 'message' => 'Two-step verification is off.']);
         } catch (PDOException $e) {
-            error_log('VENUSeP profile-save (2fa): ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
         }
     }

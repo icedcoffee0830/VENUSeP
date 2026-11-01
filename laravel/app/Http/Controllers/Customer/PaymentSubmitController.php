@@ -315,7 +315,7 @@ class PaymentSubmitController
                         ? 'That GCash reference number has already been used for a booking.'
                         : 'That exact receipt image has already been submitted before.']);
             }
-            error_log('VENUSeP payment-submit: ' . $e->getMessage());
+            sql_failed($e);
             return self::reply(500, ['ok' => false, 'message' => 'Something went wrong, so your payment was not recorded.']);
         }
 

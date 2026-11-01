@@ -448,7 +448,7 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
   the row stays `failed` and staff press Resend. The body is stored when queued, so a
   resend is the identical email. `includes/mailer.php` is the only file that talks to
   the mail library.
-- **Sending:** settings in `includes/mail-config.php`, git-ignored (template:
+- **Sending:** settings in `laravel/legacy/includes/mail-config.php`, git-ignored (template:
   `mail-config.example.php`). Laptops send into **Mailpit**, a local test inbox; only the
   demo machine holds the Gmail App Password. With no settings file nothing is sent: each
   email is written to a `.eml` file outside the web root.
@@ -490,7 +490,7 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
 - **The exchange:** one-time `state` (login CSRF), PKCE S256, and a `nonce` checked in the
   ID token; the token is fetched straight from Google's token endpoint over verified TLS,
   and its issuer, audience, expiry and `email_verified` are checked.
-- **Settings:** `includes/google-config.php`, git-ignored (template:
+- **Settings:** `laravel/legacy/includes/google-config.php`, git-ignored (template:
   `google-config.example.php`). Without it the Google buttons are hidden.
 - **Profile → Account Security** shows both ways of signing in. Adding or removing one
   always needs a fresh proof, never the session alone (built 2026-10-05):

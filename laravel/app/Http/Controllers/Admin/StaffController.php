@@ -71,6 +71,7 @@ class StaffController
                 ];
             }
         } catch (PDOException $e) {
+            sql_failed($e);
             $smRows = [];
             $smVenues = [];
         }
@@ -105,7 +106,7 @@ class StaffController
         try {
             notify_admins($pdo, $kind, (int) $actor, $detail);
         } catch (PDOException $e) {
-            error_log('VENUSeP staff-save (notify): ' . $e->getMessage());
+            sql_failed($e, optional: true);
         }
     }
 
@@ -205,7 +206,7 @@ class StaffController
                 $pdo->prepare('UPDATE staff SET venue_id = :v WHERE user_id = :u')
                     ->execute([':v' => $venue['id'], ':u' => $target]);
             } catch (PDOException $e) {
-                error_log('VENUSeP staff-save (set_venue): ' . $e->getMessage());
+                sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the venue was not changed.']);
             }
             if ((int) $user['old_venue_id'] !== (int) $venue['id']) {
@@ -281,7 +282,7 @@ class StaffController
                             ? 'That employee number already belongs to another account.'
                             : 'That email address already belongs to another account.']);
                 }
-                error_log('VENUSeP staff-save (update): ' . $e->getMessage());
+                sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was saved.']);
             }
             if ($venueGiven && $user['account_type'] === 'staff' && $venue['id'] !== null
@@ -313,7 +314,7 @@ class StaffController
                                       reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :u')
                     ->execute([':h' => venusep_password_hash($new), ':u' => $target]);
             } catch (PDOException $e) {
-                error_log('VENUSeP staff-save (reset_password): ' . $e->getMessage());
+                sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the password was not changed.']);
             }
             \App\Http\Controllers\Auth\SignInThrottle::passed((string) $user['email']);   // a forgotten password often means a sign-in lock too
@@ -349,7 +350,7 @@ class StaffController
                 $pdo->prepare('UPDATE users SET is_active = :a WHERE id = :u')
                     ->execute([':a' => $active, ':u' => $target]);
             } catch (PDOException $e) {
-                error_log('VENUSeP staff-save (set_active): ' . $e->getMessage());
+                sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
             }
             if ((int) $user['is_active'] !== $active) {

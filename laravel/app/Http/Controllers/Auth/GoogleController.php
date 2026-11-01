@@ -125,7 +125,8 @@ class GoogleController
                     }
                 }
             } catch (PDOException $e) {
-                $this->fail(self::GC_GENERIC, $purpose . ' failed: ' . $e->getMessage());
+                sql_failed($e);
+                $this->fail(self::GC_GENERIC);
             }
             return $this->headers(redirect()->to(route('customer.customer-profile') . '#accountSecurityTitle'));
         }
@@ -133,7 +134,8 @@ class GoogleController
         try {
             $who = google_resolve($pdo, $sub, $email);
         } catch (PDOException $e) {
-            $this->fail(self::GC_GENERIC, 'resolve failed: ' . $e->getMessage());
+            sql_failed($e);
+            $this->fail(self::GC_GENERIC);
         }
 
         switch ($who['action']) {

@@ -74,7 +74,7 @@ class CustomerLoginController
                         if ($e->getCode() === '23000') {
                             $loginNotice = 'This email is already registered. Log in with your email and password. You can connect Google from your profile afterwards.';
                         } else {
-                            error_log('VENUSeP Google sign-up: ' . $e->getMessage());
+                            sql_failed($e);
                             $loginNotice = 'Something went wrong, so the account was not created. Please try again.';
                         }
                         $newUserId = null;

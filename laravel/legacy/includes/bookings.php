@@ -157,6 +157,7 @@ function bookings_query(array $opts = []) {
         $stmt->execute($args);
         $rows = $stmt->fetchAll();
     } catch (PDOException $e) {
+        sql_failed($e);
         return [];
     }
 
@@ -388,6 +389,7 @@ function booking_refund_documents($bookingId) {
                                 WHERE booking_id = :b AND document_type = 'refund_support' ORDER BY id");
         $stmt->execute([':b' => (int) $bookingId]);
     } catch (PDOException $e) {
+        sql_failed($e);
         return [];
     }
     $out = [];
@@ -419,6 +421,7 @@ function booking_occupants($bookingId) {
         $stmt->execute([':b' => (int) $bookingId]);
         return $stmt->fetchAll();
     } catch (PDOException $e) {
+        sql_failed($e);
         return [];
     }
 }
@@ -568,6 +571,7 @@ function transaction_rows($customerId = null) {
             $stmt = $pdo->query('SELECT DISTINCT booking_id FROM system_receipts WHERE booking_id IN (' . implode(',', $ids) . ')');
             $hasReceipt = array_flip(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
         } catch (PDOException $e) {
+            sql_failed($e);
             // no Receipt buttons rather than a broken page
         }
     }
@@ -695,7 +699,7 @@ function report_quarters($count = 4, $now = null) {
                 ? round((float) $r['revenue'] / (int) $r['paid_bookings'])
                 : 0;
         }
-    } catch (PDOException $e) { /* the zeroed window still renders */ }
+    } catch (PDOException $e) { sql_failed($e); /* the zeroed window still renders */ }
 
     return array_values($out);
 }
@@ -744,6 +748,7 @@ function report_by_venue($year = null, $quarter = null) {
         $stmt->execute($args);
         return $stmt->fetchAll();
     } catch (PDOException $e) {
+        sql_failed($e);
         return [];
     }
 }
@@ -788,6 +793,7 @@ function calendar_events($customerId = null) {
                 }
             }
         } catch (PDOException $e) {
+            sql_failed($e);
             $firstSlot = [];
         }
     }
@@ -858,6 +864,7 @@ function booking_slots($bookingId) {
         $stmt->execute([':b' => (int) $bookingId]);
         return $stmt->fetchAll();
     } catch (PDOException $e) {
+        sql_failed($e);
         return [];
     }
 }
@@ -902,6 +909,7 @@ function booking_document_ids($bookingId) {
         }
         return $out;
     } catch (PDOException $e) {
+        sql_failed($e);
         return [];
     }
 }
@@ -932,6 +940,7 @@ function booking_receipt_attempts($bookingId) {
         }
         return $out;
     } catch (PDOException $e) {
+        sql_failed($e);
         return [];
     }
 }
@@ -968,6 +977,7 @@ function booking_receipt($bookingId) {
         $r['flags'] = is_array($flags) ? $flags : [];
         return $r;
     } catch (PDOException $e) {
+        sql_failed($e);
         return null;
     }
 }
@@ -1027,7 +1037,7 @@ function booking_history_events(array $b) {
                     'm' => (string) $t['note'],
                 ];
             }
-        } catch (PDOException $e) { /* the derived events above still stand */ }
+        } catch (PDOException $e) { sql_failed($e); /* the derived events above still stand */ }
     }
     return $events;
 }
@@ -1163,7 +1173,7 @@ if (!function_exists('status_badge_maps')) {
                 }
             }
         } catch (PDOException $e) {
-            error_log('status_badge_maps: ' . $e->getMessage());
+            sql_failed($e);
         }
         $cached = $maps;
         return $maps;

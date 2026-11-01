@@ -59,6 +59,7 @@ function faq_sections()
             $cache[$row['section_key']] = $row['label'];
         }
     } catch (PDOException $e) {
+        sql_failed($e);
         $cache = [];
     }
     return $cache;
@@ -95,6 +96,7 @@ function faqs_by_section($includeHidden = false, $policy = null)
             $out[$row['section_key']][] = $row;
         }
     } catch (PDOException $e) {
+        sql_failed($e);
         $out = [];
     }
     return $out;

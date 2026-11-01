@@ -16,7 +16,7 @@
                      if they gave an address at the counter
      account holders nothing automatic — only "Email me this receipt"
 
-   SETTINGS come from includes/mail-config.php (git-ignored; template in
+   SETTINGS come from legacy/includes/mail-config.php (git-ignored; template in
    mail-config.example.php). With no settings file the transport is 'log':
    each email is written as a .eml file outside the web root and nothing
    leaves the machine, so a fresh checkout can never email a real person.
@@ -43,7 +43,7 @@ function mail_config_from(string $path): array
         'password'   => '',
         'from_email' => 'noreply@venusep.test',
         'from_name'  => 'VENUSeP',
-        'base_url'   => 'http://localhost/VENUSeP',
+        'base_url'   => config('app.url'),
         'redirect_all_to' => '',
     ];
     if (!is_file($path)) {
@@ -156,8 +156,8 @@ function mail_send(PDO $pdo, int $outboxId, ?array $config = null): bool
                 "UPDATE email_outbox SET status = 'failed', last_error = :e,
                         attempts = attempts + 1 WHERE id = :id"
             )->execute([':e' => mb_substr($error, 0, 500), ':id' => $outboxId]);
-        } catch (\Throwable $ignored) {
-            // the database itself is the problem; the error_log line below still records it
+        } catch (\Throwable $dbErr) {
+            sql_failed($dbErr, optional: true);   // the database itself is the problem; the send must still answer false
         }
         error_log('VENUSeP mail #' . $outboxId . ' failed: ' . $error);
         return false;

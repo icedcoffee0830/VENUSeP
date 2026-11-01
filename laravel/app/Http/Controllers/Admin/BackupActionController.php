@@ -142,7 +142,7 @@ class BackupActionController
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            error_log('VENUSeP backup-action (re-auth): ' . $e->getMessage());
+            sql_failed($e);
             return $this->bk(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was restored.']);
         }
 

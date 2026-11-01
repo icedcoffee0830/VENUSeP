@@ -47,6 +47,6 @@ function venusep_password_upgrade(PDO $pdo, int $userId, string $plain, string $
         $pdo->prepare('UPDATE users SET password_hash = :h WHERE id = :u AND password_hash = :old')
             ->execute([':h' => venusep_password_hash($plain), ':u' => $userId, ':old' => $hash]);
     } catch (PDOException $e) {
-        error_log('VENUSeP password upgrade: ' . $e->getMessage());
+        sql_failed($e, optional: true);
     }
 }

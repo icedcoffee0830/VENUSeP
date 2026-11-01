@@ -25,6 +25,7 @@ class BookingHistoryController
                 $bhStmt = $bhPdo->query('SELECT DISTINCT booking_id FROM system_receipts WHERE booking_id IN (' . implode(',', $bhIds) . ')');
                 $bhReceipts = array_flip(array_map('intval', $bhStmt->fetchAll(PDO::FETCH_COLUMN)));
             } catch (PDOException $e) {
+                sql_failed($e);
                 // no Receipt buttons rather than a broken page
             }
         }

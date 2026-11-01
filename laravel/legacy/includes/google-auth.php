@@ -60,7 +60,7 @@
    copy has NO google-config.php, so google_enabled() is false and every
    Google button stays hidden (the old "not configured" behaviour).
 
-   SETTINGS: includes/google-config.php (git-ignored; template in
+   SETTINGS: legacy/includes/google-config.php (git-ignored; template in
    google-config.example.php). Without it the Google buttons are hidden.
    ===================================================================== */
 

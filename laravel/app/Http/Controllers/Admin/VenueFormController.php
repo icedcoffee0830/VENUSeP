@@ -43,6 +43,7 @@ class VenueFormController extends Controller
                       WHERE u.account_type = 'staff' ORDER BY s.full_name"
                 )->fetchAll();
             } catch (PDOException $e) {
+                sql_failed($e);
                 $vfStaff = [];
             }
         }

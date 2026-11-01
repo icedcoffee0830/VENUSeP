@@ -58,6 +58,7 @@ function refund_setting_details()
             ];
         }
     } catch (PDOException $e) {
+        sql_failed($e);
         $cache = null;
     }
     return $cache;

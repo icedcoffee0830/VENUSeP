@@ -196,6 +196,7 @@ function rp_add_photo($code, $tmpPath, $originalName, $uploadedByUserId, &$error
     ]);
   } catch (Throwable $e) {
     @unlink($dest);
+    sql_failed($e);
     $error = 'Could not save the photo record.';
     return null;
   }
@@ -293,6 +294,7 @@ function rp_save_pano($code, $tmpPath, $originalName, $uploadedByUserId, &$error
     ]);
   } catch (Throwable $e) {
     @unlink($dest);
+    sql_failed($e);
     $error = 'Could not save the 360° photo record.';
     return null;
   }

@@ -158,11 +158,11 @@ class VenueSaveController extends Controller
                 $this->reply(409, ['ok' => false, 'error' => 'duplicate',
                     'message' => 'A venue with that name already exists.']);
             }
-            error_log('VENUSeP venue-save: ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the venue was not saved.']);
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            error_log('VENUSeP venue-save: ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the venue was not saved.']);
         }
     }
@@ -205,7 +205,7 @@ class VenueSaveController extends Controller
                 notify_admins($pdo, 'staff_moved', (int) session('user_id'), ['email' => $email, 'venue' => $venueName]);
             }
         } catch (PDOException $e) {
-            error_log('VENUSeP venue-save (notify): ' . $e->getMessage());
+            sql_failed($e, optional: true);
         }
     }
 }

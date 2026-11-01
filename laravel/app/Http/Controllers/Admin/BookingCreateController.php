@@ -110,7 +110,7 @@ class BookingCreateController extends Controller
                 $stmt->execute([':c' => $c['customerId']]);
                 $row = $stmt->fetch();
             } catch (PDOException $e) {
-                error_log('VENUSeP booking-create (customer): ' . $e->getMessage());
+                sql_failed($e);
                 $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
             }
             if (!$row) {
@@ -155,7 +155,7 @@ class BookingCreateController extends Controller
             $roomStmt->execute([':c' => $roomCode]);
             $room = $roomStmt->fetch();
         } catch (PDOException $e) {
-            error_log('VENUSeP booking-create (room): ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
         }
         if (!$room || !$room['is_active'] || $room['room_type'] !== ($type === 'hostel' ? 'hostel' : 'event')) {
@@ -313,7 +313,7 @@ class BookingCreateController extends Controller
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            error_log('VENUSeP booking-create (hostel): ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
         }
 
@@ -322,6 +322,9 @@ class BookingCreateController extends Controller
             BookingRules::assignBeds($pdo, (int) $room['id'], $bookingId, $occIds, $checkIn, $checkOut);
         } catch (Throwable $e) {
             $removeStay();
+            if ($e instanceof PDOException) {
+                sql_failed($e);
+            }
             $this->reply(409, ['ok' => false,
                 'message' => ($e instanceof PDOException && stripos($e->getMessage(), 'maintenance') !== false)
                     ? 'The room is closed for maintenance during that stay. Pick other dates.'
@@ -356,8 +359,8 @@ class BookingCreateController extends Controller
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            error_log('VENUSeP booking-create (hostel approve + payment): ' . $e->getMessage());
             $removeStay();
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created and nothing was charged.']);
         }
 
@@ -502,7 +505,7 @@ class BookingCreateController extends Controller
                1213, nothing was saved) — told like a taken slot. */
             $refused = in_array($e->getCode(), ['45000', '40001'], true);
             if (!$refused) {
-                error_log('VENUSeP booking-create: ' . $e->getMessage());
+                sql_failed($e);
             }
             $this->reply($refused ? 409 : 500, ['ok' => false,
                 'message' => $refused
@@ -521,6 +524,7 @@ class BookingCreateController extends Controller
             $after->execute([':b' => $bookingId]);
             $row = $after->fetch();
         } catch (PDOException $e) {
+            sql_failed($e, optional: true);
             $row = ['submitted_at' => null, 'current_deadline_at' => null];
         }
 

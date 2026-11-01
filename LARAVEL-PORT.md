@@ -1,9 +1,8 @@
 # VENUSeP → Laravel port — the rules every porter follows
 
 Started 2026-10-29 (overnight run). Branch `laravel`. The Laravel app lives in `laravel/`.
-The old plain-PHP site (repo root: `admin/`, `customer/`, `includes/`, root `*.php`) stays
-exactly where it is — it is the REFERENCE you port from, and the team's live code.
-**Never edit anything outside `laravel/` except this file.**
+The old plain-PHP site was the reference for the port. It was deleted in the first cleanup
+(2026-11-01) and is still in git at tag `before-cleanup`; "the old site" below means that.
 
 ## What "done" means for a page
 

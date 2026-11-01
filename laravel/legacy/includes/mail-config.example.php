@@ -1,6 +1,6 @@
 <?php
 /* =====================================================================
-   MAIL SETTINGS — TEMPLATE. Copy this file to includes/mail-config.php
+   MAIL SETTINGS — TEMPLATE. Copy this file to legacy/includes/mail-config.php
    (git-ignored) and fill it in there. NEVER commit the copy: on the demo
    machine it holds a Gmail App Password.
 

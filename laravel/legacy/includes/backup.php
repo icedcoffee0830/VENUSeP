@@ -15,7 +15,7 @@
      photos/avatars   assets/img/avatars        (profile pictures)
      manifest.json    who made it, when, and the LAYOUT VERSION
    NOT included: the code (git has it) and the secret config files
-   (includes/mail-config.php, google-config.php) — those belong to each
+   (legacy/includes/mail-config.php, google-config.php) — those belong to each
    machine and must never travel in a downloadable file.
 
    .tar.gz because PHP's zip extension is off on this XAMPP; Phar + zlib

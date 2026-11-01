@@ -26,7 +26,7 @@ Thumbs.db
 # VENUSeP: each worktree points its tests at its own copy of the database
 .env.testing
 
-# Secrets: Google sign-in and mail settings for the Laravel copy (templates in ../includes/*.example.php)
+# Secrets: Google sign-in and mail settings for the Laravel copy (templates next to them: *.example.php)
 /legacy/includes/google-config.php
 /legacy/includes/mail-config.php
 /public/assets/img/avatars/

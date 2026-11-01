@@ -1,6 +1,6 @@
 # VENUSeP: run it on your computer
 
-The system now runs on Laravel, in the `laravel/` folder. The old PHP files in the main folder are no longer used.
+The system runs on Laravel, in the `laravel/` folder.
 
 ## What you need
 
@@ -109,7 +109,7 @@ The counter uses a paper form: guest, room, dates, ID checked and amount taken. 
 ## Good to know
 
 - **Emails:** nothing is really sent. Each email is saved as a file instead, unless you add a mail settings file.
-- **Google sign-in:** the button stays off until you add a settings file. The template is `includes/google-config.example.php`; copy it to `laravel/legacy/includes/google-config.php`. Never commit it.
+- **Google sign-in:** the button stays off until you add a settings file. The template is `laravel/legacy/includes/google-config.example.php`; copy it to `laravel/legacy/includes/google-config.php`. Never commit it.
 - **IDs and receipts:** use fake ones only while testing, never a real person's.
 - **Automated tests:** `php artisan test` needs its own test database. The browser tester (`venusep:flows`) also needs a snapshot file that isn't in the repo, so ask Aron for it.
 - **Project rules and decisions:** see `HANDOFF.md` section 13 and `DB-DECISIONS.md`.

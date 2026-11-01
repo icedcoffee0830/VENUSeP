@@ -22,7 +22,7 @@ next phase, deliberately not started.
 |---|---|
 | The Laravel app | `C:\xamp5\htdocs\VENUSeP-laravel\laravel\` (git branch `laravel`) |
 | The rules every porter followed | `C:\xamp5\htdocs\VENUSeP-laravel\LARAVEL-PORT.md` — **read this first** |
-| The old plain-PHP site | `C:\xamp5\htdocs\VENUSeP\` (branch `Aron`) — untouched by the port |
+| The old plain-PHP site | Deleted by cleanup-1 (2026-11-01); still in git at tag `before-cleanup` |
 | Fixes for 6 old-site bugs | branch `bugfixes` (commit `8164f6a`), worktree `C:\xamp5\htdocs\VENUSeP-laravel-helpers\fixes` — **not merged into `Aron` yet** |
 | Flow tester (in progress) | branch `lv-flows`, worktree `C:\xamp5\htdocs\VENUSeP-laravel-helpers\flows` |
 | Helper worktrees (finished, already merged) | `C:\xamp5\htdocs\VENUSeP-laravel-helpers\<area>` on branches `lv-auth`, `lv-cbook`, `lv-cacct`, `lv-abook`, `lv-venues`, `lv-admina`, `lv-adminb`, `lv-tester` — safe to delete |
@@ -143,7 +143,7 @@ Aron said to record these, not change code. Each is in BOTH the old site and the
    purpose (it holds the secret), so it exists only on the machine where it was made — it is NOT
    on Aron's laptop for either site. Without it the button stays hidden / says "not set up".
    To enable: get the id/secret (Google Cloud → project "VENUSeP" → Google Auth Platform →
-   Clients, or ask Francis), copy `includes/google-config.example.php` to the path above, fill
+   Clients, or ask Francis), copy `laravel/legacy/includes/google-config.example.php` to the path above, fill
    it in, and make `redirect_uri` match an Authorized redirect URI in that client exactly
    (old site: `http://localhost/VENUSeP/customer/google-callback.php`; Laravel:
    `http://localhost:8000/customer/google-callback`, browse via `localhost`). Aron is trying this.
@@ -184,7 +184,7 @@ All on the staff side, in both sites. File paths are the Laravel copy.
   Live FAQ pages link correctly. This is the "2 failing" in `venusep:check`.
 - **Google sign-in** is switched off in the Laravel copy (no settings file). To switch it on:
   put a `google-config.php` in `laravel/legacy/includes/` (template:
-  `includes/google-config.example.php`; it is git-ignored) with
+  `google-config.example.php` next to it; the copy is git-ignored) with
   `redirect_uri` = `http://localhost:8000/customer/google-callback`, add that exact address to
   the Google Cloud client's redirect URIs, and browse via `localhost`, not `127.0.0.1`.
   Aron was about to try this himself.

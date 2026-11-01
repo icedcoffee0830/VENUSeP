@@ -16,7 +16,7 @@
                      if they gave an address at the counter
      account holders nothing automatic — only "Email me this receipt"
 
-   SETTINGS come from includes/mail-config.php (git-ignored; template in
+   SETTINGS come from legacy/includes/mail-config.php (git-ignored; template in
    mail-config.example.php). With no settings file the transport is 'log':
    each email is written as a .eml file outside the web root and nothing
    leaves the machine, so a fresh checkout can never email a real person.

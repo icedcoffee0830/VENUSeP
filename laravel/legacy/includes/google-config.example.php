@@ -1,7 +1,7 @@
 <?php
 /* =====================================================================
    GOOGLE SIGN-IN SETTINGS — TEMPLATE. Copy this file to
-   includes/google-config.php (git-ignored) and fill it in there. NEVER
+   legacy/includes/google-config.php (git-ignored) and fill it in there. NEVER
    commit the copy: it holds the OAuth client secret.
 
    With no google-config.php (or an empty client_id), the "Continue with

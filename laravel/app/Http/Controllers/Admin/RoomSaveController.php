@@ -421,6 +421,9 @@ class RoomSaveController extends Controller
                 $o = $old->fetch() ?: ['attendee_capacity' => 0, 'fee_per_day' => 0];
                 $newCap = $capGiven ? $cap : (int) $o['attendee_capacity'];
                 $newFee = $feeGiven ? $fee : (float) $o['fee_per_day'];
+                if (abs($newFee - (float) $o['fee_per_day']) > 0.004 && session('account_type') !== 'admin') {
+                    $this->reply(403, ['ok' => false, 'error' => 'admin_price', 'message' => 'Only an administrator can change a price.']);
+                }
                 $pdo->prepare(
                     'INSERT INTO event_room_details (room_id, attendee_capacity, fee_per_day) VALUES (:r, :c, :f)
                      ON DUPLICATE KEY UPDATE attendee_capacity = VALUES(attendee_capacity), fee_per_day = VALUES(fee_per_day)'
@@ -451,6 +454,9 @@ class RoomSaveController extends Controller
                 $pdo->prepare(
                     'UPDATE hostel_room_details SET rate_per_head_per_night = :p, cr_type = :c, check_in_time = :i, check_out_time = :o WHERE room_id = :r'
                 )->execute([':p' => $hRate, ':c' => $hCr, ':i' => $hIn . ':00', ':o' => $hOut . ':00', ':r' => $rid]);
+                if (abs($hRate - $oldRate) > 0.004 && session('account_type') !== 'admin') {
+                    $this->reply(403, ['ok' => false, 'error' => 'admin_price', 'message' => 'Only an administrator can change a price.']);
+                }
                 if (abs($hRate - $oldRate) > 0.004) {
                     $notes[] = 'The new rate applies to new bookings; existing stays keep the price they were booked at.';
                 }

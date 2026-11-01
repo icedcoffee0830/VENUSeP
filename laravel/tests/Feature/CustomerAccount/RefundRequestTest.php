@@ -56,7 +56,7 @@ class RefundRequestTest extends TestCase
         $oldAllowed = DB::table('bookings')->where('id', 28)->value('refunds_allowed');
         try {
             DB::table('hostel_booking_details')->where('booking_id', 28)->update(['check_in_date' => '2027-06-15', 'check_out_date' => '2027-06-17']);
-            DB::table('bookings')->where('id', 28)->update(['refunds_allowed' => 1]);
+            DB::table('bookings')->where('id', 28)->update(['refunds_allowed' => 1, 'reservation_status' => 'approved']);
             $this->actingAsCustomer('rafael.lim@gmail.com')
                 ->get(route('customer.refund-request', ['booking' => $this->ref(28)]))
                 ->assertOk()

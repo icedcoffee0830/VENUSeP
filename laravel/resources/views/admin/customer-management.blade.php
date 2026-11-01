@@ -363,7 +363,7 @@
         const disable = row.status === 'Active';
         const ok = await venusepConfirm(
           disable
-            ? 'They will be signed out immediately and cannot sign in or book again until re-enabled. Their existing bookings and history are unaffected.'
+            ? (row.open ? 'Warning: they have ' + row.open + ' upcoming or unpaid booking(s), which stay as they are. ' : '') + 'They will be signed out immediately and cannot sign in or book again until re-enabled. Their existing bookings and history are unaffected.'
             : 'They will be able to sign in and book again.',
           { title: (disable ? 'Disable ' : 'Re-enable ') + row.name + '?', okLabel: disable ? 'Disable' : 'Re-enable', danger: disable });
         if (!ok) return;

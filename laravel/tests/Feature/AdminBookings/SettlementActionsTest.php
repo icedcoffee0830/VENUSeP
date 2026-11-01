@@ -118,13 +118,14 @@ class SettlementActionsTest extends TestCase
     public function test_reversing_needs_a_reason_and_the_password_then_voids_the_receipt(): void
     {
         [$id, $ref] = $this->paidWithReceipt();
+        $this->useKnownAdminPassword();
         $this->actingAsAdmin();
         $this->act(['booking' => $ref, 'action' => 'reverse_payment', 'reason' => 'fake', 'note' => 'short', 'password' => 'x'])->assertStatus(400);
         $this->act(['booking' => $ref, 'action' => 'reverse_payment', 'reason' => 'fake', 'note' => 'No money in the app', 'password' => ''])->assertStatus(400);
         $this->act(['booking' => $ref, 'action' => 'reverse_payment', 'reason' => 'fake', 'note' => 'No money in the app', 'password' => 'wrong'])->assertStatus(401);
         $this->assertSame('confirmed', $this->booking($id)->payment_status);
 
-        $this->act(['booking' => $ref, 'action' => 'reverse_payment', 'reason' => 'fake', 'note' => 'No money in the app', 'password' => 'admin123'])->assertOk();
+        $this->act(['booking' => $ref, 'action' => 'reverse_payment', 'reason' => 'fake', 'note' => 'No money in the app', 'password' => $this->pw])->assertOk();
         $this->assertSame('await_gcash', $this->booking($id)->payment_status);
         $this->assertNotNull(DB::table('system_receipts')->where('booking_id', $id)->value('voided_at'));
         $this->assertSame('rejected', DB::table('payments')->where('booking_id', $id)->value('payment_record_status'));

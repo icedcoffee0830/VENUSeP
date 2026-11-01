@@ -92,7 +92,17 @@ function venusep_expire_due_bookings()
         $pdo->exec('CALL sp_expire_due_bookings()');
         require_once __DIR__ . '/documents.php';
         doc_remove_finished_ids($pdo);
-    } catch (PDOException $e) {
+        /* After the response: an email must not slow a page, and loading the booking
+           code here, inside a function, would hide its variables from the page. */
+        app()->terminating(function () use ($pdo) {
+            try {
+                legacy('bookings', 'receipt-emails');
+                mail_status_sweep($pdo);
+            } catch (\Throwable $e) {
+                error_log('VENUSeP status emails: ' . $e->getMessage());
+            }
+        });
+    } catch (\Throwable $e) {
         error_log('VENUSeP sp_expire_due_bookings: ' . $e->getMessage());
     }
 }

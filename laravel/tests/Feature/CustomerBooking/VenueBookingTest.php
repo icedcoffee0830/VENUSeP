@@ -14,7 +14,7 @@ class VenueBookingTest extends TestCase
             ->assertSee('Alumni Grand Ballroom')                       /* an active venue room */
             ->assertDontSee('Alumni Boardroom')                        /* an inactive one */
             ->assertSee('Hostel Room 1')
-            ->assertSee('USeP student, faculty or staff?')             /* the nudge, not the USeP rate */
+            ->assertSee('USeP student, faculty, staff or alumni?')             /* the nudge, not the USeP rate */
             ->assertSee(route('customer.room-reservation') . '?room=r1', false)
             ->assertSee(route('customer.hostel-reservation') . '?room=h1', false)
             ->assertSee(route('customer.customer-login'), false)       /* the nav: Log in */
@@ -34,7 +34,7 @@ class VenueBookingTest extends TestCase
     public function test_a_gmail_customer_sees_full_prices(): void
     {
         $this->actingAsCustomer()->get(route('customer.venues'))->assertOk()
-            ->assertSee('USeP student, faculty or staff?')
+            ->assertSee('USeP student, faculty, staff or alumni?')
             ->assertDontSee('You are signed in with a USeP account');
     }
 

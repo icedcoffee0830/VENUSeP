@@ -110,6 +110,67 @@ function re_paragraph(string $html, string $pad = '20px 32px 0 32px', string $si
 }
 
 /* ---------------------------------------------------------------------
+   Status emails (2026-11-01): the moments a customer must not miss if they
+   never open the site. Account holders and walk-ins who gave an address.
+   --------------------------------------------------------------------- */
+function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note, ?int $actorUserId): ?int
+{
+    $words = [
+        'booking_approved'  => ['Your booking was approved', 'Your booking request was approved.'],
+        'booking_rejected'  => ['Your booking request was not approved', 'Your booking request was not approved. If the problem was your ID, you can send a new one from My Bookings.'],
+        'payment_due'       => ['Your payment is due', 'Your event is over, so your payment is now due.'],
+        'payment_overdue'   => ['Your payment is overdue', 'Your payment is overdue. You cannot make new online bookings with this office until it is paid.'],
+        'booking_cancelled' => ['Your booking was cancelled', 'Your booking was cancelled by the office.'],
+    ];
+    if (!isset($words[$kind])) {
+        return null;
+    }
+    $st = $pdo->prepare('SELECT c.full_name, COALESCE(u.email, c.contact_email) AS email
+                           FROM bookings b JOIN customers c ON c.id = b.customer_id LEFT JOIN users u ON u.id = c.user_id WHERE b.id = :b');
+    $st->execute([':b' => $bookingId]);
+    $who = $st->fetch();
+    $rows = bookings_query(['booking_id' => $bookingId]);
+    if (!$who || trim((string) $who['email']) === '' || !$rows) {
+        return null;
+    }
+    $b = $rows[0];
+    [$title, $intro] = $words[$kind];
+    $first = re_first_name((string) $who['full_name']);
+    $line = $b['roomName'] . ', ' . $b['venueName'] . '. ' . booking_date_label($b) . '. Reference ' . $b['bookingId'] . '.';
+    $html = re_frame($line, $title, $first, bh_e($intro),
+        re_paragraph(bh_e($line)) . ($note !== '' ? re_paragraph(bh_e($note)) : ''),
+        'You&rsquo;re getting this because of your VENUSeP booking ' . bh_e($b['bookingId']) . '.');
+    return mail_enqueue($pdo, [
+        'kind' => $kind, 'booking_id' => $bookingId, 'requested_by_user_id' => $actorUserId ?: null,
+        'to_email' => $who['email'], 'subject' => $title . ': ' . $b['bookingId'],
+        'body_html' => $html,
+        'body_text' => $title . "\n\nGood day, " . $first . "!\n" . $intro . "\n\n" . $line . ($note !== '' ? "\n\n" . $note : ''),
+    ]);
+}
+
+/* Payment due / overdue happen in sp_expire_due_bookings, with nobody at a keyboard, so
+   the first request after them sends the emails. Recent changes only; a few at a time. */
+function mail_status_sweep(PDO $pdo): void
+{
+    $rows = $pdo->query(
+        "SELECT DISTINCT b.id, b.payment_status FROM bookings b
+           JOIN booking_timeline t ON t.booking_id = b.id AND t.action_code = 'status_changed'
+                AND t.new_payment_status = b.payment_status AND t.occurred_at >= NOW() - INTERVAL 3 DAY
+          WHERE b.refunds_allowed = 0 AND b.pay_to_use = 0
+            AND (b.payment_status = 'overdue' OR (b.payment_status IN ('await_gcash', 'await_cash') AND t.old_payment_status = 'await_event'))
+            AND NOT EXISTS (SELECT 1 FROM email_outbox e WHERE e.booking_id = b.id
+                             AND e.kind = IF(b.payment_status = 'overdue', 'payment_overdue', 'payment_due'))
+          LIMIT 3"
+    )->fetchAll();
+    foreach ($rows as $r) {
+        $outbox = queue_status_email($pdo, (int) $r['id'], $r['payment_status'] === 'overdue' ? 'payment_overdue' : 'payment_due', '', null);
+        if ($outbox) {
+            mail_send($pdo, $outbox);
+        }
+    }
+}
+
+/* ---------------------------------------------------------------------
    1. walkin_booking — the counter booking, confirmed
    --------------------------------------------------------------------- */
 function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int

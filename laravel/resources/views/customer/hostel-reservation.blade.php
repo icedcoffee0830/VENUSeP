@@ -305,7 +305,7 @@ function nightsOf(ci,co){
   const out=[];
   if(!ci||!co||co<=ci) return out;
   let cur=new Date(ci+'T00:00:00'); const end=new Date(co+'T00:00:00');
-  while(cur<end && out.length<366){ out.push(isoOf(cur)); cur.setDate(cur.getDate()+1); }
+  while(cur<end && out.length<183){ out.push(isoOf(cur)); cur.setDate(cur.getDate()+1); }
   return out;
 }
 
@@ -552,6 +552,7 @@ async function submitRequest(){
   fd.append('type', 'hostel');
   fd.append('room', state.roomId);
   fd.append('check_in', b.checkIn);
+  fd.append('organization', b.organization||'');
   fd.append('check_out', b.checkOut);
   /* The page uses F/M for display; the database stores male/female/other. */
   fd.append('occupants', JSON.stringify(b.occupants.map(function(o){
@@ -999,6 +1000,10 @@ function reviewScreen(){
     <button onclick="backToDetail()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">← Back</button>
     <h1 style="margin:0 0 6px;font-size:25px;font-weight:720;letter-spacing:-.01em">Review your booking</h1>
     <p style="margin:0 0 22px;font-size:14px;color:#7a766f">${COUNTER?'Check the details with the guest, then take the payment.':'Check the details, then attach a valid ID. Once staff approve it, you pay before you check in.'}</p>
+    <div style="margin-top:14px"><label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
+          <span style="font-size:12px;font-weight:600;color:#6b675f">Booking for an organization? (optional)</span>
+          <input id="bk-organization" type="text" maxlength="190" value="${esc(state.booking.organization||'')}" oninput="state.booking.organization=this.value" placeholder="e.g. CIC Student Council. It goes on your receipt." style="height:42px;border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:0 12px;font-size:14px;font-family:inherit;background:#fff">
+        </label></div>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">

@@ -185,6 +185,97 @@ trait BookingSettlementActions
         $this->storeRefundFiles($bookingId, $files, $actor);
     }
 
+    /* MOVE A DATE: same length, same price. Staff once, unless the office closed. */
+    private function moveDate(Request $request, PDO $pdo, array $bk, int $bookingId, int $actor): void
+    {
+        $from = (string) $request->post('from');
+        $to = (string) $request->post('to');
+        $closure = !empty($request->post('closure'));
+        if (!in_array($bk['reservation_status'], ['pending', 'approved'], true) || !in_array($bk['payment_status'], array_merge(self::UNPAID, ['confirmed', 'paid_cash']), true)) {
+            $this->reply(409, ['ok' => false, 'message' => 'This booking cannot be moved.']);
+        }
+        if (BookingRules::eventStarted($pdo, $bookingId)) {
+            $this->reply(409, ['ok' => false, 'message' => 'The event has already started, so it cannot be moved.']);
+        }
+        if ((int) $bk['date_moves'] >= 1 && !$closure && session('account_type') !== 'admin') {
+            $this->reply(403, ['ok' => false, 'message' => 'This booking has already been moved once. Only an administrator can move it again.']);
+        }
+        if (!BookingRules::isDate($from) || !BookingRules::isDate($to) || $to < $from || $from <= date('Y-m-d')) {
+            $this->reply(400, ['ok' => false, 'message' => 'Pick new dates after today, with the end on or after the start.']);
+        }
+        $office = office_by_id($pdo->query('SELECT venue_id FROM rooms WHERE id = ' . (int) $bk['room_id'])->fetchColumn());
+        $note = 'Moved to ' . date('M j, Y', strtotime($from)) . ($to !== $from ? ' – ' . date('M j, Y', strtotime($to)) : '') . ($closure ? ' because the office closed.' : '.');
+
+        if ($bk['booking_type'] === 'hostel') {
+            $this->moveStay($pdo, $bk, $bookingId, $actor, $from, $to, $office, $closure, $note);
+        } else {
+            $start = (string) $request->post('start');
+            $end = (string) $request->post('end');
+            if (!BookingRules::validHours($start, $end, $office)) {
+                $this->reply(400, ['ok' => false, 'message' => 'Pick a start and end time within the office hours (' . $office['opens'] . ' to ' . $office['closes'] . ').']);
+            }
+            if ($far = BookingRules::venueTooFarAhead($from)) {
+                $this->reply(409, ['ok' => false, 'message' => $far]);
+            }
+            $old = $pdo->prepare('SELECT COUNT(*) FROM venue_booking_slots WHERE booking_id = :b AND released_at IS NULL');
+            $old->execute([':b' => $bookingId]);
+            if (BookingRules::daysBetween($from, $to) + 1 !== (int) $old->fetchColumn()) {
+                $this->reply(400, ['ok' => false, 'message' => 'The new dates must cover the same number of days, so the price stays the same.']);
+            }
+            BookingRules::beginBooking($pdo);
+            $pdo->prepare('DELETE FROM venue_booking_slots WHERE booking_id = :b')->execute([':b' => $bookingId]);
+            $add = $pdo->prepare('CALL sp_add_venue_slot(:b, :d, :s, :e)');
+            for ($d = $from; $d <= $to; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
+                $add->execute([':b' => $bookingId, ':d' => $d, ':s' => $start . ':00', ':e' => $end . ':00']);
+                $add->closeCursor();
+            }
+            $pdo->prepare('UPDATE venue_booking_details SET start_date = :f, end_date = :t WHERE booking_id = :b')
+                ->execute([':f' => $from, ':t' => $to, ':b' => $bookingId]);
+            $this->afterMove($pdo, $bk, $bookingId, $actor, $closure, $note);
+            $pdo->commit();
+        }
+    }
+
+    private function moveStay(PDO $pdo, array $bk, int $bookingId, int $actor, string $in, string $out, array $office, bool $closure, string $note): void
+    {
+        if ($closed = BookingRules::stayClosed($office, $in, $out)) {
+            $this->reply(409, ['ok' => false, 'message' => $closed]);
+        }
+        $st = $pdo->prepare('SELECT check_in_date, check_out_date FROM hostel_booking_details WHERE booking_id = :b');
+        $st->execute([':b' => $bookingId]);
+        $was = $st->fetch();
+        if (BookingRules::daysBetween($in, $out) !== BookingRules::daysBetween($was['check_in_date'], $was['check_out_date'])) {
+            $this->reply(400, ['ok' => false, 'message' => 'The new dates must cover the same number of nights, so the price stays the same.']);
+        }
+        $occ = $pdo->prepare('SELECT id FROM hostel_occupants WHERE booking_id = :b ORDER BY id');
+        $occ->execute([':b' => $bookingId]);
+        $occupants = array_map('intval', $occ->fetchAll(PDO::FETCH_COLUMN));
+        $place = function (string $i, string $o) use ($pdo, $bk, $bookingId, $occupants) {
+            $pdo->prepare('DELETE FROM bed_reservation_nights WHERE booking_id = :b')->execute([':b' => $bookingId]);
+            $pdo->prepare('DELETE FROM bed_reservations WHERE booking_id = :b')->execute([':b' => $bookingId]);
+            $pdo->prepare('UPDATE hostel_booking_details SET check_in_date = :i, check_out_date = :o WHERE booking_id = :b')
+                ->execute([':i' => $i, ':o' => $o, ':b' => $bookingId]);
+            BookingRules::assignBeds($pdo, (int) $bk['room_id'], $bookingId, $occupants, $i, $o);
+        };
+        try {
+            $place($in, $out);
+        } catch (\Throwable $e) {
+            $place($was['check_in_date'], $was['check_out_date']);     // back where it was
+            $this->reply(409, ['ok' => false, 'message' => 'There are not enough free beds on those dates. Nothing changed.']);
+        }
+        $pdo->beginTransaction();
+        $this->afterMove($pdo, $bk, $bookingId, $actor, $closure, $note);
+        $pdo->commit();
+    }
+
+    private function afterMove(PDO $pdo, array $bk, int $bookingId, int $actor, bool $closure, string $note): void
+    {
+        $pdo->prepare('UPDATE bookings SET date_moves = date_moves + :n, current_deadline_at = IF(payment_status IN (\'confirmed\', \'paid_cash\'), current_deadline_at, fn_payment_deadline(:b)) WHERE id = :b2')
+            ->execute([':n' => $closure ? 0 : 1, ':b' => $bookingId, ':b2' => $bookingId]);
+        $this->timeline($pdo, $bookingId, 'date_moved', $actor, $note);
+        notify_booking_parties($pdo, $bookingId, 'booking_moved', $actor, ['note' => $note]);
+    }
+
     /* HOSTEL CHECK-OUT: the bed is free again from today, however early they left. */
     private function checkOut(PDO $pdo, array $bk, int $bookingId, int $actor): void
     {

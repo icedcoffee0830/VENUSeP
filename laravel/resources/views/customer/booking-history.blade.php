@@ -261,6 +261,11 @@
                                   <i class="bi bi-file-earmark-text" aria-hidden="true"></i>Receipt
                                 </a>
                               @endif
+                              @if ($booking['reservationCode'] === 'pending')
+                                <button type="button" class="booking-action" onclick="bookingCancel('{{ $booking['bookingId'] }}')"><i class="bi bi-x-circle" aria-hidden="true"></i>Cancel request</button>
+                              @elseif ($booking['reservationCode'] === 'rejected' && $booking['eventDateIso'] > date('Y-m-d'))
+                                <label class="booking-action" style="cursor:pointer"><i class="bi bi-upload" aria-hidden="true"></i>Send a new ID<input type="file" hidden accept="image/*,application/pdf" onchange="bookingFix('{{ $booking['bookingId'] }}', this)"></label>
+                              @endif
                               {{-- also on a row whose refund is open or returned: the script
                                    below turns it into "Withdraw request" / "Fix and resubmit" --}}
                               @if ($booking['refundable'] || in_array($booking['refundStatus'], ['requested', 'under_review', 'returned_for_correction'], true))
@@ -299,6 +304,25 @@
 @endsection
 @push('scripts')
     <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
+    <script>
+      async function bookingChange(url, body) {
+        body.append('_token', {!! json_encode(csrf_token()) !!});
+        const out = await fetch(url, { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was changed.' }; });
+        if (out.ok) { location.reload(); return; }
+        venusepAlert(out.message || 'Nothing was changed.');
+      }
+      async function bookingCancel(ref) {
+        if (!(await venusepConfirm('Your request is cancelled and the date is freed. You owe nothing.', { title: 'Cancel this request?', okLabel: 'Cancel request', cancelLabel: 'Keep it' }))) return;
+        const body = new FormData(); body.append('booking', ref);
+        bookingChange({!! json_encode(route('customer.booking-cancel')) !!}, body);
+      }
+      function bookingFix(ref, input) {
+        const body = new FormData(); body.append('booking', ref); body.append('id_document', input.files[0]);
+        bookingChange({!! json_encode(route('customer.booking-fix')) !!}, body);
+      }
+    </script>
     <!-- [6] PAGE SCRIPT — page-local table logic (search/sort/paginate) -->
     <script>
       document.addEventListener('DOMContentLoaded', function () {

@@ -1014,6 +1014,8 @@ function booking_history_events(array $b) {
                 'write_off_requested'        => 'Write-off requested',
                 'write_off_declined'         => 'Write-off declined',
                 'checked_out'                => 'Guest checked out',
+                'date_moved'                 => 'Dates moved',
+                'counter_overdue_booked'     => 'Booked at the counter despite an unpaid booking',
                 'checked_in'                 => 'Guest checked in',
             ];
             foreach ($stmt->fetchAll() as $t) {

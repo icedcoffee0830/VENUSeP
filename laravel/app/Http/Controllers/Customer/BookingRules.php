@@ -15,7 +15,6 @@ final class BookingRules
        customer holds at most 5 unpaid upcoming bookings per office online (2026-11-01).
        Hours are each office's own (legacy offices.php). */
     public const MAX_DAYS = 183;
-    public const MAX_UNPAID = 5;
     private const HHMM = '/^([01]\d|2[0-3]):[0-5]\d$/';   /* a real time of day, "00:00".."23:59" */
 
     /* A real calendar date in yyyy-mm-dd: the pattern alone let "2030-02-30" through. */
@@ -67,8 +66,9 @@ final class BookingRules
                 AND fn_booking_last_day(b.id) >= CURDATE()"
         );
         $st->execute([':c' => $customerId, ':v' => $venueId]);
-        return (int) $st->fetchColumn() < self::MAX_UNPAID ? null
-            : 'You already have ' . self::MAX_UNPAID . ' unpaid bookings with this office. Please pay or cancel one before booking again.';
+        $max = (int) config('venusep.max_unpaid');
+        return (int) $st->fetchColumn() < $max ? null
+            : 'You already have ' . $max . ' unpaid bookings with this office. Please pay or cancel one before booking again.';
     }
 
     /* Has the event begun? A venue booking at its first slot; a hostel stay once its first

@@ -16,5 +16,7 @@ Route::match(['get', 'post'], '/customer/receipt', Customer\ReceiptController::c
 Route::get('/receipt-pdf', Customer\ReceiptPdfController::class)->name('root.receipt-pdf');
 Route::get('/customer/refund-request', Customer\RefundRequestController::class)->middleware('customer')->name('customer.refund-request');
 Route::match(['get', 'post'], '/customer/refund-submit', Customer\RefundSubmitController::class)->name('customer.refund-submit');
+Route::post('/customer/booking-cancel', [Customer\BookingChangeController::class, 'cancel'])->name('customer.booking-cancel');
+Route::post('/customer/booking-fix', [Customer\BookingChangeController::class, 'fix'])->name('customer.booking-fix');
 Route::get('/customer/transaction-history', Customer\TransactionHistoryController::class)->middleware('customer')->name('customer.transaction-history');
 Route::get('/customer/faq', Customer\FaqController::class)->name('customer.faq');

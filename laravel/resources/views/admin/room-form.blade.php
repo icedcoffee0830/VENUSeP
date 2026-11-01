@@ -642,7 +642,7 @@
           </div>
           <div class="vm-field">
             <label for="roomRate">Rate (₱ per head, per night)</label>
-            <input id="roomRate" class="vm-control" type="number" min="0" step="0.01" value="{{ $roomFormRoom ? number_format((float) $roomFormRoom['rate'], 2, '.', '') : '350.00' }}" placeholder="0.00" />
+            <input id="roomRate" class="vm-control" type="number" @if ($roomId && session('account_type') !== 'admin') readonly title="Only an administrator can change a price." @endif min="0" step="0.01" value="{{ $roomFormRoom ? number_format((float) $roomFormRoom['rate'], 2, '.', '') : '350.00' }}" placeholder="0.00" />
             <div class="vm-hint" style="margin:.4rem 0 0">Per bed, per night. A new rate applies to new bookings; existing stays keep their price.</div>
           </div>
         </div>
@@ -656,7 +656,7 @@
           </div>
           <div class="vm-field">
             <label for="roomRate">Rate per day (₱)</label>
-            <input id="roomRate" class="vm-control" type="number" min="0" step="0.01" value="{{ $roomFormRoom ? number_format((float) $roomFormRoom['fee'], 2, '.', '') : '' }}" placeholder="0.00" />
+            <input id="roomRate" class="vm-control" type="number" @if ($roomId && session('account_type') !== 'admin') readonly title="Only an administrator can change a price." @endif min="0" step="0.01" value="{{ $roomFormRoom ? number_format((float) $roomFormRoom['fee'], 2, '.', '') : '' }}" placeholder="0.00" />
             <div class="vm-hint" style="margin:.4rem 0 0">A new rate applies to new bookings; existing ones keep their price.</div>
           </div>
         </div>

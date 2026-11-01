@@ -33,7 +33,9 @@ class CustomerController
             $cmStmt = $cmPdo->query(
                 "SELECT u.id AS user_id, u.email, u.is_active, u.last_login_at,
                         c.id AS customer_id, c.full_name, c.phone, c.university_id_no, c.created_at,
-                        (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) AS booking_count
+                        (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) AS booking_count,
+                        (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id AND b.reservation_status IN ('pending', 'approved')
+                            AND (b.payment_status = 'overdue' OR fn_booking_last_day(b.id) >= CURDATE())) AS open_count
                    FROM customers c
                    JOIN users u ON u.id = c.user_id
                   WHERE u.account_type = 'customer'
@@ -49,6 +51,7 @@ class CustomerController
                     'usep'      => $r['university_id_no'] !== null && $r['university_id_no'] !== '' ? 'USeP' : '—',
                     'status'    => $r['is_active'] ? 'Active' : 'Disabled',
                     'bookings'  => (int) $r['booking_count'],
+                    'open'      => (int) $r['open_count'],
                     'joined'    => $r['created_at'] ? date('M j, Y', strtotime($r['created_at'])) : '—',
                     'lastLogin' => $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
                 ];

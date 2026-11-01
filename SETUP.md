@@ -43,7 +43,7 @@ C:\xampp\mysql\bin\mysql -u root < venusep_schema.sql
 **Then, in both cases,** bring it up to date. It's safe to run this more than once:
 
 ```
-for %i in (01 02 03 04 05 06 07 08 09 10 11 12 13 14 15) do C:\xampp\mysql\bin\mysql -u root venusep < venusep_migration_%i.sql
+for %i in (01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16) do C:\xampp\mysql\bin\mysql -u root venusep < venusep_migration_%i.sql
 ```
 
 Never run `php artisan migrate` on this database.
@@ -56,7 +56,10 @@ composer install --no-scripts
 php artisan package:discover
 copy .env.example .env
 php artisan key:generate
+php artisan venusep:encrypt-ids
 ```
+
+`APP_KEY` in `.env` encrypts the stored IDs. If you lose it, those IDs can never be opened again. Never commit it. If you already have a `.env` with a key, keep that key and skip `key:generate`.
 
 If `php` isn't recognized, use `C:\xampp\php\php.exe` in its place.
 
@@ -84,6 +87,24 @@ Use this instead of Apache: through Apache, other people on your network might b
 The admin sets up an authenticator app at first sign-in. Create staff accounts in **Staff Management**. Staff choose their own password at first sign-in.
 
 These are development accounts only. Change them before any real use.
+
+## Office settings
+
+Admins set each office's hours, closed days, closures, USeP discount, grace days, minimum notice and cleanup gap on **Office Settings**. Bahay Alumni and USeP Venues start with weekends closed; the hostel stays open.
+
+## Nightly backup (on the real server)
+
+Add this in Windows Task Scheduler, every night, with `laravel` as the "Start in" folder:
+
+```
+C:\xampp\php\php.exe artisan venusep:backup
+```
+
+IDs are left out of backups on purpose. After a restore, customers with open bookings upload theirs again.
+
+## If the system is down
+
+The counter uses a paper form: guest, room, dates, ID checked and amount taken. Staff enter each one when the system is back.
 
 ## Good to know
 

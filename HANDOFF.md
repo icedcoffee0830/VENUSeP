@@ -455,3 +455,16 @@ Conflicts are being settled with Aron; nothing above is built yet.
 - **Force cancel (staff, own office, no admin needed):** only when not paid, no receipt waiting for review, and the event has not started. Requires a reason and a note. Customer and admins are notified. Also covers answer 15 (cancel after approval goes through staff). Repeat offenders: an admin disables the account.
 - **Suspected fake booking:** the ID is deleted like any other; the history keeps who cancelled and why.
 - **Reverse payment (admin only):** requires the admin's password and a written reason. Payment marked rejected, System Receipt VOID, booking back to unpaid with a new 48-hour deadline; customer and other admins notified. Details under discussion.
+
+### Built on the laravel branch (2026-11-01), migration 16
+
+Office Settings and per-office rules; the rate shown at booking is kept; Completed by itself; force cancel; write-offs; Reverse payment; recording outside refunds; move date; customer cancel and "send a new ID"; hostel check-out; extension limit of 5; exact amount only; prices admin-only on existing rooms; status emails; nightly backup command; IDs encrypted, logged, removed and out of backups; organization on the receipt; Activity page; admin alert after 3 days; demo mode removed.
+
+Decisions made while building, for Aron to review:
+- Staff can still set the price when creating a new room; only changing an existing price is admin-only.
+- A prepaid booking reversed after its event is released when its 48 hours pass, since only post-pay bookings become debts.
+- Move date applies the same hours to every day of a multi-day event.
+- Rejected requests keep their ID until the booking's first day passes.
+- Office closures do not count against a booking's one date move.
+
+Known gaps: walk-in refund proof is stored but not emailed to the customer; a restore brings no IDs back; the date pickers do not grey out dates past the 1-year limit, though the server refuses them.

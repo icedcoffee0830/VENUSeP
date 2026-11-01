@@ -25,6 +25,8 @@ trait BookingRefs
        but its event is past. Move it to a future date for a test; undo after. */
     protected function makeBooking36Refundable(): void
     {
+        /* its old date made it Completed by now (paid and finished, 2026-11-01) */
+        DB::table('bookings')->where('id', 36)->update(['reservation_status' => 'approved', 'payment_status' => 'confirmed']);
         DB::table('venue_booking_details')->where('booking_id', 36)->update(['start_date' => '2027-06-15', 'end_date' => '2027-06-15']);
         DB::table('venue_booking_slots')->where('booking_id', 36)->update(['slot_date' => '2027-06-15']);
     }

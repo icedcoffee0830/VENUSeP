@@ -575,6 +575,7 @@
         if (cur.pay === 'overdue' && !cur.writeOff) out += b('write_off_request', 'Request write-off');
         if (cur.pay === 'overdue' && cur.writeOff && IS_ADMIN) out += `<button class="br-btn br-btn-primary" onclick="settleSend('write_off_approve')">Approve write-off</button><button class="br-btn" onclick="settleSend('write_off_decline')">Decline write-off</button>`;
         if (cur.pay === 'overdue' && cur.writeOff && !IS_ADMIN) out += `<span class="none">Write-off waiting for an administrator</span>`;
+        if (cur.canForceCancel || cur.isPaid && cur.res === 'approved') out += b('move_date', 'Move date');
         if (cur.isPaid) out += b('refund_outside', 'Record outside refund');
         if (cur.isPaid && IS_ADMIN) out += b('reverse_payment', 'Reverse payment');
         if (cur.kind === 'hostel' && cur.checkedIn && !cur.checkedOut) out += `<button class="br-btn" onclick="settleSend('check_out')">Check the guest out</button>`;
@@ -588,6 +589,11 @@
         const P = {
           force_cancel: ['Force cancel this booking', 'The date is freed at once. The customer and the admins are told, with your reason. This cannot be undone.',
             sel({ fake: 'Suspected fake booking', asked: 'The customer asked to cancel', unreachable: 'The customer could not be reached' }) + note('Note (the customer reads this)')],
+          move_date: ['Move this booking to other dates', 'Same length and same price. Staff can do this once; a move because the office closed does not count.',
+            (cur.kind === 'hostel'
+              ? `<div class="br-fld"><label for="xIn">New check-in</label><input id="xIn" type="date"></div><div class="br-fld"><label for="xOutD">New check-out</label><input id="xOutD" type="date"></div>`
+              : `<div class="br-fld"><label for="xIn">New first day</label><input id="xIn" type="date"></div><div class="br-fld"><label for="xOutD">New last day</label><input id="xOutD" type="date"></div><div class="br-fld"><label for="xStart">Start time</label><input id="xStart" type="time" step="1800"></div><div class="br-fld"><label for="xEnd">End time</label><input id="xEnd" type="time" step="1800"></div>`)
+            + `<label style="display:flex;gap:0.5rem;align-items:center;font-size:0.8rem;margin-bottom:0.7rem"><input type="checkbox" id="xClosure"> This move is because the office closed</label>`],
           write_off_request: ['Request a write-off', 'For a debt that will not be paid. An administrator approves or declines it.', note('Why this cannot be collected')],
           refund_outside: ['Record a refund made outside the system', 'Only after the school has returned the money through the Cashier. The booking becomes Cancelled and Refunded, and this cannot be edited.',
             sel({ closure: 'Office closure', school: 'School decision', other: 'Other' }) + note('Explanation (the customer reads this)')
@@ -613,6 +619,8 @@
         body.append('_token', CSRF); body.append('booking', cur.id); body.append('action', action);
         body.append('reason', val('xReason')); body.append('note', val('xNote'));
         body.append('cashier_reference', val('xRef')); body.append('refunded_on', val('xOn')); body.append('password', val('xPass'));
+        body.append('from', val('xIn')); body.append('to', val('xOutD')); body.append('start', val('xStart')); body.append('end', val('xEnd'));
+        if ((document.getElementById('xClosure') || {}).checked) body.append('closure', '1');
         const f = document.getElementById('xFile');
         if (f && f.files[0]) body.append('proof[]', f.files[0]);
         const out = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
@@ -945,7 +953,7 @@
              `under_review`, DB-DECISIONS #6); `rejected` is reached through
              rejectedUpload() above. */
           case 'auto_pass': return banner('bn-green', 'All automatic checks passed', 'Exact amount · correct receiver · fresh reference · genuine receipt markers.') + receiptBlock() +
-            `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="openRejectPay()">Reject after GCash check</button></div>` + rejectPayPanel() + `
+            `<div style="display:flex;gap:0.5rem;margin-top:0.6rem"><button class="br-btn br-btn-primary" title="Check the office's GCash app first: the money must really be there." onclick="confirmPay()">Confirm payment</button><button class="br-btn" onclick="openRejectPay()">Reject after GCash check</button></div>` + rejectPayPanel() + `
              <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.55rem">Find the reference number in the business GCash Transaction History before confirming.</div>`;
           /* Manual review is now the COMMON path, not a rarity — so it has to say
              out loud that the customer is waiting on US. The pay-by deadline must
@@ -1138,7 +1146,7 @@
                   </div>
                   ${rosterBlock()}` : `
                   <div class="br-kvgrid">
-                    ${kv('Room', esc(cur.room))}${kv('Venue', esc(cur.venue))}
+                    ${kv('Room', esc(cur.room))}${kv('Venue', esc(cur.venue))}${cur.organization ? kv('Booking for', esc(cur.organization)) : ''}
                     ${kv(cur.days > 1 ? 'Dates' : 'Date', esc(cur.dates))}${kv('Attendees', cur.attendees + ' / ' + cur.capacity + (over ? ' <span style="color:#8a5a12">· over capacity</span>' : ''))}
                     ${kv('Fee', esc(cur.total) + ' <span class="soft">(' + esc(cur.feeDay) + '/day × ' + cur.days + ')</span>')}${!cur.prepay
                       ? kv('Pay-by rule', esc(cur.payBy) + ' <span class="soft">(post-pay · the day after the event · overdue after ' + esc(cur.graceEnds || cur.payBy) + ')</span>')

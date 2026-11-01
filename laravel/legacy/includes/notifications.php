@@ -179,6 +179,8 @@ function notif_words(array $r, string $accountType): array
             return ['Booking ' . $ref . ' was cancelled by the office. ' . ($d['note'] ?? ''), $accountType === 'customer' ? $viewLink : $staffLink];
         case 'payment_reversed':
             return ['The payment on ' . $ref . ' was reversed. ' . ($d['note'] ?? ''), $accountType === 'customer' ? $viewLink : $staffLink];
+        case 'booking_moved':
+            return ['Booking ' . $ref . ' was moved. ' . ($d['note'] ?? ''), $accountType === 'customer' ? $viewLink : $staffLink];
         case 'write_off_requested':
             return ['Staff asked to write off the debt on ' . $ref . '. Approve or decline it.', $staffLink];
         case 'refund_recorded':
@@ -210,6 +212,16 @@ function notif_words(array $r, string $accountType): array
    staff (their venue) and admins (all). $venueScope: null = every venue. */
 function notif_reminders(PDO $pdo, ?int $venueScope): array
 {
+    $waiting = [];
+    if ($venueScope === null) {
+        foreach ($pdo->query("SELECT id, submitted_at, DATEDIFF(NOW(), submitted_at) AS days FROM bookings
+                               WHERE reservation_status = 'pending' AND submitted_at <= NOW() - INTERVAL 3 DAY
+                               ORDER BY submitted_at LIMIT 5")->fetchAll() as $w) {
+            $ref = booking_reference($w['id'], $w['submitted_at']);
+            $waiting[] = ['text' => 'Request ' . $ref . ' has waited ' . (int) $w['days'] . ' days for an answer.',
+                          'link' => 'admin/booking-request.php?id=' . rawurlencode($ref)];
+        }
+    }
     $sql = "SELECT b.id, b.submitted_at, r.name AS room_name, fn_request_expiry(b.id, b.booking_type) AS expires_at
               FROM bookings b JOIN rooms r ON r.id = b.room_id
              WHERE b.reservation_status = 'pending'
@@ -218,7 +230,7 @@ function notif_reminders(PDO $pdo, ?int $venueScope): array
          . ' ORDER BY expires_at LIMIT 10';
     $s = $pdo->prepare($sql);
     $s->execute($venueScope !== null ? [':v' => $venueScope] : []);
-    $out = [];
+    $out = $waiting;
     foreach ($s->fetchAll() as $row) {
         $ref  = booking_reference($row['id'], $row['submitted_at']);
         $left = max(0, strtotime($row['expires_at']) - time());

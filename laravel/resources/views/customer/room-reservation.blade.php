@@ -394,7 +394,7 @@ function rangeDates(d1,d2){
   const end = d2 || d1;
   if(end < d1) return [];
   const out=[]; let cur=new Date(d1+'T00:00:00'); const last=new Date(end+'T00:00:00');
-  while(cur<=last && out.length<366){ out.push(isoOf(cur)); cur.setDate(cur.getDate()+1); }
+  while(cur<=last && out.length<183){ out.push(isoOf(cur)); cur.setDate(cur.getDate()+1); }
   return out;
 }
 
@@ -846,6 +846,7 @@ async function submitRequest(){
   fd.append('type', 'venue');
   fd.append('room', state.roomId);
   fd.append('event_name', state.booking.eventName);
+  fd.append('organization', state.booking.organization||'');
   fd.append('date_start', state.booking.date);
   fd.append('date_end', state.booking.dateEnd || state.booking.date);
   fd.append('attendees', state.booking.attendees);
@@ -1261,6 +1262,10 @@ function detailScreen(){
         <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
           <span style="${LBL}">Event name</span>
           <input id="bk-eventName" type="text" value="${esc(b.eventName)}" oninput="setBooking('eventName',this.value)" placeholder="e.g. CIC Research Colloquium" style="height:42px;padding:0 11px;border:1px solid transparent;border-radius:10px;font-size:14px;color:#1c1b19">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
+          <span style="${LBL}">Booking for an organization? (optional)</span>
+          <input id="bk-organization" type="text" maxlength="190" value="${esc(b.organization||'')}" oninput="state.booking.organization=this.value" placeholder="e.g. CIC Student Council. It goes on your receipt." style="height:42px;border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:0 12px;font-size:14px;font-family:inherit;background:#fff">
         </label>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">

@@ -47,7 +47,7 @@ class RoomSaveTest extends VenuesTestCase
 
     public function test_create_then_edit_an_event_room(): void
     {
-        $this->actingAsStaff();
+        $this->actingAsAdmin();
         $next = 'r' . ((int) DB::selectOne("SELECT COALESCE(MAX(CAST(SUBSTRING(room_code, 2) AS UNSIGNED)), 0) + 1 AS n FROM rooms WHERE room_code REGEXP '^r[0-9]+$'")->n);
         try {
             $this->postForm('admin.room-save', [

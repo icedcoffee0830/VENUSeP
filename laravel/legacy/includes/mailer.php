@@ -27,7 +27,8 @@ require_once __DIR__ . '/documents.php';   /* doc_ensure_dir() for the log trans
 
 use PHPMailer\PHPMailer\PHPMailer;
 
-const MAIL_KINDS = ['walkin_booking', 'walkin_receipt', 'receipt_copy', 'password_reset'];
+const MAIL_KINDS = ['walkin_booking', 'walkin_receipt', 'receipt_copy', 'password_reset',
+                    'booking_approved', 'booking_rejected', 'payment_due', 'payment_overdue', 'booking_cancelled'];
 
 /* The settings file's array over the defaults. A missing or broken file means
    'log' — the safe direction. Takes a path so the tests can point it anywhere. */

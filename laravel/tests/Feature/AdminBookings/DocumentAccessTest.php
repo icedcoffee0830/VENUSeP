@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\AdminBookings;
 
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /* document-view (the bytes) and valid-id-view (the viewer page) — used by
@@ -21,6 +22,9 @@ class DocumentAccessTest extends TestCase
     {
         parent::setUp();
         $this->file = getenv('VENUSEP_DOC_ROOT') . '/bookings/158/customer_id_5ef9bd3afd018835.png';
+        /* an open booking: a finished one's ID is removed (2026-11-01) */
+        DB::update("UPDATE bookings SET reservation_status = 'approved', payment_status = 'await_gcash', current_deadline_at = NOW() + INTERVAL 30 DAY WHERE id = 158");
+        DB::update('UPDATE booking_documents SET removed_at = NULL WHERE booking_id = 158');
         @mkdir(dirname($this->file), 0700, true);
         file_put_contents($this->file, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='));
     }

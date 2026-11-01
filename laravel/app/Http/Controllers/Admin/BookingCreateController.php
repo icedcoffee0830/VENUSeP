@@ -205,6 +205,9 @@ class BookingCreateController extends Controller
             ':n' => $c['usepId']
                 ? 'Valid USeP ID inspected in person; ' . (int) $pct . '% affiliate discount applied.'
                 : 'Valid ID inspected in person; no affiliate discount.']);
+        if ($c['bookerMode'] === 'account' && ($owes = BookingRules::overdueBookings($pdo, null, (int) $c['customerId'])[(int) $c['customerId']] ?? null)) {
+            $tl->execute([':b' => $bookingId, ':a' => 'counter_overdue_booked', ':u' => $c['actor'], ':n' => 'The customer has an unpaid booking: ' . $owes . '.']);
+        }
         if ($c['bookerMode'] === 'account') {
             $tl->execute([':b' => $bookingId, ':a' => 'counter_identity_confirmed', ':u' => $c['actor'],
                 ':n' => 'Customer confirmed the account by entering their password at the counter.']);

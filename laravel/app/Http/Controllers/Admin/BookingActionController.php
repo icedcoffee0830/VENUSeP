@@ -87,7 +87,7 @@ class BookingActionController extends Controller
         $cur = $pdo->prepare(
             'SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
                     b.is_usep_affiliated, b.room_price, b.refunds_allowed, b.pay_to_use, b.approved_at,
-                    (SELECT c.user_id FROM customers c WHERE c.id = b.customer_id) AS customer_user_id, b.write_off_reason, b.deadline_extensions, b.total_amount, b.room_id,
+                    (SELECT c.user_id FROM customers c WHERE c.id = b.customer_id) AS customer_user_id, b.write_off_reason, b.deadline_extensions, b.date_moves, b.total_amount, b.room_id,
                     COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount
                FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id WHERE b.id = :b'
         );
@@ -122,6 +122,14 @@ class BookingActionController extends Controller
         }
 
         /* Committed. Now, and only now, the email goes out. */
+        $statusEmail = ['approve' => 'booking_approved', 'reject' => 'booking_rejected', 'force_cancel' => 'booking_cancelled'][$action] ?? null;
+        if ($statusEmail !== null && $queued === null) {
+            try {
+                $queued = queue_status_email($pdo, $bookingId, $statusEmail, $note, $actor);
+            } catch (\Throwable $mailErr) {
+                error_log('VENUSeP status email, booking ' . $bookingId . ': ' . $mailErr->getMessage());
+            }
+        }
         if ($queued !== null) {
             mail_send($pdo, $queued);
         }
@@ -727,6 +735,7 @@ class BookingActionController extends Controller
         case 'reverse_payment':    $this->reversePayment($request, $pdo, $bk, $bookingId, $actor, $note); break;
         case 'refund_outside':     $this->recordOutsideRefund($request, $pdo, $bk, $bookingId, $actor, $note); break;
         case 'check_out':          $this->checkOut($pdo, $bk, $bookingId, $actor); break;
+        case 'move_date':          $this->moveDate($request, $pdo, $bk, $bookingId, $actor); break;
 
         case 'refund_return':
         case 'refund_deny':

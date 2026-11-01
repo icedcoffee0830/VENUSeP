@@ -767,3 +767,7 @@ starts.
   nullable `staff.venue_id` — four columns, in `venusep_migration_01.sql`.
 - `system_settings.demo_mode` — a ROW, not a column, so removing demo mode later
   is one DELETE.
+
+
+## Offices run separately (2026-11-01, migration 16)
+Each `venues` row has its own hours, closed days, closures, discount, grace days, lead time and cleanup gap. This replaces the single `discount_percent` and `postpay_grace_days` settings (the rows stay, unused, as the seed values). Bookings keep the rate shown when booked (`quoted_discount_percent`) and take the discount at approval from it. A deadline never lands on a day its office is closed. Paid and finished bookings become Completed in `sp_expire_due_bookings`. Demo mode is removed.

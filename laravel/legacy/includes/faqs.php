@@ -110,7 +110,7 @@ function faq_placeholders()
        centavos only when there are any, so 350.50 is "₱350.50" and 350 is "₱350" */
     $peso = function ($n) { return '&#8369;' . number_format((float) $n, fmod((float) $n, 1.0) == 0.0 ? 0 : 2); };
     return [
-        '{discount}'      => (int) $DISCOUNT_PERCENT . '%',           /* "20%" — the sign is part of the value */
+        '{discount}'      => office_discount_label(),           /* "20%" — the sign is part of the value */
         '{grace_days}'    => (int) $POSTPAY_GRACE_DAYS,
         '{rate_communal}' => $peso(isset($HOSTEL_RATES['communal']) ? $HOSTEL_RATES['communal'] : 0),
         '{rate_private}'  => $peso(isset($HOSTEL_RATES['private']) ? $HOSTEL_RATES['private'] : 0),

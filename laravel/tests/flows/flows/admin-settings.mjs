@@ -1,7 +1,7 @@
 // Flow — an administrator changes the settings the rest of the system runs on.
 // sign in (password + code) → edit an event room → edit a hostel room → disable a
-// room, edit it while disabled, enable it again → change the USeP discount (staff
-// then see the rate but no "Change rate" button) → change a venue's GCash account
+// room, edit it while disabled, enable it again → change an office's USeP discount (staff
+// have no Office Settings) → change a venue's GCash account
 // (password re-asked, the venue's note kept) → create a staff account, suspend it,
 // it can no longer sign in → add a FAQ question, customers see it.
 //
@@ -126,47 +126,38 @@ export default {
       return page;
     });
 
-    await step('Changes the USeP discount rate with a reason → saved + history row', async () => {
+    await step('Office Settings: changes Bahay Alumni\'s discount with a reason; other offices keep theirs', async () => {
       const page = s.admin;
-      const cur = Number((await dbOne(`SELECT setting_value AS v FROM system_settings WHERE setting_key = 'discount_percent'`)).v);
+      const cur = Number((await dbOne(`SELECT discount_percent AS v FROM venues WHERE id = 1`)).v);
       s.rate = cur === 25 ? 30 : 25;
       s.reason = `Flow test rate change ${tag}`;
+      s.otherRate = Number((await dbOne(`SELECT discount_percent AS v FROM venues WHERE id = 2`)).v);
 
-      await page.goto(ctx.url('/admin/venue-management'));
-      await page.locator('#dcOpen').click();
-      await page.locator('#dcRate').fill(String(s.rate));
-      await page.locator('#dcReason').fill(s.reason);
-      /* a save shows "Saved" for ~0.7 s and reloads the page; a refusal shows #dcErr */
-      const reloaded = page.waitForEvent('load').then(() => 'reloaded', () => 'timeout');
-      await page.locator('#dcForm').getByRole('button', { name: 'Save', exact: true }).click();
-      const refused = page.locator('#dcErr').waitFor({ state: 'visible' }).then(() => 'error', () => 'timeout');
-      const outcome = await Promise.race([reloaded, refused]);
-      if (outcome === 'timeout') ctx.fail('the page neither reloaded nor showed an error after Save');
-      if (outcome === 'error') ctx.fail('the rate was not saved: ' + (await page.locator('#dcErr').textContent()));
-      const history = page.locator('#dcHistory .vm-setting-row', { hasText: s.reason });
-      await expect.visible(history, 'the change is not in the history list after the reload');
-      expect.match(await history.textContent(), new RegExp(`${cur}%\\s*→\\s*${s.rate}%`), 'history row');
-      expect.equal(await page.locator('#dcCurrent').textContent(), `${s.rate}%`, 'rate shown after the reload');
-
-      const set = await dbOne(`SELECT setting_value AS v FROM system_settings WHERE setting_key = 'discount_percent'`);
-      expect.equal(Number(set.v), s.rate, 'system_settings.discount_percent');
-      const h = await dbOne(`SELECT h.old_value, h.new_value, u.email FROM system_settings_history h LEFT JOIN users u ON u.id = h.changed_by_user_id
-          WHERE h.setting_key = 'discount_percent' AND h.change_note = ?`, [s.reason]);
-      expect.ok(h, 'no system_settings_history row with the reason');
+      await page.goto(ctx.url('/admin/office-settings'));
+      const card = page.locator('[data-office="1"]');
+      await card.locator('input[name="discount"]').fill(String(s.rate));
+      await card.locator('input[name="reason"]').fill(s.reason);
+      const reloaded = page.waitForEvent('load').then(() => true, () => false);
+      await card.getByRole('button', { name: /^Save / }).click();
+      expect.ok(await reloaded, 'the page did not reload after Save');
+      await expect.visible(page.locator('[data-office="1"]').getByText(s.reason), 'the change is not in the history');
+      expect.equal(Number((await dbOne(`SELECT discount_percent AS v FROM venues WHERE id = 1`)).v), s.rate, 'venues.discount_percent');
+      expect.equal(Number((await dbOne(`SELECT discount_percent AS v FROM venues WHERE id = 2`)).v), s.otherRate, 'another office changed too');
+      const h = await dbOne(`SELECT h.old_value, h.new_value, u.email FROM venue_settings_history h LEFT JOIN users u ON u.id = h.changed_by_user_id
+          WHERE h.field = 'discount' AND h.note = ?`, [s.reason]);
+      expect.ok(h, 'no venue_settings_history row with the reason');
       expect.equal(Number(h.new_value), s.rate, 'history new_value');
       expect.equal(Number(h.old_value), cur, 'history old_value');
       expect.equal(h.email, ADMIN, 'history changed_by');
       return page;
     });
 
-    await step('Staff sign in: they see the new rate but no "Change rate" button', async () => {
+    await step('Staff sign in: they have no Office Settings', async () => {
       s.staff = await ctx.loginStaff(STAFF);
       const page = s.staff;
-      await page.goto(ctx.url('/admin/venue-management'));
-      await expect.visible(page.locator('#vmDiscount'), 'no discount panel on Venue Management for staff');
-      expect.equal(await page.locator('#dcCurrent').textContent(), `${s.rate}%`, 'rate shown to staff');
-      expect.equal(await page.getByRole('button', { name: 'Change rate' }).count(), 0, '"Change rate" buttons visible to staff');
-      expect.equal(await page.locator('#dcOpen').count(), 0, '#dcOpen elements for staff');
+      expect.equal(await page.getByRole('link', { name: 'Office Settings' }).count(), 0, 'Office Settings link shown to staff');
+      await page.goto(ctx.url('/admin/office-settings'));
+      await expect.url(page, /\/admin\/dashboard/);
       return page;
     });
 

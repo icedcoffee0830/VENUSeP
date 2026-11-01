@@ -44,7 +44,7 @@ class BookingCreateController extends Controller
 
     public function __invoke(Request $request)
     {
-        legacy('auth', 'db', 'bookings', 'refund-policy', 'receipt-emails');
+        legacy('auth', 'db', 'bookings', 'refund-policy', 'receipt-emails', 'offices');
         /* pricing.php ends with a <script> block for the booking pages; this
            endpoint answers in JSON, so its output is swallowed. */
         ob_start();
@@ -145,8 +145,9 @@ class BookingCreateController extends Controller
         try {
             $roomStmt = $pdo->prepare(
                 "SELECT r.id, r.venue_id, r.room_type, r.is_active, erd.attendee_capacity, erd.fee_per_day,
-                        hrd.rate_per_head_per_night
+                        hrd.rate_per_head_per_night, v.discount_percent
                    FROM rooms r
+                   JOIN venues v ON v.id = r.venue_id
                    LEFT JOIN event_room_details erd  ON erd.room_id = r.id
                    LEFT JOIN hostel_room_details hrd ON hrd.room_id = r.id
                   WHERE r.room_code = :c"
@@ -241,6 +242,9 @@ class BookingCreateController extends Controller
             $this->reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
         }
         /* the same advance limit as online (system_settings.hostel_advance_booking_max_days) */
+        if ($closed = BookingRules::stayClosed(office_by_id($room['venue_id']), $checkIn, $checkOut)) {
+            $this->reply(409, ['ok' => false, 'message' => $closed]);
+        }
         if ($tooFar = BookingRules::hostelTooFarAhead($pdo, $checkIn)) {
             $this->reply(400, ['ok' => false, 'message' => $tooFar]);
         }
@@ -259,7 +263,7 @@ class BookingCreateController extends Controller
         $nights = BookingRules::daysBetween($checkIn, $checkOut);
         /* per head, per night; the discount applies now — staff have seen the ID */
         $roomPrice = (float) $room['rate_per_head_per_night'] * count($guests) * $nights;
-        $pct       = $c['usepId'] ? (float) venusep_discount_percent() : 0.0;
+        $pct       = $c['usepId'] ? (float) $room['discount_percent'] : 0.0;
         $discount  = round($roomPrice * $pct) / 100;
         $total     = $roomPrice - $discount;
         $stayLabel = count($guests) . ' bed' . (count($guests) === 1 ? '' : 's') . ' · ' . $nights . ' night' . ($nights === 1 ? '' : 's');
@@ -292,6 +296,7 @@ class BookingCreateController extends Controller
                 ':ra' => $c['refundsAllowed'], ':u' => $c['actor'],
             ]);
             $bookingId = (int) $pdo->lastInsertId();
+            BookingRules::stamp($pdo, $bookingId, (int) $room['discount_percent'], request()->post('organization'));
             $pdo->prepare('INSERT INTO hostel_booking_details (booking_id, check_in_date, check_out_date, checked_in) VALUES (:b, :i, :o, 0)')
                 ->execute([':b' => $bookingId, ':i' => $checkIn, ':o' => $checkOut]);
             $occIns = $pdo->prepare('INSERT INTO hostel_occupants (booking_id, full_name, gender, is_primary_guest) VALUES (:b, :n, :g, :p)');
@@ -404,7 +409,7 @@ class BookingCreateController extends Controller
             $t = isset($times[$d]) && is_array($times[$d]) ? $times[$d] : [];
             $s = isset($t['start']) ? (string) $t['start'] : '';
             $e = isset($t['end'])   ? (string) $t['end']   : '';
-            if (!BookingRules::validHours($s, $e)) {
+            if (!BookingRules::validHours($s, $e, office_by_id($room['venue_id']))) {
                 $this->reply(400, ['ok' => false, 'message' => 'Set valid hours for ' . $d . '.']);
             }
             $slots[] = ['date' => $d, 'start' => $s . ':00', 'end' => $e . ':00'];
@@ -413,8 +418,11 @@ class BookingCreateController extends Controller
             $this->reply(409, ['ok' => false, 'message' => 'Every day picked is closed for maintenance.']);
         }
 
-        /* THE 12-HOUR RULE APPLIES TO WALK-INS TOO (time for the Official Receipt). */
-        $LEAD_HOURS = 12;
+        if ($far = BookingRules::venueTooFarAhead($slots[0]['date'])) {
+            $this->reply(409, ['ok' => false, 'message' => $far]);
+        }
+        /* The office's lead time applies to walk-ins too (time for the Official Receipt). */
+        $LEAD_HOURS = office_by_id($room['venue_id'])['lead'];
         if (strtotime($slots[0]['date'] . ' ' . $slots[0]['start']) - time() < $LEAD_HOURS * 3600) {
             $this->reply(409, ['ok' => false,
                 'message' => 'Venue bookings must start at least ' . $LEAD_HOURS . ' hours from now — there has to be time for the Official Receipt.']);
@@ -422,7 +430,7 @@ class BookingCreateController extends Controller
 
         /* Priced per day for the days actually held; the discount applies HERE. */
         $roomPrice = (float) $room['fee_per_day'] * count($slots);
-        $pct       = $c['usepId'] ? (float) venusep_discount_percent() : 0.0;
+        $pct       = $c['usepId'] ? (float) $room['discount_percent'] : 0.0;
         $discount  = round($roomPrice * $pct) / 100;
         $total     = $roomPrice - $discount;
         $method    = $c['method'];
@@ -451,6 +459,7 @@ class BookingCreateController extends Controller
                 ':ra' => $c['refundsAllowed'], ':u' => $c['actor'],
             ]);
             $bookingId = (int) $pdo->lastInsertId();
+            BookingRules::stamp($pdo, $bookingId, (int) $room['discount_percent'], request()->post('organization'));
 
             $pdo->prepare(
                 'INSERT INTO venue_booking_details (booking_id, event_name, start_date, end_date, attendee_count)

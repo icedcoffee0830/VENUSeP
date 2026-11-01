@@ -651,7 +651,7 @@
            the ID and granting the discount are different judgements. When they
            have not claimed it, there is nothing to decide — one approve button. */
         if (cur.res === 'pending') return (claimsAffiliation()
-            ? `<button class="br-btn br-btn-primary" onclick="approveIdRes(true)">Approve with ${DISCOUNT_PERCENT}% discount</button><button class="br-btn" onclick="approveIdRes(false)">Approve at full price</button>`
+            ? `<button class="br-btn br-btn-primary" onclick="approveIdRes(true)">Approve with ${cur.quotedPct}% discount</button><button class="br-btn" onclick="approveIdRes(false)">Approve at full price</button>`
             : `<button class="br-btn br-btn-primary" onclick="approveIdRes(false)">Approve ID &amp; reservation</button>`)
           + `<button class="br-btn" onclick="rejectRequest()">Reject request</button>`;
         /* A post-pay booking is never released: its event already happened (Aron, 2026-10-30). */
@@ -1012,7 +1012,7 @@
             <div style="margin-top:0.7rem;padding-top:0.7rem;border-top:1px solid var(--vm-hairline)">
               <div class="br-h2" style="margin-bottom:0.45rem">USeP affiliation</div>
               <div style="font-size:0.83rem;font-weight:600;margin-bottom:0.25rem">
-                ${claim ? 'Claimed &mdash; ' + DISCOUNT_PERCENT + '% discount requested' : 'Not claimed &mdash; full price'}
+                ${claim ? 'Claimed &mdash; ' + cur.quotedPct + '% discount requested' : 'Not claimed &mdash; full price'}
               </div>
               <div style="font-size:0.76rem;color:var(--vm-muted);line-height:1.5">
                 ID uploaded: <strong>${esc(cur.idLabel)}</strong><br>

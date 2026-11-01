@@ -91,26 +91,9 @@ $REFUNDS_ENABLED = refunds_enabled();
    ===================================================================== */
 function postpay_grace_days()
 {
-    static $days = null;
-    if ($days !== null) {
-        return $days;
-    }
-    $days = 3;
-    $pdo = venusep_db();
-    if ($pdo === null) {
-        return $days;
-    }
-    try {
-        $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'postpay_grace_days' LIMIT 1");
-        $stmt->execute();
-        $v = $stmt->fetchColumn();
-        if ($v !== false && (int)$v > 0) {
-            $days = (int)$v;
-        }
-    } catch (PDOException $e) {
-        // keep the default
-    }
-    return $days;
+    require_once __DIR__ . '/offices.php';
+    $grace = array_column(office_all(), 'grace');
+    return office_page()['grace'] ?? ($grace ? max($grace) : 3);
 }
 
 /* Everything a page needs to say about one booking's payment timing.

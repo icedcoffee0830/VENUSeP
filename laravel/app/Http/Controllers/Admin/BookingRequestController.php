@@ -147,6 +147,8 @@ class BookingRequestController extends Controller
             'idStatus'  => $this->idStatus($b),
             'idLabel'   => $this->idLabel($b),
             'discountPercent' => $b['discountPercent'],
+            'quotedPct' => $b['quotedDiscount'],
+            'organization' => $b['organization'],
             'receipt'   => $receipt,
             /* Ids only — the bytes come from document-view, which runs its own permission check. */
             'docs'      => booking_document_ids($b['id']),

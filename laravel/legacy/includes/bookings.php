@@ -99,7 +99,8 @@ function bookings_query(array $opts = []) {
                c.id AS customer_id, c.full_name AS customer_name, c.phone AS customer_phone,
                c.university_id_no, u.email AS customer_email, c.contact_email,
                r.room_code, r.name AS room_name,
-               v.name AS venue_name,
+               v.name AS venue_name, v.postpay_grace_days AS office_grace,
+               COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount, b.organization_name,
                erd.attendee_capacity, erd.fee_per_day,
                hrd.cr_type, hrd.rate_per_head_per_night,
                vd.event_name, vd.purpose, vd.start_date, vd.end_date, vd.attendee_count,
@@ -206,6 +207,8 @@ function booking_shape(array $row) {
         'contactEmail'  => (string) $row['contact_email'],       // walk-ins only: the address given at the counter (#22)
         'customerPhone' => (string) $row['customer_phone'],
         'isWalkIn'      => $row['customer_email'] === null,
+        'quotedDiscount' => (int) $row['quoted_discount'],
+        'organization'  => (string) $row['organization_name'],
 
         'roomCode'      => $row['room_code'],
         'roomName'      => $row['room_name'],
@@ -302,7 +305,7 @@ function booking_shape(array $row) {
     if ($b['payment']['policy'] === 'postpay') {
         $lastDay = strtotime(($lastBooked ?: ($firstIso ?: date('Y-m-d'))) . ' 00:00:00');
         $b['payment']['graceEndsLabel'] = $b['payment']['payByLabel'];
-        if ($b['payment']['payByTs'] <= strtotime('+' . postpay_grace_days() . ' days 23:59:59', $lastDay)) {
+        if ($b['payment']['payByTs'] <= strtotime('+' . (int) $row['office_grace'] . ' days 23:59:59', $lastDay)) {
             $b['payment']['payByLabel'] = date('M j, Y', strtotime('+1 day', $lastDay));
         }
         $b['payment']['askByLabel'] = $b['payment']['payByLabel'];   /* customer_pay_by_label(): the extended date too */

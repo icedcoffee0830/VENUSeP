@@ -125,19 +125,19 @@ class BookingSubmitTest extends TestCase
         ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Check-out must be after check-in.']);
     }
 
-    /* The pages stop a range at 366 days/nights; the server looped over
+    /* The pages stop a range at 183 days/nights (about 6 months); the server looped over
        whatever it was sent — years of slots or bed-nights in one request. */
-    public function test_a_range_longer_than_366_days_is_refused(): void
+    public function test_a_range_longer_than_six_months_is_refused(): void
     {
         $before = DB::table('bookings')->count();
         $start = date('Y-m-d', strtotime('+' . random_int(400, 1400) . ' days'));
         $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost([
-            'date_start' => $start, 'date_end' => date('Y-m-d', strtotime($start . ' +366 days')),
-        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A booking can cover at most 366 days.']);
+            'date_start' => $start, 'date_end' => date('Y-m-d', strtotime($start . ' +183 days')),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A booking can cover at most 183 days.']);
         $in = date('Y-m-d', strtotime('+1 day'));
         $this->asCustomer()->post(route('customer.booking-submit'), $this->hostelPost([
-            'check_in' => $in, 'check_out' => date('Y-m-d', strtotime($in . ' +367 days')),
-        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A stay can be at most 366 nights.']);
+            'check_in' => $in, 'check_out' => date('Y-m-d', strtotime($in . ' +184 days')),
+        ]))->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A stay can be at most 183 nights.']);
         $this->assertSame($before, DB::table('bookings')->count());
     }
 

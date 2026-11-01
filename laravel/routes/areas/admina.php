@@ -18,5 +18,6 @@ Route::get('/admin/backup-restore', Admin\BackupRestoreController::class)->middl
 Route::match(['get', 'post'], '/admin/backup-action', Admin\BackupActionController::class)->name('admin.backup-action');
 Route::match(['get', 'post'], '/admin/refund-switch', Admin\RefundSwitchController::class)->name('admin.refund-switch');
 Route::get('/admin/payment-settings', Admin\PaymentSettingsController::class)->middleware('staff')->name('admin.payment-settings');
-Route::match(['get', 'post'], '/admin/discount-save', Admin\DiscountSaveController::class)->name('admin.discount-save');
+Route::middleware('staff:admin')->get('/admin/office-settings', [Admin\OfficeSettingsController::class, 'index'])->name('admin.office-settings');
+Route::post('/admin/office-save', [Admin\OfficeSettingsController::class, 'save'])->name('admin.office-save');
 Route::match(['get', 'post'], '/admin/gcash-account-save', Admin\GcashAccountSaveController::class)->name('admin.gcash-account-save');

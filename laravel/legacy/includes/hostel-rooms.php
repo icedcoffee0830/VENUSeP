@@ -38,6 +38,7 @@
    ===================================================================== */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/offices.php';
 require_once __DIR__ . '/amenities.php';
 require_once __DIR__ . '/auth.php';        /* staff_sees_venue() — staff list their own venue only */
 
@@ -140,6 +141,7 @@ $hostelRooms = [];
 foreach ($hrRoomRows as $r) {
   if (!staff_sees_venue($r['venue_id'])) continue;   // after $HOSTEL_RATES: the FAQ's rates stay whole
   $hostelRooms[] = [
+    'office'      => office_by_id($r['venue_id']),
     'id'          => $r['room_code'],
     'name'        => $r['name'],
     'venue'       => $r['venue_name'],

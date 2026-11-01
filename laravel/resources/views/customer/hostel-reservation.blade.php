@@ -176,7 +176,7 @@
         {!! RR::morePic($r['id'], $r['cr_type'] === 'private' ? 'private' : 'bunk') !!}
         <div class="bk-more-body">
           <h3>{{ $r['name'] }}</h3>
-          <p class="bk-more-meta">{{ (int) $r['beds'] }} beds &middot; {!! usep_price_html((float) $r['rate'], $mrUsep, ' per head, per night') !!}</p>
+          <p class="bk-more-meta">{{ (int) $r['beds'] }} beds &middot; {!! usep_price_html((float) $r['rate'], $mrUsep, ' per head, per night', $r['office']['discount']) !!}</p>
           <span class="bk-more-free {{ $closed ? 'is-closed' : (!$free ? 'is-none' : '') }}"><i></i>{{ $closed ? 'Closed for maintenance tonight' : (!$free ? 'No beds free tonight' : $free . ' of ' . (int) $r['beds'] . ' beds free tonight') }}</span>
         </div>
       </a>
@@ -313,11 +313,12 @@ function nightsOf(ci,co){
 function maintCovers(m,ds){ return !!m && ds>=m.from && (m.until==null || ds<=m.until); }
 function maintLive(m){ return !!m && (m.until==null || m.until>=TODAY); }
 
-/* A night is BLOCKED only by HARD maintenance. Beds being full is a different
+{!! office_js() !!}
+/* A night is BLOCKED by HARD maintenance or a closed office. Beds being full is a different
    thing: it limits HOW MANY beds you can take, it does not close the room. */
 function nightBlocked(ns){
   const r=getRoom();
-  return !!r && maintCovers(r.maintenance,ns) && r.maintenance.blocks;
+  return !!r && (!!officeClosure(r,ns) || (maintCovers(r.maintenance,ns) && r.maintenance.blocks));
 }
 function firstBlockedNight(nights){ return nights.find(nightBlocked) || null; }
 
@@ -379,7 +380,7 @@ function derive(){
       /* A hostel stay is ONE CONTIGUOUS thing. The venue books around a closed
          day; a guest cannot leave and come back, so the whole range is refused. */
       slot={show:true,dot:'#d9930d',title:'The room is closed for part of your stay',
-            detail:'Closed for maintenance on '+fmtShort(blocked)+' ('+esc(R.maintenance.reason)+'). A stay cannot be split around a closure — please pick different dates.'};
+            detail:'Closed on '+fmtShort(blocked)+' ('+esc(officeClosure(R,blocked)||R.maintenance.reason)+'). A stay cannot be split around a closure — please pick different dates.'};
     }else if(maxFree===0){
       slot={show:true,dot:'#d9930d',title:'No beds left for these dates',
             detail:'Every bed in this room is taken on at least one of your nights. Try other dates or another room.'};
@@ -401,7 +402,7 @@ function derive(){
   if(!b.checkIn||!b.checkOut) hint='Pick your check-in and check-out dates';
   else if(tooFar) hint='Check-in can be at most '+ADVANCE_DAYS+' days ahead';
   else if(badRange) hint='Check-out must be after check-in';
-  else if(blocked) hint='Closed for maintenance during your stay — pick different dates';
+  else if(blocked) hint='Closed during your stay — pick different dates';
   else if(maxFree===0) hint='No beds available for these dates';
   else if(beds>maxFree) hint='Only '+maxFree+' bed'+(maxFree>1?'s':'')+' free — reduce your booking';
   else if(!named) hint='Enter a name for every bed';
@@ -1037,7 +1038,7 @@ function reviewScreen(){
          DB-DECISIONS #2 applies the discount to hostel bookings too. -->
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px">
       <div style="font-size:14.5px;font-weight:680;margin-bottom:3px">USeP affiliation <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">USeP students, faculty and employees get <strong>${DISCOUNT_PERCENT}% off</strong> the whole stay. Staff confirm it from your ID.</div>
+      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">USeP students, faculty, employees and alumni get <strong>${DISCOUNT_PERCENT}% off</strong> the whole stay. Staff confirm it from your ID.</div>
       ${[[true,'I am USeP-affiliated','Student, faculty or employee &mdash; upload your <strong>USeP ID</strong> below'],
          [false,'Not affiliated','Upload any valid government-issued ID below']].map(function(o){
         const on = state.affiliated === o[0];

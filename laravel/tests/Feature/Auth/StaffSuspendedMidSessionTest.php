@@ -8,7 +8,7 @@ use Tests\TestCase;
 /* A staff member suspended WHILE signed in loses the session on their next
    request of ANY kind. Before, only pages behind the `staff` guard checked
    (staff_session_heal()); the JSON endpoints a still-open page calls
-   (booking-action, booking-create, discount-save, ...) and the counter
+   (booking-action, booking-create, office-save, ...) and the counter
    booking pages kept working for the suspended account. */
 class StaffSuspendedMidSessionTest extends TestCase
 {
@@ -56,7 +56,7 @@ class StaffSuspendedMidSessionTest extends TestCase
         $this->signInAs($admin, 'admin')->withSession(['_token' => self::TOKEN]);
         DB::table('users')->where('id', $admin->id)->update(['account_type' => 'staff', 'password_changed_at' => now()]);
 
-        $this->post(route('admin.discount-save'), ['_token' => self::TOKEN, 'percent' => 'abc', 'reason' => 'x'],   // invalid on purpose: nothing is written even if the role check fails
+        $this->post(route('admin.office-save'), ['_token' => self::TOKEN, 'venue_id' => '1', 'action' => 'save'],
             ['Accept' => 'application/json'])
             ->assertStatus(403)->assertJson(['error' => 'not_admin']);
     }

@@ -7,7 +7,7 @@ use Tests\TestCase;
 
 /* admin.booking-create (the counter) checks a booking by the same rules as
    customer.booking-submit (BookingRules): real dates, hours HH:MM inside
-   7:00 AM - 10:00 PM, at most 366 days or nights. */
+   the office's hours, at most 183 days or nights. */
 class CounterBookingRulesTest extends TestCase
 {
     private function create(array $data)
@@ -56,15 +56,15 @@ class CounterBookingRulesTest extends TestCase
             ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Check-out must be after check-in.']);
     }
 
-    public function test_a_range_longer_than_366_days_is_refused(): void
+    public function test_a_range_longer_than_six_months_is_refused(): void
     {
         $before = DB::table('bookings')->count();
         $start = now()->addDays(random_int(400, 1400))->toDateString();
-        $this->actingAsStaff()->create($this->venue($start, date('Y-m-d', strtotime($start . ' +366 days')), []))
-            ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A booking can cover at most 366 days.']);
+        $this->actingAsStaff()->create($this->venue($start, date('Y-m-d', strtotime($start . ' +183 days')), []))
+            ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A booking can cover at most 183 days.']);
         $in = date('Y-m-d', strtotime('+1 day'));
-        $this->actingAsAdmin()->create($this->hostel($in, date('Y-m-d', strtotime($in . ' +367 days'))))
-            ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A stay can be at most 366 nights.']);
+        $this->actingAsAdmin()->create($this->hostel($in, date('Y-m-d', strtotime($in . ' +184 days'))))
+            ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A stay can be at most 183 nights.']);
         $this->assertSame($before, DB::table('bookings')->count());
     }
 }

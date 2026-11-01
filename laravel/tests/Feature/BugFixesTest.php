@@ -47,27 +47,6 @@ class BugFixesTest extends TestCase
 
     /* 3. The discount rate is admin-only (decided 2026-10-29): staff are refused by
           the server and don't get the button; the form no longer shows itself. */
-    public function test_staff_cannot_change_the_discount(): void
-    {
-        $before = DB::table('system_settings')->where('setting_key', 'discount_percent')->value('setting_value');
-        $this->actingAsStaff()->withTestCsrf()
-            ->post(route('admin.discount-save'), ['_token' => 'test-csrf-token', 'percent' => '7', 'reason' => 'staff try'])
-            ->assertStatus(403)->assertExactJson(['ok' => false, 'error' => 'not_admin', 'message' => 'Only the administrator can change the discount rate.']);
-        $this->assertSame($before, DB::table('system_settings')->where('setting_key', 'discount_percent')->value('setting_value'));
-    }
-
-    public function test_only_admins_see_the_change_rate_button(): void
-    {
-        $this->actingAsStaff()->get(route('admin.venue-management'))->assertOk()
-            ->assertDontSee('id="dcOpen"', false)
-            ->assertSee('.vm-setting-form[hidden]', false);   // the closed form really hides
-    }
-
-    public function test_admins_still_see_the_change_rate_button(): void
-    {
-        $this->actingAsAdmin()->get(route('admin.venue-management'))->assertOk()->assertSee('id="dcOpen"', false);
-    }
-
     /* 5. Saving a GCash account from Payment Settings (which sends no note) wiped the note. */
     public function test_a_gcash_save_without_a_note_keeps_the_current_note(): void
     {

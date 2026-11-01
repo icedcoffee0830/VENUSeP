@@ -44,7 +44,7 @@ class BookingSubmitController extends Controller
 
     public function __invoke(Request $request)
     {
-        extract(legacy('auth', 'documents', 'bookings', 'notifications'));
+        extract(legacy('auth', 'documents', 'bookings', 'notifications', 'offices'));
 
         if (!$request->isMethod('POST')) {
             return self::reply(405, ['ok' => false, 'message' => 'Use POST.'], ['Allow' => 'POST']);
@@ -79,7 +79,7 @@ class BookingSubmitController extends Controller
 
         /* ---- the room, and the rate THIS server believes in ---- */
         $roomStmt = $pdo->prepare(
-            "SELECT r.id, r.name, r.room_type, r.is_active, v.name AS venue_name,
+            "SELECT r.id, r.venue_id, r.name, r.room_type, r.is_active, v.name AS venue_name, v.discount_percent,
                     erd.attendee_capacity, erd.fee_per_day,
                     hrd.rate_per_head_per_night
                FROM rooms r
@@ -96,6 +96,11 @@ class BookingSubmitController extends Controller
         $wantType = $type === 'venue' ? 'event' : 'hostel';
         if ($room['room_type'] !== $wantType) {
             return self::reply(409, ['ok' => false, 'message' => 'That room does not take this kind of booking.']);
+        }
+
+        $office = office_by_id($room['venue_id']);
+        if ($unpaid = BookingRules::tooManyUnpaid($pdo, $customerId, (int) $room['venue_id'])) {
+            return self::reply(409, ['ok' => false, 'error' => 'too_many_unpaid', 'message' => $unpaid]);
         }
 
         /* The ID is required for EVERY booking (PROJECT-HANDOFF 4.7) — checked here
@@ -119,9 +124,7 @@ class BookingSubmitController extends Controller
             return self::reply(400, ['ok' => false, 'message' => 'Please confirm you understand this booking is non-refundable.']);
         }
 
-        /* USeP Venues has no advance-notice requirement; Bahay Alumni keeps the
-           12-hour rule. Mirrors leadMsFor() on the room page. Venues only. */
-        $LEAD_HOURS = ($room['venue_name'] === 'USeP Venues') ? 0 : 12;
+        $LEAD_HOURS = $office['lead'];
 
         /* ============================ VENUE ============================ */
         if ($type === 'venue') {
@@ -157,13 +160,16 @@ class BookingSubmitController extends Controller
                 $t = isset($times[$d]) && is_array($times[$d]) ? $times[$d] : [];
                 $s = isset($t['start']) ? (string) $t['start'] : '';
                 $e = isset($t['end'])   ? (string) $t['end']   : '';
-                if (!BookingRules::validHours($s, $e)) {
+                if (!BookingRules::validHours($s, $e, $office)) {
                     return self::reply(400, ['ok' => false, 'message' => 'Set valid hours for ' . $d . '.']);
                 }
                 $slots[] = ['date' => $d, 'start' => $s . ':00', 'end' => $e . ':00'];
             }
             if (!$slots) {
                 return self::reply(409, ['ok' => false, 'message' => 'Every day you picked is closed for maintenance.']);
+            }
+            if ($far = BookingRules::venueTooFarAhead($slots[0]['date'])) {
+                return self::reply(409, ['ok' => false, 'message' => $far]);
             }
             /* Lead time, measured from the FIRST day actually held. */
             if (strtotime($slots[0]['date'] . ' ' . $slots[0]['start']) - time() < $LEAD_HOURS * 3600) {
@@ -187,6 +193,7 @@ class BookingSubmitController extends Controller
                     ':a' => $affiliated, ':p' => $price, ':p2' => $price, ':ra' => $refundsAllowed,
                 ]);
                 $bookingId = (int) $pdo->lastInsertId();
+                BookingRules::stamp($pdo, $bookingId, (int) $room['discount_percent'], $request->post('organization'));
 
                 $pdo->prepare(
                     'INSERT INTO venue_booking_details (booking_id, event_name, start_date, end_date, attendee_count)
@@ -252,6 +259,9 @@ class BookingSubmitController extends Controller
                 return self::reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
             }
             /* The advance limit (system_settings, Aron 2026-10-30): no further ahead than N days. */
+            if ($closed = BookingRules::stayClosed($office, $checkIn, $checkOut)) {
+                return self::reply(409, ['ok' => false, 'message' => $closed]);
+            }
             if ($tooFar = BookingRules::hostelTooFarAhead($pdo, $checkIn)) {
                 return self::reply(400, ['ok' => false, 'message' => $tooFar]);
             }
@@ -275,6 +285,7 @@ class BookingSubmitController extends Controller
                     ':a' => $affiliated, ':p' => $price, ':p2' => $price, ':ra' => $refundsAllowed,
                 ]);
                 $bookingId = (int) $pdo->lastInsertId();
+                BookingRules::stamp($pdo, $bookingId, (int) $room['discount_percent'], $request->post('organization'));
 
                 $pdo->prepare(
                     'INSERT INTO hostel_booking_details (booking_id, check_in_date, check_out_date, checked_in)

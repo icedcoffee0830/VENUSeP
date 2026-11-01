@@ -28,7 +28,8 @@ export default {
       const page = s.cust;
       const room = await dbOne(`SELECT r.id, e.fee_per_day FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = ?`, [ROOM]);
       s.fee = Number(room.fee_per_day);
-      s.pct = Number((await dbOne(`SELECT setting_value AS v FROM system_settings WHERE setting_key = 'discount_percent'`)).v);
+      s.pct = Number((await dbOne(`SELECT v.discount_percent AS v FROM venues v JOIN rooms r ON r.venue_id = v.id WHERE r.id = ?`, [room.id])).v);
+      s.venueId = Number((await dbOne(`SELECT venue_id AS v FROM rooms WHERE id = ?`, [room.id])).v);
       const d = new Date(); d.setDate(d.getDate() + 21);
       for (let i = 0; i < 60 && !s.day; i++, d.setDate(d.getDate() + 1)) {
         const day = iso(d);
@@ -91,15 +92,15 @@ export default {
     await step('The admin changes the rate: the approved booking keeps its snapshot', async () => {
       const page = await ctx.loginAdmin('admin@gmail.com');
       s.newPct = s.pct === 25 ? 30 : 25;
-      await page.goto(ctx.url('/admin/venue-management'));
-      await page.locator('#dcOpen').click();
-      await page.locator('#dcRate').fill(String(s.newPct));
-      await page.locator('#dcReason').fill('Flow discount snapshot test ' + ctx.uniq);
+      await page.goto(ctx.url('/admin/office-settings'));
+      const card = page.locator(`[data-office="${s.venueId}"]`);
+      await card.locator('input[name="discount"]').fill(String(s.newPct));
+      await card.locator('input[name="reason"]').fill('Flow discount snapshot test ' + ctx.uniq);
       const reloaded = page.waitForEvent('load').then(() => 'reloaded', () => 'timeout');
-      await page.locator('#dcForm').getByRole('button', { name: 'Save', exact: true }).click();
+      await card.getByRole('button', { name: /^Save / }).click();
       expect.equal(await reloaded, 'reloaded', 'the rate save');
-      const set = await dbOne(`SELECT setting_value AS v FROM system_settings WHERE setting_key = 'discount_percent'`);
-      expect.equal(Number(set.v), s.newPct, 'live discount_percent');
+      const set = await dbOne(`SELECT discount_percent AS v FROM venues WHERE id = ?`, [s.venueId]);
+      expect.equal(Number(set.v), s.newPct, 'the office rate');
       const b = await dbOne(`SELECT discount_percent, total_amount FROM bookings WHERE id = ?`, [s.bookingId]);
       expect.equal(Number(b.discount_percent), s.pct, 'the booking\'s discount_percent after the rate change');
       expect.equal(Number(b.total_amount), s.expected, 'the booking\'s total after the rate change');

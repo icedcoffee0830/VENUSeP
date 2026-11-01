@@ -41,6 +41,7 @@
    ===================================================================== */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/offices.php';
 require_once __DIR__ . '/amenities.php';
 require_once __DIR__ . '/auth.php';        /* staff_sees_venue() — staff list their own venue only */
 
@@ -133,6 +134,7 @@ foreach ($vrRoomRows as $r) {
     'active'      => (bool) $r['is_active'],     // catalog visibility — admin only reads this; customer pages never see a false row
     'capacity'    => (int) $r['attendee_capacity'],
     'maintenance' => isset($vrMaint[$r['id']]) ? $vrMaint[$r['id']] : null,
+    'office'      => office_by_id($r['venue_id']),
     'fee'         => (float) $r['fee_per_day'],      // to the centavo: the server charges it so (room forms take 0.01)
     'description' => (string) $r['description'],
     'amenities'   => amenity_labels($r['amenities']),

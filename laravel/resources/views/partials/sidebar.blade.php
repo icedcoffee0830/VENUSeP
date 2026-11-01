@@ -18,6 +18,7 @@
     : [
         ['Dashboard',           route('admin.dashboard'),              'bi-speedometer2'],
         ['Venue Management',    route('admin.venue-management'),       'bi-building'],
+        ['Office Settings',     route('admin.office-settings'),        'bi-sliders', 'admin'],
         ['Booking Management',  route('admin.booking-requests'),       'bi-calendar-check'],
         ['Transaction History', route('admin.transaction-history'),    'bi-receipt'],
         ['Calendar',            route('admin.calendar'),               'bi-calendar-event'],

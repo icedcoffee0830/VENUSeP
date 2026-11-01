@@ -11,11 +11,11 @@ use RuntimeException;
    One copy, so the counter cannot accept what the website refuses. */
 final class BookingRules
 {
-    /* The limits the booking pages draw: hours 7:00 AM - 10:00 PM (DB-DECISIONS #9),
-       and a range of at most 366 days or nights (rangeDates() / nightsOf()). */
-    private const OPENS = '07:00';
-    private const CLOSES = '22:00';
-    public const MAX_DAYS = 366;
+    /* A booking covers at most about 6 months; a venue can be booked 1 year ahead; one
+       customer holds at most 5 unpaid upcoming bookings per office online (2026-11-01).
+       Hours are each office's own (legacy offices.php). */
+    public const MAX_DAYS = 183;
+    public const MAX_UNPAID = 5;
     private const HHMM = '/^([01]\d|2[0-3]):[0-5]\d$/';   /* a real time of day, "00:00".."23:59" */
 
     /* A real calendar date in yyyy-mm-dd: the pattern alone let "2030-02-30" through. */
@@ -30,11 +30,53 @@ final class BookingRules
         return (int) round((strtotime($to) - strtotime($from)) / 86400);
     }
 
-    /* One day's hours: real HH:MM times, end after start, inside opening hours. */
-    public static function validHours(string $start, string $end): bool
+    /* One day's hours: real HH:MM times, end after start, inside this office's hours. */
+    public static function validHours(string $start, string $end, array $office): bool
     {
         return preg_match(self::HHMM, $start) && preg_match(self::HHMM, $end)
-            && $end > $start && $start >= self::OPENS && $end <= self::CLOSES;
+            && $end > $start && $start >= $office['opens'] && $end <= $office['closes'];
+    }
+
+    /* The refusal for a venue date beyond the year ahead, or null. */
+    public static function venueTooFarAhead(string $firstDay): ?string
+    {
+        $max = (int) config('venusep.max_days_ahead');
+        return self::daysBetween(date('Y-m-d'), $firstDay) <= $max ? null
+            : 'Venues can be booked at most 1 year ahead. Pick a date on or before ' . date('M j, Y', strtotime('+' . $max . ' days')) . '.';
+    }
+
+    /* A stay cannot be split around a night its office is closed: the refusal, or null. */
+    public static function stayClosed(array $office, string $checkIn, string $checkOut): ?string
+    {
+        for ($d = $checkIn; $d < $checkOut; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
+            if ($why = office_closed_reason($office, $d)) {
+                return 'The hostel is closed on ' . date('M j, Y', strtotime($d)) . ' (' . $why . '). A stay cannot be split around a closure. Please pick different dates.';
+            }
+        }
+        return null;
+    }
+
+    /* The refusal once a customer holds MAX_UNPAID unpaid upcoming bookings at this office. */
+    public static function tooManyUnpaid(PDO $pdo, int $customerId, int $venueId): ?string
+    {
+        $st = $pdo->prepare(
+            "SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id
+              WHERE b.customer_id = :c AND r.venue_id = :v
+                AND b.reservation_status IN ('pending', 'approved')
+                AND b.payment_status IN ('locked', 'await_event', 'await_gcash', 'await_cash', 'await_pos')
+                AND fn_booking_last_day(b.id) >= CURDATE()"
+        );
+        $st->execute([':c' => $customerId, ':v' => $venueId]);
+        return (int) $st->fetchColumn() < self::MAX_UNPAID ? null
+            : 'You already have ' . self::MAX_UNPAID . ' unpaid bookings with this office. Please pay or cancel one before booking again.';
+    }
+
+    /* What the new booking keeps for later: the rate shown right now, and who it is for. */
+    public static function stamp(PDO $pdo, int $bookingId, int $discount, $organization): void
+    {
+        $org = mb_substr(trim((string) $organization), 0, 190);
+        $pdo->prepare('UPDATE bookings SET quoted_discount_percent = :d, organization_name = :o WHERE id = :b')
+            ->execute([':d' => $discount, ':o' => $org !== '' ? $org : null, ':b' => $bookingId]);
     }
 
     /* system_settings.hostel_advance_booking_max_days (DB-DECISIONS: a stay can't be

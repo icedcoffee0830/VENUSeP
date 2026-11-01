@@ -38,6 +38,7 @@ class VenueBookingController extends Controller
             'REFUNDS_ENABLED'    => $REFUNDS_ENABLED,
             'POSTPAY_GRACE_DAYS' => $POSTPAY_GRACE_DAYS,
             'isUsep'             => $isUsep,
+            'lpDiscountLabel'    => office_discount_label(),
             'lpToday'            => date('Y-m-d'),
             /* The three places. Names must match the `venue` field in venue-rooms
                and $HOSTEL_VENUE in hostel-rooms. The blurbs are copy for this page

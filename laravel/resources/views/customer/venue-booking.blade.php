@@ -538,14 +538,14 @@
              crossed out. A preview, not a grant — staff confirm from the ID. -->
         <div class="lp-notice lp-notice-usep" data-reveal>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4.5 4.5L19 7"/></svg>
-          <span>You are signed in with a USeP account, so prices show your <strong>{{ (int) $DISCOUNT_PERCENT }}% USeP rate</strong> with the full price crossed out. It is confirmed from your USeP ID when staff approve the booking.</span>
+          <span>You are signed in with a USeP account, so prices show your <strong>{{ $lpDiscountLabel }} USeP rate</strong> with the full price crossed out. It is confirmed from your USeP ID when staff approve the booking.</span>
         </div>
       @else
         <!-- everyone else: full price, plus the nudge — a USeP student on a Gmail
              account should still find out the discount exists. -->
         <div class="lp-notice lp-notice-nudge" data-reveal>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a11626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-          <span><strong>USeP student, faculty or staff?</strong> You get {{ (int) $DISCOUNT_PERCENT }}% off &mdash; choose "USeP-affiliated" and upload your USeP ID when you book.</span>
+          <span><strong>USeP student, faculty, staff or alumni?</strong> You get {{ $lpDiscountLabel }} off &mdash; choose "USeP-affiliated" and upload your USeP ID when you book.</span>
         </div>
       @endif
 
@@ -589,7 +589,7 @@
             <p class="lp-card-meta">up to {{ number_format((int) $room['capacity']) }} guests</p>
             {!! $status !!}
             <p class="lp-card-desc">{{ $room['description'] }}</p>
-            <div class="lp-card-price">{!! usep_price_html((float) $room['fee'], $isUsep, ' per day') !!}</div>
+            <div class="lp-card-price">{!! usep_price_html((float) $room['fee'], $isUsep, ' per day', $room['office']['discount']) !!}</div>
           </div>
         </a>
 @endforeach
@@ -638,7 +638,7 @@
           {!! LP::photoBlock($room['id'], $crType === 'private' ? 'private' : 'bunk') !!}
           <div class="lp-card-body">
             <h3>{{ $room['name'] }}</h3>
-            <p class="lp-card-meta">{{ (int) $room['beds'] }} beds &middot; {!! usep_price_html((float) $room['rate'], $isUsep, ' per head, per night') !!}</p>
+            <p class="lp-card-meta">{{ (int) $room['beds'] }} beds &middot; {!! usep_price_html((float) $room['rate'], $isUsep, ' per head, per night', $room['office']['discount']) !!}</p>
             <span class="lp-free {{ $closed ? 'lp-free-closed' : (!$free ? 'lp-free-no' : 'lp-free-yes') }}">
               <i></i>
               {{ $closed ? 'Closed for maintenance tonight' : (!$free ? 'No beds free tonight' : $free . ' of ' . (int) $room['beds'] . ' beds free tonight') }}
@@ -690,7 +690,7 @@
       <div class="lp-footer-brand">
         <img class="lp-footer-logo" src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP">
         <p class="lp-footer-about">Venue and hostel booking for the University of Southeastern Philippines, Tagum&ndash;Mabini Campus. Run by the campus venue office.</p>
-        <span class="lp-footer-disc"><i></i>{{ (int) $DISCOUNT_PERCENT }}% off for USeP students &amp; staff</span>
+        <span class="lp-footer-disc"><i></i>{{ $lpDiscountLabel }} off for USeP students, staff &amp; alumni</span>
       </div>
       <div>
         <h4>Book</h4>

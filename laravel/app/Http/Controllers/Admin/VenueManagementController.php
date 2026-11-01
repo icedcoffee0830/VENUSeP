@@ -77,23 +77,6 @@ class VenueManagementController extends Controller
             $vmStaffByVenue[(int) $vmStaff['venue_id']][] = (string) $vmStaff['full_name'];
         }
 
-        /* The rate's change history — system_settings_history, written by
-           discount-save. A settings change is an EVENT, not an overwrite. */
-        $dcHistory = [];
-        try {
-            $dcHistory = venusep_db_or_fail()->query(
-                "SELECT h.old_value, h.new_value, h.change_note, h.changed_at,
-                        COALESCE(u.username, u.email, 'Administrator') AS changed_by
-                   FROM system_settings_history h
-                   LEFT JOIN users u ON u.id = h.changed_by_user_id
-                  WHERE h.setting_key = 'discount_percent'
-                  ORDER BY h.changed_at DESC, h.id DESC
-                  LIMIT 6"
-            )->fetchAll();
-        } catch (PDOException $e) {
-            $dcHistory = [];   // the rate still shows; only its history is missing
-        }
-
         return view('admin.venue-management', [
             'TODAY' => date('Y-m-d'),
             'venues' => $venues,
@@ -105,7 +88,6 @@ class VenueManagementController extends Controller
             'vmVenueRows' => $vmVenueRows,
             'vmStaffByVenue' => $vmStaffByVenue,
             'vmMyVenue' => $vmMyVenue,
-            'dcHistory' => $dcHistory,
             'dcCsrf' => csrf_token(),
             'pricingScript' => $pricingScript,
         ]);

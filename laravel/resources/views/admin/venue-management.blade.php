@@ -794,65 +794,6 @@ function vmMaint($m, $today) {
       </div>
 
 
-      <!-- ============================================================
-           USeP DISCOUNT RATE — ONE rate for every venue and the hostel
-           (DB-DECISIONS #2: system_settings.discount_percent). It sits HERE,
-           where the fees live, and ABOVE the venue cards so nobody reads it as
-           per-venue. Admin only; staff will REQUEST changes once a staff UI
-           exists (agreed 2026-09-14). A change is an EVENT — who/when/from/to/
-           why — which is both the audit trail and the shape a request takes.
-           Value and history are system_settings + system_settings_history.
-           Its own panel class, not .vm-card: that one is a grid tile that
-           lifts on hover and clips overflow — wrong for a settings control. -->
-      <div class="vm-section-title">Pricing <span>&mdash; one rate, every venue and the hostel</span></div>
-      <section class="vm-setting" id="vmDiscount">
-        <div class="vm-setting-main">
-          <div class="vm-setting-rate"><span id="dcCurrent">{{ (int) $DISCOUNT_PERCENT }}%</span><small>off</small></div>
-          <div class="vm-setting-copy">
-            <div class="vm-setting-title">USeP discount rate <span class="vm-loc-badge">Admin only</span></div>
-            <p>For USeP students, faculty and employees, once staff verify their USeP ID. Changing it affects <strong>new bookings only</strong> &mdash; existing bookings keep the rate they were quoted. <strong>0%</strong> switches the discount off.</p>
-          </div>
-          @if (admin_is_admin()) {{-- the rate is admin-only; staff see it, not the button --}}
-          <div class="vm-setting-act">
-            <button class="vm-btn vm-btn-primary" type="button" id="dcOpen" onclick="dcToggle(true)">Change rate</button>
-          </div>
-          @endif
-        </div>
-
-        <form class="vm-setting-form" id="dcForm" hidden onsubmit="return false">
-          <div class="vm-setting-field">
-            <label for="dcRate">New rate</label>
-            <div class="vm-setting-pct"><input id="dcRate" type="number" min="0" max="100" step="1" inputmode="numeric" value="{{ (int) $DISCOUNT_PERCENT }}"><span>%</span></div>
-          </div>
-          <div class="vm-setting-field vm-setting-field-wide">
-            <label for="dcReason">Reason <span class="req">*</span></label>
-            <input id="dcReason" type="text" placeholder="Required &mdash; recorded in the history below">
-          </div>
-          <div class="vm-setting-buttons">
-            <button class="vm-btn vm-btn-primary" type="button" onclick="dcSave()">Save</button>
-            <button class="vm-btn vm-btn-outline" type="button" onclick="dcToggle(false)">Cancel</button>
-          </div>
-          <div class="vm-setting-msg" id="dcErr" hidden></div>
-          <div class="vm-setting-msg ok" id="dcSaved" hidden>Saved &mdash; new bookings now use this rate.</div>
-        </form>
-
-        <div class="vm-setting-hist">
-          <div class="vm-setting-hist-title">Change history</div>
-          <div id="dcHistory">
-@if (!$dcHistory)
-            <div class="vm-setting-hist-empty">No changes yet &mdash; the rate is the default from system settings.</div>
-@else
-@foreach ($dcHistory as $h)
-            <div class="vm-setting-row">
-              <b>{{ (int) $h['old_value'] }}% &rarr; {{ (int) $h['new_value'] }}%</b>
-              <span class="who">{{ (string) $h['changed_by'] }} &middot; {{ date('M j, Y, g:i A', strtotime((string) $h['changed_at'])) }}</span>
-              <span class="why">{{ (string) $h['change_note'] }}</span>
-            </div>
-@endforeach
-@endif
-          </div>
-        </div>
-      </section>
       <!-- VENUES -->
       <div class="vm-section-title">Venues <span>&mdash; locations that hold rooms</span></div>
       <div class="vm-grid">
@@ -1202,52 +1143,6 @@ function vmMaint($m, $today) {
             .finally(() => { button.disabled = false; });
         });
       });
-    </script>
-    <!-- [6b] DISCOUNT RATE SCRIPT — the form is hidden until "Change rate" is
-         clicked, so the resting state is one number and one sentence. Saving
-         POSTs to admin/discount-save.php, which is the ONLY writer of
-         system_settings.discount_percent and also records the change as an
-         event in system_settings_history. The history list itself is rendered
-         server-side above; after a save we reload so it comes back from the
-         database rather than being patched in by hand. -->
-    <script>
-      (function () {
-        const CSRF = {!! json_encode($dcCsrf) !!};
-        const $ = function (id) { return document.getElementById(id); };
-        window.dcToggle = function (show) {
-          $('dcForm').hidden = !show;
-          $('dcOpen').hidden = show;
-          $('dcErr').hidden = true; $('dcSaved').hidden = true;
-          if (show) { $('dcRate').value = parseInt($('dcCurrent').textContent, 10); $('dcReason').value = ""; $('dcRate').focus(); }
-        };
-        window.dcSave = function () {
-          const err = $('dcErr'), ok = $('dcSaved');
-          err.hidden = true; ok.hidden = true;
-          const raw = $('dcRate').value.trim(), reason = $('dcReason').value.trim();
-          const cur = parseInt($('dcCurrent').textContent, 10);
-          const fail = function (m) { err.textContent = m; err.hidden = false; };
-          /* Checked here for a fast, friendly message — and again on the server,
-             which is the check that actually counts. */
-          if (!/^\d{1,3}$/.test(raw) || parseInt(raw, 10) > 100) { return fail('Enter a whole number from 0 to 100.'); }
-          const next = parseInt(raw, 10);
-          if (next === cur) { return fail('That is already the current rate.'); }
-          if (!reason) { return fail('A reason is required — it goes into the change history.'); }
-
-          const body = new URLSearchParams({ _token: CSRF, percent: String(next), reason: reason });
-          fetch({!! json_encode(route('admin.discount-save')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
-            .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
-            .then(function (res) {
-              if (!res.ok) { return fail(res.message || 'The rate was not changed.'); }
-              $('dcCurrent').textContent = next + '%';
-              $('dcForm').hidden = true; $('dcOpen').hidden = false;
-              ok.hidden = false;
-              /* Reload for the history row + every price on this page, which is
-                 rendered in PHP from the rate we just changed. */
-              setTimeout(function () { location.reload(); }, 700);
-            })
-            .catch(function () { fail('Could not reach the server, so the rate was not changed.'); });
-        };
-      })();
     </script>
   
 @endpush

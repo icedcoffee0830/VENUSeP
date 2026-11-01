@@ -27,8 +27,8 @@
    asking a USeP customer for their USeP ID instead of a driver's licence
    costs them nothing — which is what makes proof affordable here.
    ===================================================================== */
-/* THE LIVE RATE — system_settings.discount_percent, edited on admin Venue
-   Management and written by admin/discount-save.php (the only writer).
+/* THE LIVE RATE — each office's own (venues.discount_percent, Office Settings). A page
+   about one room gets that office's; a page about none, the highest.
 
    This used to be a per-browser cookie, because there was no database to keep
    it in: the value had to reach BOTH the PHP-rendered listing and the JS
@@ -38,28 +38,11 @@
    Validated on the way OUT as well as in: a row that somehow holds nonsense
    falls back to 20 rather than pricing a booking at 0% or 900%. */
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/offices.php';
 
 function venusep_discount_percent() {
-    static $pct = null;
-    if ($pct !== null) {
-        return $pct;
-    }
-    $pct = 20;                         // the default, if the row is missing or unreadable
-    $pdo = venusep_db();
-    if ($pdo === null) {
-        return $pct;                   // priced pages call venusep_db_or_fail() themselves
-    }
-    try {
-        $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'discount_percent' LIMIT 1");
-        $stmt->execute();
-        $v = $stmt->fetchColumn();
-        if ($v !== false && preg_match('/^\d{1,3}$/', (string) $v) && (int) $v <= 100) {
-            $pct = (int) $v;
-        }
-    } catch (PDOException $e) {
-        // keep the default
-    }
-    return $pct;
+    $rates = array_column(office_all(), 'discount');
+    return office_page()['discount'] ?? ($rates ? max($rates) : 20);
 }
 
 $DISCOUNT_PERCENT = venusep_discount_percent();
@@ -79,9 +62,9 @@ function usep_is_account($email) {
     $d = $parts[1];
     return $d === $USEP_MAIL_DOMAIN || substr($d, -strlen('.' . $USEP_MAIL_DOMAIN)) === '.' . $USEP_MAIL_DOMAIN;
 }
-function usep_discounted($price) {
+function usep_discounted($price, $pct = null) {
     global $DISCOUNT_PERCENT;
-    return $price - round($price * $DISCOUNT_PERCENT) / 100;
+    return $price - round($price * ($pct ?? $DISCOUNT_PERCENT)) / 100;
 }
 /* "~~₱5,000~~ ₱4,000 per day · 20% off" for a USeP account, plain "₱5,000"
    otherwise. A preview — staff still confirm the discount from the ID at
@@ -91,12 +74,13 @@ function usep_discounted($price) {
 function usep_peso($n) {
     return number_format($n, fmod((float) $n, 1.0) == 0.0 ? 0 : 2);
 }
-function usep_price_html($price, $isUsep, $unit = '') {
+function usep_price_html($price, $isUsep, $unit = '', $pct = null) {
     global $DISCOUNT_PERCENT;
+    $pct = $pct ?? $DISCOUNT_PERCENT;
     $full = '₱' . usep_peso($price);
     if (!$isUsep) return $full . $unit;
-    return '<s style="color:#a5a19a;font-weight:400">' . $full . '</s> <strong style="color:#1c7a4f">₱' . usep_peso(usep_discounted($price)) . '</strong>' . $unit
-         . ' <span style="font-size:11px;color:#1c7a4f;white-space:nowrap">· ' . (int) $DISCOUNT_PERCENT . '% off</span>';
+    return '<s style="color:#a5a19a;font-weight:400">' . $full . '</s> <strong style="color:#1c7a4f">₱' . usep_peso(usep_discounted($price, $pct)) . '</strong>' . $unit
+         . ' <span style="font-size:11px;color:#1c7a4f;white-space:nowrap">· ' . (int) $pct . '% off</span>';
 }
 ?>
 <script>

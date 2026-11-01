@@ -83,8 +83,9 @@ class BookingActionController extends Controller
         $cur = $pdo->prepare(
             'SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
                     b.is_usep_affiliated, b.room_price, b.refunds_allowed, b.pay_to_use, b.approved_at,
-                    (SELECT c.user_id FROM customers c WHERE c.id = b.customer_id) AS customer_user_id
-               FROM bookings b WHERE b.id = :b'
+                    (SELECT c.user_id FROM customers c WHERE c.id = b.customer_id) AS customer_user_id,
+                    COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount
+               FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id WHERE b.id = :b'
         );
         $cur->execute([':b' => $bookingId]);
         $bk = $cur->fetch();
@@ -261,7 +262,7 @@ class BookingActionController extends Controller
                 $this->reply(400, ['ok' => false, 'message' => 'This booking did not claim USeP affiliation.']);
             }
             /* Snapshot the rate ONTO the booking. */
-            $pct    = $withDiscount ? (int) venusep_discount_percent() : 0;
+            $pct    = $withDiscount ? (int) $bk['quoted_discount'] : 0;   /* the rate shown when they booked (2026-11-01) */
             $amount = round((float) $bk['room_price'] * $pct / 100, 2);
             $this->setActor($pdo, $actor, $note !== '' ? $note : ($withDiscount ? 'ID verified; USeP rate applied.' : 'ID verified.'));
             $pdo->prepare(

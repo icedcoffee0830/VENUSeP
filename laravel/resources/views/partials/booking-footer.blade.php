@@ -6,7 +6,7 @@
       <div class="bk-footer-brand">
         <img class="bk-footer-logo" src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP">
         <p class="bk-footer-about">Venue and hostel booking for the University of Southeastern Philippines, Tagum&ndash;Mabini Campus. Run by the campus venue office.</p>
-        <span class="bk-footer-disc"><i></i>{{ (int) $DISCOUNT_PERCENT }}% off for USeP students &amp; staff</span>
+        <span class="bk-footer-disc"><i></i>{{ (int) $DISCOUNT_PERCENT }}% off for USeP students, staff &amp; alumni</span>
       </div>
       <div>
         <h4>Book</h4>

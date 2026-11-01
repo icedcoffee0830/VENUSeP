@@ -179,7 +179,7 @@
           <h3>{{ $r['name'] }}</h3>
           <p class="bk-more-meta">{{ $r['venue'] }} &middot; up to {{ number_format((int) $r['capacity']) }} guests</p>
           {!! $status !!}
-          <p class="bk-more-price">{!! usep_price_html((float) $r['fee'], $mrUsep, ' per day') !!}</p>
+          <p class="bk-more-price">{!! usep_price_html((float) $r['fee'], $mrUsep, ' per day', $r['office']['discount']) !!}</p>
         </div>
       </a>
 @endforeach
@@ -224,15 +224,11 @@ const ROOMS = {!! json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_
 /* "Now" is the real clock at page load (matches the live PHP app). The 12-hour
    advance rule and the earliest selectable date are both measured from here. */
 const NOW = new Date();
-const LEAD_MS = 12 * 60 * 60 * 1000;              // bookings must start ≥ 12 h from now
 const TODAY = isoOf(NOW);
 
-/* USeP Venues (the main campus location) can be booked same-day — there is no
-   Official Receipt lead time to wait on the way Bahay Alumni needs, so staff
-   there just need the room to still be free later today. Walk-ins at the
-   counter keep the full 12-hour rule regardless of venue (mirrors
-   admin/booking-create.php, which enforces it for every COUNTER booking). */
-function leadMsFor(room){ return (!COUNTER && room && room.venue==='USeP Venues') ? 0 : LEAD_MS; }
+/* Each office's own lead time (Office Settings), online and at the counter. */
+function leadMsFor(room){ return (room && room.office ? room.office.lead : 12) * 3600000; }
+function leadHours(){ return Math.round(leadMsFor(getRoom()) / 3600000); }
 
 /* [SIM] Sample equirectangular panorama (swap for real per-room images later). */
 const SAMPLE_PANO = 'https://pannellum.org/images/alma.jpg';
@@ -289,7 +285,9 @@ const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED
 /* SAME DAY, DIFFERENT TIME (2026-10-27): minutes kept free before and after
    every booking of a room. From system_settings, the same value
    sp_add_venue_slot() enforces. */
-const VENUE_GAP_MIN = {{ (int) venue_cleanup_gap_minutes() }};
+const VENUE_GAP_MIN = {{ (int) (office_page()['gap'] ?? venue_cleanup_gap_minutes()) }};
+const PAGE_OFFICE = {!! json_encode(office_page(), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+{!! office_js() !!}
 
 /* ROOMS is defined at the top of the page from includes/venue-rooms.php — the ONE
    shared source, so the booking page, the landing page and admin Venue Management
@@ -426,6 +424,8 @@ function maintUntilLabel(m){ return m.until ? 'Until '+fmtDate(m.until) : 'No se
    hours stay bookable as long as they keep the cleanup gap — see clashesOn(). */
 function dayBlock(ds){
   const r=getRoom(); if(!r) return null;
+  const closedWhy=officeClosure(r,ds);
+  if(closedWhy) return { why:'maintenance', m:{ reason:closedWhy, blocks:true } };
   if(maintCovers(r.maintenance,ds) && r.maintenance.blocks) return { why:'maintenance', m:r.maintenance };
   return null;
 }
@@ -436,7 +436,7 @@ function isDayBlocked(ds){ return !!dayBlock(ds); }
    come too close to. Too close = within VENUE_GAP_MIN minutes, before or after
    — the same test sp_add_venue_slot() runs, so what this page accepts the
    database accepts. */
-const DAY_OPEN = 7*60, DAY_CLOSE = 22*60;            // the hours the time pickers offer
+const DAY_OPEN = toMin(PAGE_OFFICE ? PAGE_OFFICE.opens : '07:00'), DAY_CLOSE = toMin(PAGE_OFFICE ? PAGE_OFFICE.closes : '22:00');   // the hours the time pickers offer
 function bookedOn(ds){ const r=getRoom(); return r ? r.booked.filter(b=>b.date===ds) : []; }
 function clashesOn(ds, start, end){
   const s=toMin(start), e=toMin(end);
@@ -603,7 +603,7 @@ function derive(){
       slot={show:true,dot:'#d9930d',title:'End date must be on or after the start date',detail:'Adjust your reservation dates to check availability.'};
     } else if(sr.allBlocked){
       slot={show:true,dot:'#d9930d',title: multi?'These dates are not available':'This date is not available',
-        detail: sr.why==='maintenance' ? 'The room is closed for maintenance on these dates — please pick different dates.'
+        detail: sr.why==='maintenance' ? 'The room is closed on these dates — please pick different dates.'
                                        : 'Not available — please pick different dates.'};
     } else if(sr.clash){
       const cl=new Date(sr.clashDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
@@ -620,7 +620,7 @@ function derive(){
     } else if(tooSoon){
       slot = sameDayOk
         ? {show:true,dot:'#d9930d',title:'That time has already passed today',detail:'Pick a start time later today, or a future date.'}
-        : {show:true,dot:'#d9930d',title:'Too soon — book at least 12 hours ahead',detail:'Reservations must start at least 12 hours from now. Pick a later date or start time.'};
+        : {show:true,dot:'#d9930d',title:'Too soon — book at least '+leadHours()+' hours ahead',detail:'Reservations must start at least '+leadHours()+' hours from now. Pick a later date or start time.'};
     } else if(sr.ok){
       let timeLbl;
       if(sr.dates.length<2){ const t=dayTime(sr.dates[0]); timeLbl=fmtTime(t.start)+' – '+fmtTime(t.end); }
@@ -643,11 +643,11 @@ function derive(){
   if(!b.eventName) hint='Enter an event name to continue';
   else if(!dateOk) hint='Pick valid reservation dates';
   else if(sr.show && sr.badRange) hint='End date must be on or after the start date';
-  else if(sr.show && sr.allBlocked) hint = sr.why==='maintenance' ? 'Closed for maintenance — pick different dates' : 'These dates are already booked — pick different ones';
+  else if(sr.show && sr.allBlocked) hint = sr.why==='maintenance' ? 'Closed on these dates — pick different dates' : 'These dates are already booked — pick different ones';
   else if(sr.show && sr.invalid) hint= (multi?badDayLabel+': ':'')+badFix;
   else if(sr.show && sr.clash) hint='Pick hours that keep a '+gapWords()+' gap from the existing booking';
   else if(!sr.show) hint='Set the hours to check availability';
-  else if(tooSoon) hint = sameDayOk ? 'Pick a start time that hasn\'t passed yet today' : 'Bookings must be made at least 12 hours in advance';
+  else if(tooSoon) hint = sameDayOk ? 'Pick a start time that hasn\'t passed yet today' : 'Bookings must be made at least '+leadHours()+' hours in advance';
   else if(isNaN(ba)||ba<=0) hint='Enter the number of attendees';
 
   return { R, b, days, multi, excluded, allDates, dates:sr.dates||actDates, totalFee, roomPrice, discountPercent, discountAmount, slot, over, ready, hint };
@@ -1101,8 +1101,8 @@ function detailScreen(){
     content=`
       <h3 style="margin:0 0 4px;font-size:16px;font-weight:660">Reservation policies</h3>
       ${leadMsFor(R)===0
-        ? policy('Booking window','This USeP Venues room can be booked <strong>the same day</strong> — your start time just has to be later than right now, with enough of the day left before the <strong>10:00 PM</strong> closing time for your event. A date that already has a reservation can still be booked at <strong>other times</strong>, keeping a <strong>'+gapWords()+' gap</strong> before and after each booking for cleanup. You pay the day rate for each day you book.')
-        : policy('Booking window','Reservations must be made <strong>at least 12 hours in advance</strong> — your start time cannot be within 12 hours of booking. A date that already has a reservation can still be booked at <strong>other times</strong>, keeping a <strong>'+gapWords()+' gap</strong> before and after each booking for cleanup. You pay the day rate for each day you book.')}
+        ? policy('Booking window','This room can be booked <strong>the same day</strong> — your start time just has to be later than right now, with enough of the day left before the <strong>10:00 PM</strong> closing time for your event. A date that already has a reservation can still be booked at <strong>other times</strong>, keeping a <strong>'+gapWords()+' gap</strong> before and after each booking for cleanup. You pay the day rate for each day you book.')
+        : policy('Booking window','Reservations must be made <strong>at least '+leadHours()+' hours in advance</strong> — your start time cannot be within '+leadHours()+' hours of booking. A date that already has a reservation can still be booked at <strong>other times</strong>, keeping a <strong>'+gapWords()+' gap</strong> before and after each booking for cleanup. You pay the day rate for each day you book.')}
       ${policy('Valid ID & approval','Every booking request must include a photo of a <strong>valid ID</strong> (USeP or government-issued). Your reservation stays <strong>pending</strong> — and payment stays locked — until staff approve both the ID and the reservation.')}
       ${PAY_POLICY.prepay
         ? policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')
@@ -1128,9 +1128,8 @@ function detailScreen(){
     let opts='';
     if(open){
       const taken=ds ? bookedOn(ds) : [];
-      for(let h=7;h<=22;h++) for(const mm of ['00','30']){
-        if(h===22 && mm==='30') continue;
-        const v=String(h).padStart(2,'0')+':'+mm, vm=toMin(v);
+      for(let vm=DAY_OPEN;vm<=DAY_CLOSE;vm+=30){
+        const v=String(Math.floor(vm/60)).padStart(2,'0')+':'+String(vm%60).padStart(2,'0');
         const hit=taken.find(b=>{
           const lo=toMin(b.start)-VENUE_GAP_MIN, hi=toMin(b.end)+VENUE_GAP_MIN;
           return kind==='end' ? (vm>lo && vm<=hi) : (vm>=lo && vm<hi);
@@ -1157,7 +1156,7 @@ function detailScreen(){
       if(isDayBlocked(ds)){
         return `<div class="bk-day-row bk-day-off" style="display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center;margin-bottom:8px">
           <span style="font-size:12px;font-weight:600;color:#f2d0cb">${lbl}</span>
-          <span style="height:42px;display:flex;align-items:center;padding:0 11px;border:1px dashed rgba(0,0,0,.14);border-radius:9px;font-size:12px;color:#a5a19a;background:#fff">Not available — closed for maintenance</span>
+          <span style="height:42px;display:flex;align-items:center;padding:0 11px;border:1px dashed rgba(0,0,0,.14);border-radius:9px;font-size:12px;color:#a5a19a;background:#fff">Not available — closed</span>
         </div>`;
       }
       const taken=bookedOn(ds);
@@ -1179,7 +1178,7 @@ function detailScreen(){
           <span></span><span style="font-size:12px;color:#d5b8b5">Start</span><span style="font-size:12px;color:#d5b8b5">End</span>
         </div>
         ${rows}
-        ${d.excluded?`<div style="font-size:12px;color:#d5b8b5;margin-top:2px">Days closed for maintenance are left out automatically — you only book and pay for the available days.</div>`:''}
+        ${d.excluded?`<div style="font-size:12px;color:#d5b8b5;margin-top:2px">Closed days are left out automatically — you only book and pay for the available days.</div>`:''}
       </div>`;
   } else {
     timeSection=`
@@ -1256,7 +1255,7 @@ function detailScreen(){
         <div style="font-size:20px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px">Reserve this room</div>
         <div style="font-size:12.5px;line-height:1.55;color:#e9d0cd;margin-bottom:18px">${leadMsFor(R)===0
           ? 'Pick your dates &amp; time to check the slot. This room can be booked the same day, as long as the time hasn&rsquo;t passed yet and still fits before 10:00 PM.'
-          : 'Pick your dates &amp; time to check the slot. Bookings must start at least 12 hours from now. <a onclick="openLeadModal()" style="font-weight:600;cursor:pointer;white-space:nowrap">Why?</a>'}</div>
+          : 'Pick your dates &amp; time to check the slot. Bookings must start at least '+leadHours()+' hours from now. <a onclick="openLeadModal()" style="font-weight:600;cursor:pointer;white-space:nowrap">Why?</a>'}</div>
         ${maintDisclosure(R)}
 
         <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
@@ -1427,7 +1426,7 @@ function reviewScreen(){
     ${COUNTER?'':`
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
       <div style="font-size:14px;font-weight:660;margin-bottom:3px">USeP affiliation <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px">USeP students, faculty and employees get <strong>${DISCOUNT_PERCENT}% off</strong>. Staff confirm this from your ID before you pay.</div>
+      <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px">USeP students, faculty, employees and alumni get <strong>${DISCOUNT_PERCENT}% off</strong>. Staff confirm this from your ID before you pay.</div>
       ${[[true,'I am USeP-affiliated','Student, faculty or employee &mdash; upload your <strong>USeP ID</strong> below'],
          [false,'Not affiliated','Upload any valid government-issued ID below']].map(function(o){
         const on = state.affiliated === o[0];
@@ -1793,10 +1792,10 @@ function modalHtml(){
       <div style="width:46px;height:46px;border-radius:999px;background:#eef0f5;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a11626" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       </div>
-      <div style="font-size:17px;font-weight:720;letter-spacing:-.01em;margin-bottom:6px">${sameDayOk ? 'Pick a time that hasn&rsquo;t passed yet' : 'Book at least 12 hours ahead'}</div>
+      <div style="font-size:17px;font-weight:720;letter-spacing:-.01em;margin-bottom:6px">${sameDayOk ? 'Pick a time that hasn&rsquo;t passed yet' : 'Book at least '+leadHours()+' hours ahead'}</div>
       <p style="margin:0 auto 16px;font-size:13.5px;line-height:1.6;color:#7a766f;max-width:32ch">${sameDayOk
         ? 'This room can be booked the same day — but the time you picked is already behind the current time.'
-        : 'Venue staff need time to prepare — reservations must start at least <strong style="color:#4a463f">12 hours from now</strong>. The time you picked is too soon.'}</p>
+        : 'Venue staff need time to prepare — reservations must start at least <strong style="color:#4a463f">'+leadHours()+' hours from now</strong>. The time you picked is too soon.'}</p>
       <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px 14px;margin-bottom:18px">
         <div style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">Earliest start</div>
         <div style="font-size:15px;font-weight:680;color:#a11626">${when}</div>
@@ -1817,7 +1816,7 @@ function clashModalHtml(){
   const maint = blk.why==='maintenance';
   const dl=fmtDate(m.day);
   const multi=rangeDates(state.booking.date, state.booking.dateEnd||state.booking.date).length>1;
-  const why = maint ? 'The room is <strong>closed for maintenance</strong> on that date'
+  const why = maint ? 'The room is <strong>closed</strong> on that date'
                     : 'That date already has a reservation, so it is <strong>not available</strong>';
   const body = multi
     ? why+'. It has been left out of your booking automatically — you are only reserving the remaining available days (and only paying for those).'

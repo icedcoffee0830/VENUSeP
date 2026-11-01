@@ -136,7 +136,7 @@ export default {
       await page.goto(ctx.url('/admin/office-settings'));
       const card = page.locator('[data-office="1"]');
       await card.locator('input[name="discount"]').fill(String(s.rate));
-      await card.locator('input[name="reason"]').fill(s.reason);
+      await card.locator('.os-form input[name="reason"]').fill(s.reason);
       const reloaded = page.waitForEvent('load').then(() => true, () => false);
       await card.getByRole('button', { name: /^Save / }).click();
       expect.ok(await reloaded, 'the page did not reload after Save');

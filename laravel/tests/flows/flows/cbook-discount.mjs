@@ -95,7 +95,7 @@ export default {
       await page.goto(ctx.url('/admin/office-settings'));
       const card = page.locator(`[data-office="${s.venueId}"]`);
       await card.locator('input[name="discount"]').fill(String(s.newPct));
-      await card.locator('input[name="reason"]').fill('Flow discount snapshot test ' + ctx.uniq);
+      await card.locator('.os-form input[name="reason"]').fill('Flow discount snapshot test ' + ctx.uniq);
       const reloaded = page.waitForEvent('load').then(() => 'reloaded', () => 'timeout');
       await card.getByRole('button', { name: /^Save / }).click();
       expect.equal(await reloaded, 'reloaded', 'the rate save');

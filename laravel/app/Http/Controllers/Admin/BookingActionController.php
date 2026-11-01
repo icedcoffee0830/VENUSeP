@@ -151,18 +151,18 @@ class BookingActionController extends Controller
 
     /* A receipt the checker could read must show exactly what is owed. An unreadable
        amount is left to staff, who check the office's GCash app. */
-    private function refuseWrongAmount(?array $upload, array $bk): void
+    private function refuseWrongAmount(?array $upload, array $booking): void
     {
-        if ($upload && $upload['amount_centavos'] !== null && (int) $upload['amount_centavos'] !== (int) round((float) $bk['total_amount'] * 100)) {
+        if ($upload && $upload['amount_centavos'] !== null && (int) $upload['amount_centavos'] !== (int) round((float) $booking['total_amount'] * 100)) {
             $this->reply(409, ['ok' => false, 'message' => 'The receipt shows a different amount. Only the exact amount is accepted: reject it and return the money.']);
         }
     }
 
     /* Paperwork never lands on a booking that has ended (Aron 2026-11-01). A completed
        one still can: a post-pay stay is paid, and its paperwork arrives, after it. */
-    private function refuseOnClosedBooking(array $bk, string $what): void
+    private function refuseOnClosedBooking(array $booking, string $what): void
     {
-        if (in_array($bk['reservation_status'], [Status::REJECTED, Status::CANCELLED, Status::RELEASED], true)) {
+        if (in_array($booking['reservation_status'], [Status::REJECTED, Status::CANCELLED, Status::RELEASED], true)) {
             $this->reply(409, ['ok' => false, 'message' => $what . ' cannot be recorded on a closed booking.']);
         }
     }

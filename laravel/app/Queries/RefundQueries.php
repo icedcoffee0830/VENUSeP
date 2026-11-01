@@ -36,7 +36,7 @@ class RefundQueries
         return $row ? (array) $row : null;
     }
 
-    /* Whether the booking has a refund request staff can still decide. */
+    /* Whether the booking has a refund request staff can still decide (the same list as Status::REFUND_OPEN). */
     public static function hasOpenRefund(int $bookingId): bool
     {
         return DB::selectOne("

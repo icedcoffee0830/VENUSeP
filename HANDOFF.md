@@ -448,3 +448,9 @@ Conflicts are being settled with Aron; nothing above is built yet.
 - **36, closed bookings:** an ID is also deleted when a booking closes without being Completed (cancelled, expired, refunded). A rejected request keeps its ID until the chance to fix it has passed.
 
 **Privacy before real IDs are collected (Aron is concerned; Data Privacy Act):** get the USeP DPO to sign off; add the privacy notice and a consent tick at upload. Until then, test only with fake IDs. Proposed, not yet approved: encrypt stored IDs, log who opens them, and leave IDs out of backups.
+
+### IDs and force cancel (Aron, 2026-11-01)
+
+- **IDs:** deleted per booking once it is finished. Encrypted when stored. Log who opens one. Left out of backups. The booking page says the ID was removed and when, and keeps who verified it. There is no DPO: this is a school project.
+- **Force cancel (staff, own office, no admin needed):** only when not paid, no receipt waiting for review, and the event has not started. Requires a reason and a note. Customer and admins are notified. Also covers answer 15 (cancel after approval goes through staff). Repeat offenders: an admin disables the account.
+- **Under discussion:** keeping the ID on a suspected fake booking; an admin-only "Reverse payment".

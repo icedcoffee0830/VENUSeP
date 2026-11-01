@@ -105,7 +105,7 @@
          shows its column name (data-label) in front, the header row is hidden,
          and the id + status sit on the first line. The sorting/filtering
          script is untouched — it still works on the same rows. ---- */
-      @media (max-width: 720px) {
+      @media (max-width: 1000px) {
         .booking-history-table { min-width: 0; }
         .booking-history-table thead { display: none; }
         .booking-history-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 14px 16px; border-bottom: 1px solid #ece8e1; }

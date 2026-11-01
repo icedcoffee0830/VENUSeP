@@ -134,7 +134,7 @@
     .bk-cta-price{font-size:13px;color:#4a463f;line-height:1.3;min-width:0}
     .bk-cta-price strong{display:block;font-family:Archivo,Inter,sans-serif;font-size:17px;font-weight:800;color:#1c1b19}
     .bk-cta-btn{flex:none;height:44px;padding:0 18px;border:0;border-radius:12px;background:#a11626;color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
-    body.bk-cta-on #app{padding-bottom:72px}
+    body.bk-cta-on{padding-bottom:72px}
   }
 </style>
 </head>

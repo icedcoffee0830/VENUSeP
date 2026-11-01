@@ -101,7 +101,9 @@ if (!$navAuthed) {                                                      /* a gue
   .cn-burger { display: none; width: 44px; height: 44px; place-items: center; border-radius: 12px;
     border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); cursor: pointer; }
   .cn-menu { display: none; }
-  @media (max-width: 720px) {
+  @media (max-width: 720px) { .cn-leave { display: none; } }   /* the menu has the same link */
+  /* the burger takes over where the full set of links stops fitting */
+  @media (max-width: 900px) {
     .cn-wrap, .cn-nav.is-static .cn-wrap { padding: 0 18px; height: 72px; }
     .cn-links, .cn-name, .cn-logout { display: none; }
     /* guest on a phone: "Log in" (outlined) beside "Sign up" (white pill), so

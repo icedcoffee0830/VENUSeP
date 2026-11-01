@@ -116,6 +116,7 @@
 
         .main {
             flex: 1;
+            min-width: 0;   /* a wide table scrolls inside its box instead of widening the page */
             padding: 24px 28px;
         }
 

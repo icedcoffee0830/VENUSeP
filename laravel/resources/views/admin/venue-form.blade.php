@@ -334,6 +334,8 @@ if (!function_exists('vf_initials')) {
         box-shadow: var(--vm-shadow-hover);
         transform: translateY(-1px);
       }
+    
+      .vm-photo-btn { min-height: 32px; }
     </style>
 @endpush
 

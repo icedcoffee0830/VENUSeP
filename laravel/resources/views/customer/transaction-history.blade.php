@@ -87,6 +87,7 @@
         .container-fluid { padding-inline: 12px; }
         .app-content-header { padding-top: 16px; }
       }
+    @include('partials.tabulator-pager-css')
     </style>
 @endpush
 @section('content')

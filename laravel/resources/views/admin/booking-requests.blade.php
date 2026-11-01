@@ -87,6 +87,8 @@
         .hide-md { display: none; }
         .br-search { margin-left: 0; width: 100%; }
       }
+    
+      .br-pagesize select { min-height: 32px; }
     </style>
 @endpush
 @section('content')

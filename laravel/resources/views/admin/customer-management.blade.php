@@ -292,7 +292,8 @@
   }
 }
 
-  </style>
+  @include('partials.tabulator-pager-css')
+    </style>
 @endpush
 
 @section('content')
@@ -383,8 +384,8 @@
         movableColumns: true,
         columns: [
           { title: '#', field: 'id', width: 60, headerSort: true },
-          { title: 'Name', field: 'name', headerFilter: 'input' },
-          { title: 'Email', field: 'email', headerFilter: 'input' },
+          { title: 'Name', field: 'name', headerFilter: 'input', minWidth: 160 },
+          { title: 'Email', field: 'email', headerFilter: 'input', minWidth: 200 },
           { title: 'Phone', field: 'phone', width: 140 },
           { title: 'USeP', field: 'usep', width: 80, hozAlign: 'center' },
           { title: 'Bookings', field: 'bookings', width: 100, hozAlign: 'center' },
@@ -410,7 +411,7 @@
               const disable = row.status === 'Active';
               return '<button type="button" class="btn-cust-toggle" style="cursor:pointer;border:1px solid ' +
                 (disable ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
-                ';background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600">' +
+                ';background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">' +
                 (disable ? 'Disable' : 'Enable') + '</button>';
             },
             cellClick: function (e, cell) {

@@ -266,6 +266,19 @@
         white-space: normal;
       }
 
+      /* the toolbar wraps at any width, so Week, Day and List are never cut off */
+      #calendar .fc-toolbar.fc-header-toolbar { flex-wrap: wrap; row-gap: 0.65rem; }
+      #calendar .fc-toolbar-chunk { min-width: 0; }
+
+      /* phone: only the grid scrolls sideways, at a width that shows all 7 days (Sun-Sat) */
+      @media (max-width: 767.98px) {
+        #calendar .fc-toolbar-chunk:last-child { width: 100%; }
+        #calendar .fc-button-group { flex-wrap: wrap; }
+        #calendar .fc-view-harness { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        #calendar .fc-daygrid, #calendar .fc-timegrid { min-width: 700px; }
+        #calendar .fc-list { min-width: 0; }
+      }
+
       /* 10) Mobile Adjustments */
       @media (max-width: 767.98px) {
         .calendar-shell {

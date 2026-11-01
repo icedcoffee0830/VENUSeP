@@ -13,6 +13,7 @@
         --venusep-muted: #606a75;
         --venusep-text: #1f1e1e;
       }
+    @include('partials.tabulator-pager-css')
     </style>
     <style>
       .th-page { padding: 22px 0 0; } /* 22px + 4px from .app-content = 26px top, matches other pages */

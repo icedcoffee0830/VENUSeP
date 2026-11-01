@@ -755,7 +755,7 @@ tr:hover {
 @media (max-width: 768px) {
     .main {
         padding: 16px;
-        margin-left: var(--sidebar-collapsed);
+        margin-left: 0;
     }
 
     .header {
@@ -847,6 +847,7 @@ tr:hover {
          ============================================================ */
       body { background: #ffffff; } /* pure white, same as every other page */
       .main { padding: 26px 30px; }
+      @media (max-width: 768px) { .main { padding: 16px; } }
 
       /* page title row — open, no white strip behind it */
       .header { background: transparent; padding: 0 2px 4px; margin-bottom: 16px; }

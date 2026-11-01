@@ -508,6 +508,14 @@
         .vm-gallery { grid-template-columns: 240px 116px; grid-template-rows: 116px 116px; width: 364px; }
         .vm-thumbs { width: 364px; }
       }
+    
+      /* below desktop width the gallery fits the panel instead of pushing the form off-screen */
+      @media (max-width: 1280px) { .vm-top { grid-template-columns: minmax(0, 1fr); } }
+      @media (max-width: 900px) {
+        .vm-gallery { width: 100%; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+        .vm-thumbs { width: 100%; }
+      }
+      .vm-photo-btn { min-height: 32px; }
     </style>
 @endpush
 

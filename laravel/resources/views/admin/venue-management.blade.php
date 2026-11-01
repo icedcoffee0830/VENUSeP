@@ -521,6 +521,8 @@ function vmMaint($m, $today) {
       }
 
       .vm-delete-link {
+        margin: -0.5rem 0;
+        padding: 0.5rem 0 !important;   /* a bigger tap area, same line height */
         background: transparent;
         border: 0;
         color: #b42318;

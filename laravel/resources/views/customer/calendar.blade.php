@@ -45,16 +45,6 @@
         --calendar-button-active-bg: #a11626;
         --calendar-button-active-text: #ffffff;
       }
-      /* phone: the toolbar stays put and wraps; only the grid scrolls sideways, at a width that
-         shows all 7 days (Sun-Sat), so nothing is cut off at the card's edge */
-      @media (max-width: 767.98px) {
-        #calendar .fc-toolbar.fc-header-toolbar { flex-wrap: wrap; row-gap: 0.65rem; }
-        #calendar .fc-toolbar-chunk { min-width: 0; }
-        #calendar .fc-toolbar-chunk:last-child { width: 100%; }
-        #calendar .fc-view-harness { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
-        #calendar .fc-daygrid, #calendar .fc-timegrid { min-width: 700px; }
-        #calendar .fc-list { min-width: 0; }
-      }
       /* ---- white page (desktop + phone): the card sits on white, no crimson wash ---- */
       body { background: #fff !important; }
       .app-main { background: #fff !important; }

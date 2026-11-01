@@ -471,7 +471,8 @@
   }
 }
 
-  </style>
+  @include('partials.tabulator-pager-css')
+    </style>
 @endpush
 
 @section('content')
@@ -601,8 +602,8 @@
         movableColumns: true,
         columns: [
           { title: '#', field: 'id', width: 55, headerSort: true },
-          { title: 'Name', field: 'name', headerFilter: 'input' },
-          { title: 'Email', field: 'email', headerFilter: 'input' },
+          { title: 'Name', field: 'name', headerFilter: 'input', minWidth: 160 },
+          { title: 'Email', field: 'email', headerFilter: 'input', minWidth: 200 },
           {
             title: 'Role',
             field: 'role',
@@ -672,11 +673,11 @@
               }
               const suspend = row.status === 'Active';
               const reset = row.role === 'Staff'
-                ? '<button type="button" class="btn-staff-reset" style="cursor:pointer;border:1px solid #d5d0c8;color:#1f1e1e;background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600">Reset password</button>'
+                ? '<button type="button" class="btn-staff-reset" style="cursor:pointer;border:1px solid #d5d0c8;color:#1f1e1e;background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">Reset password</button>'
                 : '';
               return '<div style="display:flex;flex-direction:column;align-items:center;gap:.3rem">' + reset + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
                 (suspend ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
-                ';background:#fff;border-radius:999px;padding:.2rem .7rem;font-size:.76rem;font-weight:600">' +
+                ';background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">' +
                 (suspend ? 'Suspend' : 'Reactivate') + '</button></div>';
             },
             cellClick: function (e, cell) {

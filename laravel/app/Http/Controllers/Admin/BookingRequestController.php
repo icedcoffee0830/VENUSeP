@@ -75,7 +75,7 @@ class BookingRequestController extends Controller
         $refund = null;
         $rfStmt = venusep_db()->prepare(
             'SELECT refund_status, reason_category, reason, amount_requested, refund_to_number,
-                    official_receipt_pending, correction_attempts, notes, requested_at, resubmitted_at
+                    official_receipt_pending, correction_attempts, correction_due_at, notes, requested_at, resubmitted_at
                FROM refunds WHERE booking_id = :b ORDER BY id DESC LIMIT 1'
         );
         $rfStmt->execute([':b' => $b['id']]);
@@ -102,6 +102,7 @@ class BookingRequestController extends Controller
                 'filed'     => date('M j, Y', strtotime($rf['requested_at'])),
                 'docs'      => $rf['refund_status'] === 'returned_for_correction'
                                 ? 'Returned to the customer: ' . ($rf['notes'] ?: 'correction requested')
+                                  . ($rf['correction_due_at'] && strtotime($rf['correction_due_at']) < time() ? ' · Correction overdue since ' . date('M j, g:i A', strtotime($rf['correction_due_at'])) : '')
                                 : ($refundFiles ? count($refundFiles) . ' document(s) submitted · ' : 'No documents attached · ')
                                   . ($b['isWalkIn']
                                       ? ($rf['refund_status'] === 'under_review' ? 'Receipt lost: an administrator must approve the proof' : 'Receipt checked by staff')
@@ -148,6 +149,11 @@ class BookingRequestController extends Controller
             'idLabel'   => $this->idLabel($b),
             'discountPercent' => $b['discountPercent'],
             'quotedPct' => $b['quotedDiscount'],
+            'writeOff'  => $b['writeOffReason'],
+            'canForceCancel' => $b['reservationCode'] === 'approved'
+                && in_array($b['paymentCode'], ['locked', 'await_event', 'await_gcash', 'await_cash', 'await_pos'], true)
+                && !\App\Http\Controllers\Customer\BookingRules::eventStarted(venusep_db(), (int) $b['id']),
+            'isPaid'    => in_array($b['paymentCode'], ['confirmed', 'paid_cash', 'refund_denied'], true),
             'organization' => $b['organization'],
             'receipt'   => $receipt,
             /* Ids only — the bytes come from document-view, which runs its own permission check. */
@@ -184,6 +190,7 @@ class BookingRequestController extends Controller
                 'pos'       => $b['pos'] !== '' ? $b['pos'] : null,
                 'or'        => $b['officialReceipt'] !== '' ? $b['officialReceipt'] : null,
                 'checkedIn' => $b['checkedIn'],
+                'checkedOut' => $b['checkedOut'],
                 'checkInOpen' => $b['eventDateIso'] <= date('Y-m-d'),   /* not before the first night (2026-10-30) */
                 /* pay before using the bed (2026-10-27, DB-DECISIONS #26) */
                 'payToUse'  => $b['payToUse'],

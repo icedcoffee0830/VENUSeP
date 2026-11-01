@@ -35,12 +35,16 @@ use PDOException;
 class BookingActionController extends Controller
 {
     use RepliesJson;
+    use Concerns\BookingSettlementActions;
+
+    /* A booking that owes nothing yet: force cancel can end it. */
+    private const UNPAID = ['locked', 'await_event', 'await_gcash', 'await_cash', 'await_pos'];
 
     private const POSTPAY_NO_RELEASE = 'A pay-after-the-event booking is never released: the event already happened, so what is owed stays on record. Extend the deadline or follow up with the customer.';
 
     public function __invoke(Request $request)
     {
-        legacy('auth', 'db', 'bookings', 'receipt-emails');
+        legacy('auth', 'db', 'bookings', 'receipt-emails', 'notifications', 'documents', 'offices');
         /* pricing.php ends with a <script> block for the booking pages; this
            endpoint answers in JSON, so its output is swallowed. */
         ob_start();
@@ -83,7 +87,7 @@ class BookingActionController extends Controller
         $cur = $pdo->prepare(
             'SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
                     b.is_usep_affiliated, b.room_price, b.refunds_allowed, b.pay_to_use, b.approved_at,
-                    (SELECT c.user_id FROM customers c WHERE c.id = b.customer_id) AS customer_user_id,
+                    (SELECT c.user_id FROM customers c WHERE c.id = b.customer_id) AS customer_user_id, b.write_off_reason, b.deadline_extensions, b.total_amount, b.room_id,
                     COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount
                FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id WHERE b.id = :b'
         );
@@ -180,11 +184,20 @@ class BookingActionController extends Controller
         }
     }
 
+    /* A receipt the checker could read must show exactly what is owed. An unreadable
+       amount is left to staff, who check the office's GCash app. */
+    private function refuseWrongAmount(?array $upload, array $bk): void
+    {
+        if ($upload && $upload['amount_centavos'] !== null && (int) $upload['amount_centavos'] !== (int) round((float) $bk['total_amount'] * 100)) {
+            $this->reply(409, ['ok' => false, 'message' => 'The receipt shows a different amount. Only the exact amount is accepted: reject it and return the money.']);
+        }
+    }
+
     /* The booking's latest GCash upload — the one a rejection, an undo or an
        override is about — with its flags decoded, or null. */
     private function lastUpload(PDO $pdo, int $bookingId): ?array
     {
-        $s = $pdo->prepare('SELECT id, payment_id, verdict, flags_json FROM gcash_receipts WHERE booking_id = :b ORDER BY id DESC LIMIT 1');
+        $s = $pdo->prepare('SELECT id, payment_id, verdict, flags_json, amount_centavos FROM gcash_receipts WHERE booking_id = :b ORDER BY id DESC LIMIT 1');
         $s->execute([':b' => $bookingId]);
         $up = $s->fetch();
         if (!$up) {
@@ -409,6 +422,9 @@ class BookingActionController extends Controller
                 $this->reply(409, ['ok' => false, 'message' => 'This booking is not waiting on a payment.']);
             }
             $asCash = $action === 'cash_received';
+            if (!$asCash && $bk['payment_status'] === 'under_review') {
+                $this->refuseWrongAmount($this->lastUpload($pdo, $bookingId), $bk);
+            }
             /* Waiting on GCash with no receipt in: there is nothing to confirm (#18). */
             if ($action === 'confirm_payment' && $bk['payment_status'] === 'await_gcash') {
                 $this->reply(409, ['ok' => false, 'booking' => ['pay' => 'await_gcash'],
@@ -437,6 +453,9 @@ class BookingActionController extends Controller
                 $this->reply(400, ['ok' => false, 'message' => 'A GCash reference number has 10 to 16 digits.']);
             }
             $up = $this->lastUpload($pdo, $bookingId);
+            if ($up) {
+                $this->refuseWrongAmount($up, $bk);
+            }
             if ($bk['payment_status'] !== 'await_gcash' || !$up || !$up['rejected']) {
                 $this->reply(409, ['ok' => false, 'message' => 'There is no rejected receipt waiting on this booking, so there is nothing to override.']);
             }
@@ -502,11 +521,19 @@ class BookingActionController extends Controller
             if (!in_array($bk['reservation_status'], ['approved', 'completed'], true) || $bk['payment_status'] !== 'overdue') {
                 $this->reply(409, ['ok' => false, 'message' => 'Only an overdue payment can be extended.']);
             }
+            if ((int) $bk['deadline_extensions'] >= 5 && session('account_type') !== 'admin') {
+                $this->reply(403, ['ok' => false, 'message' => 'This deadline has been extended 5 times. Only an administrator can extend it again.']);
+            }
             $until = $pdo->query('SELECT DATE_ADD(NOW(), INTERVAL 48 HOUR)')->fetchColumn();
+            $office = office_by_id($pdo->query('SELECT venue_id FROM rooms WHERE id = ' . (int) $bk['room_id'])->fetchColumn());
+            for ($tries = 0; $office && $tries < 31 && office_closed_reason($office, substr($until, 0, 10)); $tries++) {
+                $until = date('Y-m-d H:i:s', strtotime($until . ' +1 day'));
+            }
             $this->setActor($pdo, $actor, 'Pay-by deadline extended 48 hours, to ' . date('M j, Y g:i A', strtotime($until)) . '.'
                 . ($note !== '' ? ' ' . $note : ''));
             $pdo->prepare(
                 "UPDATE bookings SET payment_status = IF(payment_method = 'cash', 'await_cash', 'await_gcash'),
+                        deadline_extensions = deadline_extensions + 1,
                         current_deadline_at = :d, updated_by_user_id = :u WHERE id = :b"
             )->execute([':d' => $until, ':u' => $actor, ':b' => $bookingId]);
             $this->clearActor($pdo);
@@ -692,6 +719,14 @@ class BookingActionController extends Controller
             $pdo->commit();
             break;
         }
+
+        case 'force_cancel':       $this->forceCancel($request, $pdo, $bk, $bookingId, $actor, $note); break;
+        case 'write_off_request':  $this->writeOffRequest($pdo, $bk, $bookingId, $actor, $note); break;
+        case 'write_off_approve':  $this->writeOffDecide($pdo, $bk, $bookingId, $actor, $note, true); break;
+        case 'write_off_decline':  $this->writeOffDecide($pdo, $bk, $bookingId, $actor, $note, false); break;
+        case 'reverse_payment':    $this->reversePayment($request, $pdo, $bk, $bookingId, $actor, $note); break;
+        case 'refund_outside':     $this->recordOutsideRefund($request, $pdo, $bk, $bookingId, $actor, $note); break;
+        case 'check_out':          $this->checkOut($pdo, $bk, $bookingId, $actor); break;
 
         case 'refund_return':
         case 'refund_deny':

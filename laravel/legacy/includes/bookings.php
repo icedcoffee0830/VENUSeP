@@ -100,7 +100,7 @@ function bookings_query(array $opts = []) {
                c.university_id_no, u.email AS customer_email, c.contact_email,
                r.room_code, r.name AS room_name,
                v.name AS venue_name, v.postpay_grace_days AS office_grace,
-               COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount, b.organization_name,
+               COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount, b.organization_name, b.write_off_reason, hd.checked_out,
                erd.attendee_capacity, erd.fee_per_day,
                hrd.cr_type, hrd.rate_per_head_per_night,
                vd.event_name, vd.purpose, vd.start_date, vd.end_date, vd.attendee_count,
@@ -208,6 +208,8 @@ function booking_shape(array $row) {
         'customerPhone' => (string) $row['customer_phone'],
         'isWalkIn'      => $row['customer_email'] === null,
         'quotedDiscount' => (int) $row['quoted_discount'],
+        'writeOffReason' => (string) $row['write_off_reason'],
+        'checkedOut'    => (bool) $row['checked_out'],
         'organization'  => (string) $row['organization_name'],
 
         'roomCode'      => $row['room_code'],
@@ -997,6 +999,9 @@ function booking_history_events(array $b) {
                 'pos_recorded'               => 'POS recorded',
                 'or_recorded'                => 'Official Receipt recorded',
                 'refund_approved'            => 'Refund approved',
+                'write_off_requested'        => 'Write-off requested',
+                'write_off_declined'         => 'Write-off declined',
+                'checked_out'                => 'Guest checked out',
                 'checked_in'                 => 'Guest checked in',
             ];
             foreach ($stmt->fetchAll() as $t) {

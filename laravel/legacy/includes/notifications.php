@@ -32,12 +32,25 @@ function notify_new_request(PDO $pdo, int $bookingId, ?int $actorUserId): void
 }
 
 /* A refund with a missing receipt waits for an administrator's approval. */
-function notify_refund_needs_admin(PDO $pdo, int $bookingId, int $actorUserId): void
+function notify_refund_needs_admin(PDO $pdo, int $bookingId, int $actorUserId, string $kind = 'refund_needs_admin'): void
 {
     $pdo->prepare(
         "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id)
-         SELECT id, 'refund_needs_admin', :b, :a FROM users WHERE account_type = 'admin' AND is_active = 1 AND id <> :a2"
-    )->execute([':b' => $bookingId, ':a' => $actorUserId, ':a2' => $actorUserId]);
+         SELECT id, :k, :b, :a FROM users WHERE account_type = 'admin' AND is_active = 1 AND id <> :a2"
+    )->execute([':k' => $kind, ':b' => $bookingId, ':a' => $actorUserId, ':a2' => $actorUserId]);
+}
+
+/* The customer and the admins, with the staff member's own words. */
+function notify_booking_parties(PDO $pdo, int $bookingId, string $kind, int $actorUserId, array $detail): void
+{
+    $pdo->prepare(
+        "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id, detail)
+         SELECT u.id, :k, :b, :a, :d FROM users u
+          WHERE u.is_active = 1 AND u.id <> :a2
+            AND (u.account_type = 'admin'
+                 OR u.id = (SELECT c.user_id FROM bookings b JOIN customers c ON c.id = b.customer_id WHERE b.id = :b2))"
+    )->execute([':k' => $kind, ':b' => $bookingId, ':a' => $actorUserId, ':d' => json_encode($detail, JSON_UNESCAPED_UNICODE),
+                ':a2' => $actorUserId, ':b2' => $bookingId]);
 }
 
 /* A staff/admin account event, for every admin but the one who did it.
@@ -162,6 +175,14 @@ function notif_words(array $r, string $accountType): array
             return [($r['customer_name'] ?: 'The customer') . ' cancelled paying cash · ' . $ref . '. GCash is open again.', $staffLink];
         case 'refund_requested':
             return ['Refund requested for ' . $ref . '.', $staffLink];
+        case 'booking_cancelled':
+            return ['Booking ' . $ref . ' was cancelled by the office. ' . ($d['note'] ?? ''), $accountType === 'customer' ? $viewLink : $staffLink];
+        case 'payment_reversed':
+            return ['The payment on ' . $ref . ' was reversed. ' . ($d['note'] ?? ''), $accountType === 'customer' ? $viewLink : $staffLink];
+        case 'write_off_requested':
+            return ['Staff asked to write off the debt on ' . $ref . '. Approve or decline it.', $staffLink];
+        case 'refund_recorded':
+            return ['A refund made outside the system was recorded on ' . $ref . '.', $staffLink];
         case 'refund_needs_admin':
             return ['The receipt for ' . $ref . ' is missing. Check the proof and approve the refund.', $staffLink];
 

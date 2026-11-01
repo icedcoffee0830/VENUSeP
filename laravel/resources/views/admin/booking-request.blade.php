@@ -415,6 +415,7 @@
         'The payment could not be verified in our records',
         'The documents were still not valid after being returned for correction',
         'This booking has already been refunded',
+        'The customer did not send the correction in time',
         'Other — see the note below',
       ];
       function fixDocOptions() {
@@ -565,6 +566,64 @@
         send.disabled = false;
         document.getElementById('rfErr').textContent = out.message || 'Nothing was filed.';
       }
+      /* WHAT ENDS A BOOKING OUTSIDE THE NORMAL FLOW (2026-11-01). The server re-checks all of it.
+         Nothing redraws the page while a panel is open, so a chosen file stays chosen. */
+      function settleButtons() {
+        const b = (mode, label) => `<button class="br-btn" onclick="settleOpen('${mode}')">${label}</button>`;
+        let out = '';
+        if (cur.canForceCancel) out += b('force_cancel', 'Force cancel');
+        if (cur.pay === 'overdue' && !cur.writeOff) out += b('write_off_request', 'Request write-off');
+        if (cur.pay === 'overdue' && cur.writeOff && IS_ADMIN) out += `<button class="br-btn br-btn-primary" onclick="settleSend('write_off_approve')">Approve write-off</button><button class="br-btn" onclick="settleSend('write_off_decline')">Decline write-off</button>`;
+        if (cur.pay === 'overdue' && cur.writeOff && !IS_ADMIN) out += `<span class="none">Write-off waiting for an administrator</span>`;
+        if (cur.isPaid) out += b('refund_outside', 'Record outside refund');
+        if (cur.isPaid && IS_ADMIN) out += b('reverse_payment', 'Reverse payment');
+        if (cur.kind === 'hostel' && cur.checkedIn && !cur.checkedOut) out += `<button class="br-btn" onclick="settleSend('check_out')">Check the guest out</button>`;
+        return out;
+      }
+      function settleOpen(mode) { cur.xMode = mode; render(); }
+      function settlePanel() {
+        if (!cur.xMode) return "";
+        const sel = (opts) => `<div class="br-fld"><label for="xReason">Reason</label><select id="xReason"><option value="">Choose a reason…</option>${Object.keys(opts).map(k => `<option value="${k}">${opts[k]}</option>`).join('')}</select></div>`;
+        const note = (label) => `<div class="br-fld"><label for="xNote">${label}</label><textarea id="xNote" rows="2"></textarea></div>`;
+        const P = {
+          force_cancel: ['Force cancel this booking', 'The date is freed at once. The customer and the admins are told, with your reason. This cannot be undone.',
+            sel({ fake: 'Suspected fake booking', asked: 'The customer asked to cancel', unreachable: 'The customer could not be reached' }) + note('Note (the customer reads this)')],
+          write_off_request: ['Request a write-off', 'For a debt that will not be paid. An administrator approves or declines it.', note('Why this cannot be collected')],
+          refund_outside: ['Record a refund made outside the system', 'Only after the school has returned the money through the Cashier. The booking becomes Cancelled and Refunded, and this cannot be edited.',
+            sel({ closure: 'Office closure', school: 'School decision', other: 'Other' }) + note('Explanation (the customer reads this)')
+            + `<div class="br-fld"><label for="xRef">Cashier reference</label><input id="xRef"></div><div class="br-fld"><label for="xOn">Date returned</label><input id="xOn" type="date"></div><div class="br-fld"><label for="xFile">Proof from the Cashier</label><input id="xFile" type="file" accept="image/*,application/pdf"></div>`],
+          reverse_payment: ['Reverse this payment', 'Check the office\'s GCash app first. The payment is rejected, the System Receipt becomes VOID, and the customer gets 48 hours to pay.',
+            sel({ fake: 'Fake receipt', wrong: 'Recorded on the wrong booking', never: 'The money never arrived', other: 'Other' }) + note('Note (at least 10 characters)')
+            + `<div class="br-fld"><label for="xPass">Your password</label><input id="xPass" type="password" autocomplete="current-password"></div>`],
+        }[cur.xMode];
+        return `<div class="br-ovr" style="margin-top:0.9rem;text-align:left">
+            <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">${P[0]}</div>
+            <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.55;margin-bottom:0.8rem">${P[1]}</div>
+            ${P[2]}
+            <div id="xErr" role="alert" style="color:#b23a3a;font-size:0.74rem;margin-bottom:0.55rem"></div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+              <button class="br-btn br-btn-primary" id="xSend" onclick="settleSend(cur.xMode)">${P[0]}</button>
+              <button class="br-btn" onclick="cur.xMode = null; render()">Cancel</button>
+            </div>
+          </div>`;
+      }
+      async function settleSend(action) {
+        const val = (id) => (document.getElementById(id) || {}).value || '';
+        const body = new FormData();
+        body.append('_token', CSRF); body.append('booking', cur.id); body.append('action', action);
+        body.append('reason', val('xReason')); body.append('note', val('xNote'));
+        body.append('cashier_reference', val('xRef')); body.append('refunded_on', val('xOn')); body.append('password', val('xPass'));
+        const f = document.getElementById('xFile');
+        if (f && f.files[0]) body.append('proof[]', f.files[0]);
+        const out = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was changed.' }; });
+        if (out.ok) { location.reload(); return; }
+        const err = document.getElementById('xErr');
+        if (err) { err.textContent = out.message || 'Nothing was changed.'; return; }
+        cur.actionError = out.message || 'Nothing was changed.';
+        render();
+      }
       function approveLostReceipt() {
         staffAction('refund_approve', {}, function () { location.reload(); });
       }
@@ -686,7 +745,7 @@
             ? checkInAction()
             : `<span class="none">Record the OR before check-in — the guest has to show it</span>`;
         }
-        if (cur.kind === 'hostel' && cur.checkedIn) return `<span class="none">Guest checked in &check;</span>`;
+        if (cur.kind === 'hostel' && cur.checkedIn) return `<span class="none">Guest checked ${cur.checkedOut ? 'out' : 'in'} &check;</span>`;
         return `<span class="none">Payment actions are in the Payment panel &darr;</span>`;
       }
 
@@ -1042,8 +1101,8 @@
                 <span class="br-badge ${resBadge(cur.res).c}">${esc(resBadge(cur.res).t)}</span>
                 <span class="br-badge ${payBadge(cur.pay).c}">${esc(payText())}</span>
               </div>
-              <div class="br-actions">${hdrActions()}${fileRefundButton()}</div>
-              ${fileRefundPanel()}
+              <div class="br-actions">${hdrActions()}${fileRefundButton()}${settleButtons()}</div>
+              ${fileRefundPanel()}${settlePanel()}
               ${cur.actionError && !cur.attErr ? `<div role="alert" style="color:#b23a3a;font-size:0.78rem;margin-top:0.4rem;text-align:right">${esc(cur.actionError)}</div>` : ''}
             </div>
           </div>
@@ -1143,7 +1202,7 @@
           mail = Object.assign(mail, { loaded: true, data: null, error: 'Could not reach the server.', busy: 0 });
         }
         /* a redraw would empty a form staff are filling in; the list shows on the next one */
-        if (!cur.fileRefundOpen && !cur.payoutOpen) render();
+        if (!cur.fileRefundOpen && !cur.payoutOpen && !cur.xMode) render();
       }
 
       async function resendMail(id) {

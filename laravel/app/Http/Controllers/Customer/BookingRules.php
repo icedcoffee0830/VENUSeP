@@ -71,6 +71,19 @@ final class BookingRules
             : 'You already have ' . self::MAX_UNPAID . ' unpaid bookings with this office. Please pay or cancel one before booking again.';
     }
 
+    /* Has the event begun? A venue booking at its first slot; a hostel stay once its first
+       day has passed or the guest is in. */
+    public static function eventStarted(PDO $pdo, int $bookingId): bool
+    {
+        $st = $pdo->prepare(
+            "SELECT COALESCE(
+                (SELECT TIMESTAMP(s.slot_date, s.start_time) FROM venue_booking_slots s WHERE s.booking_id = :b ORDER BY s.slot_date, s.start_time LIMIT 1) <= NOW(),
+                (SELECT h.checked_in = 1 OR h.check_in_date < CURDATE() FROM hostel_booking_details h WHERE h.booking_id = :b2), 0)"
+        );
+        $st->execute([':b' => $bookingId, ':b2' => $bookingId]);
+        return (bool) $st->fetchColumn();
+    }
+
     /* What the new booking keeps for later: the rate shown right now, and who it is for. */
     public static function stamp(PDO $pdo, int $bookingId, int $discount, $organization): void
     {

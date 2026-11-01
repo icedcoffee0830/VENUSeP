@@ -439,4 +439,8 @@ Conflicts are being settled with Aron; nothing above is built yet.
 - **29:** the discount includes alumni and applies to the hostel.
 - **32:** price editing is admin-only, with no approval step.
 
-Still open: 28 (organization name on the receipt), 36 (how long IDs are kept; needs the DPO).
+- **22 / lead time:** per-office setting, starting at 12 hours for Bahay Alumni and USeP Venues, online and at the counter. The hostel has none: guests can check in immediately.
+- **36:** an uploaded ID is kept only until the booking is Completed (event done and paid), then deleted.
+- **Outside refunds:** staff record a refund the school made outside the system: reason, Cashier reference and date, required proof. Full amounts only, every office, works with the switch off. No admin approval; admins are notified. The booking becomes Cancelled and Refunded, its date is freed, Reports stop counting it, and the record cannot be edited.
+
+Still open: 28 (organization name on the receipt); IDs on bookings that close without being Completed.

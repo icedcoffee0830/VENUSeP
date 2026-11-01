@@ -68,7 +68,7 @@ return [
                 /* the legacy includes fetch rows as arrays; Laravel's own queries set their own mode */
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 /* "rows changed" counts rows MATCHED, so saving the same values is not mistaken for a broken WHERE */
-                PDO::MYSQL_ATTR_FOUND_ROWS => true,
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_FOUND_ROWS : PDO::MYSQL_ATTR_FOUND_ROWS) => true,
             ]) : [],
         ],
 
@@ -89,6 +89,8 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+                /* "rows changed" counts rows MATCHED, so saving the same values is not mistaken for a broken WHERE */
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_FOUND_ROWS : PDO::MYSQL_ATTR_FOUND_ROWS) => true,
             ]) : [],
         ],
 

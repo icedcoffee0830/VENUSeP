@@ -6,14 +6,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
-/* All the SQL that changes a booking.
+/* The SQL that changes a booking. Being filled in during the cleanup: the rest still
+   lives in the controllers. Columns: venusep_schema.sql (search "CREATE TABLE bookings").
 
-   bookings: id, customer_id, room_id, booking_type, reservation_status, payment_status,
-             payment_method, is_usep_affiliated, affiliation_verified, room_price,
-             discount_percent, discount_amount, total_amount, quoted_discount_percent,
-             current_deadline_at, approved_at, updated_by_user_id
-   reservation_status: pending, approved, rejected, cancelled, released, completed, disrupted
-   Every status change writes a History line: the trigger trg_bookings_after_update. */
+   bookings: one row per booking request, venue or hostel.
+     reservation_status: pending, approved, rejected, cancelled, released, completed, disrupted
+   Trigger trg_bookings_after_update: on a status change, writes the booking's History line
+   and frees its dates when the booking closes. */
 class BookingQueries
 {
     /* Approve a pending request: save the discount, then let sp_approve_booking
@@ -35,7 +34,8 @@ class BookingQueries
     }
 
     /* One save, all or nothing. The two @ variables tell the History trigger who is
-       changing the booking and why, because a trigger cannot see who is signed in. */
+       changing the booking and why, because a trigger cannot see who is signed in.
+       A procedure may set its own note instead: sp_approve_booking does. */
     private static function saveAs(int $actor, string $note, callable $save): void
     {
         DB::statement('SET @venusep_actor_user_id = ?, @venusep_action_note = ?', [$actor, $note]);

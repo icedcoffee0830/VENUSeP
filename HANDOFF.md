@@ -445,4 +445,6 @@ Conflicts are being settled with Aron; nothing above is built yet.
 
 - **28:** an optional "Booking for (organization)" field, shown on the System Receipt.
 
-Still open: IDs on bookings that close without being Completed.
+- **36, closed bookings:** an ID is also deleted when a booking closes without being Completed (cancelled, expired, refunded). A rejected request keeps its ID until the chance to fix it has passed.
+
+**Privacy before real IDs are collected (Aron is concerned; Data Privacy Act):** get the USeP DPO to sign off; add the privacy notice and a consent tick at upload. Until then, test only with fake IDs. Proposed, not yet approved: encrypt stored IDs, log who opens them, and leave IDs out of backups.

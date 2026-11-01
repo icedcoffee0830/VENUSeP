@@ -254,7 +254,8 @@ BEGIN
         WHERE reservation_status = 'pending'
           AND fn_request_expiry(id, booking_type) <= NOW();
 
-    -- A guest who is checked in keeps the bed: staff settle it in person.
+    -- A guest who checked in and has not paid (a reversed payment) is never released:
+    -- that would quietly erase the debt. Staff settle it in person.
     SET @venusep_action_note = 'Not paid by the deadline; the hold was released.';
     UPDATE bookings
         SET reservation_status = 'released', payment_status = 'expired'
@@ -264,7 +265,7 @@ BEGIN
           AND current_deadline_at IS NOT NULL
           AND current_deadline_at <= NOW()
           AND NOT EXISTS (SELECT 1 FROM hostel_booking_details h
-                           WHERE h.booking_id = bookings.id AND h.checked_in = 1 AND h.checked_out = 0);
+                           WHERE h.booking_id = bookings.id AND h.checked_in = 1);
 
     SET @venusep_action_note = 'Payment not received within the post-event window.';
     UPDATE bookings

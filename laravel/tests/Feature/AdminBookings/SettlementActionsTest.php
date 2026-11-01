@@ -172,6 +172,16 @@ class SettlementActionsTest extends TestCase
         $this->act(['booking' => $ref, 'action' => 'check_out'])->assertStatus(409);
     }
 
+    /* A guest who checked in and never paid stays a visible debt, not a released booking. */
+    public function test_an_unpaid_checked_in_stay_is_never_released(): void
+    {
+        [$id] = $this->seedHostelBooking('approved', 'await_gcash', 'gcash', false, true);
+        DB::table('hostel_booking_details')->where('booking_id', $id)->update(['checked_in' => 1, 'checked_out' => 1]);
+        DB::table('bookings')->where('id', $id)->update(['current_deadline_at' => now()->subDay()]);
+        DB::statement('CALL sp_expire_due_bookings()');
+        $this->assertSame('approved', $this->booking($id)->reservation_status);
+    }
+
     /* ---- limits ---- */
 
     public function test_staff_extend_five_times_then_only_an_admin(): void

@@ -155,7 +155,7 @@ export default {
       await expect.text(page, 'Rejection withdrawn; the receipt is under review again.');
     });
 
-    await step('Reject again ("Other" + note), then Override & confirm with the verified reference', async () => {
+    await step('Reject again ("Other" + note); Override is refused, because the receipt shows the wrong amount', async () => {
       const page = s.staff;
       await page.getByRole('button', { name: 'Reject receipt' }).click();
       await page.locator('#rejReason').selectOption('Other');
@@ -165,13 +165,11 @@ export default {
       await page.locator('#ovrRef').fill('9876543210123');
       await page.locator('#ovrNote').fill('Found the full transfer in the GCash history.');
       await page.getByRole('button', { name: /Override & confirm/ }).click();
-      await expect.text(page, 'Payment confirmed', 20_000);
+      await expect.text(page, 'Only the exact amount is accepted', 20_000);
       const b = await dbOne(`SELECT payment_status FROM bookings WHERE id = ?`, [s.a.id]);
-      expect.equal(b.payment_status, 'confirmed', 'payment_status after the override');
+      expect.equal(b.payment_status, 'await_gcash', 'payment_status after the refused override');
       const r = await dbOne(`SELECT COUNT(*) AS n FROM system_receipts WHERE booking_id = ?`, [s.a.id]);
-      expect.equal(r.n, 1, 'system_receipts rows');
-      const g = await dbOne(`SELECT override_note FROM gcash_receipts WHERE booking_id = ? ORDER BY id DESC LIMIT 1`, [s.a.id]);
-      expect.match(g.override_note, /^Override — verified ref 9876543210123/, 'override_note on the receipt');
+      expect.equal(r.n, 0, 'system_receipts rows');
       return page;
     });
 

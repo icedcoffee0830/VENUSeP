@@ -106,7 +106,7 @@ export default {
       expect.ok(rf.withdrawn_at, 'refunds.withdrawn_at not set');
       const b = await dbOne(`SELECT payment_status, reservation_status FROM bookings WHERE id = ?`, [BOOKING]);
       expect.equal(b.payment_status, 'confirmed', 'payment_status after withdrawing');
-      expect.equal(b.reservation_status, 'approved', 'reservation_status (untouched)');
+      expect.equal(b.reservation_status, 'completed', 'reservation_status (its date has passed and it is paid again)');
       await page.locator('#booking-history-search').fill(s.ref);
       expect.match(await row(page).getAttribute('data-payment-status'), /^Paid$/, 'payment badge after withdrawing');
       // the event date is past, so no new request may be offered

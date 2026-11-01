@@ -385,3 +385,39 @@ laptop: with a cached config, tests can hit the dev database instead of `venusep
 **Not a concern (Aron):** entering old paper bookings, accessibility work, hosting and account ownership. Training and support: the group's IT.
 
 **Known gap:** `refunds.correction_due_at` is written but nothing enforces it, so a request returned for correction stays open after its 48 hours.
+
+### Aron's answers so far (2026-11-01): compare with the teammate's answers to the 39 questions
+
+A teammate answered the 39 logic questions separately. **Check each point below against those answers and raise any conflict with Aron before changing anything.**
+
+| Topic | Aron's answer | Related question |
+|---|---|---|
+| Refunds off | Nothing is refundable, including an office's own closure. The switch is the only control. | 6 |
+| Refund cut-off | Later: only matters if refunds are turned on. | 7 |
+| Walk-in refunds | Follow the refund switch. | |
+| Overdue block | Starts only once officially Overdue, and only at that booking's office. | |
+| Missing receipt | Needs an admin's approval, online and walk-in. | |
+| Discount a customer gets | The rate shown when they booked. | |
+| Discount rate | Separate per office. | 29 |
+| Grace days | Separate per office. | |
+| Opening hours | Per office, changed by admins only. | |
+| Regular closed days | Per office, changed by admins only. | 24 |
+| One-off closures | Per office, admins only. Staff can still close single rooms. | |
+| Booking across a closed day | An event skips that day; a hostel stay is refused. | 26 |
+| Completed | Automatic once paid and finished, including a paid hostel no-show. | |
+| Late refund correction | Stays open with a label; staff close it by denying; a denial is final, no second chance. | |
+| Never-paid bookings | Staff request a write-off with a reason; an admin approves. | |
+| Not a concern | Old paper bookings, accessibility, hosting and accounts. | |
+| Later | Reports matching each office's real format. | |
+
+Correction to question 23: a 60-minute cleaning gap already exists; it is one setting for all offices. Planned: per office.
+
+**Build status:** planned as migration 16, starts once the current 3 test runs finish.
+
+### Instructions to give the offices (outside the system)
+
+**Hostel closed after a guest has paid.** USeP does not refund, so the system returns no money.
+1. Staff contact the guest.
+2. Staff offer other dates. (No move-date button exists yet: question 16.)
+3. If the school decides to return the money anyway, it goes through the Cashier, outside the system.
+4. Staff record what happened in the office's own records.

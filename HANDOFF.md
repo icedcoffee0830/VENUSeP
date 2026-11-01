@@ -427,3 +427,16 @@ Correction to question 23: a 60-minute cleaning gap already exists; it is one se
 1 limit of 5 unpaid per office · 2 counter stays with staff, logged · 3 extensions limit 5 · 4 refunds off + cancel = no refund, offer rebooking · 5 no-show: no refund · 6 **yes, an office's own closure is refundable (conflicts with Aron)** · 7 no cut-off, always full · 8 report by event quarter · 9 walk-ins not linked to accounts · 10 disable allowed with a warning · 11 moved staff lose access · 12 same person may double-book across offices · 13 maximum length 6 months · 14 staff approve own counter bookings · 15 cancel: free before approval, then through staff · 16 staff move a date once · 17 overtime and damage fees are outside the system · 18 email on approval, rejection, payment due, overdue · 19 automatic nightly backups · 20 alert admin after 3 days · 21 venues 1 year ahead · 22 12-hour rule for venues; hostel usable the moment it is paid · 24 **no weekends; no payment deadline on a cashier-less day (see conflict)** · 25 rejected requests can be fixed · 26 closed day of a multi-day event: offer rebooking · 27 departments pay; no ₱0; no bumping · 28 receipt name: to discuss · 29 discount: anyone related to the university · 30 exact amount only, anything else sent back · 31 staff confirm in the GCash app · 32 price changes need an admin · 33 ~~restrict mixed genders~~ **overruled by Aron 2026-11-01: mixed genders are allowed in the hostel; nothing to build** · 34 add check-out · 35 no guest swaps; no unaccompanied minors · 36 delete ID files after a set time · 37 two admins and a history page · 38 remove demo mode entirely · 39 paper form at the counter, entered later.
 
 Conflicts are being settled with Aron; nothing above is built yet.
+
+### Conflicts settled by Aron (2026-11-01): these override the answers above
+
+- **6 / refunds off:** no refund through the system; the routine above stands. But a refund the school makes outside the system must be recorded on the booking, with the exact reason, so the system reflects it. Design under discussion.
+- **24:** weekends closed by default for the event offices; the hostel stays open on weekends; admins can change it.
+- **22:** the hostel keeps the rule that check-in cannot come before the stay's first night. The venue lead time (12-hour rule) becomes a per-office setting.
+- **30:** block the staff override when the amount is wrong.
+- **4:** an unpaid customer who cancels before the event owes nothing.
+- **3:** staff can extend a deadline 5 times, then only an admin can.
+- **29:** the discount includes alumni and applies to the hostel.
+- **32:** price editing is admin-only, with no approval step.
+
+Still open: 28 (organization name on the receipt), 36 (how long IDs are kept; needs the DPO).

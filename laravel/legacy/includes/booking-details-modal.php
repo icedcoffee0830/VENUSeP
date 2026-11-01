@@ -83,7 +83,7 @@ $bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route(
       const m = d.money;
       const when = d.when.map(w => kv(w.label, w.value)).join('');
       /* same tab (2026-10-28): each page has its own Back */
-      const links = [`<a class="bdm-link" href="<?php echo e(route('root.valid-id-view')); ?>?booking=${encodeURIComponent(d.reference)}">Valid ID</a>`];
+      const links = d.idRemovedOn ? [] : [`<a class="bdm-link" href="<?php echo e(route('root.valid-id-view')); ?>?booking=${encodeURIComponent(d.reference)}">Valid ID</a>`];
       if (d.hasReceipt) links.push(`<a class="bdm-link" href="<?php echo e($bdmReceiptUrl); ?>?booking=${encodeURIComponent(d.reference)}">System Receipt</a>`);
       return `
         <div class="bdm-head">
@@ -92,6 +92,7 @@ $bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route(
             <div class="bdm-sub">${e(d.reference)} · ${e(d.type)} · booked ${e(d.bookedOn)}</div>
             <span class="bdm-badge">${e(d.status)}</span>
             ${d.note ? `<div class="bdm-note">${e(d.note)}</div>` : ''}
+            ${d.idRemovedOn ? `<div class="bdm-note">Your ID was removed on ${e(d.idRemovedOn)}: all processes for this booking are finished.</div>` : ''}
           </div>
           <button type="button" class="bdm-x" aria-label="Close" data-bdm-close>&times;</button>
         </div>

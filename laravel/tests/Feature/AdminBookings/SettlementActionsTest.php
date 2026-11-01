@@ -101,9 +101,10 @@ class SettlementActionsTest extends TestCase
     private function paidWithReceipt(): array
     {
         [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'confirmed');
-        $payment = DB::table('payments')->insertGetId(['booking_id' => $id, 'payment_method' => 'gcash', 'amount' => 100,
-            'payment_record_status' => 'confirmed', 'paid_at' => now()]);
-        DB::table('system_receipts')->insert(['booking_id' => $id, 'payment_id' => $payment, 'snapshot_json' => json_encode(['x' => 1]), 'issued_at' => now()]);
+        DB::table('payments')->insert(['booking_id' => $id, 'payment_method' => 'gcash', 'amount' => 100,
+            'payment_record_status' => 'confirmed', 'paid_at' => now(), 'confirmed_at' => now()]);
+        legacy('bookings', 'system-receipt');
+        receipt_issue(venusep_db(), $id, (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id'));
         return [$id, $ref];
     }
 

@@ -866,6 +866,18 @@ function booking_slots($bookingId) {
    which is all a page needs: the bytes are fetched from document-view.php,
    which repeats the path and permission checks. A dangling seed/import row is
    not a document and must not be advertised as a link that can only return 404. */
+/* When this booking's ID was removed, or null. */
+function booking_id_removed_on($bookingId) {
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return null;
+    }
+    $st = $pdo->prepare("SELECT MAX(removed_at) FROM booking_documents WHERE booking_id = :b AND document_type = 'customer_id'");
+    $st->execute([':b' => (int) $bookingId]);
+    $on = $st->fetchColumn();
+    return $on ? date('M j, Y', strtotime($on)) : null;
+}
+
 function booking_document_ids($bookingId) {
     $pdo = venusep_db();
     if ($pdo === null) {

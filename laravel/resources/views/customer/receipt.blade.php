@@ -101,6 +101,9 @@
                 <div class="rc-strip is-warn" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>We couldn&rsquo;t send it right now. Try again in a few minutes, or use Download PDF.</div>
               @endif
 
+              @if ($rcView['void'])
+                <div role="alert" style="max-width:720px;margin:0 auto 12px;padding:10px 14px;border-radius:8px;background:#fcecec;color:#b23a3a;font-weight:650">VOID since {{ $rcView['void'] }}: this payment was reversed.</div>
+              @endif
               <article class="rc-paper" aria-label="System Receipt {{ $rcView['number'] }}">
                 <div class="rc-rule"></div>
                 <div class="rc-in">

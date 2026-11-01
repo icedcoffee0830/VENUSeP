@@ -149,6 +149,7 @@ class BookingRequestController extends Controller
             'idLabel'   => $this->idLabel($b),
             'discountPercent' => $b['discountPercent'],
             'quotedPct' => $b['quotedDiscount'],
+            'idRemovedOn' => booking_id_removed_on($b['id']),
             'writeOff'  => $b['writeOffReason'],
             'canForceCancel' => $b['reservationCode'] === 'approved'
                 && in_array($b['paymentCode'], ['locked', 'await_event', 'await_gcash', 'await_cash', 'await_pos'], true)

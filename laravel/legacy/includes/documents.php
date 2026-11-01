@@ -124,6 +124,61 @@ function doc_store_raw($sub, $prefix, $tmpPath, $originalName, &$error) {
    an original name can collide, and it can itself be sensitive
    ("juan-dela-cruz-drivers-licence.jpg" leaks in any directory listing or
    log line). The original is kept in a column for staff to see. */
+/* IDs are encrypted on disk with the app key (APP_KEY in .env): lose the key, lose the IDs. */
+function doc_encrypt_row(PDO $pdo, int $docId, string $relative): bool
+{
+    $full = doc_path($relative);
+    if ($full === null || !is_file($full)) {
+        return false;
+    }
+    $bytes = file_get_contents($full);
+    if ($bytes === false || file_put_contents($full, \Illuminate\Support\Facades\Crypt::encryptString(base64_encode($bytes))) === false) {
+        return false;
+    }
+    $pdo->prepare('UPDATE booking_documents SET encrypted = 1 WHERE id = :i')->execute([':i' => $docId]);
+    return true;
+}
+
+/* The file's real bytes, or null when it cannot be read. */
+function doc_read(string $full, bool $encrypted): ?string
+{
+    $bytes = @file_get_contents($full);
+    if ($bytes === false) {
+        return null;
+    }
+    if (!$encrypted) {
+        return $bytes;
+    }
+    try {
+        return (string) base64_decode(\Illuminate\Support\Facades\Crypt::decryptString($bytes));
+    } catch (\Throwable $e) {
+        error_log('VENUSeP document: could not decrypt ' . basename($full));
+        return null;
+    }
+}
+
+/* AN ID IS KEPT ONLY WHILE IT IS NEEDED (Aron, 2026-11-01): removed once its booking is
+   finished. A rejected request keeps its ID until the chance to fix it has passed (the
+   booking's first day). The row stays, so the page can say what happened. */
+function doc_remove_finished_ids(PDO $pdo): void
+{
+    $rows = $pdo->query(
+        "SELECT d.id, d.file_path FROM booking_documents d JOIN bookings b ON b.id = d.booking_id
+          WHERE d.document_type = 'customer_id' AND d.removed_at IS NULL
+            AND (b.reservation_status IN ('completed', 'cancelled', 'released')
+                 OR (b.reservation_status = 'rejected' AND fn_booking_first_day(b.id) < CURDATE()))
+          LIMIT 50"
+    )->fetchAll();
+    $mark = $pdo->prepare('UPDATE booking_documents SET removed_at = NOW() WHERE id = :i');
+    foreach ($rows as $r) {
+        $full = doc_path($r['file_path']);
+        if ($full !== null && is_file($full)) {
+            @unlink($full);
+        }
+        $mark->execute([':i' => $r['id']]);
+    }
+}
+
 function doc_store($bookingId, $type, $tmpPath, $originalName, $uploadedByUserId, &$error) {
     $allowed = ['customer_id', 'pos', 'transaction_receipt', 'official_receipt', 'refund_support', 'other'];
     if (!in_array($type, $allowed, true)) {
@@ -176,7 +231,11 @@ function doc_store($bookingId, $type, $tmpPath, $originalName, $uploadedByUserId
             ':h' => hash_file('sha256', $dest),
             ':u' => $uploadedByUserId ? (int) $uploadedByUserId : null,
         ]);
-        return (int) $pdo->lastInsertId();
+        $docId = (int) $pdo->lastInsertId();
+        if ($type === 'customer_id') {
+            doc_encrypt_row($pdo, $docId, $sub . '/' . $stored);
+        }
+        return $docId;
     } catch (PDOException $e) {
         @unlink($dest);                    // no row, no orphaned file
         $error = 'The document could not be recorded.';

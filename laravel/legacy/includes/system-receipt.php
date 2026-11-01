@@ -132,6 +132,7 @@ function receipt_snapshot(array $b, array $payment, string $contactEmail): array
     $isGcash = $payment['payment_method'] === 'gcash';
     return [
         'booking_ref'      => $b['bookingId'],
+        'organization'     => (string) ($b['organization'] ?? ''),
         'type'             => $b['type'],
         'customer_name'    => $b['customerName'],
         'customer_email'   => $b['customerEmail'] !== '' ? $b['customerEmail'] : $contactEmail,
@@ -213,7 +214,8 @@ function receipt_view(array $receipt): array
     return [
         'number'      => $receipt['number'],
         'issued'      => date('M j, Y, g:i A', strtotime($receipt['issued_at'])),
-        'from'        => array_values(array_filter([$s['customer_name'], $s['customer_email']])),
+        'void'        => !empty($receipt['voided_at']) ? date('M j, Y', strtotime($receipt['voided_at'])) : null,
+        'from'        => array_values(array_filter([$s['organization'] ?? '', $s['customer_name'], $s['customer_email']])),
         'booking'     => [$s['booking_ref'], $s['room_name'] . ', ' . $s['venue_name'], $s['dates'] . ($isHostel ? '' : ' · ' . $span)],
         'items'       => $items,
         'total'       => receipt_money((float) $s['total']),
@@ -258,6 +260,13 @@ function receipt_pdf_bytes(array $receipt): string
     $pdf->SetFillColor(161, 22, 38);                          // the crimson rule
     $pdf->Rect(0, 0, 210, 2.5, 'F');
 
+    if ($v['void']) {
+        $pdf->SetTextColor(178, 58, 58);
+        $pdf->SetFont('Helvetica', 'B', 13);
+        $pdf->SetXY(20, 6);
+        $pdf->Cell(0, 7, $t('VOID since ' . $v['void'] . ': this payment was reversed'));
+        $pdf->SetTextColor(0, 0, 0);
+    }
     $pdf->Image(RECEIPT_LOGO, 20, 15, 42);
     $pdf->SetXY(110, 15);
     $pdf->SetTextColor(...$ink);

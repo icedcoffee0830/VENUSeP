@@ -107,6 +107,7 @@ class BookingDetailsController extends Controller
 
         return $this->json(200, ['ok' => true, 'details' => [
             'reference'     => $b['bookingId'],
+            'idRemovedOn'   => booking_id_removed_on($b['id']),
             'type'          => $isHostel ? 'Hostel stay' : 'Venue booking',
             'title'         => $isHostel ? $b['roomName'] : $b['eventName'],
             'status'        => $bdIsStaff ? $b['bookingStatusStaff'] : $b['bookingStatus'],

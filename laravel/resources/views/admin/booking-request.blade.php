@@ -1055,7 +1055,9 @@
         const usepAcct = typeof isUsepAccount === 'function' && isUsepAccount(cur.email);
         return `
           <div style="margin-top:0.85rem">
-            ${cur.docs && cur.docs.customer_id
+            ${cur.idRemovedOn
+              ? `<div class="br-idtile"><strong>ID removed on ${esc(cur.idRemovedOn)}.</strong> All processes for this booking are finished. Who checked it is in the history.</div>`
+              : cur.docs && cur.docs.customer_id
               ? `<a href="{{ route('root.valid-id-view') }}?doc=${cur.docs.customer_id}" title="Open the ID">
                    <img src="{{ route('root.document-view') }}?doc=${cur.docs.customer_id}" alt="${esc(cur.idLabel)}"
                         style="display:block;width:100%;max-height:260px;object-fit:contain;background:#f4f4f4;border:1px solid var(--vm-border);border-radius:10px">

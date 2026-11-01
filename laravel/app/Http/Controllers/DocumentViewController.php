@@ -48,14 +48,14 @@ class DocumentViewController extends Controller
         /* Fetch the row AND the booking's owner in one query. */
         if ($docId) {
             $stmt = $pdo->prepare(
-                'SELECT d.file_path, d.original_filename, d.mime_type, d.document_type AS kind, b.customer_id, b.id AS booking_id
+                'SELECT d.file_path, d.original_filename, d.mime_type, d.document_type AS kind, d.encrypted, d.removed_at, b.customer_id, b.id AS booking_id
                    FROM booking_documents d JOIN bookings b ON b.id = d.booking_id
                   WHERE d.id = :i'
             );
             $stmt->execute([':i' => $docId]);
         } else {
             $stmt = $pdo->prepare(
-                "SELECT g.file_path, g.original_filename, NULL AS mime_type, 'gcash_receipt' AS kind, b.customer_id, b.id AS booking_id
+                "SELECT g.file_path, g.original_filename, NULL AS mime_type, 'gcash_receipt' AS kind, 0 AS encrypted, NULL AS removed_at, b.customer_id, b.id AS booking_id
                    FROM gcash_receipts g JOIN bookings b ON b.id = g.booking_id
                   WHERE g.id = :i"
             );
@@ -73,7 +73,7 @@ class DocumentViewController extends Controller
 
         /* doc_path() realpath-checks the stored path against doc_root(). */
         $full = doc_path($row['file_path']);
-        if ($full === null || !is_file($full)) {
+        if ($row['removed_at'] !== null || $full === null || !is_file($full)) {
             return $this->deny();
         }
 
@@ -89,7 +89,17 @@ class DocumentViewController extends Controller
         $niceName = preg_replace('/[^a-z0-9_-]+/i', '-', (string) $row['kind']) . '-' . ($docId ?: $receiptId) . '.' . $ext;
         $inline   = empty($request->query('download'));
 
-        return response()->file($full, [
+        $bytes = doc_read($full, (bool) $row['encrypted']);
+        if ($bytes === null) {
+            return $this->deny();
+        }
+        /* Who opened someone's ID, for the admins' history. */
+        if ($row['kind'] === 'customer_id' && $isStaff) {
+            $pdo->prepare('INSERT INTO document_access_log (document_id, user_id) VALUES (:d, :u)')
+                ->execute([':d' => $docId, ':u' => (int) session('user_id')]);
+        }
+
+        return response($bytes, 200, [
             'Content-Type'            => $types[$ext],
             'Content-Disposition'     => ($inline ? 'inline' : 'attachment') . '; filename="' . $niceName . '"',
             /* nosniff: a browser must never decide a file is HTML and run it here */

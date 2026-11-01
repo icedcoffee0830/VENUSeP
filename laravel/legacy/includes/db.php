@@ -90,6 +90,8 @@ function venusep_expire_due_bookings()
     }
     try {
         $pdo->exec('CALL sp_expire_due_bookings()');
+        require_once __DIR__ . '/documents.php';
+        doc_remove_finished_ids($pdo);
     } catch (PDOException $e) {
         error_log('VENUSeP sp_expire_due_bookings: ' . $e->getMessage());
     }

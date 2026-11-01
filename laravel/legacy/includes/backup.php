@@ -3,6 +3,7 @@
    BACKUP & RESTORE (decided 2026-10-27) — the engine behind
    admin/backup-restore.php and admin/backup-action.php.
 
+   IDs are not in backups: after a restore, customers with open bookings upload theirs again.
    ONE BACKUP = ONE .tar.gz holding:
      database.sql     the whole `venusep` database (mysqldump --databases:
                       tables, procedures, functions, triggers), restorable
@@ -137,7 +138,8 @@ function backup_copytree($from, $to, $skipTopLevel = []) {
         @mkdir($to, 0775, true);
     }
     foreach (scandir($from) as $n) {
-        if ($n === '.' || $n === '..' || in_array($n, $skipTopLevel, true)) {
+        /* IDs stay out of backups (2026-11-01), or a deleted ID would live on in old ones. */
+        if ($n === '.' || $n === '..' || in_array($n, $skipTopLevel, true) || strpos($n, 'customer_id_') === 0) {
             continue;
         }
         $a = $from . '/' . $n;

@@ -470,3 +470,24 @@ Decisions made while building, for Aron to review:
 Known gaps: walk-in refund proof is stored but not emailed to the customer; a restore brings no IDs back; the date pickers do not grey out dates past the 1-year limit, though the server refuses them.
 
 Layout fixes F1 to F11 from the responsive audit are done (approved by Aron, 2026-11-01). The hostel room form's 360° buttons stay on the photo on phones; they work but look crowded.
+
+### First cleanup (branch `cleanup-1`, 2026-11-01)
+
+**Safety tag:** `before-cleanup` (35a0b10) is everything as it was, the old site included.
+
+What it did:
+- New flow `settlement-panels`: Reverse payment, Write-off and Record outside refund, clicked in a real browser. All three passed as built.
+- Deleted the old plain-PHP site from the repo root. Nothing under `laravel/` read it. `backup.php` reads the root `venusep_migration_*.sql`, so those stay.
+- Moved the two config templates to `laravel/legacy/includes/`. The root `.gitignore` still ignores the old `includes/mail-config.php` and `google-config.php`, because a checkout may still hold them with real secrets.
+- Added a short tracked root `CLAUDE.md`.
+
+**Where errors go now:**
+- `storage/logs/laravel.log` is the place for SQL errors: `SQL failed at file:line: message`, written by `sql_failed()` in `legacy/includes/db.php`, after the catch block's own rollback.
+- With `APP_DEBUG=true` the real error is also shown: Laravel's error page, or JSON (`ok`, `error`, `message`, `file`, `line`) for the pages' `fetch()` calls.
+- With `APP_DEBUG=false` the page behaves as before: the friendly message or the empty list, and nothing about the SQL.
+- Never rethrown: a procedure's SIGNAL 45000, a deadlock (40001) and a duplicate key (1062) are answers, not failures. Work that must not cost the action around it (notifications, emails, remembered devices) passes `optional: true`, and is only logged.
+- A transaction still open at the end of a request is logged by `DetectOpenTransaction`, and shown with debug on.
+- PHPUnit runs with `APP_DEBUG=true` (`phpunit.xml`), so a hidden SQL error fails a test.
+- Still in the PHP error log, not `laravel.log`: non-SQL failures such as SMTP errors, Google token exchange and ID decryption.
+
+**Before go-live:** set `APP_DEBUG=false`. `.env.example` has it on, and with it on visitors now see SQL errors.

@@ -468,3 +468,5 @@ Decisions made while building, for Aron to review:
 - Office closures do not count against a booking's one date move.
 
 Known gaps: walk-in refund proof is stored but not emailed to the customer; a restore brings no IDs back; the date pickers do not grey out dates past the 1-year limit, though the server refuses them.
+
+Layout fixes F1 to F11 from the responsive audit are done (approved by Aron, 2026-11-01). The hostel room form's 360° buttons stay on the photo on phones; they work but look crowded.

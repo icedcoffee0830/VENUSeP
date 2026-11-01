@@ -190,7 +190,7 @@ Rules:
 - **Indefinite (`until_date = NULL`)** → no end date. An indefinite HARD closure open **≥ ~14 days** raises a **"still closed?" review prompt** in Venue Management so a room can't be closed and forgotten.
 - **Venue availability:** a HARD-covered date is unavailable; a multi-day booking **books *around* it** — e.g. pick 23–27 with HARD maintenance on 24–26 → books **23 and 27 only** (pays for 2 days), the excluded days are shown to the customer. Same treatment as days already booked by someone else. Medium windows are **not** excluded (booking takes all days + shows the notice).
 - **Hostel availability:** a stay must be **contiguous** — a HARD-covered night **rejects the whole stay** (a guest can't leave a bed and return mid-stay).
-- **Disruption flow (stays, because maintenance stays):** setting a **HARD** closure on a room that already has **paid bookings inside the window** triggers the disruption/refund flow — offer a replacement room, or an **involuntary full refund** → `reservation_status = 'disrupted'`. Designed, not yet built; keep the `disrupted` status reserved.
+- **Disruption flow (stays, because maintenance stays):** setting a **HARD** closure on a room that already has **paid bookings inside the window** triggers the disruption/refund flow — offer a replacement room, or an **involuntary full refund** → `reservation_status = 'disrupted'`. Designed, not built. **Decided 2026-11-01 (Aron): not to be built as a refund.** The school usually does not refund; the refund switch is the only control, kept so the policy can change (teacher's request). With refunds off, nothing is refundable, an office closure included. Keep the `disrupted` status reserved.
 
 ## 12. Renames (quick list)
 - `bookings.rate_snapshot` → **`room_price`**
@@ -767,3 +767,7 @@ starts.
   nullable `staff.venue_id` — four columns, in `venusep_migration_01.sql`.
 - `system_settings.demo_mode` — a ROW, not a column, so removing demo mode later
   is one DELETE.
+
+
+## Offices run separately (2026-11-01, migration 16)
+Each `venues` row has its own hours, closed days, closures, discount, grace days, lead time and cleanup gap. This replaces the single `discount_percent` and `postpay_grace_days` settings (the rows stay, unused, as the seed values). Bookings keep the rate shown when booked (`quoted_discount_percent`) and take the discount at approval from it. A deadline never lands on a day its office is closed. Paid and finished bookings become Completed in `sp_expire_due_bookings`. Demo mode is removed.

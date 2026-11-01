@@ -65,7 +65,7 @@ class ReceiptController
                         $rcState = 'sent';
                     }
                 } catch (\Throwable $e) {
-                    error_log('VENUSeP receipt copy for booking ' . $rcBookingId . ': ' . $e->getMessage());
+                    sql_failed($e, optional: true);
                 }
             }
             return redirect($rcSelf . '&' . $rcState . '=1', 303);

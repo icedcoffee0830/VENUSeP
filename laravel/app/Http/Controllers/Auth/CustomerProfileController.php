@@ -24,6 +24,7 @@ class CustomerProfileController
             $cpStmt->execute([':id' => $customerContact['id']]);
             $cpRow = $cpStmt->fetch() ?: [];
         } catch (PDOException $e) {
+            sql_failed($e);
             $cpRow = [];
         }
 
@@ -51,6 +52,7 @@ class CustomerProfileController
         try {
             $cpTfa = tfa_status(venusep_db_or_fail(), (int) session('user_id'));
         } catch (PDOException $e) {
+            sql_failed($e);
             $cpTfa = null;
         }
 

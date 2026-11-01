@@ -25,6 +25,7 @@ class AdminProfileController
             $vpStmt->execute([':u' => $uid]);
             $vpRow = $vpStmt->fetch() ?: [];
         } catch (PDOException $e) {
+            sql_failed($e);
             $vpRow = [];
         }
         /* The seeded admin has no staff row: the name falls back to the username. */
@@ -46,6 +47,7 @@ class AdminProfileController
                 $vpV->execute([':u' => $uid]);
                 $vpVenue = (string) $vpV->fetchColumn();
             } catch (PDOException $e) {
+                sql_failed($e);
                 $vpVenue = '';
             }
         }
@@ -65,6 +67,7 @@ class AdminProfileController
             try {
                 $vpTfa = tfa_status(venusep_db_or_fail(), $uid);
             } catch (PDOException $e) {
+                sql_failed($e);
                 $vpTfa = null;
             }
         }

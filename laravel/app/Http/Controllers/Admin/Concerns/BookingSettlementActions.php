@@ -261,6 +261,9 @@ trait BookingSettlementActions
             $place($in, $out);
         } catch (\Throwable $e) {
             $place($was['check_in_date'], $was['check_out_date']);     // back where it was
+            if ($e instanceof \PDOException) {
+                sql_failed($e);
+            }
             $this->reply(409, ['ok' => false, 'message' => 'There are not enough free beds on those dates. Nothing changed.']);
         }
         $pdo->beginTransaction();

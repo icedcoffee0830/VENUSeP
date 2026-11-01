@@ -57,7 +57,7 @@ class DashboardController
                 $v->execute([':id' => $scope]);
                 $adManaging = (string) ($v->fetchColumn() ?: '');
             }
-        } catch (PDOException $e) { /* tiles fall back to zero */ }
+        } catch (PDOException $e) { sql_failed($e); /* tiles fall back to zero */ }
         if ($adManaging === '') {
             $adManaging = 'No venue assigned';
         }

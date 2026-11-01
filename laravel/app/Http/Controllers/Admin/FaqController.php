@@ -176,6 +176,7 @@ class FaqController
                     return $this->back('action');
             }
         } catch (PDOException $e) {
+            sql_failed($e);
             return $this->back('db');
         }
     }

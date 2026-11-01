@@ -46,6 +46,7 @@ class RoomFormController extends Controller
                 $rfDecoded = json_decode((string) $rfStmt->fetchColumn(), true);
                 $rfCurrent = is_array($rfDecoded) ? $rfDecoded : [];
             } catch (PDOException $e) {
+                sql_failed($e);
                 $rfCurrent = [];
             }
         }

@@ -121,6 +121,7 @@ class RefundSwitchController
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
+            sql_failed($e);
             return $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the setting was not changed.']);
         }
     }

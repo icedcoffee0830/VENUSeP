@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         /* Laravel exempts only "password", so a pasted "abc " was saved as "abc" and failed at sign-in. */
         $middleware->trimStrings(except: ['new_password', 'confirm_new_password', 'confirm_password', 'creator_password']);
+        $middleware->prepend(\App\Http\Middleware\DetectOpenTransaction::class);
         $middleware->web(append: [
             \App\Http\Middleware\EnforceTwoFactor::class,
         ]);
@@ -38,5 +39,16 @@ return Application::configure(basePath: dirname(__DIR__))
             return $request->hasSession() && $request->session()->has('user_id')
                 ? response()->json(['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.'], 400)
                 : response()->json(['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.'], 401);
+        });
+        /* APP_DEBUG only: the pages' fetch() calls read JSON, so an error sql_failed() rethrew
+           must reach them as JSON or they say "could not reach the server". Same test as above. */
+        $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
+            if (!config('app.debug') || str_contains((string) $request->header('Accept'), 'text/html')
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface
+                || $e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+                return null;
+            }
+            return response()->json(['ok' => false, 'error' => 'server', 'message' => $e->getMessage(),
+                'file' => $e->getFile(), 'line' => $e->getLine()], 500);
         });
     })->create();

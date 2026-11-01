@@ -129,7 +129,7 @@ class RegisterSubmitController
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
                 }
-                error_log('VENUSeP register-submit (admin re-auth): ' . $e->getMessage());
+                sql_failed($e);
                 $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
             }
         }
@@ -139,6 +139,7 @@ class RegisterSubmitController
         try {
             $username = venusep_unique_username($pdo, $email);
         } catch (PDOException $e) {
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
         }
 
@@ -178,7 +179,7 @@ class RegisterSubmitController
                 $this->reply(409, ['ok' => false, 'field' => 'email',
                     'message' => 'That email address is already registered. Try logging in instead.']);
             }
-            error_log('VENUSeP register-submit: ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
         }
 
@@ -195,7 +196,7 @@ class RegisterSubmitController
                 notify_admins($pdo, 'account_created', (int) session('user_id'),
                     ['email' => $email, 'role' => $kind, 'venue' => $venueName]);
             } catch (PDOException $e) {
-                error_log('VENUSeP register-submit (notify): ' . $e->getMessage());
+                sql_failed($e, optional: true);
             }
         }
 

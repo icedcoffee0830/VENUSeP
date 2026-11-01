@@ -57,6 +57,7 @@ class CustomerController
                 ];
             }
         } catch (PDOException $e) {
+            sql_failed($e);
             $cmRows = [];
         }
 
@@ -115,7 +116,7 @@ class CustomerController
                 $pdo->prepare('UPDATE users SET is_active = :a WHERE id = :u')
                     ->execute([':a' => $active, ':u' => $target]);
             } catch (PDOException $e) {
-                error_log('VENUSeP customer-save (set_active): ' . $e->getMessage());
+                sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,

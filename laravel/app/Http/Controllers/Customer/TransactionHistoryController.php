@@ -37,6 +37,7 @@ class TransactionHistoryController
         try {
             $labels = $pdo->query("SELECT customer_label FROM {$table} ORDER BY sort_order")->fetchAll(PDO::FETCH_COLUMN);
         } catch (PDOException $e) {
+            sql_failed($e);
             return [];   // a filter with only "All" rather than a broken page
         }
         return array_values(array_unique($labels));

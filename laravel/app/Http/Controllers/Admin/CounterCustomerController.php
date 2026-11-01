@@ -89,7 +89,7 @@ class CounterCustomerController
             }
             return $this->reply(200, ['ok' => true, 'results' => $out]);
         } catch (PDOException $e) {
-            error_log('VENUSeP customer-search: ' . $e->getMessage());
+            sql_failed($e);
             return $this->reply(500, ['ok' => false, 'results' => [], 'message' => 'Search failed.']);
         }
     }
@@ -188,7 +188,7 @@ class CounterCustomerController
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            error_log('VENUSeP customer-verify: ' . $e->getMessage());
+            sql_failed($e);
             return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was confirmed.']);
         }
 

@@ -69,7 +69,7 @@ class NotificationsController
                 'reminders' => $type === 'customer' ? [] : notif_reminders($pdo, staff_venue_scope()),
             ]);
         } catch (PDOException $e) {
-            error_log('VENUSeP notifications: ' . $e->getMessage());
+            sql_failed($e);
             return $this->reply(500, ['ok' => false, 'message' => 'Notifications could not be loaded.']);
         }
     }

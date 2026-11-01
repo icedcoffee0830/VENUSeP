@@ -63,6 +63,7 @@ function customer_contact() {
             ];
         }
     } catch (PDOException $e) {
+        sql_failed($e);
         // keep the guest blanks
     }
     return $contact;

@@ -152,7 +152,7 @@ class CatalogDeleteController extends Controller
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            error_log('VENUSeP catalog-delete: ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Nothing was deleted because the request could not be completed safely.']);
         }
     }

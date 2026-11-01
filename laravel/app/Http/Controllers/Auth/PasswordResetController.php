@@ -32,7 +32,7 @@ class PasswordResetController
                         pr_request($pdo, $fpEmail, $request->server('REMOTE_ADDR'));
                     } catch (Throwable $e) {
                         /* Logged, never shown: the reply must not differ for an address that exists. */
-                        error_log('VENUSeP forgot password: ' . $e->getMessage());
+                        sql_failed($e, optional: true);
                     }
                     session(['forgot_sent' => true]);
                     return redirect()->route('customer.forgot-password')->header('Cache-Control', 'no-store');
@@ -82,7 +82,7 @@ class PasswordResetController
                 try {
                     $done = pr_complete($pdo, $reset['id'], $reset['user_id'], $new);
                 } catch (Throwable $e) {
-                    error_log('VENUSeP reset password: ' . $e->getMessage());
+                    sql_failed($e);
                     $done = null;
                     $rpErrors['form'] = 'Something went wrong, so your password was not changed. Please try again.';
                 }

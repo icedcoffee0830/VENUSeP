@@ -88,6 +88,7 @@ function staff_session_heal()
         try {
             $on = tfa_status($pdo, $uid)['enabled'];
         } catch (PDOException $e) {
+            sql_failed($e);
             $on = true;   // cannot tell: leave it to the sign-in page
         }
         if (!$on) {
@@ -120,6 +121,7 @@ function staff_session_refresh(): void
         $stmt->execute([':u' => (int) session('user_id')]);
         $row = $stmt->fetch();
     } catch (PDOException $e) {
+        sql_failed($e);
         return;
     }
     if (!$row || !(bool) $row['is_active'] || !in_array($row['account_type'], ['admin', 'staff'], true)) {
@@ -317,6 +319,7 @@ function customer_session_heal()
             return;
         }
     } catch (PDOException $e) {
+        sql_failed($e);
         // leave the session as it is
     }
 
@@ -328,6 +331,7 @@ function customer_session_heal()
             venusep_logout();
         }
     } catch (PDOException $e) {
+        sql_failed($e);
         // migration 04 not run yet: nothing to compare against
     }
 }
@@ -364,6 +368,7 @@ function counter_staff_name()
         $who = $stmt->fetchColumn();
         return $who === false ? 'Staff' : (string) $who;
     } catch (PDOException $e) {
+        sql_failed($e);
         return 'Staff';
     }
 }

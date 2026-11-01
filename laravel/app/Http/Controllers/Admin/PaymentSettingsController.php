@@ -32,7 +32,7 @@ class PaymentSettingsController
             $rsOpenRefunds = (int) venusep_db()->query(
                 "SELECT COUNT(*) FROM refunds WHERE refund_status IN ('requested','under_review','returned_for_correction','approved')"
             )->fetchColumn();
-        } catch (PDOException $e) { $rsOpenRefunds = 0; }
+        } catch (PDOException $e) { sql_failed($e); $rsOpenRefunds = 0; }
 
         /* A lock still running from earlier (the countdown resumes after a reload). */
         $rsLockSeconds = 0;
@@ -44,7 +44,7 @@ class PaymentSettingsController
                 );
                 $rsStmt->execute([':id' => (int) session('user_id')]);
                 $rsLockSeconds = (int) $rsStmt->fetchColumn();
-            } catch (PDOException $e) { $rsLockSeconds = 0; }
+            } catch (PDOException $e) { sql_failed($e); $rsLockSeconds = 0; }
         }
         $rsJustSaved = $request->query('refunds') === 'saved';
 
@@ -63,14 +63,14 @@ class PaymentSettingsController
                 $psCards[$psVenue] = ['name' => '', 'number' => '',
                     'note' => 'No GCash account yet: customers cannot pay this venue by GCash until one is set.'];
             }
-        } catch (PDOException $e) { /* the venues that have one still show */ }
+        } catch (PDOException $e) { sql_failed($e); /* the venues that have one still show */ }
 
         /* Which cards are the hostel's (a staff GCash account): by venue_type, not
            by name — a renamed hostel stays the hostel. Cards are keyed by name. */
         $psHostelVenues = [];
         try {
             $psHostelVenues = venusep_db()->query("SELECT name FROM venues WHERE venue_type = 'hostel'")->fetchAll(PDO::FETCH_COLUMN);
-        } catch (PDOException $e) { /* every card reads as a business account */ }
+        } catch (PDOException $e) { sql_failed($e); /* every card reads as a business account */ }
 
         return view('admin.payment-settings', compact(
             'psCards', 'psHostelVenues','POSTPAY_GRACE_DAYS', 'rsDetails', 'rsDbOk', 'rsEnabled', 'rsIsAdmin', 'rsCsrf',

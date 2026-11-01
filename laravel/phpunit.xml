@@ -19,6 +19,7 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <env name="APP_DEBUG" value="true"/>
         <env name="VENUSEP_MAX_DAYS_AHEAD" value="5000"/>
         <env name="VENUSEP_MAX_UNPAID" value="100000"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>

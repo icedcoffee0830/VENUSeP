@@ -114,6 +114,7 @@ class BookingChangeController
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            sql_failed($e);
             return self::reply(409, ['ok' => false, 'message' => $taken]);
         }
 
@@ -129,6 +130,9 @@ class BookingChangeController
                 BookingRules::assignBeds($pdo, (int) $b['room_id'], $id, array_map('intval', $occ->fetchAll(PDO::FETCH_COLUMN)), $dates['check_in_date'], $dates['check_out_date']);
             } catch (RuntimeException | PDOException $e) {
                 $pdo->prepare("UPDATE bookings SET reservation_status = 'rejected', payment_status = 'locked' WHERE id = :b")->execute([':b' => $id]);
+                if ($e instanceof PDOException) {
+                    sql_failed($e);
+                }
                 return self::reply(409, ['ok' => false, 'message' => $taken]);
             }
         }
@@ -138,7 +142,7 @@ class BookingChangeController
         try {
             notify_new_request($pdo, $id, $user);
         } catch (PDOException $e) {
-            error_log('VENUSeP booking-fix notify: ' . $e->getMessage());
+            sql_failed($e, optional: true);
         }
         return self::reply(200, ['ok' => true, 'message' => 'Your new ID was sent. The request is back with staff.']);
     }

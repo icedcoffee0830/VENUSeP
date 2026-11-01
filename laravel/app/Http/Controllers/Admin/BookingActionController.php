@@ -117,7 +117,7 @@ class BookingActionController extends Controller
             if ($e instanceof PDOException && $e->getCode() === '45000') {
                 $this->reply(409, ['ok' => false, 'message' => $e->getMessage()]);
             }
-            error_log('VENUSeP booking-action ' . $action . ': ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
         }
 
@@ -127,7 +127,7 @@ class BookingActionController extends Controller
             try {
                 $queued = queue_status_email($pdo, $bookingId, $statusEmail, $note, $actor);
             } catch (\Throwable $mailErr) {
-                error_log('VENUSeP status email, booking ' . $bookingId . ': ' . $mailErr->getMessage());
+                sql_failed($mailErr, optional: true);
             }
         }
         if ($queued !== null) {

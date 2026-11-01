@@ -216,7 +216,7 @@ function backup_create($kind, $userId, $userLabel, &$error) {
         backup_prune();
         return $file;
     } catch (Throwable $e) {
-        error_log('VENUSeP backup_create: ' . $e->getMessage());
+        sql_failed($e, optional: true);
         $error = 'The backup could not be made: ' . $e->getMessage();
         return null;
     } finally {
@@ -358,7 +358,7 @@ function backup_restore($archivePath, $userId, $userLabel, &$error) {
         backup_sign_everyone_out();
         return $pre;
     } catch (Throwable $e) {
-        error_log('VENUSeP backup_restore: ' . $e->getMessage());
+        sql_failed($e, optional: true);
         $error = 'The restore failed: ' . $e->getMessage();
         return null;
     } finally {
@@ -394,7 +394,7 @@ function backup_dump_other_database($sqlFile, $expected) {
 function backup_sign_everyone_out() {
     $pdo = venusep_db();
     if ($pdo !== null) {
-        try { $pdo->exec('DELETE FROM remember_tokens'); } catch (PDOException $e) { /* the table may predate migration 04 */ }
+        try { $pdo->exec('DELETE FROM remember_tokens'); } catch (PDOException $e) { sql_failed($e, optional: true); /* the table may predate migration 04 */ }
     }
     /* LARAVEL: the sessions are Laravel's (config/session.php), not PHP's
        sess_* files — clear whichever store is in use. */
@@ -406,6 +406,6 @@ function backup_sign_everyone_out() {
             }
         }
     } elseif ($driver === 'database' && $pdo !== null) {
-        try { $pdo->exec('DELETE FROM ' . config('session.table', 'sessions')); } catch (PDOException $e) { /* no sessions table */ }
+        try { $pdo->exec('DELETE FROM ' . config('session.table', 'sessions')); } catch (PDOException $e) { sql_failed($e, optional: true); /* no sessions table */ }
     }
 }

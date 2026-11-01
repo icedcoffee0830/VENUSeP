@@ -238,6 +238,7 @@ function doc_store($bookingId, $type, $tmpPath, $originalName, $uploadedByUserId
         return $docId;
     } catch (PDOException $e) {
         @unlink($dest);                    // no row, no orphaned file
+        sql_failed($e);
         $error = 'The document could not be recorded.';
         return null;
     }

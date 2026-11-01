@@ -487,11 +487,11 @@ class RoomSaveController extends Controller
                 $this->reply(409, ['ok' => false, 'error' => 'duplicate',
                     'message' => 'That location already has a room with this name.']);
             }
-            error_log('VENUSeP room-save: ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the room was not saved.']);
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            error_log('VENUSeP room-save: ' . $e->getMessage());
+            sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the room was not saved.']);
         }
     }

@@ -190,7 +190,7 @@ function remember_restore(PDO $pdo): bool
             }
         }
     } catch (PDOException $e) {
-        error_log('VENUSeP remember me: ' . $e->getMessage());
+        sql_failed($e);
         return false;   // the database is the problem: keep the cookie for next time
     }
     remember_cookie_clear();
@@ -205,7 +205,7 @@ function remember_forget_current(PDO $pdo): void
         try {
             $pdo->prepare('DELETE FROM remember_tokens WHERE selector = :s')->execute([':s' => $m[1]]);
         } catch (PDOException $e) {
-            error_log('VENUSeP remember me (log out): ' . $e->getMessage());
+            sql_failed($e, optional: true);
         }
     }
     remember_cookie_clear();

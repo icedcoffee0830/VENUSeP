@@ -156,8 +156,8 @@ function mail_send(PDO $pdo, int $outboxId, ?array $config = null): bool
                 "UPDATE email_outbox SET status = 'failed', last_error = :e,
                         attempts = attempts + 1 WHERE id = :id"
             )->execute([':e' => mb_substr($error, 0, 500), ':id' => $outboxId]);
-        } catch (\Throwable $ignored) {
-            // the database itself is the problem; the error_log line below still records it
+        } catch (\Throwable $dbErr) {
+            sql_failed($dbErr, optional: true);   // the database itself is the problem; the send must still answer false
         }
         error_log('VENUSeP mail #' . $outboxId . ' failed: ' . $error);
         return false;

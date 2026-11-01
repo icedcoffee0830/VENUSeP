@@ -86,7 +86,7 @@ function cl_finish_login(PDO $pdo, int $userId, bool $remember = false): void
         try {
             remember_issue($pdo, $userId);
         } catch (Throwable $e) {
-            error_log('VENUSeP remember me: ' . $e->getMessage());   // signed in anyway, just not remembered
+            sql_failed($e, optional: true);   // signed in anyway, just not remembered
         }
     }
     tfa_redirect_now(route('customer.venues'));

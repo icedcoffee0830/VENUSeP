@@ -86,15 +86,7 @@ class BookingActionController extends Controller
         /* Apply the deadline rules first, so staff act on what the booking IS now. */
         venusep_expire_due_bookings();
 
-        $cur = $pdo->prepare(
-            'SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
-                    b.is_usep_affiliated, b.room_price, b.refunds_allowed, b.pay_to_use, b.approved_at,
-                    (SELECT c.user_id FROM customers c WHERE c.id = b.customer_id) AS customer_user_id, b.write_off_reason, b.deadline_extensions, b.date_moves, b.total_amount, b.room_id,
-                    COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount
-               FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id WHERE b.id = :b'
-        );
-        $cur->execute([':b' => $bookingId]);
-        $bk = $cur->fetch();
+        $bk = BookingQueries::findForStaffAction($bookingId);
         if (!$bk) {
             $this->reply(404, ['ok' => false, 'message' => 'That booking no longer exists.']);
         }
@@ -288,6 +280,98 @@ class BookingActionController extends Controller
             $note !== '' ? $note : ($withDiscount ? 'ID verified; USeP rate applied.' : 'ID verified.'));
     }
 
+    /* Staff turn down a pending request. The booking keeps its history; the slot frees. */
+    private function reject(array $booking, int $actor, string $note): void
+    {
+        // Check
+        if (in_array($booking['reservation_status'], [Status::REJECTED, Status::CANCELLED, Status::COMPLETED, Status::RELEASED], true)) {
+            $this->reply(409, ['ok' => false, 'message' => 'That booking is already closed.']);
+        }
+        /* Rejecting answers a REQUEST. An approved booking may already be paid,
+           and this would lock its payment with no refund (found 2026-10-30). */
+        if ($booking['reservation_status'] !== Status::PENDING) {
+            $this->reply(409, ['ok' => false, 'message' => 'Only a pending request can be rejected.']);
+        }
+
+        // Save
+        BookingQueries::markRejected((int) $booking['id'], $note, $actor, $note !== '' ? $note : 'Request rejected.');
+    }
+
+    /* HOSTEL: the POS has come back from CEDU. On a pre-pay stay, payment unlocks. */
+    private function recordPos(Request $request, array $booking, int $actor): void
+    {
+        $pos = trim((string) ($request->post('pos') ?? ''));
+        // Check
+        if ($booking['booking_type'] !== 'hostel') {
+            $this->reply(400, ['ok' => false, 'message' => 'Only a hostel booking has a POS.']);
+        }
+        if ($pos === '') {
+            $this->reply(400, ['ok' => false, 'message' => 'Enter the POS number.']);
+        }
+        $this->refuseOnClosedBooking($booking, 'A POS');
+
+        // Save: payment opens only if this booking pre-pays; otherwise the POS is paperwork
+        $opensPayment = $booking['refunds_allowed'] && !$booking['pay_to_use'] && $booking['payment_status'] === Status::AWAIT_POS;
+        BookingQueries::savePosNumber((int) $booking['id'], mb_substr($pos, 0, 100), $opensPayment, $actor,
+            $opensPayment ? 'POS ' . $pos . ' recorded; payment unlocked.' : 'POS ' . $pos . ' recorded (CEDU).');
+    }
+
+    /* HOSTEL: the University Cashier issued the Official Receipt.
+       The OR is a DOCUMENT, never a payment status. */
+    private function recordOfficialReceipt(Request $request, array $booking, int $actor): void
+    {
+        $or = trim((string) ($request->post('or') ?? ''));
+        // Check
+        if ($booking['booking_type'] !== 'hostel') {
+            $this->reply(400, ['ok' => false, 'message' => 'Only a hostel booking has an Official Receipt.']);
+        }
+        if ($or === '') {
+            $this->reply(400, ['ok' => false, 'message' => 'Enter the Official Receipt number.']);
+        }
+        $this->refuseOnClosedBooking($booking, 'An Official Receipt');
+        /* The cashier issues it for money received (Aron 2026-11-01). */
+        if (!in_array($booking['payment_status'], [Status::CONFIRMED, Status::PAID_CASH, Status::REFUND_REQUESTED, Status::REFUND_CORRECTION,
+                                                   Status::REFUND_AWAIT_OR, Status::REFUND_PROCESSING, Status::REFUND_DENIED], true)) {
+            $this->reply(409, ['ok' => false, 'message' => 'An Official Receipt is recorded only after the payment.']);
+        }
+
+        // Save
+        BookingQueries::saveOfficialReceiptNumber((int) $booking['id'], mb_substr($or, 0, 100), $actor,
+            'Official Receipt ' . $or . ' recorded (University Cashier).');
+    }
+
+    /* HOSTEL: the guest arrived. PAY TO USE (2026-10-27): no bed until paid. */
+    private function checkIn(array $booking, int $actor): void
+    {
+        // Check
+        if ($booking['booking_type'] !== 'hostel') {
+            $this->reply(400, ['ok' => false, 'message' => 'Only a hostel booking has a check-in.']);
+        }
+        /* A rejected, cancelled or released stay has no bed to check into. */
+        if ($booking['reservation_status'] !== Status::APPROVED) {
+            $this->reply(409, ['ok' => false, 'message' => 'Only an approved stay can be checked in.']);
+        }
+        if ($booking['pay_to_use'] && !in_array($booking['payment_status'], [Status::CONFIRMED, Status::PAID_CASH], true)) {
+            $this->reply(409, ['ok' => false, 'message' => $booking['payment_status'] === Status::UNDER_REVIEW
+                ? 'Not paid yet: the GCash receipt is still under review. Confirm it first, then check the guest in.'
+                : ($booking['payment_status'] === Status::AWAIT_CASH
+                    ? 'Not paid yet. The guest chose to pay cash at the front desk — take it first (Cash received).'
+                    : 'Not paid yet. The guest pays before using the bed — by GCash in Pay now, or by choosing cash at the front desk there.')]);
+        }
+        /* Not before the stay begins (Aron, 2026-10-30): the bed is booked from the check-in date. */
+        $stay = BookingQueries::findHostelStay((int) $booking['id']);
+        if ($stay && $stay['checked_in']) {
+            $this->reply(409, ['ok' => false, 'message' => 'The guest is already checked in.']);
+        }
+        if ($stay && $stay['early']) {
+            $this->reply(409, ['ok' => false,
+                'message' => 'Too early: check-in opens on ' . date('M j, Y', strtotime($stay['check_in_date'])) . ', the first night of the stay.']);
+        }
+
+        // Save
+        BookingQueries::markCheckedIn((int) $booking['id'], $actor, 'Guest checked in.');
+    }
+
     /* The action itself. Returns the outbox id of an email it queued, or null. */
     private function apply(Request $request, PDO $pdo, string $action, array $bk, int $bookingId, int $actor, string $note): ?int
     {
@@ -297,113 +381,10 @@ class BookingActionController extends Controller
         /* ---- APPROVE the ID + the reservation. Optionally grant the USeP rate. ---- */
         case 'approve': $this->approve($request, $bk, $actor, $note); break;
 
-        /* ---- REJECT the request. The booking keeps its history; the slot frees. ---- */
-        case 'reject':
-            if (in_array($bk['reservation_status'], ['rejected', 'cancelled', 'completed', 'released'], true)) {
-                $this->reply(409, ['ok' => false, 'message' => 'That booking is already closed.']);
-            }
-            /* Rejecting answers a REQUEST. An approved booking may already be paid,
-               and this would lock its payment with no refund (found 2026-10-30). */
-            if ($bk['reservation_status'] !== 'pending') {
-                $this->reply(409, ['ok' => false, 'message' => 'Only a pending request can be rejected.']);
-            }
-            $this->setActor($pdo, $actor, $note !== '' ? $note : 'Request rejected.');
-            /* trg_bookings_after_update releases the held slots and bed-nights. */
-            $pdo->prepare(
-                "UPDATE bookings SET reservation_status = 'rejected', payment_status = 'locked',
-                        staff_notes = :n, updated_by_user_id = :u WHERE id = :b"
-            )->execute([':n' => $note, ':u' => $actor, ':b' => $bookingId]);
-            $this->clearActor($pdo);
-            break;
-
-        /* ---- HOSTEL: the POS has come back from CEDU, so payment unlocks. ---- */
-        case 'record_pos':
-            $pos = trim((string) ($request->post('pos') ?? ''));
-            if ($bk['booking_type'] !== 'hostel') {
-                $this->reply(400, ['ok' => false, 'message' => 'Only a hostel booking has a POS.']);
-            }
-            if ($pos === '') {
-                $this->reply(400, ['ok' => false, 'message' => 'Enter the POS number.']);
-            }
-            $this->refuseOnClosedBooking($bk, 'A POS');
-            $pdo->beginTransaction();
-            $pdo->prepare(
-                'UPDATE hostel_booking_details SET pos_number = :p, pos_recorded_at = NOW() WHERE booking_id = :b'
-            )->execute([':p' => mb_substr($pos, 0, 100), ':b' => $bookingId]);
-            /* Payment only opens now if this booking pre-pays — the status change
-               writes the timeline itself; otherwise the POS is paperwork, logged here. */
-            if ($bk['refunds_allowed'] && !$bk['pay_to_use'] && $bk['payment_status'] === 'await_pos') {
-                $this->setActor($pdo, $actor, 'POS ' . $pos . ' recorded; payment unlocked.');
-                $pdo->prepare(
-                    "UPDATE bookings SET payment_status = IF(payment_method = 'cash', 'await_cash', 'await_gcash'),
-                            current_deadline_at = fn_payment_deadline(:b), updated_by_user_id = :u
-                      WHERE id = :b2"
-                )->execute([':b' => $bookingId, ':u' => $actor, ':b2' => $bookingId]);
-                $this->clearActor($pdo);
-            } else {
-                $this->timeline($pdo, $bookingId, 'pos_recorded', $actor, 'POS ' . $pos . ' recorded (CEDU).');
-            }
-            $pdo->commit();
-            break;
-
-        /* ---- HOSTEL: the University Cashier issued the Official Receipt.
-                The OR is a DOCUMENT, never a payment status. ---- */
-        case 'record_or':
-            $or = trim((string) ($request->post('or') ?? ''));
-            if ($bk['booking_type'] !== 'hostel') {
-                $this->reply(400, ['ok' => false, 'message' => 'Only a hostel booking has an Official Receipt.']);
-            }
-            if ($or === '') {
-                $this->reply(400, ['ok' => false, 'message' => 'Enter the Official Receipt number.']);
-            }
-            $this->refuseOnClosedBooking($bk, 'An Official Receipt');
-            /* The cashier issues it for money received (Aron 2026-11-01). */
-            if (!in_array($bk['payment_status'], ['confirmed', 'paid_cash', 'refund_requested', 'refund_correction', 'refund_await_or', 'refund_processing', 'refund_denied'], true)) {
-                $this->reply(409, ['ok' => false, 'message' => 'An Official Receipt is recorded only after the payment.']);
-            }
-            $pdo->beginTransaction();
-            $pdo->prepare(
-                'UPDATE hostel_booking_details SET official_receipt_no = :o, official_receipt_recorded_at = NOW()
-                  WHERE booking_id = :b'
-            )->execute([':o' => mb_substr($or, 0, 100), ':b' => $bookingId]);
-            $this->timeline($pdo, $bookingId, 'or_recorded', $actor, 'Official Receipt ' . $or . ' recorded (University Cashier).');
-            $pdo->commit();
-            break;
-
-        /* ---- HOSTEL: the guest arrived. PAY TO USE (2026-10-27): no bed until paid. ---- */
-        case 'check_in':
-            if ($bk['booking_type'] !== 'hostel') {
-                $this->reply(400, ['ok' => false, 'message' => 'Only a hostel booking has a check-in.']);
-            }
-            /* A rejected, cancelled or released stay has no bed to check into. */
-            if ($bk['reservation_status'] !== 'approved') {
-                $this->reply(409, ['ok' => false, 'message' => 'Only an approved stay can be checked in.']);
-            }
-            if ($bk['pay_to_use'] && !in_array($bk['payment_status'], ['confirmed', 'paid_cash'], true)) {
-                $this->reply(409, ['ok' => false, 'message' => $bk['payment_status'] === 'under_review'
-                    ? 'Not paid yet: the GCash receipt is still under review. Confirm it first, then check the guest in.'
-                    : ($bk['payment_status'] === 'await_cash'
-                        ? 'Not paid yet. The guest chose to pay cash at the front desk — take it first (Cash received).'
-                        : 'Not paid yet. The guest pays before using the bed — by GCash in Pay now, or by choosing cash at the front desk there.')]);
-            }
-            /* Not before the stay begins (Aron, 2026-10-30): the bed is booked from the check-in date. */
-            $stay = $pdo->prepare('SELECT check_in_date, check_in_date > CURDATE() AS early, checked_in FROM hostel_booking_details WHERE booking_id = :b');
-            $stay->execute([':b' => $bookingId]);
-            $stay = $stay->fetch();
-            if ($stay && $stay['checked_in']) {
-                $this->reply(409, ['ok' => false, 'message' => 'The guest is already checked in.']);
-            }
-            if ($stay && $stay['early']) {
-                $this->reply(409, ['ok' => false,
-                    'message' => 'Too early: check-in opens on ' . date('M j, Y', strtotime($stay['check_in_date'])) . ', the first night of the stay.']);
-            }
-            $pdo->beginTransaction();
-            $pdo->prepare(
-                'UPDATE hostel_booking_details SET checked_in = 1, checked_in_at = NOW() WHERE booking_id = :b'
-            )->execute([':b' => $bookingId]);
-            $this->timeline($pdo, $bookingId, 'checked_in', $actor, 'Guest checked in.');
-            $pdo->commit();
-            break;
+        case 'reject':     $this->reject($bk, $actor, $note); break;
+        case 'record_pos': $this->recordPos($request, $bk, $actor); break;
+        case 'record_or':  $this->recordOfficialReceipt($request, $bk, $actor); break;
+        case 'check_in':   $this->checkIn($bk, $actor); break;
 
         /* ---- HOSTEL, PAY TO USE: the guest paid CASH at the front desk. ---- */
         case 'cash_received':
@@ -733,7 +714,7 @@ class BookingActionController extends Controller
         case 'write_off_decline':  $this->writeOffDecide($pdo, $bk, $bookingId, $actor, $note, false); break;
         case 'reverse_payment':    $this->reversePayment($request, $pdo, $bk, $bookingId, $actor, $note); break;
         case 'refund_outside':     $this->recordOutsideRefund($request, $pdo, $bk, $bookingId, $actor, $note); break;
-        case 'check_out':          $this->checkOut($pdo, $bk, $bookingId, $actor); break;
+        case 'check_out':          $this->checkOut($bk, $actor); break;
         case 'move_date':          $this->moveDate($request, $pdo, $bk, $bookingId, $actor); break;
 
         case 'refund_return':

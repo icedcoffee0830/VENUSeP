@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Concerns;
 
 use App\Http\Controllers\Customer\BookingRules;
+use App\Queries\BookingQueries;
 use Illuminate\Http\Request;
 use PDO;
 
@@ -280,22 +281,18 @@ trait BookingSettlementActions
     }
 
     /* HOSTEL CHECK-OUT: the bed is free again from today, however early they left. */
-    private function checkOut(PDO $pdo, array $bk, int $bookingId, int $actor): void
+    private function checkOut(array $booking, int $actor): void
     {
-        $st = $pdo->prepare('SELECT checked_in, checked_out FROM hostel_booking_details WHERE booking_id = :b');
-        $st->execute([':b' => $bookingId]);
-        $stay = $st->fetch();
+        // Check
+        $stay = BookingQueries::findHostelStay((int) $booking['id']);
         if (!$stay || !$stay['checked_in']) {
             $this->reply(409, ['ok' => false, 'message' => 'Only a guest who has checked in can check out.']);
         }
         if ($stay['checked_out']) {
             $this->reply(409, ['ok' => false, 'message' => 'The guest has already checked out.']);
         }
-        $pdo->beginTransaction();
-        $pdo->prepare('UPDATE hostel_booking_details SET checked_out = 1, checked_out_at = NOW() WHERE booking_id = :b')->execute([':b' => $bookingId]);
-        $pdo->prepare('UPDATE bed_reservation_nights SET released_at = NOW() WHERE booking_id = :b AND night_date >= CURDATE() AND released_at IS NULL')
-            ->execute([':b' => $bookingId]);
-        $this->timeline($pdo, $bookingId, 'checked_out', $actor, 'Guest checked out.');
-        $pdo->commit();
+
+        // Save
+        BookingQueries::markCheckedOut((int) $booking['id'], $actor, 'Guest checked out.');
     }
 }

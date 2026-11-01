@@ -33,7 +33,7 @@ return [
     'password'   => '',
     'from_email' => 'noreply@venusep.test',
     'from_name'  => 'VENUSeP',
-    'base_url'   => 'http://localhost/VENUSeP',   // used to build links in emails; no trailing slash
+    'base_url'   => 'http://localhost:8000',   // used to build links in emails; no trailing slash
     /* TEST SWITCH — while trying out real Gmail, put YOUR OWN address here: every
        email then goes to you (subject "[TEST → intended@address] ..."), never to
        the demo accounts' real-looking addresses. Empty it only for go-live. */

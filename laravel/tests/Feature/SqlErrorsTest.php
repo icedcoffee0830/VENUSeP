@@ -14,6 +14,14 @@ use Tests\TestCase;
    breaks are real: a column renamed on the test database, put back afterwards. */
 class SqlErrorsTest extends TestCase
 {
+    /* Emailed links, like password reset, use the app's own address, not the deleted site's folder. */
+    public function test_emailed_links_use_the_apps_address(): void
+    {
+        legacy('mailer');
+        config(['app.url' => 'http://localhost:8000']);
+        $this->assertSame('http://localhost:8000', mail_config_from(storage_path('no-such-file.php'))['base_url']);
+    }
+
     private ?array $renamed = null;
 
     protected function tearDown(): void

@@ -43,7 +43,7 @@ function mail_config_from(string $path): array
         'password'   => '',
         'from_email' => 'noreply@venusep.test',
         'from_name'  => 'VENUSeP',
-        'base_url'   => 'http://localhost/VENUSeP',
+        'base_url'   => config('app.url'),
         'redirect_all_to' => '',
     ];
     if (!is_file($path)) {

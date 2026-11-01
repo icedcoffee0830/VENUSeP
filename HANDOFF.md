@@ -453,4 +453,5 @@ Conflicts are being settled with Aron; nothing above is built yet.
 
 - **IDs:** deleted per booking once it is finished. Encrypted when stored. Log who opens one. Left out of backups. The booking page says the ID was removed and when, and keeps who verified it. There is no DPO: this is a school project.
 - **Force cancel (staff, own office, no admin needed):** only when not paid, no receipt waiting for review, and the event has not started. Requires a reason and a note. Customer and admins are notified. Also covers answer 15 (cancel after approval goes through staff). Repeat offenders: an admin disables the account.
-- **Under discussion:** keeping the ID on a suspected fake booking; an admin-only "Reverse payment".
+- **Suspected fake booking:** the ID is deleted like any other; the history keeps who cancelled and why.
+- **Reverse payment (admin only):** requires the admin's password and a written reason. Payment marked rejected, System Receipt VOID, booking back to unpaid with a new 48-hour deadline; customer and other admins notified. Details under discussion.

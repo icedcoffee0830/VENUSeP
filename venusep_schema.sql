@@ -425,8 +425,8 @@ CREATE TABLE bookings (
     -- Refund policy snapshot (2026-09-16): copied from system_settings.refunds_enabled
     -- when the booking is MADE, and never changed afterwards. The customer is held
     -- to the policy they agreed to — flipping the switch later neither grants nor
-    -- removes refunds on this booking. Covers customer-requested refunds only; a
-    -- closure by USeP (reservation_status 'disrupted') is refundable regardless.
+    -- removes refunds on this booking. With refunds off nothing is refundable, a closure
+    -- by USeP included (Aron 2026-11-01).
     -- 2026-09-17: the same snapshot fixes WHEN the booking is paid —
     --   TRUE  = pre-pay : pay after approval, by 1 day before the first day
     --   FALSE = post-pay: pay after the last day, within postpay_grace_days

@@ -375,6 +375,8 @@ laptop: with a cached config, tests can hit the dev database instead of `venusep
 - IDs are checked by staff by eye: no scanner, no automatic check.
 - No migration needed: `refunds.refund_status = 'under_review'` holds a lost walk-in receipt, `official_receipt_pending` an online one.
 
+**Refund policy (Aron):** the school usually does not refund. The teacher asked for a refund system that can be switched on if that policy changes. So the switch alone decides: with refunds off, nothing is refundable, a room closed by the office included. Staff handle such a closure outside the system.
+
 **Accounts stay shared:** one person has one login, and the counter's search lists every customer. Only bookings and everything built from them are separated.
 
 **Later, not now (Aron):**

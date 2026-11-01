@@ -190,7 +190,7 @@ Rules:
 - **Indefinite (`until_date = NULL`)** → no end date. An indefinite HARD closure open **≥ ~14 days** raises a **"still closed?" review prompt** in Venue Management so a room can't be closed and forgotten.
 - **Venue availability:** a HARD-covered date is unavailable; a multi-day booking **books *around* it** — e.g. pick 23–27 with HARD maintenance on 24–26 → books **23 and 27 only** (pays for 2 days), the excluded days are shown to the customer. Same treatment as days already booked by someone else. Medium windows are **not** excluded (booking takes all days + shows the notice).
 - **Hostel availability:** a stay must be **contiguous** — a HARD-covered night **rejects the whole stay** (a guest can't leave a bed and return mid-stay).
-- **Disruption flow (stays, because maintenance stays):** setting a **HARD** closure on a room that already has **paid bookings inside the window** triggers the disruption/refund flow — offer a replacement room, or an **involuntary full refund** → `reservation_status = 'disrupted'`. Designed, not yet built; keep the `disrupted` status reserved.
+- **Disruption flow (stays, because maintenance stays):** setting a **HARD** closure on a room that already has **paid bookings inside the window** triggers the disruption/refund flow — offer a replacement room, or an **involuntary full refund** → `reservation_status = 'disrupted'`. Designed, not built. **Decided 2026-11-01 (Aron): not to be built as a refund.** The school usually does not refund; the refund switch is the only control, kept so the policy can change (teacher's request). With refunds off, nothing is refundable, an office closure included. Keep the `disrupted` status reserved.
 
 ## 12. Renames (quick list)
 - `bookings.rate_snapshot` → **`room_price`**

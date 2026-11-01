@@ -31,6 +31,15 @@ function notify_new_request(PDO $pdo, int $bookingId, ?int $actorUserId): void
     $s->closeCursor();
 }
 
+/* A refund with a missing receipt waits for an administrator's approval. */
+function notify_refund_needs_admin(PDO $pdo, int $bookingId, int $actorUserId): void
+{
+    $pdo->prepare(
+        "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id)
+         SELECT id, 'refund_needs_admin', :b, :a FROM users WHERE account_type = 'admin' AND is_active = 1 AND id <> :a2"
+    )->execute([':b' => $bookingId, ':a' => $actorUserId, ':a2' => $actorUserId]);
+}
+
 /* A staff/admin account event, for every admin but the one who did it.
    $detail: email, role, venue — whatever the wording needs. */
 function notify_admins(PDO $pdo, string $kind, int $actorUserId, array $detail): void
@@ -153,6 +162,8 @@ function notif_words(array $r, string $accountType): array
             return [($r['customer_name'] ?: 'The customer') . ' cancelled paying cash · ' . $ref . '. GCash is open again.', $staffLink];
         case 'refund_requested':
             return ['Refund requested for ' . $ref . '.', $staffLink];
+        case 'refund_needs_admin':
+            return ['The receipt for ' . $ref . ' is missing. Check the proof and approve the refund.', $staffLink];
 
         /* ---- admins: staff/admin accounts ---- */
         case 'account_created':

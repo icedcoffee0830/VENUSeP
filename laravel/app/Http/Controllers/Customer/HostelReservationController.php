@@ -46,9 +46,9 @@ class HostelReservationController extends Controller
         }, $hostelRooms);
 
         return view('customer.hostel-reservation', [
-            /* an Overdue booking: the customer's notice; at the counter, every customer's (2026-10-30) */
-            'overdueNotice'     => BookingRules::overdueNoticeForPage(),
-            'counterOverdue'    => (counter_mode() && ($pdo = venusep_db())) ? BookingRules::overdueBookings($pdo) : [],
+            /* an unpaid booking at this room's office: the customer's notice; at the counter, every customer's */
+            'overdueNotice'     => BookingRules::overdueNoticeForPage($room),
+            'counterOverdue'    => BookingRules::overdueForCounter($room),
             'pricingJs'         => $pricingJs,
             'checkerJs'         => $checkerJs,
             'counterBookerJs'   => $counterBookerJs,

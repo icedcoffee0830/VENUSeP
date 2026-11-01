@@ -172,7 +172,7 @@ function whoScreen(){
           <div style="font-size:12.5px;color:#8a857d;margin-bottom:10px">${esc(b.phone)}</div>
           ${COUNTER_OVERDUE[b.customerId] ? `
             <div role="status" style="background:#fdf6e7;border:1px solid #efd9ab;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5;color:#5c3d0c">
-              <strong>Unpaid booking:</strong> ${esc(COUNTER_OVERDUE[b.customerId])}. This customer can&rsquo;t book online until it is paid &mdash; you may still book for them here.
+              <strong>Unpaid booking:</strong> ${esc(COUNTER_OVERDUE[b.customerId])}. This customer can&rsquo;t book online at this office until it is paid &mdash; you may still book for them here.
             </div>` : ''}
           ${b.verified ? `
             <div style="display:flex;align-items:center;gap:8px;background:#eaf6ef;border:1px solid #d4ebdd;border-radius:10px;padding:10px 12px">

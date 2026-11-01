@@ -94,6 +94,8 @@ class BookingRequestController extends Controller
                 'files'     => $refundFiles,
                 'stage'     => $stageMap[$rf['refund_status']] ?? $rf['refund_status'],
                 'orPending' => (bool) $rf['official_receipt_pending'],
+                'needsAdmin' => $rf['refund_status'] === 'under_review'    /* a missing receipt: the same rule online and at the counter */
+                                || ($rf['refund_status'] === 'requested' && $rf['official_receipt_pending']),
                 'reason'    => str_replace('_', ' ', $rf['reason_category']),
                 'details'   => (string) $rf['reason'],
                 'refundTo'  => (string) $rf['refund_to_number'],
@@ -101,7 +103,9 @@ class BookingRequestController extends Controller
                 'docs'      => $rf['refund_status'] === 'returned_for_correction'
                                 ? 'Returned to the customer: ' . ($rf['notes'] ?: 'correction requested')
                                 : ($refundFiles ? count($refundFiles) . ' document(s) submitted · ' : 'No documents attached · ')
-                                  . ($rf['official_receipt_pending'] ? 'Official Receipt NOT yet provided' : 'Official Receipt provided'),
+                                  . ($b['isWalkIn']
+                                      ? ($rf['refund_status'] === 'under_review' ? 'Receipt lost: an administrator must approve the proof' : 'Receipt checked by staff')
+                                      : ($rf['official_receipt_pending'] ? 'Official Receipt NOT yet provided' : 'Official Receipt provided')),
             ];
         }
 
@@ -120,6 +124,8 @@ class BookingRequestController extends Controller
             'kind'      => $isHostel ? 'hostel' : 'venue',
             'name'      => $b['customerName'],
             'type'      => $b['isWalkIn'] ? 'Walk-in' : ($b['isUsep'] ? 'USeP affiliated' : 'Non-USeP'),
+            'walkIn'    => $b['isWalkIn'],
+            'refundable' => $b['refundable'],
             /* account email; for a walk-in, the address they gave at the counter (#22) */
             'email'     => $b['customerEmail'] !== '' ? $b['customerEmail'] : (($b['contactEmail'] ?? '') !== '' ? $b['contactEmail'] : '—'),
             'phone'     => $b['customerPhone'],

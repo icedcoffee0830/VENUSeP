@@ -5,10 +5,10 @@ namespace Tests\Feature\CustomerBooking;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-/* Aron, 2026-10-30 (post-pay): a customer with a booking whose payment is Overdue
-   cannot make NEW bookings online until it is paid — booking-submit refuses, the
-   booking pages say so up front, and it unblocks by itself once paid. At the
-   counter staff see the same warning but may still book. */
+/* Aron, 2026-11-01: the offices are separate. An Overdue booking stops NEW online bookings
+   at THAT office only — booking-submit refuses, the booking pages say so up front, and it
+   unblocks by itself once paid. Anything earlier blocks nothing, the grace days included.
+   At the counter staff see the same warning but may still book. */
 class OverdueBlockTest extends TestCase
 {
     private const EMAIL = 'aronerfe0830@gmail.com';     /* no overdue booking in the snapshot */
@@ -42,15 +42,15 @@ class OverdueBlockTest extends TestCase
 
     private function notice(): string
     {
-        return 'You have an unpaid booking (USeP Gymnasium, Sep 10, 2026 — ₱1,234.50). Please settle it before making a new booking.';
+        return 'You have an unpaid booking (USeP Gymnasium at USeP Venues, Sep 10, 2026 — ₱1,234.50). Please settle it before booking with that office again. Other offices are not affected.';
     }
 
-    private function submit()
+    private function submit(string $room = 'r5')
     {
         $day = date('Y-m-d', strtotime('+' . random_int(400, 1400) . ' days'));
         return $this->actingAsCustomer(self::EMAIL)->withSession(['_token' => 'test-token'])
             ->post(route('customer.booking-submit'), [
-                '_token' => 'test-token', 'type' => 'venue', 'room' => 'r5', 'event_name' => 'Blocked?',
+                '_token' => 'test-token', 'type' => 'venue', 'room' => $room, 'event_name' => 'Blocked?',
                 'date_start' => $day, 'date_end' => $day, 'attendees' => '50',
                 'times' => json_encode([$day => ['start' => '08:00', 'end' => '12:00']]),
                 'affiliated' => '0', 'method' => 'gcash', 'agree_no_refund' => '1',
@@ -68,25 +68,57 @@ class OverdueBlockTest extends TestCase
         $this->submit()->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A valid ID is required to submit a booking.']);
     }
 
+    public function test_another_office_is_not_blocked(): void
+    {
+        $this->submit('r1')->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'A valid ID is required to submit a booking.']);
+    }
+
+    public function test_nothing_before_overdue_blocks(): void
+    {
+        foreach (['await_event', 'await_gcash', 'under_review'] as $status) {
+            DB::update("UPDATE bookings SET payment_status = ?, reservation_status = 'approved', current_deadline_at = DATE_ADD(NOW(), INTERVAL 2 DAY) WHERE id = ?", [$status, $this->bookingId]);
+            $this->submit()->assertStatus(400);
+        }
+    }
+
+    /* The day the grace ends, the block starts: no staff page has to run the housekeeping first. */
+    public function test_a_payment_past_its_grace_blocks_at_once(): void
+    {
+        DB::update("UPDATE bookings SET payment_status = 'await_gcash' WHERE id = ?", [$this->bookingId]);
+        $this->submit()->assertStatus(409)->assertJson(['error' => 'overdue']);
+    }
+
     public function test_the_booking_pages_show_the_notice_up_front(): void
     {
         $e = e($this->notice());
-        foreach ([route('customer.venues'), route('customer.room-reservation', ['room' => 'r1']), route('customer.hostel-reservation', ['room' => 'h1'])] as $url) {
+        foreach ([route('customer.venues'), route('customer.room-reservation', ['room' => 'r5'])] as $url) {
             $this->actingAsCustomer(self::EMAIL)->get($url)->assertOk()->assertSee($e, false)
                 ->assertSee('href="' . route('customer.booking-history') . '"', false);
         }
+        foreach ([route('customer.room-reservation', ['room' => 'r1']), route('customer.hostel-reservation', ['room' => 'h1'])] as $url) {
+            $this->actingAsCustomer(self::EMAIL)->get($url)->assertOk()->assertDontSee('You have an unpaid booking');
+        }
         DB::update("UPDATE bookings SET payment_status = 'confirmed' WHERE id = ?", [$this->bookingId]);
-        $this->actingAsCustomer(self::EMAIL)->get(route('customer.room-reservation', ['room' => 'r1']))->assertOk()
+        $this->actingAsCustomer(self::EMAIL)->get(route('customer.room-reservation', ['room' => 'r5']))->assertOk()
             ->assertDontSee('You have an unpaid booking');
+    }
+
+    /* Bahay Alumni's counter is not told what a customer owes USeP Venues. */
+    public function test_the_counter_warning_stays_inside_the_office(): void
+    {
+        $html = $this->actingAsStaff()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk()->getContent();
+        $this->assertSame(1, preg_match('/const COUNTER_OVERDUE = (\{.*?\});\n/', $html, $m));
+        $this->assertArrayNotHasKey($this->customerId, json_decode($m[1], true));
     }
 
     /* Staff at the counter get every customer's warning for the "who" step, and may still book. */
     public function test_the_counter_warns_but_still_books(): void
     {
+        DB::table('bookings')->where('id', $this->bookingId)->update(['room_id' => DB::table('rooms')->where('room_code', 'r1')->value('id')]);
         $html = $this->actingAsStaff()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk()
             ->assertDontSee('You have an unpaid booking')->getContent();
         $this->assertSame(1, preg_match('/const COUNTER_OVERDUE = (\{.*?\});\n/', $html, $m));
-        $this->assertSame('USeP Gymnasium, Sep 10, 2026 — ₱1,234.50', json_decode($m[1], true)[$this->customerId] ?? null);
+        $this->assertStringEndsWith(' at Bahay Alumni, Sep 10, 2026 — ₱1,234.50', json_decode($m[1], true)[$this->customerId] ?? '');
         $this->assertStringContainsString('${COUNTER_OVERDUE[b.customerId] ?', $html);   /* counter-booker.php draws it */
 
         do {   /* a date r1 is actually free on: other tests leave far-future bookings behind */

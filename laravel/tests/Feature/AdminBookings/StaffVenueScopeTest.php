@@ -59,6 +59,41 @@ class StaffVenueScopeTest extends TestCase
             ->assertDontSee('Dormitory rooms booked per bed.');    // USeP Hostel's description in the venue box
     }
 
+    /* Aron 2026-11-01: the offices are fully separate. Every page a staff member can open,
+       with a booking of another office on file: not its event, room or reference. */
+    public function test_no_staff_page_shows_another_offices_records(): void
+    {
+        $room = DB::table('rooms')->where('room_code', 'r5')->value('id');
+        $id = DB::table('bookings')->insertGetId([
+            'customer_id' => DB::table('customers')->value('id'), 'room_id' => $room, 'booking_type' => 'venue',
+            'reservation_status' => 'approved', 'payment_status' => 'confirmed', 'payment_method' => 'gcash',
+            'is_usep_affiliated' => 0, 'affiliation_verified' => 0, 'room_price' => 100, 'discount_percent' => 0,
+            'discount_amount' => 0, 'total_amount' => 100, 'refunds_allowed' => 0, 'submitted_at' => now(), 'approved_at' => now(),
+        ]);
+        $day = now()->addDays(random_int(400, 4000))->toDateString();
+        DB::table('venue_booking_details')->insert(['booking_id' => $id, 'event_name' => 'Other office secret',
+            'start_date' => $day, 'end_date' => $day, 'attendee_count' => 10]);
+        $ref = 'VB-' . now()->year . '-' . str_pad((string) $id, 3, '0', STR_PAD_LEFT);
+        $otherRooms = DB::table('rooms as r')->join('venues as v', 'v.id', '=', 'r.venue_id')
+            ->where('v.name', '<>', 'Bahay Alumni')->pluck('r.name')->all();
+        try {
+            foreach (['admin.dashboard', 'admin.reports', 'admin.calendar', 'admin.transaction-history', 'admin.booking-requests',
+                      'admin.venue-management', 'admin.payment-settings', 'admin.room-form', 'admin.hostel-room-form', 'admin.venue-form'] as $name) {
+                $html = $this->actingAsStaff()->get(route($name))->getContent();   // venue-form sends staff to their own venue
+                $html = preg_replace('/placeholder="[^"]*"/', '', $html);   // an empty form's example text is not a record
+                foreach (array_merge(['Other office secret', $ref], $otherRooms) as $word) {
+                    $this->assertStringNotContainsString(e($word), $html, "$name shows \"$word\"");
+                }
+            }
+            $html = $this->actingAsStaff()->get(route('admin.booking-request', ['id' => $ref]))->getContent();
+            $this->assertStringNotContainsString('Other office secret', $html);
+            $html = $this->actingAsStaff()->get(route('admin.room-form', ['id' => 'r5']))->getContent();
+            $this->assertStringNotContainsString(e(DB::table('rooms')->where('room_code', 'r5')->value('name')), $html);
+        } finally {
+            DB::delete('DELETE FROM bookings WHERE id = ?', [$id]);
+        }
+    }
+
     public function test_a_customers_own_lists_are_not_narrowed(): void
     {
         $this->signIn('customer@gmail.com', 'customer');

@@ -56,7 +56,7 @@ class VenueBookingController extends Controller
             'lpOfficeWhere' => 'USeP Tagum–Mabini Campus, Apokon, Tagum City',
             'lpOfficeHours' => 'Monday to Friday, 8:00 AM – 5:00 PM',
             'lpCounter'     => $lpCounter,
-            'overdueNotice' => BookingRules::overdueNoticeForPage(),   /* an Overdue booking blocks new ones (2026-10-30) */
+            'overdueNotice' => BookingRules::overdueNoticeForPage(),   /* an Overdue booking blocks new ones at its office (2026-11-01) */
             'lpQ'           => $lpCounter ? '?counter=1' : '',
         ]);
     }

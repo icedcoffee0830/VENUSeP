@@ -31,7 +31,7 @@ class RefundSubmitController
 
     public function __invoke(Request $request)
     {
-        legacy('auth', 'db', 'documents', 'bookings', 'demo-mode');
+        legacy('auth', 'db', 'documents', 'bookings', 'demo-mode', 'notifications');
 
         if (!$request->isMethod('post')) {
             return self::reply(405, ['ok' => false, 'message' => 'Use POST.'], ['Allow' => 'POST']);
@@ -208,6 +208,9 @@ class RefundSubmitController
                            ':n' => $action === 'file' ? 'Refund requested by the customer.' : 'Corrected documents resubmitted.']);
             $pdo->prepare("UPDATE bookings SET payment_status = 'refund_requested' WHERE id = :b")->execute([':b' => $id]);
             $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
+            if ($orPending) {
+                notify_refund_needs_admin($pdo, $id, (int) session('user_id'));
+            }
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }

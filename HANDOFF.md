@@ -361,3 +361,25 @@ it on too, along with `APP_DEBUG=false`, `config:cache` and `route:cache`. Do NO
 laptop: with a cached config, tests can hit the dev database instead of `venusep_laravel_test`.
 
 **No migration needed for any of this.** The real `venusep` DB stays at migration 15.
+
+## 13. 2026-11-01 — offices fully separate, walk-in refunds
+
+**Decided by Aron:**
+- Each office (one `venues` row: Bahay Alumni, USeP Venues, USeP Hostel) is separate. Only admins see everything.
+- An Overdue booking blocks new online bookings at that office only, and only once officially Overdue (grace days passed). The counter warns but may still book.
+- Walk-in refunds follow the refund switch: with refunds off, there are none.
+- Staff file a walk-in refund with the receipt number (printed or emailed). Money goes back by GCash or cash, the staff's call, with optional proof.
+- A missing receipt needs an admin's approval, online and walk-in alike. Staff look in Gmail or attach what they found.
+- POS/OR never on a closed booking; OR only after payment.
+- Disable room asks for confirmation.
+- IDs are checked by staff by eye: no scanner, no automatic check.
+- No migration needed: `refunds.refund_status = 'under_review'` holds a lost walk-in receipt, `official_receipt_pending` an online one.
+
+**Accounts stay shared:** one person has one login, and the counter's search lists every customer. Only bookings and everything built from them are separated.
+
+**Later, not now (Aron):**
+- **Reports vs what each office submits:** make the Reports page and its printout match each office's real format as closely as possible. Get the actual forms from the offices first.
+
+**Not a concern (Aron):** entering old paper bookings, accessibility work, hosting and account ownership. Training and support: the group's IT.
+
+**Known gap:** `refunds.correction_due_at` is written but nothing enforces it, so a request returned for correction stays open after its 48 hours.

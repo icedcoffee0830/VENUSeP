@@ -1,5 +1,5 @@
-{{-- An Overdue (post-pay) booking blocks new online bookings until it is paid
-     (2026-10-30): booking-submit refuses, and the booking pages say so up front.
+{{-- An Overdue booking blocks new online bookings at its office (2026-11-01):
+     booking-submit refuses, and the booking pages say so up front.
      $overdueNotice = BookingRules::overdueNoticeForPage() (null: nothing shown). --}}
 @if ($overdueNotice)
 <div style="padding:{{ $noticeGutter ?? '0 16px' }}">

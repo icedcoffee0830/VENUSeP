@@ -210,6 +210,7 @@
       /* EVERY request, from the database, keyed by its real reference. */
       const DATA = {!! json_encode($brqData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
       const CSRF = {!! json_encode(csrf_token()) !!};
+      const IS_ADMIN = {!! json_encode(session('account_type') === 'admin') !!};
 
       /* ============================================================
          STAFF ACTIONS — every one of them goes to admin/booking-action.php.
@@ -315,7 +316,11 @@
       function gcExpectedCentavos() { return refundCentavos(); }
       function gcBookingRef()       { return (cur && cur.id) || ""; }
 
-      function openPayout()  { cur.payoutOpen = true;  cur.payoutErr = null; render(); }
+      function openPayout()  { cur.payoutOpen = true;  cur.payoutErr = null; cur.payoutMethod = cur.payoutMethod || (cur.method === 'cash' ? 'cash' : 'gcash'); render(); }
+      function setPayoutMethod(v) {
+        cur.payoutNote = ((document.getElementById('payoutNote') || {}).value || "");
+        cur.payoutMethod = v; cur.payoutErr = null; state.ocr = null; render();
+      }
       function closePayout() { cur.payoutOpen = false; cur.payoutErr = null; state.ocr = null; render(); }
       function setPayoutTo(v){ cur.payoutTo = v; }
 
@@ -342,16 +347,10 @@
       }
       async function completeRefund() {
         const note = ((document.getElementById('payoutNote') || {}).value || "").trim();
+        const inCash = cur.payoutMethod === 'cash';
         const to   = normMobile(payoutTarget());
-        if (!to) { cur.payoutErr = 'Enter the GCash number the refund was sent to — it is the account that paid.'; render(); return; }
-        /* THE OR RULE, enforced rather than merely asked about: no Official Receipt,
-           no payout. An exception is allowed, but it costs a written reason — the
-           same shape as the GCash override above, not a dialog anyone clicks past. */
-        if (cur.refund && cur.refund.orPending && !note) {
-          cur.payoutErr = 'The Official Receipt has not been provided, and a refund cannot be paid without it. If you are recording an exception, write why in the note.';
-          render(); return;
-        }
-        if (!payoutVerified() && !note) {
+        if (!inCash && !to) { cur.payoutErr = 'Enter the GCash number the refund was sent to — it is the account that paid.'; render(); return; }
+        if (!inCash && !payoutVerified() && !note) {
           cur.payoutErr = 'Attach a receipt that verifies, or write a note explaining why you are recording this refund without one.';
           render(); return;
         }
@@ -360,13 +359,12 @@
         /* Write FIRST and check it landed. The customer can withdraw while this
            page is open; showing "Refunded" for a request that no longer exists
            would be a lie staff then act on. */
-        const wrote = await pushOutcome('refunded', 'Refund sent to ' + to + (refNo ? ' · GCash ref ' + refNo : "") + (note ? ' · ' + note : ""), {
-          reference: refNo, amount: cur.total, amountValue: refundCentavos() / 100, to: to,
-          receiptFile: (state.ocr && state.ocr.fileName) || null,
-          verified: payoutVerified()
-        });
+        const cashProof = (document.getElementById('payoutProof') || { files: [] }).files[0];
+        const wrote = await pushOutcome('refunded', inCash ? note : 'Refund sent to ' + to + (refNo ? ' · GCash ref ' + refNo : "") + (note ? ' · ' + note : ""), inCash
+          ? { method: 'cash', file: cashProof }
+          : { method: 'gcash', reference: refNo, amountValue: refundCentavos() / 100, to: to, file: state.ocr && state.ocr.file });
         if (!wrote) {
-          cur.payoutErr = 'This request is no longer open — the customer withdrew it while this page was open. Nothing has been recorded. Go back to the queue.';
+          cur.payoutErr = cur.outcomeError || 'This request is no longer open. Nothing has been recorded. Go back to the queue.';
           render(); return;
         }
         if (rec) gcRemember(rec);        /* consume ref + file hash only once the refund really landed */
@@ -445,8 +443,40 @@
                ${kv('Receipt file', esc((o && o.fileName) || '—'))}
              </div>`;
         const busy = o && o.phase === 'reading';
+        const methodField = `<div class="br-fld">
+              <label for="payoutMethod">How the money is returned</label>
+              <select id="payoutMethod" onchange="setPayoutMethod(this.value)">
+                <option value="gcash"${cur.payoutMethod === 'cash' ? '' : ' selected'}>GCash</option>
+                <option value="cash"${cur.payoutMethod === 'cash' ? ' selected' : ''}>Cash</option>
+              </select>
+            </div>`;
+        const payoutButtons = `${cur.payoutErr ? `<div style="color:#b23a3a;font-size:0.74rem;margin-bottom:0.55rem">${esc(cur.payoutErr)}</div>` : ""}
+            <div style="display:flex;gap:0.5rem">
+              <button class="br-btn br-btn-primary" onclick="completeRefund()">Complete refund</button>
+              <button class="br-btn" onclick="closePayout()">Cancel</button>
+            </div>`;
+        if (cur.payoutMethod === 'cash') {
+          return `<div class="br-ovr" style="margin-top:0.9rem">
+            <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">Record the refund payout</div>
+            ${methodField}
+            <div class="br-fld">
+              <label>Amount to hand back</label>
+              <div style="font-size:1.05rem;font-weight:700">${esc(cur.total)}</div>
+            </div>
+            <div class="br-fld">
+              <label for="payoutProof">Proof of the refund (optional)</label>
+              <input type="file" id="payoutProof" accept="image/*,application/pdf">
+            </div>
+            <div class="br-fld">
+              <label for="payoutNote">Note (optional)</label>
+              <textarea id="payoutNote" rows="2">${esc(cur.payoutNote || "")}</textarea>
+            </div>
+            ${payoutButtons}
+          </div>`;
+        }
         return `<div class="br-ovr" style="margin-top:0.9rem">
             <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">Record the refund payout</div>
+            ${methodField}
             <div style="color:var(--vm-muted);font-size:0.74rem;line-height:1.55;margin-bottom:0.8rem">
               Send the money in GCash first, then attach the receipt. It must go back to the account that <strong>paid</strong> — you can see the sender on the original transaction in the venue GCash history. The check <strong>advises</strong>: if it cannot read the screenshot you can still record the refund with a note.
             </div>
@@ -470,12 +500,84 @@
               <label for="payoutNote">Note ${payoutVerified() ? '(optional)' : '(required if the receipt does not verify)'}</label>
               <textarea id="payoutNote" rows="2" placeholder="e.g. screenshot unreadable — payment confirmed in the GCash transaction history.">${esc(cur.payoutNote || "")}</textarea>
             </div>
-            ${cur.payoutErr ? `<div style="color:#b23a3a;font-size:0.74rem;margin-bottom:0.55rem">${esc(cur.payoutErr)}</div>` : ""}
-            <div style="display:flex;gap:0.5rem">
-              <button class="br-btn br-btn-primary" onclick="completeRefund()">Complete refund</button>
-              <button class="br-btn" onclick="closePayout()">Cancel</button>
+            ${payoutButtons}
+          </div>`;
+      }
+      /* WALK-IN REFUND (Aron 2026-11-01): staff file it for the guest. Nothing here redraws
+         the page while it is open, so the chosen files stay chosen. */
+      function fileRefundButton() {
+        if (!cur.walkIn || !cur.refundable || cur.fileRefundOpen) return "";
+        return `<button class="br-btn" onclick="cur.fileRefundOpen = true; render()">File refund</button>`;
+      }
+      function fileRefundPanel() {
+        if (!cur.fileRefundOpen) return "";
+        return `<div class="br-ovr" style="margin-top:0.9rem;text-align:left">
+            <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">File a refund for this walk-in</div>
+            <div class="br-fld">
+              <label for="rfCategory">Reason</label>
+              <select id="rfCategory">
+                <option value="event_cancelled">Event cancelled</option>
+                <option value="schedule_conflict">Schedule conflict</option>
+                <option value="wrong_room">Wrong room</option>
+                <option value="venue_unavailable">Venue unavailable</option>
+                <option value="payment_error">Payment error</option>
+                <option value="other" selected>Other</option>
+              </select>
+            </div>
+            <div class="br-fld">
+              <label for="rfNote">What the guest said</label>
+              <textarea id="rfNote" rows="2"></textarea>
+            </div>
+            <div class="br-fld" id="rfNumberBox">
+              <label for="rfNumber">Receipt number (printed or emailed, VSR-…)</label>
+              <input id="rfNumber" autocomplete="off">
+            </div>
+            <label style="display:flex;gap:0.5rem;align-items:center;font-size:0.8rem;margin-bottom:0.7rem">
+              <input type="checkbox" id="rfLost" onchange="document.getElementById('rfNumberBox').hidden = this.checked; document.getElementById('rfHint').hidden = !this.checked">
+              The receipt was lost
+            </label>
+            <div id="rfHint" hidden style="color:var(--vm-muted);font-size:0.74rem;line-height:1.55;margin-bottom:0.7rem">Look for it in Gmail first. If it is gone, attach what you found: an administrator has to approve the proof before the money is returned.</div>
+            <div class="br-fld">
+              <label for="rfFiles">Documents</label>
+              <input type="file" id="rfFiles" multiple accept="image/*,application/pdf">
+            </div>
+            <div id="rfErr" role="alert" style="color:#b23a3a;font-size:0.74rem;margin-bottom:0.55rem"></div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+              <button class="br-btn br-btn-primary" id="rfSend" onclick="fileRefund()">File refund</button>
+              <button class="br-btn" onclick="cur.fileRefundOpen = false; render()">Cancel</button>
             </div>
           </div>`;
+      }
+      async function fileRefund() {
+        const val = function (id) { return document.getElementById(id).value; };
+        const body = new FormData();
+        body.append('_token', CSRF); body.append('booking', cur.id); body.append('action', 'refund_file');
+        body.append('reason_category', val('rfCategory')); body.append('note', val('rfNote'));
+        body.append('receipt_number', val('rfNumber'));
+        if (document.getElementById('rfLost').checked) body.append('receipt_lost', '1');
+        Array.from(document.getElementById('rfFiles').files).forEach(function (f) { body.append('support[]', f); });
+        const send = document.getElementById('rfSend');
+        send.disabled = true;
+        const out = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was filed.' }; });
+        if (out.ok) { location.reload(); return; }
+        send.disabled = false;
+        document.getElementById('rfErr').textContent = out.message || 'Nothing was filed.';
+      }
+      function approveLostReceipt() {
+        staffAction('refund_approve', {}, function () { location.reload(); });
+      }
+      async function addRefundProof(input) {
+        const body = new FormData();
+        body.append('_token', CSRF); body.append('booking', cur.id); body.append('action', 'refund_add_proof');
+        Array.from(input.files).forEach(function (f) { body.append('support[]', f); });
+        const out = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was attached.' }; });
+        if (out.ok) { location.reload(); return; }
+        cur.actionError = out.message || 'Nothing was attached.';
+        render();
       }
       function actionPanel() {
         if (!cur.actionMode) return "";
@@ -556,7 +658,14 @@
         if (cur.pay === 'overdue') return cur.postpay || overdueAfterEvent
             ?`<button class="br-btn br-btn-primary" onclick="extendDeadline()">Extend 48 h</button>`
             : `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
-        if (OPEN_REFUND.includes(cur.pay)) return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button><button class="br-btn" onclick="openAction('fix')">Return for correction</button><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
+        if (OPEN_REFUND.includes(cur.pay) && cur.refund && cur.refund.needsAdmin) {
+          return (IS_ADMIN ? `<button class="br-btn br-btn-primary" onclick="approveLostReceipt()">Approve the proof</button>`
+                           : `<span class="none">Waiting for an administrator to approve the proof</span>`)
+            + `<label class="br-btn" style="cursor:pointer">Add proof<input type="file" id="rfAddProof" hidden multiple accept="image/*,application/pdf" onchange="addRefundProof(this)"></label>`
+            + (cur.walkIn ? '' : `<button class="br-btn" onclick="openAction('fix')">Return for correction</button>`)
+            + `<button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
+        }
+        if (OPEN_REFUND.includes(cur.pay)) return `<button class="br-btn br-btn-primary" onclick="openPayout()">Mark refunded</button>${cur.walkIn ? '' : `<button class="br-btn" onclick="openAction('fix')">Return for correction</button>`}<button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
         /* PAY TO USE (2026-10-27): no bed until the stay is paid. A receipt
            still under review is not paid; staff confirm it first. The OR is
            paperwork for later and holds nothing up. */
@@ -828,12 +937,12 @@
           case 'refund_correction': {
             const pendingOR = cur.pay === 'refund_await_or' || !!(cur.refund && cur.refund.orPending);
             const returned  = cur.pay === 'refund_correction';
-            const head = returned ? 'Returned to the customer for correction'
+            const head = cur.refund && cur.refund.needsAdmin ? 'Refund on hold — an administrator must approve the proof' : returned ? 'Returned to the customer for correction'
                        : (pendingOR ? 'Refund requested — awaiting Official Receipt'
                        : (cur.pay === 'refund_processing' ? 'Refund approved — payout in progress'
                                     : 'Refund requested — under verification'));
             const orNote = pendingOR
-              ? ' <strong>The Official Receipt is still outstanding</strong> — the refund cannot be PAID until it arrives, but the claim can be decided on its merits now.'
+              ? ' <strong>The Official Receipt is still outstanding</strong> — the refund cannot be PAID until it arrives or an administrator approves the proof.'
               : "";
             /* The `refunds` row can be gone (withdrawn, or an older booking
                whose claim was purged) while the booking still carries a refund
@@ -933,7 +1042,8 @@
                 <span class="br-badge ${resBadge(cur.res).c}">${esc(resBadge(cur.res).t)}</span>
                 <span class="br-badge ${payBadge(cur.pay).c}">${esc(payText())}</span>
               </div>
-              <div class="br-actions">${hdrActions()}</div>
+              <div class="br-actions">${hdrActions()}${fileRefundButton()}</div>
+              ${fileRefundPanel()}
               ${cur.actionError && !cur.attErr ? `<div role="alert" style="color:#b23a3a;font-size:0.78rem;margin-top:0.4rem;text-align:right">${esc(cur.actionError)}</div>` : ''}
             </div>
           </div>
@@ -1326,10 +1436,13 @@
         if (!action) return false;
         const extra = { note: note || '' };
         if (proof) {
+          extra.payout_method = proof.method;
           if (proof.reference) extra.payout_reference = proof.reference;
-          if (proof.amountValue) extra.amount = proof.amountValue;
+          if (proof.to) extra.payout_to = proof.to;
         }
-        const body = new URLSearchParams(Object.assign({ _token: CSRF, booking: cur.id, action: action }, extra));
+        const body = new FormData();
+        Object.entries(Object.assign({ _token: CSRF, booking: cur.id, action: action }, extra)).forEach(function (kv) { body.append(kv[0], kv[1]); });
+        if (proof && proof.file) body.append('proof[]', proof.file);
         try {
           const res = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' });
           const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });

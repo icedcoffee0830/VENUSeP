@@ -551,7 +551,8 @@ function vmMaint($m, $today) {
         font-family: inherit;
         font-size: 0.85rem;
         font-weight: 700;
-        padding: 0;
+        margin: -0.5rem 0;
+        padding: 0.5rem 0;   /* a bigger tap area, same line height */
       }
 
       .vm-toggle-link:hover {
@@ -1171,11 +1172,14 @@ function vmMaint($m, $today) {
         });
       });
 
-      // Enable/Disable — reversible, so no confirm dialog; just flips the
-      // room and reloads so the card, its "Hidden" line and every count on
+      // Disable hides the room from customers, so it asks first (Aron 2026-11-01);
+      // Enable just flips it. Then it reloads so the card, its "Hidden" line and every count on
       // this page come back from the database rather than being patched by hand.
       document.querySelectorAll('[data-toggle-id]').forEach((button) => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
+          if (!button.classList.contains('is-off') && !(await venusepConfirm(
+                '"' + button.dataset.toggleName + '" will be hidden from customers until you enable it again.',
+                { title: 'Disable this room?', okLabel: 'Disable' }))) return;
           const body = new URLSearchParams({
             _token: {!! json_encode($dcCsrf) !!},
             room_id: button.dataset.toggleId,

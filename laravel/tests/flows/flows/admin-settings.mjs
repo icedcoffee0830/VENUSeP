@@ -106,6 +106,7 @@ export default {
 
       await page.goto(ctx.url('/admin/venue-management'));
       await roomCard(page, TOGGLE_ROOM).locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Disable' }).click();
+      await modal(ctx, page, { expect: /hidden from customers/, ok: 'Disable' });
       await expect.visible(page.locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Enable' }), 'the button did not turn into "Enable"');
       await expect.visible(roomCard(page, TOGGLE_ROOM).getByText('Hidden from customers'), 'the card does not say "Hidden from customers"');
       expect.equal((await dbOne(`SELECT is_active FROM rooms WHERE room_code = ?`, [TOGGLE_ROOM])).is_active, 0, 'rooms.is_active after Disable');

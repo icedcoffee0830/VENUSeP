@@ -993,6 +993,7 @@ function booking_history_events(array $b) {
                 'receipt_attempts_allowed'   => 'More receipt attempts allowed',
                 'pos_recorded'               => 'POS recorded',
                 'or_recorded'                => 'Official Receipt recorded',
+                'refund_approved'            => 'Refund approved',
                 'checked_in'                 => 'Guest checked in',
             ];
             foreach ($stmt->fetchAll() as $t) {

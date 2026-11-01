@@ -148,6 +148,7 @@ export default {
       const page = s.admin;
       await page.goto(ctx.url('/admin/venue-management'));
       await roomCard(page, s.code).locator(`[data-toggle-id="${s.code}"]`, { hasText: 'Disable' }).click();
+      await modal(ctx, page, { expect: /hidden from customers/, ok: 'Disable' });
       await expect.visible(roomCard(page, s.code).getByText('Hidden from customers'), 'the card does not say "Hidden from customers"');
       expect.equal((await dbOne(`SELECT is_active FROM rooms WHERE room_code = ?`, [s.code])).is_active, 0, 'rooms.is_active');
 

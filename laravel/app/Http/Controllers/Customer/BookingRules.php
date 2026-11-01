@@ -60,22 +60,27 @@ final class BookingRules
             . date('M j, Y', strtotime('+' . $max . ' days')) . '.';
     }
 
-    /* POST-PAY OVERDUE BLOCK (Aron, 2026-10-30): a customer with a booking whose
-       payment is Overdue cannot book online until it is paid; it unblocks by itself
-       once the payment status moves on. Staff at the counter see it but may book.
+    /* THE UNPAID-BOOKING BLOCK (Aron, 2026-11-01). The offices (one `venues` row each) are
+       separate: a booking officially Overdue (its event is over and the grace days have
+       passed) stops new online bookings at THAT office only. Anything earlier blocks
+       nothing, and it unblocks by itself once the payment moves on.
+       Staff at the counter see it but may book.
 
-       customer id => "Room, Oct 1, 2026 — ₱1,800" naming that customer's oldest
-       overdue booking; every such customer when $customerId is null. */
-    public static function overdueBookings(PDO $pdo, ?int $customerId = null): array
+       $roomCode: only the office that room belongs to; null = every office.
+       customer id => "Room at Office, Oct 1, 2026 — ₱1,800" naming that customer's oldest
+       unpaid booking per office; every such customer when $customerId is null. */
+    public static function overdueBookings(PDO $pdo, ?string $roomCode = null, ?int $customerId = null): array
     {
         try {
             $stmt = $pdo->prepare(
-                "SELECT b.customer_id, r.name, fn_booking_first_day(b.id) AS first_day, b.total_amount
-                   FROM bookings b JOIN rooms r ON r.id = b.room_id
-                  WHERE b.payment_status = 'overdue'" . ($customerId === null ? '' : ' AND b.customer_id = :c') . '
+                "SELECT b.customer_id, r.venue_id, r.name, v.name AS office, fn_booking_first_day(b.id) AS first_day, b.total_amount
+                   FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id
+                  WHERE b.payment_status = 'overdue'"
+                  . ($roomCode === null ? '' : ' AND r.venue_id = (SELECT venue_id FROM rooms WHERE room_code = :room)')
+                  . ($customerId === null ? '' : ' AND b.customer_id = :c') . '
                   ORDER BY b.current_deadline_at, b.id'
             );
-            $stmt->execute($customerId === null ? [] : [':c' => $customerId]);
+            $stmt->execute(($roomCode === null ? [] : [':room' => $roomCode]) + ($customerId === null ? [] : [':c' => $customerId]));
             $rows = $stmt->fetchAll();
         } catch (PDOException $e) {
             error_log('VENUSeP overdue check: ' . $e->getMessage());
@@ -84,28 +89,35 @@ final class BookingRules
         $out = [];
         foreach ($rows as $r) {
             $amount = (float) $r['total_amount'];
-            $out[(int) $r['customer_id']] ??= $r['name'] . ', '
+            $out[(int) $r['customer_id']][(int) $r['venue_id']] ??= $r['name'] . ' at ' . $r['office'] . ', '
                 . ($r['first_day'] ? date('M j, Y', strtotime($r['first_day'])) : '—')
                 . ' — ₱' . number_format($amount, fmod($amount, 1.0) == 0.0 ? 0 : 2);   /* = usep_peso() */
         }
-        return $out;
+        return array_map(fn ($offices) => implode('; ', $offices), $out);
     }
 
     /* The refusal booking-submit gives, and the notice the booking pages show up front. */
-    public static function overdueNotice(PDO $pdo, int $customerId): ?string
+    public static function overdueNotice(PDO $pdo, int $customerId, ?string $roomCode = null): ?string
     {
-        $which = self::overdueBookings($pdo, $customerId)[$customerId] ?? null;
+        $which = self::overdueBookings($pdo, $roomCode, $customerId)[$customerId] ?? null;
         return $which === null ? null
-            : 'You have an unpaid booking (' . $which . '). Please settle it before making a new booking.';
+            : 'You have an unpaid booking (' . $which . '). Please settle it before booking with that office again. Other offices are not affected.';
     }
 
-    /* For a booking page: the signed-in customer's notice — never at the counter. */
-    public static function overdueNoticeForPage(): ?string
+    /* For a booking page: the signed-in customer's notice — never at the counter.
+       $room: the room on the page; the landing page has none and lists every office. */
+    public static function overdueNoticeForPage(mixed $room = null): ?string
     {
         if (counter_mode() || !customer_logged_in() || !($pdo = venusep_db())) {
             return null;
         }
-        return self::overdueNotice($pdo, (int) session('customer_id'));
+        return self::overdueNotice($pdo, (int) session('customer_id'), is_string($room) ? $room : null);
+    }
+
+    /* For the counter's "who" step: every customer who owes THIS room's office. */
+    public static function overdueForCounter(mixed $room): array
+    {
+        return (counter_mode() && is_string($room) && ($pdo = venusep_db())) ? self::overdueBookings($pdo, $room) : [];
     }
 
     /* Opens a new booking's transaction (booking-submit and the counter). The

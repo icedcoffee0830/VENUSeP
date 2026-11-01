@@ -132,18 +132,4 @@ class BookingActionTest extends TestCase
         $this->act(['booking' => 'nope', 'action' => 'approve'])
             ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Invalid booking reference.']);
     }
-
-    public function test_demo_mode_writes_nothing(): void
-    {
-        [$id, $ref] = $this->seedVenueBooking('r1');
-        DB::update("UPDATE system_settings SET setting_value = '1' WHERE setting_key = 'demo_mode'");
-        try {
-            $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'approve'])
-                ->assertOk()->assertJson(['ok' => true, 'demo' => true, 'message' => 'Saved (demo mode — nothing was written).',
-                    'booking' => ['res' => 'approved']]);
-        } finally {
-            DB::update("UPDATE system_settings SET setting_value = '0' WHERE setting_key = 'demo_mode'");
-        }
-        $this->assertSame('pending', $this->booking($id)->reservation_status);
-    }
 }

@@ -2,8 +2,7 @@
 // admin signs in → Dashboard tiles (today's bookings, this quarter's revenue) match the
 // database → Quarterly Reports tiles match it for the current and the previous quarter,
 // and the print layout names the chosen quarter → staff make a backup and cannot
-// download it → the admin downloads it, then deletes it → demo mode: a wrong password
-// is counted, the right one turns it ON (banner, history), then OFF again → a customer
+// download it → the admin downloads it, then deletes it → a customer
 // opens a notification (marked read in the database, lands on the right page) and
 // marks the rest read.
 
@@ -37,7 +36,6 @@ const QUARTER_REVENUE = `SELECT COALESCE(SUM(b.total_amount), 0) AS v FROM booki
 export default {
   name: 'admina-dashboard-reports-backup',
   title: 'Admin overview — dashboard + reports vs the database, backup, demo mode, notifications',
-  settings: { demo_mode: '0' },
 
   async run(ctx) {
     const { step, expect, dbOne } = ctx;
@@ -123,48 +121,6 @@ export default {
       await page.reload();
       expect.equal(await page.locator(`tr[data-file="${s.file}"]`).count(), 0, 'the deleted backup is listed after a reload');
       return page;
-    });
-
-    await step('Demo mode: a wrong password is counted; the right one turns it ON (banner + history)', async () => {
-      const page = s.admin;
-      await page.goto(ctx.url('/admin/profile'));
-      await page.locator('#dmOpen').click();
-      await page.locator('#dmPassword').fill('not-the-password');
-      await page.locator('#dmConfirm').click();
-      await expect.visible(page.locator('#dmMsg', { hasText: 'Wrong password.' }), 'no "Wrong password" message');
-      const u = await dbOne(`SELECT reauth_failed_attempts AS n FROM users WHERE email = ?`, [ADMIN]);
-      expect.equal(Number(u.n), 1, 'users.reauth_failed_attempts after one wrong password');
-
-      await page.locator('#dmPassword').fill(ctx.password);
-      await page.locator('#dmConfirm').click();
-      await expect.url(page, /\/admin\/profile\?demo=saved/);
-      await expect.text(page, 'DEMO MODE');
-      const set = await dbOne(`SELECT setting_value AS v FROM system_settings WHERE setting_key = 'demo_mode'`);
-      expect.equal(set.v, '1', 'system_settings.demo_mode');
-      const h = await dbOne(`SELECT h.old_value, h.new_value, u.email FROM system_settings_history h JOIN users u ON u.id = h.changed_by_user_id
-          WHERE h.setting_key = 'demo_mode' ORDER BY h.id DESC LIMIT 1`);
-      expect.ok(h && h.old_value === '0' && h.new_value === '1' && h.email === ADMIN, 'no demo_mode 0 → 1 history row by the admin');
-      const u2 = await dbOne(`SELECT reauth_failed_attempts AS n FROM users WHERE email = ?`, [ADMIN]);
-      expect.equal(Number(u2.n), 0, 'the correct password resets the wrong-password count');
-
-      const guest = await ctx.newPage('guest');
-      await guest.goto(ctx.url('/customer/venues'));
-      await expect.text(guest, 'DEMO MODE');
-      return page;
-    });
-
-    await step('Demo mode OFF again: the banner is gone', async () => {
-      const page = s.admin;
-      await page.locator('#dmOpen').click();
-      await page.locator('#dmPassword').fill(ctx.password);
-      await page.locator('#dmConfirm').click();
-      await expect.url(page, /\/admin\/profile\?demo=saved/);
-      const set = await dbOne(`SELECT setting_value AS v FROM system_settings WHERE setting_key = 'demo_mode'`);
-      expect.equal(set.v, '0', 'system_settings.demo_mode');
-      const guest = await ctx.newPage('guest');
-      await guest.goto(ctx.url('/customer/venues'));
-      expect.equal(await guest.getByText('DEMO MODE').count(), 0, 'the demo banner after demo mode was turned off');
-      return guest;
     });
 
     await step('A customer opens a notification (read in the database, right page), then marks the rest read', async () => {

@@ -224,7 +224,7 @@ function staff_may_handle_booking($bookingId)
 
 /* =====================================================================
    "TYPE YOUR PASSWORD AGAIN" — the one lockout every sensitive action shares
-   (refund switch, demo mode, GCash accounts, backup restore, creating an
+   (refund switch, GCash accounts, backup restore, creating an
    admin, the counter's customer check). Stored on users.reauth_*, so another
    browser does not start over: 5 wrong in a row = one lock, each lock longer
    than the last (10s, 30s, 1m, 5m, then 15m). A right password resets it.

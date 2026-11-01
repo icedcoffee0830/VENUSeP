@@ -171,7 +171,6 @@ class BookingCreateController extends Controller
             $this->reply(400, ['ok' => false, 'message' => 'The customer must confirm they understand the booking is non-refundable.']);
         }
 
-        legacy('demo-mode');
         $type === 'hostel' ? $this->hostel($request, $pdo, $c) : $this->venue($request, $pdo, $c);
     }
 
@@ -264,25 +263,6 @@ class BookingCreateController extends Controller
         $discount  = round($roomPrice * $pct) / 100;
         $total     = $roomPrice - $discount;
         $stayLabel = count($guests) . ' bed' . (count($guests) === 1 ? '' : 's') . ' · ' . $nights . ' night' . ($nights === 1 ? '' : 's');
-
-        if (demo_mode_on()) {
-            $policy = payment_policy_for('pay_to_use', $checkIn, $checkOut);
-            $row = demo_add_booking([
-                'type' => 'hostel', 'customerId' => $c['customerId'], 'customerName' => $c['bookerName'],
-                'customerEmail' => '', 'customerPhone' => (string) ($request->post('walkin_phone') ?? ''),
-                'isWalkIn' => true, 'isUsep' => (bool) $c['usepId'], 'usepVerified' => (bool) $c['usepId'],
-                'roomCode' => $c['roomCode'], 'roomName' => $c['roomCode'], 'venueName' => '',
-                'eventName' => $stayLabel, 'eventDateIso' => $checkIn, 'endDateIso' => $checkOut,
-                'roomPrice' => $roomPrice, 'discountPercent' => $pct, 'amount' => $total,
-                'method' => 'Cash',
-                'reservationCode' => 'approved', 'paymentCode' => 'paid_cash',
-                'refundsAllowed' => (bool) $c['refundsAllowed'], 'payToUse' => true, 'refundable' => false,
-                'payment' => $policy, 'beds' => count($guests), 'nights' => $nights, 'days' => 0,
-            ]);
-            $this->reply(200, ['ok' => true, 'demo' => true, 'bookingId' => $row['id'],
-                'reference' => $row['bookingId'], 'payBy' => $policy['payByLabel'], 'paid' => true,
-                'message' => 'Stay booked and paid (demo mode — nothing was saved).']);
-        }
 
         /* ---- 1. the stay itself ---- */
         $bookingId = 0;
@@ -448,30 +428,6 @@ class BookingCreateController extends Controller
         $method    = $c['method'];
         $policy    = payment_policy_for($c['refundsAllowed'], $slots[0]['date'], $slots[count($slots) - 1]['date']);
         $postpay   = $policy['policy'] === 'postpay';
-
-        /* DEMO MODE — validated exactly as above, then recorded in the session. */
-        if (demo_mode_on()) {
-            $days   = count($slots);
-            $row = demo_add_booking([
-                'type' => 'venue', 'customerId' => $c['customerId'], 'customerName' => $c['bookerName'],
-                'customerEmail' => '', 'customerPhone' => (string) ($request->post('walkin_phone') ?? ''),
-                'isWalkIn' => true, 'isUsep' => (bool) $c['usepId'], 'usepVerified' => (bool) $c['usepId'],
-                'roomCode' => $c['roomCode'], 'roomName' => $c['roomCode'], 'venueName' => '',
-                'eventName' => $eventName, 'eventDateIso' => $slots[0]['date'],
-                'endDateIso' => $slots[count($slots) - 1]['date'], 'days' => $days,
-                'attendees' => $attendees, 'capacity' => (int) $room['attendee_capacity'],
-                'roomPrice' => $roomPrice, 'discountPercent' => $pct, 'amount' => $total,
-                'method' => $method === 'cash' ? 'Cash' : 'GCash',
-                'reservationCode' => 'approved',
-                'paymentCode' => $c['refundsAllowed'] ? ($method === 'cash' ? 'await_cash' : 'await_gcash') : 'await_event',
-                'refundsAllowed' => (bool) $c['refundsAllowed'], 'refundable' => false,
-                'payment' => $policy, 'beds' => 0, 'nights' => 0,
-            ]);
-            $this->reply(200, ['ok' => true, 'demo' => true, 'bookingId' => $row['id'],
-                'reference' => $row['bookingId'], 'payBy' => customer_pay_by_label($policy),
-                'overdueAfter' => $postpay ? $policy['payByLabel'] : null,
-                'message' => 'Booking created (demo mode — nothing was saved).']);
-        }
 
         /* ---- the write ---- */
         $queued = null;   /* the walk-in confirmation email, sent after commit */

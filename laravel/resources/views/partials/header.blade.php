@@ -15,7 +15,6 @@
   }
   $hdParts  = preg_split('/\s+/', trim($hdName));   /* initials = first + last name */
   $hdAvatar = strtoupper(mb_substr($hdParts[0], 0, 1) . (count($hdParts) > 1 ? mb_substr(end($hdParts), 0, 1) : ''));
-  legacy('demo-mode');
 @endphp
 <style>
   /* the ONE header — crimson to black, like the landing page's nav (both portals) */
@@ -58,8 +57,6 @@
     body.sb-open::after{opacity:1;pointer-events:auto}
   }
 </style>
-{{-- DEMO MODE banner — deliberately the first thing on every admin and customer page. --}}
-{!! demo_banner_html() !!}
 @if ($portal === 'customer')
 <nav class="app-header">
   <div class="hd-wrap">

@@ -12,8 +12,7 @@ use Illuminate\Http\Request;
    GET  ?booking=<VB-ref>   -> JSON { ok, details: {...} }
 
    WHO MAY SEE WHAT — the same rule as valid-id-view and document-view:
-   staff and admins see any booking, a customer only their own (including
-   bookings made while demo mode is on, which live in their session), anyone
+   staff and admins see any booking, a customer only their own, anyone
    else a 404. Never 403, so the reply does not confirm that a booking exists.
    READ ONLY. No route middleware: the 404 JSON is the guard.
    ===================================================================== */
@@ -32,7 +31,7 @@ class BookingDetailsController extends Controller
 
         /* ---- find it, through the same path each portal's lists use ---- */
         if ($bdIsCustomer) {
-            $customerBookings = legacy('customer-bookings')['customerBookings'];   /* own bookings, demo ones included */
+            $customerBookings = legacy('customer-bookings')['customerBookings'];   /* own bookings */
             $b = cb_find($customerBookings, $ref);
         } else {
             $b = booking_by_reference($ref);
@@ -40,7 +39,6 @@ class BookingDetailsController extends Controller
         if (!$b || ($bdIsStaff && !staff_may_handle_booking($b['id']))) {   /* staff: own venue only */
             $this->notFound();
         }
-        $isDemo = !empty($b['isDemo']);
         $isHostel = $b['type'] === 'hostel';
 
         /* ---- when: each venue day with its hours, or the hostel stay ---- */
@@ -51,7 +49,7 @@ class BookingDetailsController extends Controller
                 $when[] = ['label' => 'Check-out', 'value' => date('F j, Y', strtotime($b['endDateIso']))];
             }
             $when[] = ['label' => 'Stay', 'value' => $b['eventName']];
-        } elseif (!$isDemo) {
+        } else {
             foreach (booking_slots($b['id']) as $s) {
                 $when[] = ['label' => date('D, M j, Y', strtotime($s['slot_date'])),
                            'value' => date('g:i A', strtotime($s['start_time'])) . ' – ' . date('g:i A', strtotime($s['end_time']))];
@@ -63,7 +61,7 @@ class BookingDetailsController extends Controller
 
         /* ---- the guests named on a hostel stay ---- */
         $guests = [];
-        if ($isHostel && !$isDemo) {
+        if ($isHostel) {
             foreach (booking_occupants($b['id']) as $o) {
                 $guests[] = trim(($o['full_name'] ?? $o['name'] ?? '') . (isset($o['bed_label']) && $o['bed_label'] ? ' · ' . $o['bed_label'] : ''));
             }
@@ -71,7 +69,7 @@ class BookingDetailsController extends Controller
 
         /* ---- the GCash receipt on file, if any ---- */
         $gcash = null;
-        if (!$isDemo && !empty($b['gcashReceiptId'])) {
+        if (!empty($b['gcashReceiptId'])) {
             $rec = booking_receipt($b['id']);
             $verdicts = ['accepted' => 'Passed the automatic check', 'manual_review' => 'Sent to staff to check', 'rejected' => 'Did not pass the check'];
             $gcash = [
@@ -84,7 +82,7 @@ class BookingDetailsController extends Controller
 
         /* ---- the System Receipt, once one was issued ---- */
         $hasReceipt = false;
-        if (!$isDemo && ($pdo = venusep_db()) !== null) {
+        if (($pdo = venusep_db()) !== null) {
             $r = $pdo->prepare('SELECT 1 FROM system_receipts WHERE booking_id = :b LIMIT 1');
             $r->execute([':b' => $b['id']]);
             $hasReceipt = $r->fetchColumn() !== false;
@@ -113,7 +111,6 @@ class BookingDetailsController extends Controller
             'title'         => $isHostel ? $b['roomName'] : $b['eventName'],
             'status'        => $bdIsStaff ? $b['bookingStatusStaff'] : $b['bookingStatus'],
             'note'          => (string) ($b['expiryNote'] ?? ''),
-            'isDemo'        => $isDemo,
             'room'          => $b['roomName'],
             'venue'         => $b['venueName'],
             'attendees'     => $isHostel ? null : (int) ($b['attendees'] ?? 0),
@@ -130,7 +127,7 @@ class BookingDetailsController extends Controller
             'gcash'         => $gcash,
             'hasReceipt'    => $hasReceipt,
             /* history: staff see who did what; a customer sees the same steps */
-            'timeline'      => $isDemo ? [] : booking_history_events($b),
+            'timeline'      => booking_history_events($b),
         ]]);
     }
 

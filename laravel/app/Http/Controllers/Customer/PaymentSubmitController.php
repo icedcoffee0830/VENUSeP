@@ -37,7 +37,7 @@ class PaymentSubmitController
 
     public function __invoke(Request $request)
     {
-        legacy('auth', 'db', 'documents', 'bookings', 'demo-mode');
+        legacy('auth', 'db', 'documents', 'bookings');
 
         if (!$request->isMethod('post')) {
             return self::reply(405, ['ok' => false, 'message' => 'Use POST.'], ['Allow' => 'POST']);
@@ -50,46 +50,6 @@ class PaymentSubmitController
         $postMethod = (string) $request->input('method', '');
         $cancelCash = $postMethod === 'cancel_cash';
         $method     = $postMethod === 'cash' ? 'cash' : 'gcash';
-
-        /* DEMO MODE — a payment against a booking that only exists in the session.
-           Nothing is stored, no reference consumed, no UNIQUE index touched. The
-           verdict still reflects what was actually sent. */
-        if (demo_owns($ref)) {
-            $demoRow = demo_get_booking($ref);
-            $owed    = (int) round((float) $demoRow['amountValue'] * 100);
-            $claimed = (string) $request->input('amount_centavos', '') !== '' ? (int) $request->input('amount_centavos') : null;
-            $demoPtu = !empty($demoRow['payToUse']);
-            if ($cancelCash) {
-                if ($demoRow['paymentCode'] !== 'await_cash') {
-                    return self::reply(409, ['ok' => false, 'message' => 'There is no cash payment to cancel.']);
-                }
-                demo_update_booking($ref, ['paymentCode' => 'await_gcash', 'paymentStatus' => 'Payment due',
-                                           'paymentStatusStaff' => 'Awaiting GCash payment', 'method' => 'GCash']);
-                return self::reply(200, ['ok' => true, 'demo' => true, 'status' => 'await_gcash',
-                    'message' => 'Cash choice cancelled. (Demo mode — nothing was saved.)']);
-            }
-            if ($demoRow['paymentCode'] === 'await_cash' && $postMethod !== 'cash') {
-                return self::reply(409, ['ok' => false, 'message' => 'You chose to pay in cash ' . ($demoPtu ? 'at the front desk' : 'at the office') . '. Cancel that first to pay by GCash.']);
-            }
-            if ($postMethod === 'cash') {
-                demo_update_booking($ref, ['paymentCode' => 'await_cash', 'paymentStatus' => 'Payment due',
-                                           'paymentStatusStaff' => 'Awaiting cash payment', 'method' => 'Cash']);
-                return self::reply(200, ['ok' => true, 'demo' => true, 'status' => 'await_cash',
-                    'message' => 'Pay at the venue office — staff will record it. (Demo mode — nothing was saved.)']);
-            }
-            $amountOk = $claimed === null ? null : ($claimed === $owed);
-            $verdict  = $amountOk === false ? 'manual_review' : 'accepted';
-            demo_update_booking($ref, ['paymentCode' => 'under_review', 'paymentStatus' => 'Under review',
-                                       'paymentStatusStaff' => 'Receipt under review', 'receiptVerdict' => $verdict]);
-            return self::reply(200, ['ok' => true, 'demo' => true, 'verdict' => $verdict,
-                'flags' => $amountOk === false ? ['amount_mismatch'] : [], 'status' => 'under_review',
-                'message' => 'Receipt received (demo mode — nothing was saved).']);
-        }
-        /* Demo mode is on but this is a REAL booking: paying it would be written for real. */
-        if (demo_mode_on()) {
-            return self::reply(409, ['ok' => false,
-                'message' => 'Demo mode is on, so payments on real bookings are not recorded. Ask an administrator to turn demo mode off.']);
-        }
 
         $id = booking_id_from_reference($ref);
         if ($id === null) {

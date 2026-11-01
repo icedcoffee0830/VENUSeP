@@ -89,7 +89,7 @@ $bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route(
         <div class="bdm-head">
           <div>
             <h2 id="bdmTitle">${e(d.title)}</h2>
-            <div class="bdm-sub">${e(d.reference)} · ${e(d.type)} · booked ${e(d.bookedOn)}${d.isDemo ? ' · demo booking' : ''}</div>
+            <div class="bdm-sub">${e(d.reference)} · ${e(d.type)} · booked ${e(d.bookedOn)}</div>
             <span class="bdm-badge">${e(d.status)}</span>
             ${d.note ? `<div class="bdm-note">${e(d.note)}</div>` : ''}
           </div>

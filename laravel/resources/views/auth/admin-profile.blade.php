@@ -1,4 +1,4 @@
-{{-- Ported from admin/venusep_profile.php — the signed-in staff member's own account (+ the demo-mode card). --}}
+{{-- Ported from admin/venusep_profile.php — the signed-in staff member's own account. --}}
 @extends('layouts.admin')
 @section('title', 'Profile Settings')
 @section('active', 'Settings')
@@ -326,13 +326,7 @@
 .menu a:hover{background:#343333}.menu a.active{background:#343333;border:1px solid #ffffff40}
 .menu i{width:20px;text-align:center;font-size:18px}.menu span{font-size:14px}
 
-/* ---- DEMO MODE card + confirmation window ------------------------------
-   Deliberately the same shape as the refund switch on payment-settings.php:
-   both are admin-only settings that change what the whole system does, both
-   re-ask for the password, and both are recorded. A setting that dangerous
-   should not have to be re-learned because it lives on a different page.
-   The class names are dm- rather than rs- only because this page has its own
-   stylesheet; the values are the refund card's. */
+/* The account cards (two-step verification). */
 .dm-card { grid-column: 1 / -1;   /* a third grid item would otherwise drop into the 270px sidebar column */
            background:#fff; border:1px solid var(--venusep-border); border-radius:14px; box-shadow:0 18px 34px rgba(31,30,30,.06); margin-top:1.2rem; max-width:780px; padding:1.1rem 1.15rem 1rem; }
 .dm-top { align-items:flex-start; display:flex; flex-wrap:wrap; gap:.9rem; justify-content:space-between; }
@@ -356,22 +350,6 @@
 .dm-meta strong { color:#6b675f; font-weight:600; }
 .dm-flash { align-items:center; color:#1c7a4f; display:flex; font-size:.8rem; font-weight:600; gap:.4rem; margin-bottom:.6rem; }
 
-.dm-backdrop { align-items:center; background:rgba(15,12,10,.5); display:flex; inset:0; justify-content:center; padding:16px; position:fixed; z-index:2000; }
-.dm-backdrop[hidden], .dm-msg[hidden] { display:none; }   /* display:flex would otherwise beat the hidden attribute */
-.dm-modal { background:#fff; border-radius:16px; box-shadow:0 24px 60px rgba(0,0,0,.3); max-height:calc(100vh - 32px); max-width:480px; overflow-y:auto; width:100%; }
-.dm-modal-head { align-items:flex-start; border-bottom:1px solid #f0efec; display:flex; gap:.7rem; padding:1.1rem 1.2rem .9rem; }
-.dm-modal-head i { color:#c2540a; flex:none; font-size:1.3rem; line-height:1.2; }
-.dm-modal-head h3 { font-size:1.02rem; font-weight:700; margin:0; }
-.dm-modal-head p { color:#6b675f; font-size:.8rem; margin:.2rem 0 0; }
-.dm-modal-body { padding:.9rem 1.2rem 0; }
-.dm-list { font-size:.84rem; line-height:1.55; margin:0 0 1rem; padding-left:1.1rem; }
-.dm-list li { margin-bottom:.45rem; }
-.dm-pw-label { display:block; font-size:.78rem; font-weight:650; margin-bottom:.1rem; }
-.dm-input { border:1px solid #d8d4cc; border-radius:8px; font-size:.86rem; padding:.5rem .65rem; width:100%; }
-.dm-msg { border-radius:8px; font-size:.78rem; line-height:1.45; margin-top:.55rem; padding:.5rem .65rem; }
-.dm-msg-bad { background:#fcecec; color:#b23a3a; }
-.dm-msg-lock { background:#fdf3e6; color:#8a5a12; }
-.dm-modal-foot { border-top:1px solid #f0efec; display:flex; gap:.5rem; justify-content:flex-end; margin-top:1rem; padding:.8rem 1.2rem; }
 </style>
 @endpush
 @section('content')
@@ -641,7 +619,7 @@
         </article>
 
         <!-- TWO-STEP VERIFICATION (DB-DECISIONS #20). Admins only for now (staff come later).
-             Same shape as the Demo Mode card below. Driven by assets/js/two-factor.js
+             Driven by assets/js/two-factor.js
              against profile-save.php, which refuses to turn it off for an admin. -->
         @if ($vpTfaShow)
         <section class="dm-card tfa-panel" aria-labelledby="tfaTitle" data-tfa-panel data-endpoint="{{ route('root.profile-save') }}" data-csrf="{{ $vpCsrf }}">
@@ -678,194 +656,6 @@
         </section>
         @endif
 
-@if ($dmIsAdmin)
-        <!-- DEMO MODE. Admin only, because turning it ON in production is the
-             most damaging single action here: customers would book, receive a
-             reference, and have nothing recorded. Built as the refund switch's
-             twin so the two most consequential settings in the system are
-             operated the same way. -->
-        <section class="dm-card" id="dmCard" aria-labelledby="dmTitle">
-          @if ($dmJustSaved && $dmDbOk)
-            <div class="dm-flash" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>Saved. Demo mode is now {!! $dmOn ? 'ON' : 'OFF' !!}.</div>
-          @endif
-          <div class="dm-top">
-            <div>
-              <div class="dm-title">
-                <h2 id="dmTitle">Demo Mode</h2>
-                @if ($dmDbOk)
-                  <span class="dm-pill {!! $dmOn ? 'dm-pill-on' : 'dm-pill-off' !!}">{!! $dmOn ? 'ON' : 'OFF' !!}</span>
-                @endif
-              </div>
-              @if (!$dmDbOk)
-                <p class="dm-state dm-error">The database cannot be reached, so this setting cannot be read or changed right now. Until it is back, the system behaves normally and every booking is recorded.</p>
-              @elseif ($dmOn)
-                <p class="dm-state"><strong>Nothing is being saved.</strong> Bookings, payments and refunds go through the screens normally but never reach the database, so the same showcase can be run any number of times without changing anything or needing a reset. <strong>A real customer booking right now would be given a reference for a booking that does not exist.</strong></p>
-              @else
-                <p class="dm-state"><strong>The system is live.</strong> Every booking, payment and refund is recorded for real. Turn this on only to showcase the system.</p>
-              @endif
-            </div>
-            <div>
-              @if (!$dmDbOk)
-                <span class="dm-lock"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>Unavailable</span>
-              @else
-                <button type="button" class="dm-btn {!! $dmOn ? 'dm-btn-primary' : 'dm-btn-danger' !!}" id="dmOpen">
-                  {!! $dmOn ? 'Turn demo mode OFF' : 'Turn demo mode ON' !!}
-                </button>
-              @endif
-            </div>
-          </div>
-          <ul class="dm-rules">
-            <li>Setting the system up still saves for real: venues, rooms, rates, staff, accounts and settings. Only <strong>bookings, payments and refunds</strong> are held back.</li>
-            <li>Registration also saves for real &mdash; an account that vanishes is not an account.</li>
-            <li>Every page shows a warning banner while it is on, and turning it off discards whatever the demo pretended to book.</li>
-            <li>Changing it needs your password, and every change is recorded.</li>
-          </ul>
-          @if ($dmDbOk)
-            <div class="dm-meta">
-              @if ($dmDetails['updated_by'])
-                Last changed by <strong>{{ $dmDetails['updated_by'] }}</strong> on {{ date('M j, Y \a\t g:i A', strtotime($dmDetails['updated_at'])) }}
-              @else
-                Not changed since the system was set up (default: OFF).
-              @endif
-            </div>
-          @endif
-        </section>
-
-@if ($dmDbOk)
-        <!-- The warning + password window. Same two steps as the refund switch:
-             read what changes, then prove who you are. -->
-        <div class="dm-backdrop" id="dmModal" role="dialog" aria-modal="true" aria-labelledby="dmModalTitle" hidden>
-          <div class="dm-modal">
-            <div class="dm-modal-head">
-              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
-              <div>
-                <h3 id="dmModalTitle"></h3>
-                <p>Read this before you confirm.</p>
-              </div>
-            </div>
-            <form id="dmForm" novalidate>
-              <div class="dm-modal-body">
-                <ul class="dm-list" id="dmModalList"></ul>
-                <label class="dm-pw-label" for="dmPassword">Enter your admin password to confirm</label>
-                <input class="dm-input" type="password" id="dmPassword" autocomplete="current-password" />
-                <div class="dm-msg" id="dmMsg" role="alert" hidden></div>
-              </div>
-              <div class="dm-modal-foot">
-                <button type="button" class="dm-btn" id="dmCancel">Cancel</button>
-                <button type="submit" class="dm-btn dm-btn-primary" id="dmConfirm"></button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <script>
-          /* Opens the right warning, posts to admin/demo-mode-switch.php, runs
-             the lockout countdown. The server decides everything; this only
-             reports what it says. Lifted from the refund switch so the two
-             behave identically, down to the wording of the errors. */
-          (function () {
-            const ON = {!! $dmOn ? 'true' : 'false' !!};
-            const CSRF = @json($vpCsrf);
-            let lockUntil = Date.now() + {!! (int) $dmLockSeconds !!} * 1000;
-            let timer = null, busy = false;
-
-            const modal = document.getElementById('dmModal');
-            const title = document.getElementById('dmModalTitle');
-            const list = document.getElementById('dmModalList');
-            const form = document.getElementById('dmForm');
-            const pw = document.getElementById('dmPassword');
-            const msg = document.getElementById('dmMsg');
-            const confirmBtn = document.getElementById('dmConfirm');
-            const openBtn = document.getElementById('dmOpen');
-
-            const plural = function (n, one, many) { return n + ' ' + (n === 1 ? one : many); };
-            function show(kind, text) { msg.className = 'dm-msg ' + (kind === 'lock' ? 'dm-msg-lock' : 'dm-msg-bad'); msg.textContent = text; msg.hidden = false; }
-            function hideMsg() { msg.hidden = true; }
-
-            function tick() {
-              const left = Math.ceil((lockUntil - Date.now()) / 1000);
-              if (left > 0) {
-                pw.disabled = true; confirmBtn.disabled = true;
-                show('lock', 'Too many wrong passwords. Try again in ' + (left >= 60 ? Math.floor(left / 60) + 'm ' + (left % 60) + 's' : left + 's') + '.');
-                return;
-              }
-              clearInterval(timer); timer = null;
-              pw.disabled = false; confirmBtn.disabled = false; hideMsg();
-              if (!modal.hidden) pw.focus();
-            }
-            function startCountdown(seconds) {
-              lockUntil = Date.now() + seconds * 1000;
-              if (!timer) timer = setInterval(tick, 250);
-              tick();
-            }
-
-            function openWindow() {
-              const turningOn = !ON;
-              title.textContent = turningOn ? 'Turn demo mode ON?' : 'Turn demo mode OFF?';
-              confirmBtn.textContent = turningOn ? 'Turn demo mode on' : 'Turn demo mode off';
-              confirmBtn.className = 'dm-btn ' + (turningOn ? 'dm-btn-danger' : 'dm-btn-primary');
-              const items = turningOn ? [
-                '<strong>No booking, payment or refund will be saved</strong> while this is on. The screens behave normally and nothing reaches the database.',
-                'A real customer booking during a demo would be given a reference for <strong>a booking that does not exist</strong>. Do not leave this on.',
-                'Setting the system up still saves for real: venues, rooms, rates, staff, accounts and settings. Registration does too.',
-                'A booking made during a demo <strong>never reaches the staff queue</strong>, because it was never written. Use a seeded booking to show that step.',
-                'Every page will show a warning banner while it is on.'
-              ] : [
-                'Bookings, payments and refunds are <strong>recorded for real</strong> again.',
-                'Whatever this browser pretended to book during the demo is <strong>discarded</strong>.',
-                'Nothing the demo did was ever written, so there is nothing to clean up.',
-                'The warning banner disappears from every page.'
-              ];
-              list.innerHTML = items.map(function (t) { return '<li>' + t + '</li>'; }).join('');
-              pw.value = ''; hideMsg();
-              modal.hidden = false;
-              if (lockUntil > Date.now()) startCountdown(Math.ceil((lockUntil - Date.now()) / 1000));
-              else pw.focus();
-            }
-            function closeWindow() {
-              if (busy) return;
-              modal.hidden = true; pw.value = ''; hideMsg();
-              if (openBtn) openBtn.focus();
-            }
-
-            if (openBtn) openBtn.addEventListener('click', openWindow);
-            document.getElementById('dmCancel').addEventListener('click', closeWindow);
-            modal.addEventListener('click', function (e) { if (e.target === modal) closeWindow(); });
-            document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeWindow(); });
-
-            form.addEventListener('submit', function (e) {
-              e.preventDefault();
-              if (busy || lockUntil > Date.now()) return;
-              if (!pw.value) { show('bad', 'Enter your admin password to confirm.'); pw.focus(); return; }
-
-              const body = new URLSearchParams({ _token: CSRF, enable: ON ? '0' : '1', password: pw.value });
-              busy = true; confirmBtn.disabled = true; pw.disabled = true; hideMsg();
-              fetch(@json(route('admin.demo-mode-switch')), { method: 'POST', body: body, credentials: 'same-origin' })
-                .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'Unexpected reply from the server.' }; }); })
-                .then(function (res) {
-                  busy = false;
-                  if (res.ok) { location.replace(@json(route('admin.profile', ['demo' => 'saved']))); return; }
-                  pw.value = '';
-                  if (res.error === 'locked') { startCountdown(res.seconds || 10); return; }
-                  confirmBtn.disabled = false; pw.disabled = false;
-                  if (res.error === 'wrong_password') {
-                    show('bad', 'Wrong password. ' + plural(res.attemptsLeft, 'attempt', 'attempts') + ' left before a temporary lock.');
-                  } else if (res.error === 'not_admin') {
-                    show('bad', res.message); setTimeout(function () { location.href = @json(route('admin.admin-login')); }, 1500);
-                  } else {
-                    show('bad', res.message || 'The setting was not changed.');
-                  }
-                  pw.focus();
-                })
-                .catch(function () {
-                  busy = false; confirmBtn.disabled = false; pw.disabled = false;
-                  show('bad', 'Could not reach the server. The setting was not changed.');
-                });
-            });
-          })();
-        </script>
-@endif
-@endif
         </section>
       </div>
     </div>

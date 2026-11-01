@@ -246,23 +246,4 @@ class BookingSubmitTest extends TestCase
         $this->assertSame(2, DB::table('hostel_occupants')->where('booking_id', $id)->count());
         $this->assertSame(4, DB::table('bed_reservation_nights')->where('booking_id', $id)->count());
     }
-
-    public function test_demo_mode_records_the_booking_in_the_session_only(): void
-    {
-        $before = DB::table('bookings')->count();
-        DB::update("UPDATE system_settings SET setting_value = '1' WHERE setting_key = 'demo_mode'");
-        try {
-            $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost())->assertOk()
-                ->assertJson(['ok' => true, 'demo' => true, 'idStored' => false,
-                              'message' => 'Booking submitted (demo mode — nothing was saved).'])
-                ->assertJsonPath('reference', 'VB-' . date('Y') . '-D001')
-                ->assertSessionHas('demo');
-            /* the demo row names the ROOM, not its code (fixed 2026-10-29) */
-            $demoRow = array_values(session('demo')['bookings'])[0];
-            $this->assertSame(DB::table('rooms')->where('room_code', $this->venuePost()['room'])->value('name'), $demoRow['roomName']);
-        } finally {
-            DB::update("UPDATE system_settings SET setting_value = '0' WHERE setting_key = 'demo_mode'");
-        }
-        $this->assertSame($before, DB::table('bookings')->count());
-    }
 }

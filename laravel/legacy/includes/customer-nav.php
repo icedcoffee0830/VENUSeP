@@ -118,14 +118,6 @@ if (!$navAuthed) {                                                      /* a gue
     .cn-menu a:hover, .cn-menu a.is-here { background: rgba(255,255,255,.1); }
   }
 </style>
-<?php
-/* DEMO MODE banner. The landing page and the FAQ are PUBLIC and use this bar
-   rather than includes/header.php, so the warning has to be repeated here —
-   otherwise the two pages a visitor is most likely to arrive on would be the
-   only ones not saying the system is in a showcase. */
-require_once __DIR__ . '/demo-mode.php';
-echo demo_banner_html();
-?>
 <header class="cn-nav<?php echo $navMode === 'hero' ? '' : ' solid is-static'; ?>" id="cnNav">
   <div class="cn-wrap">
     <a class="cn-logo" href="<?php echo route('customer.venues') . $navCounterQ; ?>" title="Back to the landing page"><img src="<?php echo asset('logo/Logo Header 3.png'); ?>" alt="VENUSeP"></a>

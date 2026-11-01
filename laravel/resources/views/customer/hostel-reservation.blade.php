@@ -57,8 +57,6 @@
     · $hostelRooms       sample rooms (includes/hostel-rooms.php)
     · ACCOUNT            fake logged-in customer
     · $gcAccount         the hostel STAFF's designated GCash account
-    · demoGoPay()        jump to payment once "approved" (demo mode only)
-    · demoIssueOr()      fake "cashier issued the Official Receipt"
     · localStorage       stands in for the receipts database
   ================================================================== -->
 <html lang="en">
@@ -248,17 +246,6 @@ const ACCOUNT = {!! json_encode([
   'phone' => $customerContact['phone'],
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const CSRF = {!! json_encode(csrf_token()) !!};
-
-/* Is this a showcase? The "Demo only" panels below stand in for people and
-   offices this page cannot reach — a coordinator approving an ID, CEDU handing
-   over a POS, the cashier issuing an OR. They belong to a demonstration, and a
-   real customer must never be shown a button that claims to approve their own
-   booking. So they render ONLY while demo mode is on (includes/demo-mode.php,
-   switched on admin/venusep_profile.php).
-   Nothing here could ever have changed the database — these functions only move
-   the screen, and the server refuses a payment on a booking it has not approved
-   — but a customer reading "Simulate staff approval" has no way to know that. */
-const DEMO_MODE = {{ demo_mode_on() ? 'true' : 'false' }};
 
 /* [SIM] where the customer hands cash to the hostel staff. */
 const CASH_PAY = { where:'USeP Hostel front desk', hours:'Mon–Sat · 8:00 AM – 5:00 PM' };
@@ -608,13 +595,6 @@ async function submitRequest(){
   }
   submitting = false; render();
 }
-/* [SIM] the staff side is not connected — these stand in for the hostel staff
-   approving the ID + booking, after which payment is open. */
-function demoApprove(){ if(!DEMO_MODE) return; state.approved=true; window.scrollTo(0,0); render(); }
-function demoGoPay(){
-  if(!DEMO_MODE || !state.approved) return;  /* live system: the guest pays from My Bookings (Pay now) */
-  state.screen='payment'; window.scrollTo(0,0); render();
-}
 /* PAY TO USE: due by the END of the check-in day (fn_payment_deadline). */
 function payByInfo(){ return { label: state.booking.checkIn ? fmtDate(state.booking.checkIn) : '—' }; }
 function receiptGate(){ return state.payMethod==='cash' ? true : receiptOk(); }
@@ -666,14 +646,6 @@ async function confirmBooking(){
   }
   paying = false; render();
 }
-/* [SIM] the cashier issuing the OR, which happens AFTER the booking is already
-   confirmed — this is why the OR is a document flag and not a payment status. */
-function demoIssueOr(){
-  if(!DEMO_MODE) return;     /* live system: the cashier issues the real OR */
-  state.orNumber='OR-'+Math.floor(100000 + Math.random()*900000);
-  render();
-}
-
 /* the shared GCash checker calls back into these three — the only things this
    page knows that the engine does not: which account, what is owed, and for
    which booking. */
@@ -1161,20 +1133,11 @@ function pendingScreen(){
       <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">The hostel is <strong>pay to use</strong>: staff check you in once the stay is paid. A GCash receipt still being reviewed is confirmed first.</div>
     </div>
 
-    ${DEMO_MODE ? `
-    <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
-      <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
-      ${!state.approved ? `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the staff side is standing in — use this to simulate the hostel staff approving your ID and booking.</div>
-      <button onclick="demoApprove()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate staff approval</button>` : `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Payment is open. Use this to go to the payment step, as Pay now in My Bookings would.</div>
-      <button onclick="demoGoPay()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Pay now</button>`}
-    </div>` : `
-    <!-- Live system: real people do these steps. Say who has it and where the
+        <!-- Live system: real people do these steps. Say who has it and where the
          answer will appear, rather than ending the screen on nothing. -->
     <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
       <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the hostel staff now. You will see the decision in <a href="{{ route('customer.booking-history') }}" style="color:#1f1e1e;font-weight:640">My Bookings</a> &mdash; pay there with <strong>Pay now</strong>, or bring the cash and your valid ID to the front desk.</div>
-    </div>`}
+    </div>
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse other rooms</button>
   </main>`;
@@ -1311,15 +1274,10 @@ function doneScreen(){
       </div>
     </div>
 
-    ${!or ? (DEMO_MODE ? `
-    <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
-      <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the cashier is standing in. Use this to simulate the ${esc(CASHIER.name)} issuing the Official Receipt after the staff hand over the money.</div>
-      <button onclick="demoIssueOr()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate OR issued by the cashier</button>
-    </div>` : `
+    ${!or ? `
     <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
       <div style="font-size:12.5px;color:#6b675f;line-height:1.6">The ${esc(CASHIER.name)} issues the Official Receipt once the staff hand the money over. It will appear on this stay in <a href="{{ route('customer.booking-history') }}" style="color:#1f1e1e;font-weight:640">My Bookings</a>.</div>
-    </div>`) : ''}
+    </div>` : ''}'}
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Back to venues</button>
   </main>`;
@@ -1354,7 +1312,7 @@ function counterDoneScreen(){
   <main style="max-width:620px;margin:0 auto;padding:40px 18px 80px;text-align:center">
     <div style="width:54px;height:54px;border-radius:999px;background:#eaf6ef;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#1c7a4f">&check;</div>
     <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px">Stay booked and paid</h1>
-    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">Read the reference out to the guest. ${r.demo?'<strong>Demo mode &mdash; nothing was saved.</strong>':'The beds are held in their name.'}</p>
+    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">Read the reference out to the guest. The beds are held in their name.</p>
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:22px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
         ${blk2('Reference', esc(state.reference))}

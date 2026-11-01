@@ -7,4 +7,4 @@
              'customer.venues' makes Venues / Hostel / How it works in-page anchors
     navCounterHasOwnBar  true on room-reservation (it renders its own counter bar)
 --}}
-@php extract(legacy('auth', 'customer-bookings', 'venue-rooms', 'hostel-rooms', 'demo-mode'), EXTR_SKIP); include base_path('legacy/includes/customer-nav.php'); @endphp
+@php extract(legacy('auth', 'customer-bookings', 'venue-rooms', 'hostel-rooms'), EXTR_SKIP); include base_path('legacy/includes/customer-nav.php'); @endphp

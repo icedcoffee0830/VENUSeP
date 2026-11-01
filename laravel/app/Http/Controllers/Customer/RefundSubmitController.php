@@ -31,7 +31,7 @@ class RefundSubmitController
 
     public function __invoke(Request $request)
     {
-        legacy('auth', 'db', 'documents', 'bookings', 'demo-mode', 'notifications');
+        legacy('auth', 'db', 'documents', 'bookings', 'notifications');
 
         if (!$request->isMethod('post')) {
             return self::reply(405, ['ok' => false, 'message' => 'Use POST.'], ['Allow' => 'POST']);
@@ -42,27 +42,6 @@ class RefundSubmitController
 
         $action = (string) $request->input('action', '');
         $ref    = (string) $request->input('booking', '');
-
-        /* DEMO MODE — a refund against a session-only booking. The chain still
-           walks (file -> withdraw -> file again); nothing is written. */
-        if (demo_owns($ref)) {
-            if ($action === 'withdraw') {
-                $row = demo_get_booking($ref);
-                demo_update_booking($ref, [
-                    'refundStatus' => null,
-                    'paymentCode' => $row['method'] === 'Cash' ? 'paid_cash' : 'confirmed',
-                    'paymentStatus' => 'Paid',
-                ]);
-                return self::reply(200, ['ok' => true, 'demo' => true, 'status' => 'withdrawn',
-                    'message' => 'Request withdrawn. Your booking is unchanged. (Demo mode — nothing was saved.)']);
-            }
-            demo_update_booking($ref, ['refundStatus' => 'requested',
-                'paymentCode' => 'refund_requested', 'paymentStatus' => 'Refund requested',
-                'paymentStatusStaff' => 'Refund requested']);
-            return self::reply(200, ['ok' => true, 'demo' => true, 'status' => 'requested', 'refundId' => 0,
-                'documents' => ['stored' => 0, 'failed' => 0],
-                'message' => 'Refund request filed (demo mode — nothing was saved).']);
-        }
 
         $id = booking_id_from_reference($ref);
         if ($id === null || !in_array($action, ['file', 'withdraw', 'resubmit'], true)) {

@@ -44,7 +44,7 @@ class BookingSubmitController extends Controller
 
     public function __invoke(Request $request)
     {
-        extract(legacy('auth', 'documents', 'bookings', 'demo-mode', 'notifications'));
+        extract(legacy('auth', 'documents', 'bookings', 'notifications'));
 
         if (!$request->isMethod('POST')) {
             return self::reply(405, ['ok' => false, 'message' => 'Use POST.'], ['Allow' => 'POST']);
@@ -113,60 +113,6 @@ class BookingSubmitController extends Controller
 
         /* The policy snapshot — read once, stored on the booking, never re-read. */
         $refundsAllowed = refunds_enabled() ? 1 : 0;
-
-        /* -----------------------------------------------------------------
-           DEMO MODE — everything above still ran: the room is real, the ID was
-           required, the policy was read. The booking is recorded in the SESSION
-           instead of the database, so the showcase leaves nothing behind.
-           Placed AFTER validation on purpose: rehearse the real thing, minus
-           the write.
-           ----------------------------------------------------------------- */
-        if (demo_mode_on()) {
-            if ($type === 'venue') {
-                $startIso  = (string) ($request->post('date_start') ?? '');
-                $endIso    = (string) ($request->post('date_end') ?? '') ?: $startIso;
-                $eventName = trim((string) ($request->post('event_name') ?? ''));
-                $days      = max(1, (int) round((strtotime($endIso) - strtotime($startIso)) / 86400) + 1);
-                $price     = (float) $room['fee_per_day'] * $days;
-                $first = $startIso; $last = $endIso;
-            } else {
-                $checkIn  = (string) ($request->post('check_in') ?? '');
-                $checkOut = (string) ($request->post('check_out') ?? '');
-                $occ      = json_decode((string) ($request->post('occupants') ?? '[]'), true);
-                $beds     = is_array($occ) ? count($occ) : 1;
-                $nights   = max(1, (int) round((strtotime($checkOut) - strtotime($checkIn)) / 86400));
-                $price    = (float) $room['rate_per_head_per_night'] * $beds * $nights;
-                $eventName = $beds . ' bed' . ($beds == 1 ? '' : 's') . ' · ' . $nights . ' night' . ($nights == 1 ? '' : 's');
-                $first = $checkIn; $last = $checkOut;
-            }
-            /* Priced by the SAME rule the real path uses, from the room's own rate. */
-            $policy = payment_policy_for($type === 'hostel' ? 'pay_to_use' : $refundsAllowed, $first, $last);
-            $row = demo_add_booking([
-                'type' => $type, 'roomCode' => $roomCode, 'roomName' => $room['name'] ?? $roomCode,
-                'venue' => $room['name'] ?? $roomCode, 'venueName' => $room['venue_name'] ?? '',
-                'customerId' => $customerId, 'customerName' => (string) (session('customer_name') ?? ''),
-                'eventName' => $eventName,
-                'eventDate' => $first ? date('F j, Y', strtotime($first)) : '—',
-                'eventDateIso' => $first, 'endDateIso' => $last,
-                'bookingDate' => date('F j, Y'), 'bookingDateIso' => date('Y-m-d'),
-                'roomPrice' => $price, 'discountPercent' => 0.0, 'discountAmount' => 0.0,
-                'amountValue' => $price, 'amount' => '₱' . number_format($price),
-                'reservationCode' => 'pending', 'paymentCode' => 'locked',
-                'bookingStatus' => 'Pending', 'paymentStatus' => 'Locked',
-                'bookingStatusStaff' => 'Reservation pending review', 'paymentStatusStaff' => 'Payment locked',
-                'method' => $method === 'cash' ? 'Cash' : 'GCash',
-                'refundsAllowed' => (bool) $refundsAllowed, 'payToUse' => $type === 'hostel', 'refundable' => false,
-                'refundStatus' => null, 'receiptVerdict' => null, 'payment' => $policy,
-                'beds' => $type === 'hostel' ? ($beds ?? 0) : 0,
-                'nights' => $type === 'hostel' ? ($nights ?? 0) : 0,
-                'days' => $type === 'venue' ? ($days ?? 1) : 0,
-            ]);
-            return self::reply(200, [
-                'ok' => true, 'demo' => true,
-                'bookingId' => $row['id'], 'reference' => $row['bookingId'], 'idStored' => false,
-                'message' => 'Booking submitted (demo mode — nothing was saved).',
-            ]);
-        }
 
         /* While refunds are OFF the customer must acknowledge the booking is final. */
         if (!$refundsAllowed && empty($request->post('agree_no_refund'))) {

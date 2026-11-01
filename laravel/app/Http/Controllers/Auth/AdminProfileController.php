@@ -6,13 +6,13 @@ use Illuminate\Http\Request;
 use PDOException;
 
 /* admin/venusep_profile.php — THE SIGNED-IN STAFF MEMBER'S OWN ACCOUNT (saves to
-   profile-save), the demo-mode card (posts to admin.demo-mode-switch) and, for
+   profile-save) and, for
    admins, the two-step verification card. Guarded by the `staff` middleware. */
 class AdminProfileController
 {
     public function __invoke(Request $request)
     {
-        legacy('auth', 'db', 'demo-mode', 'two-factor', 'two-factor-views');
+        legacy('auth', 'db', 'two-factor', 'two-factor-views');
         $uid = (int) session('user_id');
 
         $vpRow = [];
@@ -57,28 +57,6 @@ class AdminProfileController
         $vpCsrf = csrf_token();
         $vpMustChange = (bool) session('must_change_password');   // staff whose password the admin typed (EnforceTwoFactor holds them here)
 
-        /* DEMO MODE — the card is the refund switch's twin; admin.demo-mode-switch re-checks everything. */
-        $dmDetails = demo_setting_details();        // null = the database cannot be read
-        $dmDbOk    = $dmDetails !== null;
-        $dmOn      = $dmDbOk ? $dmDetails['enabled'] : demo_mode_on();
-        $dmIsAdmin = admin_is_admin();
-
-        /* A lock still running from an earlier wrong password — the countdown resumes after a reload. */
-        $dmLockSeconds = 0;
-        if ($dmDbOk && $dmIsAdmin) {
-            try {
-                $dmStmt = venusep_db()->prepare(
-                    'SELECT CASE WHEN reauth_locked_until > NOW() THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END
-                       FROM users WHERE id = :id'
-                );
-                $dmStmt->execute([':id' => $uid]);
-                $dmLockSeconds = (int) $dmStmt->fetchColumn();
-            } catch (PDOException $e) {
-                $dmLockSeconds = 0;
-            }
-        }
-        $dmJustSaved = $request->query('demo') === 'saved';
-
         /* Two-step verification (#20): required for admins, so this card only moves it
            or renews codes. Staff do not see it. null = could not be read. */
         $vpTfaShow = tfa_required_for((string) session('account_type', ''));
@@ -94,7 +72,7 @@ class AdminProfileController
 
         return view('auth.admin-profile', compact(
             'vpName', 'vpFirst', 'vpLast', 'vpEmail', 'vpPhone', 'vpRole', 'vpEmp', 'vpPhoto', 'vpRoleLine',
-            'vpInitials', 'vpCsrf', 'dmDetails', 'dmDbOk', 'dmOn', 'dmIsAdmin', 'dmLockSeconds', 'dmJustSaved',
+            'vpInitials', 'vpCsrf',
             'vpTfaShow', 'vpTfa', 'vpTfaLow', 'vpMustChange'
         ));
     }

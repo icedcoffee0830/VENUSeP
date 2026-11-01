@@ -19,10 +19,10 @@ class PayController
 {
     public function __invoke(Request $request)
     {
-        extract(legacy('customer-bookings', 'payment-settings', 'demo-mode'));
+        extract(legacy('customer-bookings', 'payment-settings'));
 
         $payRef = (string) $request->query('booking', '');
-        /* Scoped to THIS customer's own bookings (demo ones included): typing another
+        /* Scoped to THIS customer's own bookings: typing another
            customer's reference finds nothing. */
         $payB = cb_find($customerBookings, $payRef);
         if ($payB === null) {
@@ -31,16 +31,10 @@ class PayController
 
         $payCode     = (string) $payB['paymentCode'];
         $payOpen     = in_array($payCode, ['await_gcash', 'await_cash', 'overdue'], true);
-        $payIsDemo   = !empty($payB['isDemo']);
         $payIsHostel = $payB['type'] === 'hostel';
         $payAccount  = gcAccountFor($gcAccounts, $payB['venueName']);   /* null = this venue cannot take GCash yet */
-        /* DEMO MODE: only bookings made during the demo can be "paid" — a real booking
-           paid while the switch is on would be written for real. payment-submit
-           refuses it too; this just says so before anyone uploads anything. */
-        $payDemoBlocked = demo_mode_on() && !$payIsDemo;
-
-        /* The receipt staff are reviewing, if one is in. Demo bookings never stored one. */
-        $payReceipt = (!$payIsDemo && in_array($payCode, ['under_review', 'confirmed'], true)) ? booking_receipt($payB['id']) : null;
+        /* The receipt staff are reviewing, if one is in. */
+        $payReceipt = (in_array($payCode, ['under_review', 'confirmed'], true)) ? booking_receipt($payB['id']) : null;
 
         $sent = (string) $request->query('sent', '');
         $paySent = in_array($sent, ['accepted', 'manual_review', 'cash', 'cash_cancelled', 'limit'], true) ? $sent : '';
@@ -48,13 +42,12 @@ class PayController
            GCash closed until they cancel that choice (payment-submit). */
         $payCashLocked = $payCode === 'await_cash';
 
-        /* The 5-attempt rule (DB-DECISIONS #6): uploads made, uploads allowed. A demo
-           booking has neither, so it simply starts at 0 of 5. */
+        /* The 5-attempt rule (DB-DECISIONS #6): uploads made, uploads allowed. */
         $payUsed    = (int) ($payB['receiptAttempts'] ?? 0);
         $payAllowed = (int) ($payB['receiptAttemptsAllowed'] ?? 5);
         /* This booking's own earlier uploads, so the page can say "you already
            uploaded this receipt" BEFORE it is sent. */
-        $payPrior = ($payOpen && !$payIsDemo) ? array_map(function ($a) {
+        $payPrior = $payOpen ? array_map(function ($a) {
             return ['no' => (int) $a['attempt_no'], 'sha' => $a['sha256_hash'], 'ref' => (string) $a['reference_number'],
                     'outcome' => $a['outcome']];
         }, booking_receipt_attempts($payB['id'])) : [];
@@ -71,7 +64,7 @@ class PayController
 
         /* (old header('Cache-Control: private, no-store') — the customer middleware sends no-store) */
         return view('customer.pay', compact(
-            'customerContact', 'payB', 'payCode', 'payOpen', 'payIsHostel', 'payAccount', 'payDemoBlocked',
+            'customerContact', 'payB', 'payCode', 'payOpen', 'payIsHostel', 'payAccount',
             'payReceipt', 'paySent', 'payCashLocked', 'payUsed', 'payAllowed', 'payPrior', 'payCash', 'payStateNote'
         ));
     }

@@ -18,25 +18,23 @@ class AdminProfileTest extends TestCase
         $this->actingAsCustomer()->get(route('admin.profile'))->assertRedirect(route('admin.admin-login'));
     }
 
-    public function test_staff_see_their_own_card_without_two_step_or_the_demo_switch(): void
+    public function test_staff_see_their_own_card_without_two_step(): void
     {
         $staff = $this->makeAccount('staff');
         $this->signInAs($staff, 'staff')->get(route('admin.profile'))->assertOk()
             ->assertSee('Settings')->assertSee('Test Staff')->assertSee($staff->email)
             ->assertSee('>TS</div>', false)
             ->assertSee(json_encode(route('root.profile-save')), false)
-            ->assertDontSee('data-tfa-panel', false)
-            ->assertDontSee('id="dmOpen"', false);
+            ->assertDontSee('data-tfa-panel', false);
     }
 
-    public function test_an_admin_sees_the_two_step_card_and_the_demo_switch(): void
+    public function test_an_admin_sees_the_two_step_card(): void
     {
         $admin = $this->makeAccount('admin', ['totp' => self::SECRET]);
-        $this->signInAs($admin, 'admin')->get(route('admin.profile') . '?demo=saved')->assertOk()
+        $this->signInAs($admin, 'admin')->get(route('admin.profile'))->assertOk()
             ->assertSee('Administrator · All venues')
             ->assertSee('data-tfa-panel', false)->assertSee('data-endpoint="' . route('root.profile-save') . '"', false)
-            ->assertSee('id="dmOpen"', false)->assertSee(json_encode(route('admin.demo-mode-switch')), false)
-            ->assertSee('Saved. Demo mode is now', false)
+            ->assertDontSee('Demo Mode')
             ->assertSee(asset('assets/js/confirm-modal.js'), false);
     }
 

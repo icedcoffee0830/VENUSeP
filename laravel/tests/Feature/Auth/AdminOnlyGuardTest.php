@@ -42,7 +42,6 @@ class AdminOnlyGuardTest extends TestCase
     {
         $this->postAsStaff('admin.refund-switch', ['enabled' => '1', 'password' => 'x'])->assertStatus(403);
         $this->postAsStaff('admin.discount-save', ['percent' => '30', 'reason' => 'x'])->assertStatus(403);
-        $this->postAsStaff('admin.demo-mode-switch', ['enabled' => '1', 'password' => 'x'])->assertStatus(403);
         $this->postAsStaff('admin.gcash-account-save', ['venue_id' => '1', 'password' => 'x'])->assertStatus(403);
         $this->postAsStaff('admin.catalog-delete', ['kind' => 'room', 'id' => '1', 'confirm' => 'delete'])->assertStatus(403);
     }

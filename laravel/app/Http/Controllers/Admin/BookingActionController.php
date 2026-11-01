@@ -61,18 +61,10 @@ class BookingActionController extends Controller
         $note   = trim((string) ($request->post('note') ?? ''));
 
         /* STAFF ACT ONLY ON THEIR OWN VENUE'S BOOKINGS (decided 2026-10-27).
-           Checked before the demo branch too. Admins handle every venue. */
+           Admins handle every venue. */
         $scopeId = booking_id_from_reference($ref);
         if ($scopeId !== null && !staff_may_handle_booking($scopeId)) {
             $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can act on it.']);
-        }
-
-        /* DEMO MODE — while the switch is on, nothing here writes: the reply
-           describes what WOULD have happened, the page redraws from it, and
-           the seed is untouched. */
-        legacy('demo-mode');
-        if (demo_mode_on()) {
-            $this->demoReply($action, $ref);
         }
 
         $bookingId = booking_id_from_reference($ref);
@@ -213,74 +205,6 @@ class BookingActionController extends Controller
              VALUES (:b, :c, :u, :n, :m)'
         )->execute([':b' => $bookingId, ':c' => $code, ':u' => $actor, ':n' => $note,
                     ':m' => $meta !== null ? json_encode($meta) : null]);
-    }
-
-    /* What each action would have produced in demo mode, so the screen still moves. */
-    private function demoReply(string $action, string $ref): never
-    {
-        $demoAfter = booking_by_reference($ref);
-        if (!$demoAfter) {
-            $this->reply(404, ['ok' => false, 'message' => 'That booking no longer exists.']);
-        }
-        $res = $demoAfter['reservationCode'];
-        $pay = $demoAfter['paymentCode'];
-        switch ($action) {
-            case 'approve':
-                $res = 'approved';
-                /* A pay-to-use hostel stay opens payment at once; an older one keeps
-                   its POS or post-pay route (sp_approve_booking draws the same lines). */
-                $pay = !empty($demoAfter['payToUse']) ? ($demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash')
-                     : (!$demoAfter['refundsAllowed'] ? 'await_event'
-                     : ($demoAfter['type'] === 'hostel'
-                        ? ($demoAfter['eventDateIso'] !== '' && $demoAfter['eventDateIso'] <= date('Y-m-d') ? 'await_cash' : 'await_pos')
-                     : ($demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash')));
-                break;
-            case 'reject':           $res = 'rejected';  $pay = 'locked'; break;
-            case 'confirm_payment':  $pay = $demoAfter['method'] === 'Cash' ? 'paid_cash' : 'confirmed'; break;
-            case 'cash_received':
-                if (empty($demoAfter['payToUse']) || $pay !== 'await_cash') {
-                    $this->reply(409, ['ok' => false, 'message' => $pay === 'await_gcash'
-                        ? 'The guest has not chosen to pay at the front desk. Ask them to choose "Cash — hostel front desk" in Pay now first.'
-                        : 'This stay is not waiting on a cash payment.']);
-                }
-                $pay = 'paid_cash';
-                break;
-            case 'reject_payment':   $pay = $demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash'; break;
-            case 'record_pos':       $pay = ($demoAfter['refundsAllowed'] && empty($demoAfter['payToUse']) && $pay === 'await_pos') ? 'await_gcash' : $pay; break;
-            case 'refund_file':      $pay = 'refund_requested'; break;
-            case 'refund_approve':
-            case 'refund_add_proof': break;
-            case 'refund_return':    $pay = 'refund_correction'; break;
-            case 'refund_deny':      $pay = 'refund_denied'; break;
-            case 'refund_complete':  $res = 'cancelled'; $pay = 'refunded'; break;
-            case 'check_in':
-                if (!empty($demoAfter['payToUse']) && !in_array($pay, ['confirmed', 'paid_cash'], true)) {
-                    $this->reply(409, ['ok' => false, 'message' => 'Not paid yet. The guest pays before using the bed.']);
-                }
-                if ($demoAfter['eventDateIso'] > date('Y-m-d')) {
-                    $this->reply(409, ['ok' => false, 'message' => 'Too early: check-in opens on ' . date('M j, Y', strtotime($demoAfter['eventDateIso'])) . ', the first night of the stay.']);
-                }
-                break;
-            case 'override_confirm': $pay = 'confirmed'; break;
-            case 'undo_rejection':   $pay = 'under_review'; break;
-            case 'extend_deadline':  $pay = $demoAfter['method'] === 'Cash' ? 'await_cash' : 'await_gcash'; break;
-            case 'release_slot':
-                if ($demoAfter['payment']['policy'] === 'postpay') {
-                    $this->reply(409, ['ok' => false, 'message' => self::POSTPAY_NO_RELEASE]);
-                }
-                $res = 'released'; $pay = 'expired'; break;
-            case 'record_or':
-            case 'allow_receipt_attempts': break;   // documents, arrival and the attempt allowance change no status
-            default:
-                $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
-        }
-        $this->reply(200, ['ok' => true, 'demo' => true,
-            'message' => 'Saved (demo mode — nothing was written).',
-            'booking' => ['res' => $res, 'pay' => $pay,
-                          'resLabel' => 'Reservation ' . $res, 'payLabel' => str_replace('_', ' ', $pay),
-                          'total' => $demoAfter['amount'], 'discount' => $demoAfter['discountPercent'],
-                          'payBy' => $demoAfter['payment']['payByLabel'],
-                          'method' => $action === 'cash_received' ? 'Cash' : $demoAfter['method']]]);
     }
 
     /* Paperwork never lands on a booking that has ended (Aron 2026-11-01). A completed

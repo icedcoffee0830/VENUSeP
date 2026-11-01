@@ -109,9 +109,6 @@
                   <div><strong>{{ $payNoteHead }}</strong>{{ $payNoteText }}</div>
                 </div>
 
-              @elseif ($payDemoBlocked)
-                <div class="pay-note is-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><div><strong>Demo mode is on</strong>Payments on real bookings are not recorded during a demo. Ask an administrator to turn demo mode off, then pay here.</div></div>
-
               @else
                 @if ($payCode === 'overdue')
                   <div class="pay-note is-bad"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><div><strong>This payment is overdue</strong>It was due {{ customer_pay_by_label($payB['payment']) }}.{{ $payB['payment']['policy'] === 'postpay' ? ' Please pay it now — it can still be paid here.' : ' It can still be paid, but staff may release the slot.' }}</div></div>
@@ -128,7 +125,7 @@
       </main>
 @endsection
 @push('scripts')
-    @if ($payOpen && !$payDemoBlocked)
+    @if ($payOpen)
     <!-- [5] GCASH CHECKER — the shared engine (OCR + verdict). It calls back into
          gcAccount(), gcExpectedCentavos(), gcBookingRef(), state and render(). -->
     @php include base_path('legacy/includes/gcash-checker.php'); @endphp

@@ -76,8 +76,7 @@ function venue_cleanup_gap_minutes()
     return $gap;
 }
 
-/* The deadline rules, applied before anyone looks. Once per request;
-   skipped while demo mode is on. */
+/* The deadline rules, applied before anyone looks. Once per request. */
 function venusep_expire_due_bookings()
 {
     static $done = false;
@@ -85,10 +84,6 @@ function venusep_expire_due_bookings()
         return;
     }
     $done = true;
-    require_once __DIR__ . '/demo-mode.php';
-    if (demo_mode_on()) {
-        return;
-    }
     $pdo = venusep_db();
     if ($pdo === null) {
         return;

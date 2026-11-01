@@ -27,7 +27,7 @@
     "---------- actions"             small functions the buttons call
     "---------- custom date-picker"  calendar popup + time dropdowns
     "---------- 360 panorama"        360 lightbox, swipe photo strip, photo-gallery lightbox
-    "---------- approve-first flow"  ID upload → pending → demo staff approval
+    "---------- approve-first flow"  ID upload → pending → staff approval
     "GCASH RECEIPT CHECKER"          OCR + verdict engine (big banner explains it)
     "---------- shared bits"         page header
     "screen: DETAIL"                 room page + booking panel (entry screen)
@@ -46,7 +46,6 @@
                           Payment Settings). gcAccount() picks by room.
     · CASH_PAY            cashier location — placeholder, not decided yet
     · SAMPLE_PANO         demo 360° image used for every room
-    · demoApprove()       fake "staff approved" button (pending screen)
     · localStorage store  stands in for the receipts database
   ================================================================== -->
 <html lang="en">
@@ -268,17 +267,6 @@ const ACCOUNT = {!! json_encode([
   'phone' => $customerContact['phone'],
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const CSRF = {!! json_encode(csrf_token()) !!};
-
-/* Is this a showcase? The "Demo only" panels below stand in for people and
-   offices this page cannot reach — a coordinator approving an ID, CEDU handing
-   over a POS, the cashier issuing an OR. They belong to a demonstration, and a
-   real customer must never be shown a button that claims to approve their own
-   booking. So they render ONLY while demo mode is on (includes/demo-mode.php,
-   switched on admin/venusep_profile.php).
-   Nothing here could ever have changed the database — these functions only move
-   the screen, and the server refuses a payment on a booking it has not approved
-   — but a customer reading "Simulate staff approval" has no way to know that. */
-const DEMO_MODE = {{ demo_mode_on() ? 'true' : 'false' }};
 
 /* ---------------------------------------------------------------------
    COUNTER MODE — this same page, driven by staff, for a walk-in.
@@ -910,20 +898,6 @@ async function submitRequest(){
   submitting = false;
   render();
 }
-/* [SIM] mockup stand-in for the staff side (the two UIs aren't connected yet) —
-   delete this + its button once real staff approval updates the booking in the DB */
-function demoApprove(){
-  if(!DEMO_MODE) return;     /* live system: only a coordinator approves a booking */
-  state.approved=true;
-  /* pre-pay: approval unlocks payment. post-pay: approval only confirms the
-     slot — payment stays locked until the event is over. */
-  state.screen = PAY_POLICY.prepay ? 'payment' : 'pending';
-  window.scrollTo(0,0);
-  render();
-}
-/* [SIM] post-pay only — stands in for the calendar rolling past the last day
-   (the DB does this in sp_expire_due_bookings). */
-function demoEventOver(){ if(!DEMO_MODE) return; state.eventOver=true; state.screen='payment'; window.scrollTo(0,0); render(); }
 
 /* This booking's payment timing — the shared rule (payPolicyFor, from
    includes/refund-policy.php) applied to the dates being typed. */
@@ -1576,21 +1550,12 @@ function pendingScreen(){
       <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">${payWhenText()}${PAY_POLICY.prepay?' — unpaid reservations may be released after the deadline.':'. Bookings not paid by then are marked overdue.'}</div>
     </div>
 
-    ${DEMO_MODE ? `
-    <div style="border:1.5px dashed rgba(0,0,0,.16);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left">
-      <div style="font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#a5a19a;margin-bottom:6px">Demo only</div>
-      ${!state.approved ? `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Demo mode is on, so the staff side is standing in — use this to simulate the coordinator approving your ID and reservation.</div>
-      <button onclick="demoApprove()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">${PAY_POLICY.prepay?'Simulate staff approval → proceed to payment':'Simulate staff approval'}</button>` : `
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.5;margin-bottom:10px">Payment opens by itself once the calendar passes your last day — use this to jump there.</div>
-      <button onclick="demoEventOver()" style="height:42px;padding:0 18px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer">Simulate: event is over → proceed to payment</button>`}
-    </div>` : `
-    <!-- Live system: a real coordinator does this, and the request is already
+        <!-- Live system: a real coordinator does this, and the request is already
          in their queue. Say where to watch for it rather than leaving the
          screen looking like it stops here. -->
     <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
       <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the venue coordinators now. You will see the decision on this booking in <a href="{{ route('customer.booking-history') }}" style="color:#1f1e1e;font-weight:640">My Bookings</a>, and payment unlocks there once it is approved.</div>
-    </div>`}
+    </div>
 
     <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse more rooms</button>
   </main>`;
@@ -1729,7 +1694,7 @@ function counterDoneScreen(x){
   <main style="max-width:620px;margin:0 auto;padding:40px 18px 80px;text-align:center">
     <div style="width:54px;height:54px;border-radius:999px;background:#eaf6ef;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#1c7a4f">&check;</div>
     <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px">Booking created and approved</h1>
-    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">Read the reference out to the customer. ${r.demo?'<strong>Demo mode &mdash; nothing was saved.</strong>':'The slot is held in their name.'}</p>
+    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">Read the reference out to the customer. The slot is held in their name.</p>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:22px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">

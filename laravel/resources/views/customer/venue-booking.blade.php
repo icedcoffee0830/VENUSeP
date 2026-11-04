@@ -414,19 +414,25 @@
     <div class="lp-wrap">
       <div class="lp-hero-copy" data-reveal data-hero>
         @include('customer.overdue-notice', ['noticeMargin' => '0 auto 22px', 'noticeGutter' => '0'])
+@if ($lpCounterNotice) {{-- counter mode: no office yet, or another office's booking page was refused --}}
+        <div role="alert" style="max-width:1120px;margin:0 auto 22px;padding:12px 16px;background:#fdf6e7;border:1px solid #efd9ab;border-radius:12px;color:#5c3d0c;font-size:14px;line-height:1.55;text-align:left;box-sizing:border-box">{{ $lpCounterNotice }}</div>
+@endif
         <span class="lp-pill lp-eyebrow" data-hero-item>
           <svg class="lp-i" width="13" height="13" style="color:var(--gold)" aria-hidden="true"><use href="#lp-i-pin"/></svg>
           USeP Tagum&ndash;Mabini Campus
         </span>
         <h1 data-hero-item>Reserve a campus venue in <br>minutes, not visits.</h1>
-        <p class="lp-hero-sub" data-hero-item>Alumni halls, university venues and hostel beds &mdash; check real availability, reserve online, and pay by GCash or cash.</p>
+        <p class="lp-hero-sub" data-hero-item>{{ $lpWhat }} &mdash; check real availability, reserve online, and pay by GCash or cash.</p>
 
+@if ($lpVenueCount) {{-- counter mode shows the session's own offices only (DB-DECISIONS 28) --}}
         <div class="lp-hero-actions" data-hero-item>
-          <a class="lp-btn lp-btn-white" href="#venue-listings">
+          <a class="lp-btn lp-btn-white" href="#{{ $lpVenueNames ? 'venue-listings' : 'hostel-listings' }}">
             Browse the spaces
             <svg class="lp-i" width="16" height="16" aria-hidden="true"><use href="#lp-i-arrow"/></svg>
           </a>
+@if ($lpShowHostel && $lpVenueNames)
           <a class="lp-btn lp-btn-ghost" href="#hostel-listings">Hostel beds</a>
+@endif
         </div>
 
         <!-- real numbers, computed from the shared lists -->
@@ -435,19 +441,21 @@
           <div class="lp-stat"><b data-count="{{ (int) $lpSpaceCount }}">{{ (int) $lpSpaceCount }}</b><span>bookable spaces</span></div>
           <div class="lp-stat"><b class="gold" data-count="{{ (int) $DISCOUNT_PERCENT }}" data-suffix="%">{{ (int) $DISCOUNT_PERCENT }}%</b><span>off for USeP</span></div>
         </div>
+@endif
       </div>
     </div>
   </section>
 
   <!-- ==================== VENUES ==================== -->
+@if ($lpVenueCount)
   <section class="lp-venues" id="venues">
     <div class="lp-wrap">
       <div class="lp-section-head" data-reveal>
         <div>
           <span class="lp-eyebrow">Where you can book</span>
-          <h2 class="lp-h2">Three places on campus</h2>
+          <h2 class="lp-h2">{{ $lpPlaces }}</h2>
         </div>
-        <a href="#venue-listings">See every space
+        <a href="#{{ $lpVenueNames ? 'venue-listings' : 'hostel-listings' }}">See every space
           <svg class="lp-i" width="15" height="15" aria-hidden="true"><use href="#lp-i-arrow"/></svg>
         </a>
       </div>
@@ -472,6 +480,7 @@
           </div>
         </a>
 @endforeach
+@if ($lpShowHostel)
         <a class="lp-card lp-venue-card lp-lift" href="#hostel-listings">
           {!! LP::photoBlock('venue-usep-hostel', 'bunk', '', $HOSTEL_VENUE) !!}
           <div class="lp-card-body">
@@ -482,9 +491,11 @@
             </div>
           </div>
         </a>
+@endif
       </div>
     </div>
   </section>
+@endif
 
   <!-- ==================== HOW IT WORKS ==================== -->
   <section class="lp-how lp-grain" id="how">
@@ -525,6 +536,7 @@
   </section>
 
   <!-- ==================== SPACES ==================== -->
+@if ($lpVenueNames)
   <section class="lp-spaces" id="venue-listings">
     <div class="lp-wrap">
       <div data-reveal>
@@ -597,6 +609,7 @@
 @endforeach
     </div>
   </section>
+@endif
 
   <!-- ==========================================================
        USeP HOSTEL — a separate section on purpose. The hostel is a
@@ -605,6 +618,7 @@
        apart because that is the choice a guest actually makes.
        Rooms come from legacy hostel-rooms.php (one source).
        ========================================================== -->
+@if ($lpShowHostel)
   <section class="lp-hostel lp-grain" id="hostel-listings">
     <div class="lp-glow lp-hostel-glow"></div>
     <svg class="lp-hostel-art" viewBox="0 0 400 250" preserveAspectRatio="xMaxYMin slice" aria-hidden="true"><use href="#lp-art-bunk"/></svg>
@@ -650,6 +664,7 @@
 @endforeach
     </div>
   </section>
+@endif
 
   <!-- ==================== REFUND ====================
        Follows the admin refund switch (legacy refund-policy.php). OFF is the
@@ -695,8 +710,12 @@
       <div>
         <h4>Book</h4>
         <div class="lp-footer-links">
+@if ($lpVenueNames)
           <a href="#venue-listings">Browse venues</a>
+@endif
+@if ($lpShowHostel)
           <a href="#hostel-listings">Hostel beds</a>
+@endif
 @if ($lpCounter)
           <a href="{{ route('admin.calendar') }}">Availability calendar</a>
 @else

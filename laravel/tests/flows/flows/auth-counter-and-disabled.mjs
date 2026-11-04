@@ -5,13 +5,15 @@
 //    How it works, FAQ — from the landing page, the FAQ, a room page and a hostel
 //    page. Every link must keep ?counter=1 (or be an in-page anchor / the way back
 //    to the admin side), and every page reached must still be the counter, never
-//    the customer sign-in page.
+//    the customer sign-in page. The counter shows the viewer's own offices only, and
+//    another office's booking page is refused up front (DB-DECISIONS 28).
 // B. A DISABLED CUSTOMER IS TOLD (Bug 2). A signed-in customer is disabled by staff
 //    in Customer Management; their next click lands on the sign-in page with the
 //    "Account disabled" modal. Signing in again with the right password shows it
 //    again; a wrong password shows only the generic message.
 
-const STAFF = 'staff@gmail.com';
+const STAFF = 'staff@gmail.com';     // Bahay Alumni only
+const CEDU_ADMIN = 'cedu.admin@gmail.com';
 const CUSTOMER = 'customer@gmail.com';
 const VENUE_ROOM = 'r2';    // Heritage Function Room, Bahay Alumni
 const HOSTEL_ROOM = 'h2';   // Hostel Room 2
@@ -75,11 +77,12 @@ export default {
       return page;
     });
 
-    await step('From the FAQ: each venue link, Hostel and How it works stay in counter mode', async () => {
+    await step("From the FAQ: their office's link and How it works stay in counter mode", async () => {
       const page = s.staff;
       const names = await page.locator('#cnNav .cn-links a').evaluateAll((as) => as.map((a) => a.textContent.trim()));
-      const sections = names.filter((n) => n !== 'FAQ');   // venues, the hostel, How it works (no "My bookings": staff are not a customer)
-      expect.ok(sections.length >= 3, `expected venue / hostel / how links, got ${names.join(', ')}`);
+      const sections = names.filter((n) => n !== 'FAQ');   // their office, How it works (no "My bookings": staff are not a customer)
+      expect.ok(sections.length >= 2, `expected venue / how links, got ${names.join(', ')}`);
+      expect.ok(!names.includes('USeP Hostel') && !names.includes('USeP Venues'), `Bahay Alumni staff get another office's link: ${names.join(', ')}`);
       expect.ok(!names.includes('My bookings'), 'counter mode shows the customer-only "My bookings" link');
       for (const name of sections) {
         await page.goto(ctx.url('/customer/faq?counter=1'));
@@ -90,7 +93,7 @@ export default {
       return page;
     });
 
-    await step('A room page and a hostel page in counter mode: top bar + logo keep it', async () => {
+    await step("Own room page in counter mode keeps it; the hostel's page is refused up front", async () => {
       const page = s.staff;
       await page.goto(ctx.url(`/customer/room-reservation?room=${VENUE_ROOM}&counter=1`));
       await expect.text(page, 'Counter booking');
@@ -99,9 +102,21 @@ export default {
       await stillCounter(ctx, page, /\/customer\/venues\?counter=1$/);
 
       await page.goto(ctx.url(`/customer/hostel-reservation?room=${HOSTEL_ROOM}&counter=1`));
-      await checkNavLinks(ctx, page);
-      await clickLogo(page);
       await stillCounter(ctx, page, /\/customer\/venues\?counter=1$/);
+      await expect.text(page, 'USeP Hostel is another office');
+      expect.equal(await page.locator('#hostel-listings').count(), 0, 'the hostel section on a Bahay Alumni counter');
+      await expect.text(page, 'One place on campus');
+      return page;
+    });
+
+    await step("The CEDU admin's counter shows USeP Venues and the hostel, not Bahay Alumni", async () => {
+      const page = await ctx.loginAdmin(CEDU_ADMIN);
+      await page.goto(ctx.url('/customer/venues?counter=1'));
+      await stillCounter(ctx, page, /\/customer\/venues\?counter=1$/);
+      await expect.text(page, 'Two places on campus');
+      await expect.visible(page.locator('#venue-usep-venues'), 'no USeP Venues section');
+      await expect.visible(page.locator('#hostel-listings'), 'no hostel section');
+      expect.equal(await page.locator('#venue-bahay-alumni').count(), 0, 'the Bahay Alumni section on a CEDU counter');
       return page;
     });
 

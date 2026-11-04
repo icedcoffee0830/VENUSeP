@@ -18,7 +18,7 @@ class VenueBookingController extends Controller
 
     public function __invoke()
     {
-        extract(legacy('auth', 'venue-rooms', 'hostel-rooms', 'room-photos', 'venue-photos', 'customer-bookings'));
+        extract(legacy('auth', 'offices', 'venue-rooms', 'hostel-rooms', 'room-photos', 'venue-photos', 'customer-bookings'));
         self::legacyOutput('pricing');   /* PHP helpers now; the old page captured its JS block and never printed it */
         extract(legacy('pricing'));
         $isUsep = usep_is_account($customerContact['email']);
@@ -28,6 +28,19 @@ class VenueBookingController extends Controller
            the links that only mean something to a signed-in customer — My bookings,
            Transaction history, refunds — are hidden (2026-10-27). */
         $lpCounter = counter_mode();
+        /* The lists above are already narrowed to a staff session's offices (staff_sees_venue);
+           the hostel card and section follow the same rule (DB-DECISIONS 28). */
+        $lpShowHostel = office_hostel_shown();
+        $lpNoOffice = $lpCounter && staff_venue_scope() === [];
+        $lpCount = count($lpVenueNames) + ($lpShowHostel ? 1 : 0);
+        /* "Alumni halls, university venues and hostel beds", for the places shown only */
+        $what = array_keys(array_filter([
+            'alumni halls'      => in_array('Bahay Alumni', $lpVenueNames, true),
+            'university venues' => in_array('USeP Venues', $lpVenueNames, true),
+            'hostel beds'       => $lpShowHostel,
+        ]));
+        $last = array_pop($what);
+        $lpWhat = ucfirst(($what ? implode(', ', $what) . ' and ' : '') . $last);
 
         return view('customer.venue-booking', [
             'venueRooms'         => $venueRooms,
@@ -50,7 +63,12 @@ class VenueBookingController extends Controller
             'lpVenueArt'   => ['Bahay Alumni' => 'hall', 'USeP Venues' => 'gym'],
             'lpVenueSlug'  => ['Bahay Alumni' => 'venue-bahay-alumni', 'USeP Venues' => 'venue-usep-venues'],
             'lpVenueNames' => $lpVenueNames,
-            'lpVenueCount' => count($lpVenueNames) + 1,                          /* + the hostel */
+            'lpVenueCount' => $lpCount,
+            'lpPlaces'     => ([1 => 'One place', 2 => 'Two places', 3 => 'Three places'][$lpCount] ?? $lpCount . ' places') . ' on campus',
+            'lpWhat'       => $lpWhat,
+            'lpShowHostel' => $lpShowHostel,
+            /* counter mode: no office yet, or another office's booking page was refused (BookingAccess) */
+            'lpCounterNotice' => $lpNoOffice ? 'You have no office yet. Ask an admin to assign one.' : ($lpCounter ? session('counter_refused') : null),
             'lpSpaceCount' => count($venueRooms) + count($hostelRooms),
             'lpBedCount'   => array_sum(array_column($hostelRooms, 'beds')),
             /* Footer facts. Confirm these with the venue office before go-live. */

@@ -90,6 +90,13 @@ function office_discount_label(): string
     return (count($rates) > 1 ? 'up to ' : '') . max($rates) . '%';
 }
 
+/* Do this session's lists include the hostel? Staff and admins see their own offices only
+   (staff_sees_venue, auth.php); customers and guests always do. */
+function office_hostel_shown(): bool
+{
+    return (bool) array_filter(office_all(), fn ($o) => $o['type'] === 'hostel' && staff_sees_venue($o['id']));
+}
+
 /* The JS twin of office_closed_reason(), printed once on each booking page. */
 function office_js(): string
 {

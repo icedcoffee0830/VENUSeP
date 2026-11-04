@@ -431,7 +431,7 @@
                 return b.on
                   ? '<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin:.15rem 0"><span class="badge text-bg-danger" title="' +
                       esc('By ' + b.by + ', ' + b.at + ': ' + b.reason) + '">Blocked · ' + esc(b.office) + '</span>' +
-                      '<button type="button" class="btn-cust-block" data-act="lift" data-venue="' + b.venueId + '" style="' + PILL + '#c3e0cd;color:#1c7a4f">Lift</button></div>'
+                      '<button type="button" class="btn-cust-block" data-act="lift" data-venue="' + b.venueId + '" style="' + PILL + '#c3e0cd;color:#1c7a4f">Lift block</button></div>'
                   : '<div style="margin:.15rem 0"><button type="button" class="btn-cust-block" data-act="block" data-venue="' + b.venueId + '" style="' + PILL + '#e3c3c3;color:#b23a3a">Block at ' + esc(b.office) + '</button></div>';
               }).join('');
             },

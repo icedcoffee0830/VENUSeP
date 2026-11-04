@@ -137,8 +137,7 @@ function bookings_query(array $opts = []) {
                /* The 5-attempt rule: every upload counts, rejected ones too. */
                (SELECT COUNT(*) FROM gcash_receipts gr WHERE gr.booking_id = b.id) AS receipt_attempts,
                /* the customer is blocked at this booking's office (DB-DECISIONS 28) */
-               EXISTS (SELECT 1 FROM customer_office_blocks k
-                        WHERE k.customer_id = b.customer_id AND k.venue_id = v.id AND k.lifted_at IS NULL) AS office_blocked
+               fn_customer_blocked(b.customer_id, b.room_id) AS office_blocked
           FROM bookings b
           JOIN customers c                      ON c.id = b.customer_id
           LEFT JOIN users u                     ON u.id = c.user_id

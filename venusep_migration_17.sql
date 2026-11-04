@@ -44,7 +44,7 @@
 --      ALTER TABLE venues DROP COLUMN office_group;
 --      ALTER TABLE staff DROP COLUMN both_cedu_offices;
 --      then run sp_notify_venue_staff from venusep_migration_12.sql again.
---      DROP TRIGGER trg_bookings_block_ins; DROP TABLE customer_office_blocks;
+--      DROP TRIGGER trg_bookings_block_ins; DROP FUNCTION fn_customer_blocked; DROP TABLE customer_office_blocks;
 --      then run sp_expire_due_bookings from venusep_migration_16.sql again.
 --      (The office contact text and the new email kind can stay: nothing old reads them.)
 --  The CEDU Admin account stays unless you delete it.
@@ -158,13 +158,23 @@ BEGIN
                      OR (s.both_cedu_offices = 1 AND mine.office_group = 'cedu' AND v_group = 'cedu'))));
 END$$
 
+-- Is this customer blocked right now at this room's office? The one copy of the rule:
+-- the trigger and procedure below, and the app's booking reads, all ask it.
+DROP FUNCTION IF EXISTS fn_customer_blocked$$
+CREATE FUNCTION fn_customer_blocked(p_customer_id BIGINT UNSIGNED, p_room_id BIGINT UNSIGNED)
+RETURNS BOOLEAN
+NOT DETERMINISTIC READS SQL DATA
+BEGIN
+    RETURN EXISTS (SELECT 1 FROM customer_office_blocks k JOIN rooms r ON r.venue_id = k.venue_id
+                    WHERE r.id = p_room_id AND k.customer_id = p_customer_id AND k.lifted_at IS NULL);
+END$$
+
 -- No new booking for a customer blocked at the room's office, online or at the counter.
 DROP TRIGGER IF EXISTS trg_bookings_block_ins$$
 CREATE TRIGGER trg_bookings_block_ins BEFORE INSERT ON bookings
 FOR EACH ROW
 BEGIN
-    IF EXISTS (SELECT 1 FROM customer_office_blocks k JOIN rooms r ON r.venue_id = k.venue_id
-                WHERE r.id = NEW.room_id AND k.customer_id = NEW.customer_id AND k.lifted_at IS NULL) THEN
+    IF fn_customer_blocked(NEW.customer_id, NEW.room_id) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This customer is blocked at this office, so no new booking can be made there.';
     END IF;
 END$$
@@ -189,8 +199,7 @@ BEGIN
         SET reservation_status = 'cancelled', cancelled_at = NOW()
         WHERE reservation_status = 'pending'
           AND fn_request_expiry(id, booking_type) <= NOW()
-          AND EXISTS (SELECT 1 FROM customer_office_blocks k JOIN rooms r ON r.venue_id = k.venue_id
-                       WHERE r.id = bookings.room_id AND k.customer_id = bookings.customer_id AND k.lifted_at IS NULL);
+          AND fn_customer_blocked(customer_id, room_id);
 
     SET @venusep_action_note = 'Not approved before the booking date; the request expired.';
     UPDATE bookings

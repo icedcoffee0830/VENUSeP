@@ -658,7 +658,8 @@
               if (!filterValue) return true;
               return String(rowValue) === String(filterValue);
             },
-            width: 160,
+            width: 190,
+            tooltip: function (e, cell) { return cell.getRow().getData().venue; },   // a long office label is cut short in the cell
             cellEdited: function (cell) {
               const row = cell.getRow().getData();
               const body = new FormData();
@@ -669,10 +670,10 @@
             },
           },
           {
-            title: 'Both CEDU offices',
+            title: 'Both offices',
             field: 'both',
             headerSort: false,
-            width: 110,
+            width: 125,
             hozAlign: 'center',
             formatter: function (cell) {
               const r = cell.getRow().getData();

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\AdminBookings;
 
+use App\Queries\ReportQueries;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -27,22 +28,22 @@ class StaffVenueScopeTest extends TestCase
     {
         $this->signIn('staff@gmail.com', 'staff');
         $this->assertSame([1], $this->venuesOf(bookings_all()));               // queue, calendar, transactions, detail page
-        $this->assertSame(['Bahay Alumni'], array_column(report_by_venue(), 'venue'));
+        $this->assertSame(['Bahay Alumni'], array_column(ReportQueries::offices(staff_venue_scope()), 'name'));
     }
 
     public function test_admins_see_every_venue(): void
     {
         $this->signIn('admin@gmail.com', 'admin');
         $this->assertGreaterThan(1, count($this->venuesOf(bookings_all())));
-        $this->assertGreaterThan(1, count(report_by_venue()));
+        $this->assertGreaterThan(1, count(ReportQueries::offices(staff_venue_scope())));
     }
 
     public function test_staff_revenue_is_their_venues_share(): void
     {
         $this->signIn('admin@gmail.com', 'admin');
-        $all = array_sum(array_column(report_quarters(4), 'bookings'));
+        $all = array_sum(array_column(ReportQueries::quarters(array_column(ReportQueries::offices(staff_venue_scope()), 'id')), 'bookings'));
         $this->signIn('staff@gmail.com', 'staff');
-        $mine = array_sum(array_column(report_quarters(4), 'bookings'));
+        $mine = array_sum(array_column(ReportQueries::quarters(array_column(ReportQueries::offices(staff_venue_scope()), 'id')), 'bookings'));
         $this->assertLessThan($all, $mine);
     }
 

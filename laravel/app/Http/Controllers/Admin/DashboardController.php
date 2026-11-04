@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Queries\ReportQueries;
 use PDOException;
 
 /* Admin Dashboard (was admin/Admin_Dashboard.php). Route middleware: staff. */
@@ -32,9 +33,9 @@ class DashboardController
                     AND b.reservation_status IN ('approved', 'completed')"
                  . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id IN (%s))', 'AND')
             )->fetchColumn();
-            /* Money COLLECTED this quarter — the Quarterly Reports' own figure
-               (report_quarters()), so the tile and the report cannot disagree. */
-            $adRevenue = (float) report_quarters(1)[0]['revenue'];
+            /* Money COLLECTED this quarter in this person's offices: the Quarterly Reports'
+               own figure (ReportQueries::quarters()), so the tile and the report agree. */
+            $adRevenue = (float) ReportQueries::quarters(array_column(ReportQueries::offices(staff_venue_scope()), 'id'), 1)[0]['revenue'];
             $adVenues = $adPdo->query(
                 "SELECT v.name, v.description, COUNT(r.id) AS rooms
                    FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1

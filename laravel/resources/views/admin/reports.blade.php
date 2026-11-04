@@ -482,6 +482,15 @@
       .panel { border-radius: 14px; }
       .panel-header { padding: 14px 18px; border-bottom: 1px solid #f0efec; }
       .panel-header h3 { font-size: 14.5px; font-weight: 650; }
+      /* the halls and hostel-rooms tables, one under the other */
+      .rp-detail + .rp-detail { margin-top: 16px; }
+      .rp-detail td { font-variant-numeric: tabular-nums; }
+      #bathroomTypes { font-size: 12.5px; color: #6f675d; }
+      html.rp-print .rp-detail + .rp-detail { margin-top: 8px; }
+      html.rp-print #bathroomTypes { font-size: 10px; padding: 4px 12px; }
+      html.rp-print .stats-grid .stat-card { padding: 6px 10px; }
+      html.rp-print .stats-grid .stat-card .number { font-size: 16px; margin-top: 2px; }
+      html.rp-print .stats-grid .stat-card .info { font-size: 9px; margin-top: 1px; }
 
       /* ============================================================
          PRINT LAYOUT (2026-10-28). Paper is narrower than the 1024px
@@ -567,6 +576,7 @@
                         Print PDF
                     </button>
                 </div>
+                @include('partials.report-office-toggle')
 
                 <div class="report-controls">
                     <div class="report-period-control">
@@ -610,6 +620,30 @@
                         <div class="number" id="averageRevenue">₱0</div>
                         <div class="info">Selected quarter</div>
                     </div>
+                    <div class="stat-card">
+                        <span class="stat-icon"><i class="bi bi-journal-text"></i></span>
+                        <h3>Bookings</h3>
+                        <div class="number" id="totalBookings">0</div>
+                        <div class="info">Cancelled ones left out</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-icon"><i class="bi bi-people"></i></span>
+                        <h3>Customers</h3>
+                        <div class="number" id="totalCustomers">0</div>
+                        <div class="info">Each counted once</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-icon"><i class="bi bi-arrow-counterclockwise"></i></span>
+                        <h3>Refunded</h3>
+                        <div class="number" id="totalRefunded">₱0</div>
+                        <div class="info" id="totalRefunds">0 bookings</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-icon"><i class="bi bi-x-octagon"></i></span>
+                        <h3>Written Off</h3>
+                        <div class="number" id="totalWrittenOff">₱0</div>
+                        <div class="info" id="totalWriteOffs">0 bookings</div>
+                    </div>
                 </div>
 
                 <div class="chart-grid">
@@ -625,7 +659,7 @@
 
                     <div class="panel">
                         <div class="panel-header">
-                            <h3>Revenue by Venue</h3>
+                            <h3>Revenue by {{ $rpBy }}</h3>
                             <span class="panel-header-subtitle">Paid transaction share</span>
                         </div>
                         <div class="panel-content">
@@ -637,7 +671,7 @@
                 <div class="chart-grid three">
                     <div class="panel">
                         <div class="panel-header">
-                            <h3>Events Held by Venue</h3>
+                            <h3>Events Held by {{ $rpBy }}</h3>
                             <span class="panel-header-subtitle">Approved bookings</span>
                         </div>
                         <div class="panel-content">
@@ -648,7 +682,7 @@
                     <div class="panel">
                         <div class="panel-header">
                             <h3>Discounted Bookings</h3>
-                            <span class="panel-header-subtitle">Quarterly count by venue</span>
+                            <span class="panel-header-subtitle">Count by {{ strtolower($rpBy) }}</span>
                         </div>
                         <div class="panel-content">
                             <div id="discountedBookingsChart" class="chart-box compact"></div>
@@ -666,26 +700,59 @@
                     </div>
                 </div>
 
-                <div class="panel">
+@if ($rpHalls)
+                <div class="panel rp-detail">
                     <div class="panel-header">
-                        <h3>Venue Report Details</h3>
-                        <span class="panel-header-subtitle">Same data shown in the venue charts</span>
+                        <h3>Halls</h3>
+                        <span class="panel-header-subtitle">Events held, with their booked days and hours</span>
                     </div>
                     <div class="table-scroll">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Venue</th>
+                                    <th>Hall</th>
+@if ($rpBy === 'Office')
+                                    <th>Office</th>
+@endif
                                     <th>Events Held</th>
-                                    <th>Discounted Bookings</th>
-                                    <th>Cancelled Reservations</th>
+                                    <th>Days</th>
+                                    <th>Hours</th>
+                                    <th>Discounted</th>
+                                    <th>Cancelled</th>
                                     <th>Revenue</th>
                                 </tr>
                             </thead>
-                            <tbody id="venueReportRows"></tbody>
+                            <tbody id="hallRows"></tbody>
                         </table>
                     </div>
                 </div>
+@endif
+@if ($rpHostel)
+                <div class="panel rp-detail">
+                    <div class="panel-header">
+                        <h3>Hostel Rooms</h3>
+                        <span class="panel-header-subtitle">Stays held; bed-nights = nights &times; guests; occupancy = bed-nights &divide; (beds &times; days in the quarter)</span>
+                    </div>
+                    <div class="table-scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Room</th>
+                                    <th>Bathroom</th>
+                                    <th>Stays Held</th>
+                                    <th>Bed-nights</th>
+                                    <th>Occupancy</th>
+                                    <th>Discounted</th>
+                                    <th>Cancelled</th>
+                                    <th>Revenue</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hostelRows"></tbody>
+                        </table>
+                    </div>
+                    <p class="panel-content" id="bathroomTypes"></p>
+                </div>
+@endif
                 <!-- printed only: the university footer — vision, address, certifications -->
                 <div class="rp-letterfoot"><img src="{{ asset('assets/img/reports/print-footer.png') }}" alt="USeP vision: Premier research university transforming communities in the ASEAN and beyond. University of Southeastern Philippines, Iñigo St., Bo. Obrero, Davao City, Philippines 8000 · (082) 227-8192 local 255 · www.usep.edu.ph · president@usep.edu.ph"></div>
             </main>
@@ -696,15 +763,17 @@
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.37.1/dist/apexcharts.min.js"></script>
     <script>
 
-        /* Live aggregates — see report_quarters() / report_by_venue(). */
+        /* Live aggregates for the chosen office(s) — see App\Queries\ReportQueries. */
         const quarterLabels = @json(array_column($rpQuarters, 'label'));
         const quarterRevenue = @json(array_map('floatval', array_column($rpQuarters, 'revenue')));
         const averageRevenuePerBooking = @json(array_map('floatval', array_column($rpQuarters, 'avg')));
         const cancelledByQuarter = @json(array_map('intval', array_column($rpQuarters, 'cancelled')));
 
-        /* venue = venue name · events = bookings held · discounted = bookings
-           that got the USeP rate · cancelled = fell through · revenue = money
-           actually collected (an unpaid booking inflates nothing).
+        /* One row per hall or hostel room: name · office · kind (event|hostel) ·
+           events = bookings held · discounted = bookings that got the USeP rate ·
+           cancelled = fell through · revenue = money actually collected (an unpaid
+           booking inflates nothing) · days, hours (halls) · beds, bed_nights,
+           bathroom (hostel rooms).
 
            One breakdown per quarter, in the same order as quarterLabels, so the
            Reporting Period dropdown can narrow the page without a reload. */
@@ -712,12 +781,15 @@
 
         /* If there are no quarters at all (a brand-new database), fall back to
            the all-time breakdown so the charts still have something to draw. */
-        const allTimeVenues = @json($allTimeVenues);
+        const allTimeVenues = @json($allTimeRooms);
+
+        /* Several offices: the charts compare the offices. One office: its halls or rooms. */
+        const chartByOffice = @json($rpBy === 'Office');
 
         /* The dropdown opens on the newest quarter, so that is what the venue
            charts and the stat tiles describe on first paint. */
         let periodIndex = venueByQuarter.length - 1;
-        let venueReport = venueByQuarter.length ? venueByQuarter[periodIndex].venues : allTimeVenues;
+        let venueReport = venueByQuarter.length ? venueByQuarter[periodIndex].rooms : allTimeVenues;
 
         const currencyFormatter = new Intl.NumberFormat('en-PH', {
             style: 'currency',
@@ -740,14 +812,17 @@
            in the table; charts omit only points that have no drawable value.
            An entirely empty metric then uses ApexCharts' real no-data state. */
         function venueChartRows(metric) {
-            return venueReport.map((item) => ({
-                venue: item.venue,
-                value: Number(item[metric]),
-            })).filter((item) => Number.isFinite(item.value) && item.value > 0);
+            const sums = new Map();
+            venueReport.forEach((item) => {
+                const key = chartByOffice ? item.office : item.name;
+                sums.set(key, (sums.get(key) || 0) + Number(item[metric]));
+            });
+            return [...sums].map(([venue, value]) => ({ venue, value }))
+                .filter((item) => Number.isFinite(item.value) && item.value > 0);
         }
 
         /* The selected quarter's status (2026-10-28). The window always ends at
-           the CURRENT quarter (report_quarters()), which is still running — its
+           the CURRENT quarter (ReportQueries::quarters()), which is still running — its
            numbers keep changing; every earlier one is over. Today's quarter
            comes from the server, not the viewer's clock. */
         const currentQuarter = @json($currentQuarter);
@@ -763,7 +838,7 @@
 
         function renderPeriod() {
             const period = venueByQuarter[periodIndex] || null;
-            venueReport = period ? period.venues : allTimeVenues;
+            venueReport = period ? period.rooms : allTimeVenues;
             periodStatus(period ? period.label : currentQuarter);
 
             const currentRevenue = period
@@ -787,18 +862,61 @@
             document.querySelector('#totalRevenue').textContent = currencyFormatter.format(currentRevenue);
             document.querySelector('#totalEvents').textContent = numberFormatter.format(totalEvents);
             document.querySelector('#averageRevenue').textContent = currencyFormatter.format(currentAverageRevenue);
+            const bookings = (n) => `${numberFormatter.format(n)} booking${n === 1 ? '' : 's'}`;
+            document.querySelector('#totalBookings').textContent = numberFormatter.format(period ? period.bookings : 0);
+            document.querySelector('#totalCustomers').textContent = numberFormatter.format(period ? period.customers : 0);
+            document.querySelector('#totalRefunded').textContent = currencyFormatter.format(period ? period.refunded : 0);
+            document.querySelector('#totalRefunds').textContent = bookings(period ? period.refunds : 0);
+            document.querySelector('#totalWrittenOff').textContent = currencyFormatter.format(period ? period.written_off : 0);
+            document.querySelector('#totalWriteOffs').textContent = bookings(period ? period.write_offs : 0);
 
-            /* a venue name is typed by an admin: text, never markup */
+            /* hall, room and office names are typed by an admin: text, never markup */
             const escHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            document.querySelector('#venueReportRows').innerHTML = venueReport.map((item) => `
-                <tr>
-                    <td><strong>${escHtml(item.venue)}</strong></td>
-                    <td>${numberFormatter.format(item.events)}</td>
+            const shared = (item) => `
                     <td>${numberFormatter.format(item.discounted)}</td>
                     <td>${numberFormatter.format(item.cancelled)}</td>
-                    <td>${currencyFormatter.format(item.revenue)}</td>
+                    <td>${currencyFormatter.format(item.revenue)}</td>`;
+            const hallBody = document.querySelector('#hallRows');
+            if (hallBody) {
+                hallBody.innerHTML = venueReport.filter((item) => item.kind === 'event').map((item) => `
+                <tr>
+                    <td><strong>${escHtml(item.name)}</strong></td>
+                    ${chartByOffice ? `<td>${escHtml(item.office)}</td>` : ''}
+                    <td>${numberFormatter.format(item.events)}</td>
+                    <td>${numberFormatter.format(item.days)}</td>
+                    <td>${numberFormatter.format(Math.round(item.hours * 10) / 10)}</td>${shared(item)}
                 </tr>
             `).join('');
+            }
+            /* occupancy needs the quarter's length: the all-time fallback shows a dash */
+            const days = period ? period.days : 0;
+            const occupancy = (nights, beds) => days > 0 && beds > 0 ? `${Math.round((nights / (beds * days)) * 100)}%` : '—';
+            const bathroom = (type) => (type === 'private' ? 'Private CR' : 'Communal CR');
+            const hostelBody = document.querySelector('#hostelRows');
+            if (hostelBody) {
+                const rooms = venueReport.filter((item) => item.kind === 'hostel');
+                hostelBody.innerHTML = rooms.map((item) => `
+                <tr>
+                    <td><strong>${escHtml(item.name)}</strong></td>
+                    <td>${bathroom(item.bathroom)}</td>
+                    <td>${numberFormatter.format(item.events)}</td>
+                    <td>${numberFormatter.format(item.bed_nights)}</td>
+                    <td>${occupancy(item.bed_nights, item.beds)}</td>${shared(item)}
+                </tr>
+            `).join('');
+                /* the bathroom types, from the same rows */
+                const types = ['communal', 'private'].map((type) => {
+                    const of = rooms.filter((item) => (item.bathroom || 'communal') === type);
+                    const nights = of.reduce((sum, item) => sum + item.bed_nights, 0);
+                    const beds = of.reduce((sum, item) => sum + item.beds, 0);
+                    const money = of.reduce((sum, item) => sum + item.revenue, 0);
+                    return `${bathroom(type)}: ${numberFormatter.format(nights)} bed-nights, ${occupancy(nights, beds)} occupancy, ${currencyFormatter.format(money)}`;
+                });
+                const allNights = rooms.reduce((sum, item) => sum + item.bed_nights, 0);
+                const allBeds = rooms.reduce((sum, item) => sum + item.beds, 0);
+                document.querySelector('#bathroomTypes').textContent =
+                    `By bathroom type: ${types.join(' · ')}. All rooms: ${occupancy(allNights, allBeds)} occupancy.`;
+            }
 
             const revenueRows = venueChartRows('revenue');
             const eventRows = venueChartRows('events');

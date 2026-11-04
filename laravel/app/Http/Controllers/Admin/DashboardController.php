@@ -30,7 +30,7 @@ class DashboardController
                   WHERE (CURDATE() BETWEEN vd.start_date AND vd.end_date
                          OR (hd.check_in_date <= CURDATE() AND hd.check_out_date > CURDATE()))
                     AND b.reservation_status IN ('approved', 'completed')"
-                 . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id = %d)', 'AND')
+                 . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id IN (%s))', 'AND')
             )->fetchColumn();
             /* Money COLLECTED this quarter — the Quarterly Reports' own figure
                (report_quarters()), so the tile and the report cannot disagree. */
@@ -38,7 +38,7 @@ class DashboardController
             $adVenues = $adPdo->query(
                 "SELECT v.name, v.description, COUNT(r.id) AS rooms
                    FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
-                  WHERE v.is_active = 1" . staff_venue_sql('v.id = %d', 'AND') . " GROUP BY v.id ORDER BY v.id"
+                  WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . " GROUP BY v.id ORDER BY v.id"
             )->fetchAll();
 
             /* "Welcome, <who> | Managing: <what>" — the header's name rule (staff
@@ -47,16 +47,10 @@ class DashboardController
                                       LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = :id');
             $who->execute([':id' => (int) session('user_id')]);
             $adWho = (string) ($who->fetchColumn() ?: $adWho);
-            $scope = staff_venue_scope();
-            if ($scope === null) {
-                $names = array_column($adVenues, 'name');
-                $last = array_pop($names);
-                $adManaging = $names ? implode(', ', $names) . ' and ' . $last : (string) $last;
-            } elseif ($scope !== 0) {
-                $v = $adPdo->prepare('SELECT name FROM venues WHERE id = :id');
-                $v->execute([':id' => $scope]);
-                $adManaging = (string) ($v->fetchColumn() ?: '');
-            }
+            /* $adVenues is already narrowed to the offices this person handles */
+            $names = array_column($adVenues, 'name');
+            $last = array_pop($names);
+            $adManaging = $names ? implode(', ', $names) . ' and ' . $last : (string) $last;
         } catch (PDOException $e) { sql_failed($e); /* tiles fall back to zero */ }
         if ($adManaging === '') {
             $adManaging = 'No venue assigned';

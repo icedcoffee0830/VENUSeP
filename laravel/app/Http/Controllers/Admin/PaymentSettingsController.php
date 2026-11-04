@@ -21,7 +21,8 @@ class PaymentSettingsController
         $rsDetails  = refund_setting_details();          // null = database unreachable
         $rsDbOk     = $rsDetails !== null;
         $rsEnabled  = $rsDbOk && $rsDetails['enabled'];
-        $rsIsAdmin  = admin_is_admin();                  // staff see the card read-only
+        $rsIsAdmin  = admin_is_super();                  // the refund switch: the super admin only; others see it read-only
+        $psCanEdit  = admin_is_admin() && !admin_is_super();   // GCash: each office's normal admin (DB-DECISIONS 28)
         $rsCsrf     = csrf_token();
         $rsStayRefundable = count(array_filter(bookings_all(), function ($b) { return $b['refundable']; }));
 
@@ -55,7 +56,7 @@ class PaymentSettingsController
         try {
             foreach (venusep_db()->query(
                 "SELECT v.name FROM venues v
-                  WHERE v.is_active = 1" . staff_venue_sql('v.id = %d', 'AND') . "
+                  WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . "
                     AND NOT EXISTS (SELECT 1 FROM gcash_accounts g
                                      WHERE g.venue_id = v.id AND g.is_active = 1 AND g.valid_until IS NULL)
                   ORDER BY v.id"
@@ -73,7 +74,7 @@ class PaymentSettingsController
         } catch (PDOException $e) { sql_failed($e); /* every card reads as a business account */ }
 
         return view('admin.payment-settings', compact(
-            'psCards', 'psHostelVenues','POSTPAY_GRACE_DAYS', 'rsDetails', 'rsDbOk', 'rsEnabled', 'rsIsAdmin', 'rsCsrf',
+            'psCards', 'psHostelVenues', 'psCanEdit','POSTPAY_GRACE_DAYS', 'rsDetails', 'rsDbOk', 'rsEnabled', 'rsIsAdmin', 'rsCsrf',
             'rsStayRefundable', 'rsOpenRefunds', 'rsLockSeconds', 'rsJustSaved'
         ));
     }

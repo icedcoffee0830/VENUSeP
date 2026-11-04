@@ -14,7 +14,8 @@ trait MakesAccounts
     protected const PASSWORD = 'Correct-Horse-9';
 
     /* $type customer|staff|admin. Options: password (null = Google-only),
-       hash (a ready-made hash), totp (base32 secret = 2FA on), active, google_sub. */
+       hash (a ready-made hash), totp (base32 secret = 2FA on), active, google_sub,
+       group (an admin's office_group: bahay_alumni | cedu). */
     protected function makeAccount(string $type, array $o = []): object
     {
         $email = 'lvtest-' . bin2hex(random_bytes(5)) . '@test.local';
@@ -29,6 +30,7 @@ trait MakesAccounts
             'is_active' => $o['active'] ?? 1,
             'totp_secret' => $o['totp'] ?? null,
             'totp_enabled_at' => isset($o['totp']) ? now() : null,
+            'office_group' => $o['group'] ?? null,
         ]);
         $this->madeUserIds[] = $id;
         $customerId = null;

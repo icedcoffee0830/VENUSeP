@@ -531,7 +531,8 @@
       const venues = {!! json_encode($smVenues, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
       const CSRF = {!! json_encode(csrf_token()) !!};
       /* No "Unassigned" (2026-10-27): every staff member handles exactly one
-         venue, and staff-save.php refuses an empty one. Admins handle all. */
+         venue, and staff-save.php refuses an empty one. The list holds only the
+         offices this admin may move staff to (DB-DECISIONS 28). */
       const venueEditorValues = {};
       const venueFilterValues = { '': 'All Venues' };
       venues.forEach(function (venue) {
@@ -593,6 +594,37 @@
         staffAction(body, function (res) { venusepAlert(res.message, { tone: 'ok', title: 'Password reset' }); });
       };
 
+      /* Hand over the super admin (DB-DECISIONS 28): a reason, then your password. No undo. */
+      const handOver = async function (row) {
+        const reason = await venusepPrompt(
+          row.name + ' becomes the super admin. Your account is suspended at once and you are signed out. This cannot be undone.',
+          { title: 'Hand over the super admin to ' + row.name + '?', label: 'Reason', okLabel: 'Next', danger: true });
+        if (reason === null) return;
+        const pw = await venusepPrompt('Both of you are emailed.',
+          { title: 'Confirm the handover', label: 'Your password', inputType: 'password',
+            autocomplete: 'current-password', okLabel: 'Hand over', danger: true });
+        if (pw === null) return;
+        const body = new FormData();
+        body.append('action', 'handover');
+        body.append('user_id', row.id);
+        body.append('reason', reason);
+        body.append('password', pw);
+        staffAction(body, function (res) {
+          venusepAlert(res.message, { tone: 'ok', title: 'Handed over' })
+            .then(function () { window.location.href = @json(route('admin.admin-login')); });
+        });
+      };
+
+      /* Ticked for both USeP Venues and USeP Hostel: CEDU staff only. */
+      const setBoth = function (row, on) {
+        const body = new FormData();
+        body.append('action', 'set_venue');
+        body.append('user_id', row.id);
+        body.append('venue_id', row.venueId);
+        body.append('both_cedu', on ? '1' : '0');
+        staffAction(body).then(function () { window.location.reload(); });
+      };
+
       const table = new Tabulator('#users-table', {
         data: data,
         layout: 'fitColumns',
@@ -609,27 +641,24 @@
             field: 'role',
             formatter: roleBadge,
             headerFilter: 'list',
-            headerFilterParams: { values: ['', 'Staff'] },
+            headerFilterParams: { values: ['', 'Staff', 'Admin', 'Super admin'] },
             width: 100,
             hozAlign: 'center',
           },
           {
-            title: 'Venue',
+            title: 'Office',
             field: 'venueId',
-            formatter: function (cell) {
-              if (cell.getRow().getData().role !== 'Staff') return 'All venues';
-              return escText(venueEditorValues[String(cell.getValue())] || 'Choose a venue');
-            },
+            formatter: function (cell) { return escText(cell.getRow().getData().venue); },   // the office label, from the server
             editor: 'list',
             editorParams: { values: venueEditorValues, itemFormatter: escText },
-            editable: function (cell) { return cell.getRow().getData().role === 'Staff'; },
+            editable: function (cell) { const r = cell.getRow().getData(); return r.role === 'Staff' && r.canManage; },
             headerFilter: 'list',
             headerFilterParams: { values: venueFilterValues, clearable: true, itemFormatter: escText },
             headerFilterFunc: function (filterValue, rowValue) {
               if (!filterValue) return true;
               return String(rowValue) === String(filterValue);
             },
-            width: 145,
+            width: 160,
             cellEdited: function (cell) {
               const row = cell.getRow().getData();
               const body = new FormData();
@@ -637,6 +666,21 @@
               body.append('user_id', row.id);
               body.append('venue_id', cell.getValue() || '');
               staffAction(body).then(function () { window.location.reload(); });
+            },
+          },
+          {
+            title: 'Both CEDU offices',
+            field: 'both',
+            headerSort: false,
+            width: 110,
+            hozAlign: 'center',
+            formatter: function (cell) {
+              const r = cell.getRow().getData();
+              if (!r.canBoth) return r.both ? 'Yes' : '';
+              return '<input type="checkbox" class="sm-both" aria-label="' + escText(r.name) + ' handles both USeP Venues and USeP Hostel"' + (r.both ? ' checked' : '') + '>';
+            },
+            cellClick: function (e, cell) {
+              if (e.target.classList.contains('sm-both')) setBoth(cell.getRow().getData(), e.target.checked);
             },
           },
           {
@@ -671,17 +715,22 @@
               if (row.isSelf) {
                 return '<span style="color:#8a857d;font-size:.78rem">you</span>';
               }
+              if (!row.canManage) return '';
               const suspend = row.status === 'Active';
-              const reset = row.role === 'Staff'
+              const handover = row.canHandOver
+                ? '<button type="button" class="btn-staff-handover" style="cursor:pointer;border:1px solid #e3c3c3;color:#b23a3a;background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">Make super admin</button>'
+                : '';
+              const reset = row.canManage
                 ? '<button type="button" class="btn-staff-reset" style="cursor:pointer;border:1px solid #d5d0c8;color:#1f1e1e;background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">Reset password</button>'
                 : '';
-              return '<div style="display:flex;flex-direction:column;align-items:center;gap:.3rem">' + reset + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
+              return '<div style="display:flex;flex-direction:column;align-items:center;gap:.3rem">' + handover + reset + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
                 (suspend ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
                 ';background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">' +
                 (suspend ? 'Suspend' : 'Reactivate') + '</button></div>';
             },
             cellClick: function (e, cell) {
               if (e.target.closest('.btn-staff-reset')) { resetPassword(cell.getRow().getData()); return; }
+              if (e.target.closest('.btn-staff-handover')) { handOver(cell.getRow().getData()); return; }
               if (!e.target.closest('.btn-staff-toggle')) return;
               toggleActive(cell.getRow().getData());
             },

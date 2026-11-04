@@ -162,7 +162,9 @@
                verification the first time they sign in. -->
           <div class="role-pick" role="radiogroup" aria-label="Account type">
             <label class="role-option"><input type="radio" name="account_role" value="staff" checked> <span><b>Staff</b> One venue's bookings</span></label>
-            <label class="role-option"><input type="radio" name="account_role" value="admin"> <span><b>Administrator</b> Everything, every venue</span></label>
+            @if ($canCreateAdmin)   {{-- the super admin only (DB-DECISIONS 28) --}}
+            <label class="role-option"><input type="radio" name="account_role" value="admin"> <span><b>Administrator</b> One group's offices</span></label>
+            @endif
           </div>
 
           <!-- Venue options come from the venues table through includes/venues.php. -->
@@ -181,6 +183,21 @@
               </div>
               <small class="validation-message" id="venueValidation" aria-live="polite"></small>
             </div>
+
+            @if ($canCreateAdmin)
+            <div class="form-group" id="groupGroup" hidden>
+              <label for="adminGroup" class="form-label">Group</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+                <select id="adminGroup" name="office_group" aria-describedby="groupValidation">
+                  <option value="" disabled selected>Select the group they will run</option>
+                  <option value="bahay_alumni">Bahay Alumni</option>
+                  <option value="cedu">USeP CEDU (USeP Venues and USeP Hostel)</option>
+                </select>
+              </div>
+              <small class="validation-message" id="groupValidation" aria-live="polite"></small>
+            </div>
+            @endif
 
             <div class="form-group">
               <label for="adminFullName" class="form-label">Full Name</label>
@@ -259,8 +276,9 @@
           r.addEventListener('change', function () {
             const admin = regRole() === 'admin';
             document.getElementById('venueGroup').hidden = admin;
+            document.getElementById('groupGroup').hidden = !admin;
             document.getElementById('roleSubtitle').textContent = admin
-              ? 'Administrators handle every venue and every setting. You will confirm with your own password, and they set up two-step verification at their first sign-in.'
+              ? 'An administrator runs one group: its offices, staff and settings. You will confirm with your own password, and they set up two-step verification at their first sign-in.'
               : 'Staff handle one venue’s bookings. Choose which venue below.';
           });
         });
@@ -301,6 +319,10 @@
             const venueError = isAdmin || (venue && venue.value) ? '' : 'Choose the venue this staff member will handle.';
             if (venue) setFieldState(venue, 'venueValidation', venueError);
             hasError = hasError || Boolean(venueError);
+            const group = form.querySelector('[name="office_group"]');
+            const groupError = !isAdmin || group.value ? '' : 'Choose the group this admin will run.';
+            if (group) setFieldState(group, 'groupValidation', groupError);
+            hasError = hasError || Boolean(groupError);
 
             const emailError = email.value.trim() && email.checkValidity() ? '' : 'Please enter a valid email address.';
             setFieldState(email, 'emailValidation', emailError);
@@ -324,7 +346,7 @@
             let creatorPw = null;
             if (isAdmin) {
               creatorPw = await venusepPrompt(
-                (form.querySelector('[name="full_name"]').value.trim() || 'This person') + ' will be able to change every setting, venue, payment account and staff account.',
+                (form.querySelector('[name="full_name"]').value.trim() || 'This person') + ' will be able to change the settings, rooms, payment accounts and staff of their group’s offices.',
                 { title: 'Create an administrator?', label: 'Your own admin password', inputType: 'password',
                   autocomplete: 'current-password', okLabel: 'Create administrator', danger: true });
               if (creatorPw === null) return;          /* cancelled — nothing sent */
@@ -334,7 +356,7 @@
             const body = new FormData(form);
             body.append('csrf', CSRF);
             body.append('kind', isAdmin ? 'admin' : 'staff');
-            if (isAdmin) { body.delete('venue_id'); body.append('creator_password', creatorPw); }
+            if (isAdmin) { body.delete('venue_id'); body.append('creator_password', creatorPw); } else { body.delete('office_group'); }
             fetch(@json(route('root.register-submit')), { method: 'POST', body: body, headers: { 'X-CSRF-TOKEN': CSRF }, credentials: 'same-origin' })
               .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
               .then(function (out) {
@@ -343,7 +365,7 @@
                   const map = { full_name: 'fullNameValidation', email: 'emailValidation',
                                 contact_number: 'contactNumberValidation', password: 'passwordValidation',
                                 confirm_password: 'confirmPasswordValidation', terms: 'termsValidation',
-                                venue_id: 'venueValidation' };
+                                venue_id: 'venueValidation', office_group: 'groupValidation' };
                   const target = out.field && form.querySelector('[name="' + out.field + '"]');
                   if (target) { setFieldState(target, map[out.field], out.message); target.focus(); }
                   else { setMessage(form.dataset.successTarget, out.message || 'The account was not created.'); }

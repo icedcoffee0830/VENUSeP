@@ -49,25 +49,17 @@ class VenueManagementController extends Controller
                LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
                LEFT JOIN hostel_beds hb ON hb.room_id = r.id AND hb.is_active = 1
                LEFT JOIN staff s ON s.venue_id = v.id
-              WHERE v.is_active = 1" . staff_venue_sql('v.id = %d', 'AND') . "
+              WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . "
               GROUP BY v.id, v.name, v.venue_type, v.description, v.cover_photo
               ORDER BY v.id"
         )->fetchAll();
 
         /* Staff change only their own venue's rooms (DB-DECISIONS #24; the JSON
            endpoints refuse the rest), so the cards hide Edit/Disable on other
-           venues' rooms. null = admin (every room); '' = unknown (none). */
+           venues' rooms. null = the super admin (every room); otherwise the names of
+           the offices this person handles ($vmVenueRows is already narrowed to them). */
         legacy('auth');
-        $vmMyVenue = null;
-        $vmScope = staff_venue_scope();
-        if ($vmScope !== null) {
-            $vmMyVenue = '';
-            foreach ($vmVenueRows as $vmRow) {
-                if ((int) $vmRow['id'] === $vmScope) {
-                    $vmMyVenue = (string) $vmRow['name'];
-                }
-            }
-        }
+        $vmMyVenue = staff_venue_scope() === null ? null : array_map('strval', array_column($vmVenueRows, 'name'));
 
         $vmStaffByVenue = [];
         $vmStaffRows = venusep_db_or_fail()->query(

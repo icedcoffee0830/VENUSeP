@@ -44,10 +44,10 @@ class BackupTest extends TestCase
             ->assertExactJson(['ok' => false, 'message' => 'Your session has ended. Log in again.']);
         $this->actingAsStaff()->withTestCsrf();
         $this->get(route('admin.backup-action', ['download' => 'x']))->assertStatus(403)
-            ->assertJson(['message' => 'Only an administrator can use backups.']);
+            ->assertJson(['message' => 'Only the super admin can use backups.']);
         foreach (['create', 'delete', 'restore'] as $action) {
             $this->post(route('admin.backup-action'), ['_token' => 'test-csrf-token', 'action' => $action, 'file' => 'x', 'password' => 'x'])
-                ->assertStatus(403)->assertJson(['message' => 'Only an administrator can use backups.']);
+                ->assertStatus(403)->assertJson(['message' => 'Only the super admin can use backups.']);
         }
         $this->flushSession();
         $this->actingAsAdmin()->withTestCsrf();

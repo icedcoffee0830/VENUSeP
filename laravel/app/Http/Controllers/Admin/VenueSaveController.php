@@ -42,9 +42,9 @@ class VenueSaveController extends Controller
            saved and has an id" — but nothing behind it ever inserted a row, so the
            screen was a facade. */
         $isNew = ($venueId === '' || $venueId === '0');
-        /* Adding a venue is admin-only (Aron 2026-10-30); staff edit their own one. */
-        if ($isNew && !admin_is_admin()) {
-            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only an administrator can add a venue.']);
+        /* Adding a venue (an office) is the super admin's only (DB-DECISIONS 28); others edit their own. */
+        if ($isNew && !admin_is_super()) {
+            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only the super admin can add a venue.']);
         }
         if (!$isNew && !ctype_digit($venueId)) {
             $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Invalid venue.']);
@@ -149,7 +149,7 @@ class VenueSaveController extends Controller
             throw $e;
         } catch (InvalidArgumentException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            $this->reply(400, ['ok' => false, 'error' => 'bad_staff', 'message' => 'One of the selected people is not a staff account, so nothing was saved.']);
+            $this->reply(400, ['ok' => false, 'error' => 'bad_staff', 'message' => 'One of the selected people is not a staff member you manage, so nothing was saved.']);
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             /* uq_venues_name — two venues sharing a name would make every "Location"
@@ -179,7 +179,8 @@ class VenueSaveController extends Controller
             "SELECT s.user_id, s.full_name, s.venue_id, u.email FROM staff s JOIN users u ON u.id = s.user_id
               WHERE u.account_type = 'staff' AND s.user_id IN ($in) ORDER BY s.full_name"
         )->fetchAll();
-        if (count($rows) !== count($ids)) {
+        /* only staff this admin manages: a normal admin moves its own offices' staff (DB-DECISIONS 28) */
+        if (count($rows) !== count($ids) || array_filter($rows, fn ($r) => !staff_may_handle_venue($r['venue_id']))) {
             throw new InvalidArgumentException('not_staff');
         }
         $pdo->prepare("UPDATE staff SET venue_id = :v WHERE user_id IN ($in)")->execute([':v' => (int) $venueId]);

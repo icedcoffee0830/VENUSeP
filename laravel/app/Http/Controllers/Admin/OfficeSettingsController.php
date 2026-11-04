@@ -9,7 +9,8 @@ use Illuminate\Http\Request;
 use PDO;
 
 /* OFFICE SETTINGS (Aron, 2026-11-01): each office's hours, closed days, closures,
-   USeP discount, grace days, lead time and cleanup gap. Admins only.
+   USeP discount, grace days, lead time and cleanup gap. Admins only: a normal admin
+   its own group's offices, the super admin every office (DB-DECISIONS 28).
    POST _token, venue_id, action=save|closure_add|closure_remove. Replies with JSON.
    A change applies to NEW bookings; existing ones keep what they were made under. */
 class OfficeSettingsController extends Controller
@@ -29,8 +30,8 @@ class OfficeSettingsController extends Controller
 
     public function index()
     {
-        legacy('offices');
-        $offices = office_all();
+        legacy('offices', 'auth');
+        $offices = array_filter(office_all(), fn ($o) => staff_may_handle_venue($o['id']));
         $history = venusep_db_or_fail()->query(
             "SELECT h.venue_id, h.field, h.old_value, h.new_value, h.note, h.changed_at, COALESCE(u.username, u.email) AS who
                FROM venue_settings_history h LEFT JOIN users u ON u.id = h.changed_by_user_id
@@ -59,6 +60,9 @@ class OfficeSettingsController extends Controller
         $office = office_by_id($venueId);
         if ($office === null) {
             $this->reply(404, ['ok' => false, 'message' => 'That office no longer exists.']);
+        }
+        if (!staff_may_handle_venue($venueId)) {
+            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'That office belongs to another group. Only its admin or the super admin can change it.']);
         }
         $actor = (int) session('user_id');
 

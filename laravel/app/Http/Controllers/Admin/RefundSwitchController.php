@@ -39,8 +39,8 @@ class RefundSwitchController
         if (!session()->has('user_id') || !in_array($sessionType, ['admin', 'staff'], true)) {
             return $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
         }
-        if ($sessionType !== 'admin') {
-            return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the administrator can change the refund setting.']);
+        if (!admin_is_super()) {   // the super admin only (DB-DECISIONS 28)
+            return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the super admin can change the refund setting.']);
         }
         if (!$this->csrfOk($request)) {
             return $this->reply(400, ['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
@@ -66,7 +66,7 @@ class RefundSwitchController
 
             /* FOR UPDATE: two wrong attempts sent at the same moment must both count. */
             $stmt = $pdo->prepare(
-                'SELECT id, email, password_hash, account_type, is_active,
+                'SELECT id, email, password_hash, account_type, is_active, is_super_admin,
                         reauth_failed_attempts, reauth_lock_level,
                         CASE WHEN reauth_locked_until > NOW()
                              THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
@@ -75,9 +75,9 @@ class RefundSwitchController
             $stmt->execute([':id' => (int) session('user_id')]);
             $user = $stmt->fetch();
 
-            if (!$user || !(bool) $user['is_active'] || $user['account_type'] !== 'admin') {
+            if (!$user || !(bool) $user['is_active'] || $user['account_type'] !== 'admin' || !(bool) $user['is_super_admin']) {
                 $pdo->rollBack();
-                return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the administrator can change the refund setting.']);
+                return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the super admin can change the refund setting.']);
             }
 
             if ($no = reauth_verify($pdo, $user, $password)) {   // the shared lockout (auth.php)

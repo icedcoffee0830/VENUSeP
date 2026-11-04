@@ -32,7 +32,7 @@ class StaffManagementTest extends TestCase
         $this->actingAsAdmin()->get(route('admin.staff'))->assertOk()
             ->assertSee('Staff Management')
             ->assertSee('"email":"staff@gmail.com"', false)
-            ->assertSee('"venue":"All venues"', false)
+            ->assertSee('"venue":"All offices"', false)
             ->assertSee('"isSelf":true', false)
             ->assertSee('href="' . route('admin.admin-register') . '"', false)
             ->assertSee(json_encode(route('admin.staff-save')), false);
@@ -65,7 +65,7 @@ class StaffManagementTest extends TestCase
                 ->assertDontSee('<img src=x', false)
                 ->assertSee('"name":' . json_encode('Hall <img src=x onerror=alert(1)>', JSON_HEX_TAG), false)   // data, not markup
                 ->getContent();
-            $this->assertStringContainsString("return escText(venueEditorValues[String(cell.getValue())] || 'Choose a venue');", $html);
+            $this->assertStringContainsString('formatter: function (cell) { return escText(cell.getRow().getData().venue); }', $html);
             $this->assertStringContainsString('editorParams: { values: venueEditorValues, itemFormatter: escText }', $html);
             $this->assertStringContainsString('headerFilterParams: { values: venueFilterValues, clearable: true, itemFormatter: escText }', $html);
         } finally {
@@ -127,14 +127,15 @@ class StaffManagementTest extends TestCase
     {
         /* Since 2026-10-29 staff-save re-reads the ACTOR: with the actor's own row inactive
            it refuses before the last-admin count guard (which stays as a backstop). */
-        $this->actingAsAdmin()->withSession(['_token' => 'tok']);
-        DB::table('users')->where('id', 1)->update(['is_active' => 0]);
+        /* the actor is Francis (75): the super admin (1) can never be suspended, chk_users_super_admin */
+        $this->actingAsAdmin('francishubero@gmail.com')->withSession(['_token' => 'tok']);
+        DB::table('users')->where('id', 75)->update(['is_active' => 0]);
         try {
-            $this->post_(['action' => 'set_active', 'user_id' => 75, 'active' => '0'])
+            $this->post_(['action' => 'set_active', 'user_id' => 7, 'active' => '0'])
                 ->assertStatus(403)->assertJson(['message' => 'Only an administrator can manage staff accounts.']);
-            $this->assertSame(1, (int) DB::table('users')->where('id', 75)->value('is_active'));
+            $this->assertSame(1, (int) DB::table('users')->where('id', 7)->value('is_active'));
         } finally {
-            DB::table('users')->whereIn('id', [1, 75])->update(['is_active' => 1]);
+            DB::table('users')->where('id', 75)->update(['is_active' => 1]);
         }
     }
 

@@ -22,7 +22,13 @@ require_once __DIR__ . '/bookings.php';     /* booking_reference() */
 const NOTIF_LIST_SIZE  = 30;
 const NOTIF_KEEP_DAYS  = 90;               /* read notifications older than this are deleted */
 
-/* A new online request: staff of that venue + every admin. Counter bookings
+/* The normal admins of the booking's office group (DB-DECISIONS 28): booking news
+   never goes to the super admin. SQL on users u; %d = the booking id. */
+const NOTIF_GROUP_ADMINS_SQL = "u.account_type = 'admin' AND u.is_super_admin = 0
+    AND u.office_group = (SELECT v.office_group FROM bookings b JOIN rooms r ON r.id = b.room_id
+                           JOIN venues v ON v.id = r.venue_id WHERE b.id = %d)";
+
+/* A new online request: staff of that office + its group's normal admins. Counter bookings
    do not call this — staff made those themselves. */
 function notify_new_request(PDO $pdo, int $bookingId, ?int $actorUserId): void
 {
@@ -31,23 +37,23 @@ function notify_new_request(PDO $pdo, int $bookingId, ?int $actorUserId): void
     $s->closeCursor();
 }
 
-/* A refund with a missing receipt waits for an administrator's approval. */
+/* A refund with a missing receipt waits for the group's normal admin to approve it. */
 function notify_refund_needs_admin(PDO $pdo, int $bookingId, int $actorUserId, string $kind = 'refund_needs_admin'): void
 {
     $pdo->prepare(
         "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id)
-         SELECT id, :k, :b, :a FROM users WHERE account_type = 'admin' AND is_active = 1 AND id <> :a2"
+         SELECT u.id, :k, :b, :a FROM users u WHERE u.is_active = 1 AND u.id <> :a2 AND " . sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId)
     )->execute([':k' => $kind, ':b' => $bookingId, ':a' => $actorUserId, ':a2' => $actorUserId]);
 }
 
-/* The customer and the admins, with the staff member's own words. */
+/* The customer and the group's normal admins, with the staff member's own words. */
 function notify_booking_parties(PDO $pdo, int $bookingId, string $kind, int $actorUserId, array $detail): void
 {
     $pdo->prepare(
         "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id, detail)
          SELECT u.id, :k, :b, :a, :d FROM users u
           WHERE u.is_active = 1 AND u.id <> :a2
-            AND (u.account_type = 'admin'
+            AND ((" . sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId) . ")
                  OR u.id = (SELECT c.user_id FROM bookings b JOIN customers c ON c.id = b.customer_id WHERE b.id = :b2))"
     )->execute([':k' => $kind, ':b' => $bookingId, ':a' => $actorUserId, ':d' => json_encode($detail, JSON_UNESCAPED_UNICODE),
                 ':a2' => $actorUserId, ':b2' => $bookingId]);
@@ -208,15 +214,23 @@ function notif_words(array $r, string $accountType): array
     return ['Something changed' . ($ref !== '' ? ' on ' . $ref : '') . '.', $accountType === 'customer' ? $viewLink : $staffLink];
 }
 
-/* Unapproved requests within 24 hours of their date — worked out live, for
-   staff (their venue) and admins (all). $venueScope: null = every venue. */
-function notif_reminders(PDO $pdo, ?int $venueScope): array
+/* Unapproved requests within 24 hours of their date — worked out live, for staff
+   and normal admins, in the offices they handle; a normal admin also hears of
+   requests waiting 3 days. $offices: null = the super admin, who gets no booking
+   reminders (DB-DECISIONS 28). */
+function notif_reminders(PDO $pdo, ?array $offices, bool $isAdmin): array
 {
+    if ($offices === null) {
+        return [];
+    }
+    $officeIds = implode(',', array_map('intval', $offices) ?: [0]);
     $waiting = [];
-    if ($venueScope === null) {
-        foreach ($pdo->query("SELECT id, submitted_at, DATEDIFF(NOW(), submitted_at) AS days FROM bookings
-                               WHERE reservation_status = 'pending' AND submitted_at <= NOW() - INTERVAL 3 DAY
-                               ORDER BY submitted_at LIMIT 5")->fetchAll() as $w) {
+    if ($isAdmin) {
+        foreach ($pdo->query("SELECT b.id, b.submitted_at, DATEDIFF(NOW(), b.submitted_at) AS days FROM bookings b
+                               JOIN rooms r ON r.id = b.room_id
+                               WHERE b.reservation_status = 'pending' AND b.submitted_at <= NOW() - INTERVAL 3 DAY
+                                 AND r.venue_id IN ($officeIds)
+                               ORDER BY b.submitted_at LIMIT 5")->fetchAll() as $w) {
             $ref = booking_reference($w['id'], $w['submitted_at']);
             $waiting[] = ['text' => 'Request ' . $ref . ' has waited ' . (int) $w['days'] . ' days for an answer.',
                           'link' => 'admin/booking-request.php?id=' . rawurlencode($ref)];
@@ -226,10 +240,9 @@ function notif_reminders(PDO $pdo, ?int $venueScope): array
               FROM bookings b JOIN rooms r ON r.id = b.room_id
              WHERE b.reservation_status = 'pending'
                AND fn_request_expiry(b.id, b.booking_type) BETWEEN NOW() AND NOW() + INTERVAL 24 HOUR"
-         . ($venueScope !== null ? ' AND r.venue_id = :v' : '')
-         . ' ORDER BY expires_at LIMIT 10';
+         . " AND r.venue_id IN ($officeIds) ORDER BY expires_at LIMIT 10";
     $s = $pdo->prepare($sql);
-    $s->execute($venueScope !== null ? [':v' => $venueScope] : []);
+    $s->execute();
     $out = $waiting;
     foreach ($s->fetchAll() as $row) {
         $ref  = booking_reference($row['id'], $row['submitted_at']);

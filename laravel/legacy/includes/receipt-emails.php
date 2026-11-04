@@ -148,6 +148,26 @@ function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note
     ]);
 }
 
+/* The super admin handover (DB-DECISIONS 28): both people are told, with the reason.
+   $old, $new: email and name. Returns the two outbox ids. */
+function queue_handover_emails(PDO $pdo, array $old, array $new, string $reason, int $actorUserId): array
+{
+    $line = $new['name'] . ' (' . $new['email'] . ') is now the VENUSeP super admin. '
+          . $old['name'] . ' (' . $old['email'] . ') handed it over and that account is suspended. This cannot be undone.';
+    $ids = [];
+    foreach ([[$old, 'You handed over the super admin'], [$new, 'You are now the super admin']] as [$who, $title]) {
+        $first = re_first_name($who['name']);
+        $ids[] = mail_enqueue($pdo, [
+            'kind' => 'super_admin_handover', 'requested_by_user_id' => $actorUserId, 'to_email' => $who['email'],
+            'subject' => 'VENUSeP: ' . $title,
+            'body_html' => re_frame($line, $title, $first, bh_e($line), re_paragraph('Reason: ' . bh_e($reason)),
+                'You&rsquo;re getting this because your VENUSeP admin account changed.'),
+            'body_text' => $title . "\n\nGood day, " . $first . "!\n" . $line . "\n\nReason: " . $reason . "\n\n" . RE_NO_REPLY,
+        ]);
+    }
+    return $ids;
+}
+
 /* Payment due / overdue happen in sp_expire_due_bookings, with nobody at a keyboard, so
    the first request after them sends the emails. Recent changes only; a few at a time. */
 function mail_status_sweep(PDO $pdo): void

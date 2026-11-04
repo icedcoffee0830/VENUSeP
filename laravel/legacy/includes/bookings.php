@@ -67,7 +67,7 @@ function booking_id_from_reference($ref) {
      customer_id   int    only this customer's bookings
      booking_id    int    a single booking
      limit         int    cap the rows (the queue pages page in the browser)
-     venue_id      int    only this venue's bookings (0 = none)
+     venue_id      int[]  only these offices' bookings ([] = none)
    --------------------------------------------------------------------- */
 function bookings_query(array $opts = []) {
     $pdo = venusep_db();
@@ -87,8 +87,7 @@ function bookings_query(array $opts = []) {
         $args[':bid'] = (int) $opts['booking_id'];
     }
     if (isset($opts['venue_id'])) {
-        $where[] = 'v.id = :vid';
-        $args[':vid'] = (int) $opts['venue_id'];
+        $where[] = 'v.id IN (' . implode(',', array_map('intval', (array) $opts['venue_id']) ?: [0]) . ')';
     }
     $sql = "
         SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
@@ -360,8 +359,8 @@ function bookings_for_customer($customerId) {
     return bookings_query(['customer_id' => (int) $customerId]);
 }
 
-/* Every booking — the staff queue, the admin calendar, the reports. A staff
-   member gets their own venue's only. */
+/* Every booking — the staff queue, the admin calendar, the reports. Narrowed to
+   the offices the session handles (staff_list_venue()). */
 function bookings_all(array $opts = []) {
     $venue = staff_list_venue();
     return bookings_query($venue === null ? $opts : $opts + ['venue_id' => $venue]);
@@ -515,6 +514,7 @@ function booking_queue_class(array $b) {
    finished bookings hides the 30 that need someone. */
 function booking_queue_rows() {
     $rows = [];
+    $mixed = staff_sees_many_offices();   // several offices in one list: each row names its office (DB-DECISIONS 28)
     foreach (bookings_all() as $b) {
         if ($b['reservationCode'] === 'completed'
             && in_array($b['paymentCode'], ['confirmed', 'paid_cash'], true)) {
@@ -527,6 +527,7 @@ function booking_queue_rows() {
                             : ($b['isUsep'] ? 'USeP' . ($b['usepVerified'] ? ' · verified' : ' · unverified') : 'Non-USeP'),
             'room'     => $b['roomName'],
             'venue'    => $b['venueName'],
+            'office'   => $mixed ? $b['venueName'] : '',
             'dates'    => booking_date_label($b),
             'res'      => $b['reservationCode'],
             'pay'      => booking_queue_pay_key($b),
@@ -644,7 +645,7 @@ function report_base_sql() {
                    IF(b.reservation_status IN ('cancelled','rejected','released'), 1, 0) AS fell_through
               FROM bookings b
               LEFT JOIN venue_booking_details vd  ON vd.booking_id = b.id
-              LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id" . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id = %d)');
+              LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id" . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id IN (%s))');
 }
 
 /* The last $count quarters up to and including the current one, oldest first.
@@ -740,7 +741,7 @@ function report_by_venue($year = null, $quarter = null) {
                FROM venues v
                LEFT JOIN rooms r ON r.venue_id = v.id
                LEFT JOIN (" . report_base_sql() . ") x
-                      ON x.room_id = r.id" . $where . staff_venue_sql('v.id = %d') . "
+                      ON x.room_id = r.id" . $where . staff_venue_sql('v.id IN (%s)') . "
               GROUP BY v.id, v.name, v.is_active
              HAVING v.is_active = 1 OR COUNT(x.id) > 0
               ORDER BY v.id"

@@ -66,7 +66,7 @@ class NotificationsController
                 'ok'        => true,
                 'unread'    => notif_unread_count($pdo, $userId),
                 'items'     => notif_items($pdo, $userId, $type),
-                'reminders' => $type === 'customer' ? [] : notif_reminders($pdo, staff_venue_scope()),
+                'reminders' => $type === 'customer' ? [] : notif_reminders($pdo, staff_venue_scope(), $type === 'admin'),
             ]);
         } catch (PDOException $e) {
             sql_failed($e);

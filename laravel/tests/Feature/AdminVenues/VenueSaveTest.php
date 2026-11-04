@@ -64,7 +64,7 @@ class VenueSaveTest extends VenuesTestCase
         $before = DB::table('venues')->count();
         $this->actingAsStaff();
         $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Staff Made Hall'])
-            ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden', 'message' => 'Only an administrator can add a venue.']);
+            ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden', 'message' => 'Only the super admin can add a venue.']);
         $this->postForm('admin.venue-save', ['name' => 'Staff Made Hall'])->assertStatus(403);
         $this->assertSame($before, DB::table('venues')->count());
         $this->get(route('admin.venue-management'))->assertOk()

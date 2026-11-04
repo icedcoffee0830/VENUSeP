@@ -36,7 +36,7 @@ class PaymentSettingsTest extends TestCase
     public function test_staff_sees_the_card_read_only(): void
     {
         $this->actingAsStaff()->get(route('admin.payment-settings'))->assertOk()
-            ->assertSee('Only the administrator can change this')->assertDontSee('id="rsModal"', false);
+            ->assertSee('Only the super admin can change this')->assertDontSee('id="rsModal"', false);
     }
 
     /* The GCash save is admin-only on the server, so staff get no Edit button that
@@ -53,10 +53,11 @@ class PaymentSettingsTest extends TestCase
     {
         $name = 'Admina Test Hall ' . bin2hex(random_bytes(3));
         $venueId = DB::table('venues')->insertGetId(['venue_code' => strtoupper(str_replace(' ', '-', $name)),
-            'name' => $name, 'venue_type' => 'event', 'description' => 'test', 'is_active' => 1]);
+            'name' => $name, 'venue_type' => 'event', 'description' => 'test', 'is_active' => 1, 'office_group' => 'bahay_alumni']);
+        $this->adminEmail = 'francishubero@gmail.com';   // the group's normal admin sets its GCash accounts
         $this->useKnownAdminPassword();
         try {
-            $this->actingAsAdmin()->withTestCsrf()->get(route('admin.payment-settings'))->assertOk()
+            $this->actingAsAdmin($this->adminEmail)->withTestCsrf()->get(route('admin.payment-settings'))->assertOk()
                 ->assertSee('data-venue="' . $name . '"', false)
                 ->assertSee('No GCash account yet: customers cannot pay this venue by GCash until one is set.');
 
@@ -85,9 +86,9 @@ class PaymentSettingsTest extends TestCase
         }
     }
 
-    public function test_admin_gets_the_gcash_edit_buttons(): void
+    public function test_the_offices_admin_gets_the_gcash_edit_buttons(): void
     {
-        $this->actingAsAdmin()->get(route('admin.payment-settings'))->assertOk()
+        $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.payment-settings'))->assertOk()
             ->assertSeeInOrder(['<div class="ps-foot">', '<button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>'], false);
     }
 
@@ -105,7 +106,7 @@ class PaymentSettingsTest extends TestCase
             ->assertJson(['ok' => false, 'error' => 'method']);
         $this->post(route('admin.refund-switch'))->assertStatus(401)->assertJson(['error' => 'not_logged_in']);
         $this->actingAsStaff()->withTestCsrf()->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '1', 'password' => 'x'])
-            ->assertStatus(403)->assertJson(['error' => 'not_admin', 'message' => 'Only the administrator can change the refund setting.']);
+            ->assertStatus(403)->assertJson(['error' => 'not_admin', 'message' => 'Only the super admin can change the refund setting.']);
     }
 
     public function test_refund_switch_csrf_and_validation(): void
@@ -155,16 +156,17 @@ class PaymentSettingsTest extends TestCase
         $this->actingAsStaff()->withTestCsrf()->post(route('admin.gcash-account-save'), ['_token' => 'test-csrf-token'])
             ->assertStatus(403)->assertJson(['error' => 'not_admin']);
         $this->flushSession();
-        $this->actingAsAdmin()->withTestCsrf()->post(route('admin.gcash-account-save'), [
+        $this->actingAsAdmin('francishubero@gmail.com')->withTestCsrf()->post(route('admin.gcash-account-save'), [
             '_token' => 'test-csrf-token', 'venue' => 'Bahay Alumni', 'account_name' => 'X', 'mobile_number' => '0812', 'password' => 'x',
         ])->assertStatus(400)->assertJson(['field' => 'mobile_number']);
     }
 
     public function test_gcash_save_supersedes_the_old_row(): void
     {
+        $this->adminEmail = 'francishubero@gmail.com';   // Bahay Alumni's normal admin
         $this->useKnownAdminPassword();
         $old = DB::table('gcash_accounts')->where('venue_id', 1)->where('is_active', 1)->first();
-        $this->actingAsAdmin()->withTestCsrf()->post(route('admin.gcash-account-save'), [
+        $this->actingAsAdmin($this->adminEmail)->withTestCsrf()->post(route('admin.gcash-account-save'), [
             '_token' => 'test-csrf-token', 'venue' => 'Bahay Alumni', 'account_name' => 'Test Payee',
             'mobile_number' => '0917 000 1111', 'password' => $this->pw,
         ])->assertOk()->assertJson(['ok' => true, 'number' => '09170001111', 'previous' => $old->mobile_number]);

@@ -513,6 +513,25 @@ ends by listing every admin and its role. Applied to the test/flows snapshot
   staff only; the super admin any admin or staff; nobody resets the super admin; Make super admin =
   the handover (reason + password, emails both, old account suspended for good).
 - **Not built yet (later phases):** customers page narrowed to the group, blocks, counter search
-  rules, per-office refund switch, report toggle, forgot password for staff/admins, account events
+  rules, per-office refund switch, forgot password for staff/admins, account events
   (`sp_notify_admins`) still go to every admin.
 - Tests: `tests/Feature/AdminPeople/RolesTest.php`; flow `roles-accounts`.
+
+### 14b. Reports office filter + toggle (phase C, no migration)
+- One page, one set of queries: `app/Queries/ReportQueries.php` (moved out of legacy
+  `bookings.php`; the old `report_quarters()` / `report_by_venue()` are gone). Every query takes a
+  list of office ids and filters with a plain `r.venue_id IN (...)`. The Dashboard revenue tile
+  reads the same `quarters()`.
+- `ReportsController::choices()` builds the toggle from `staff_venue_scope()`: each own office, each
+  group with two or more of them ("USeP CEDU (both)"), and "All offices" for the super admin only.
+  `?office=` outside the list falls back to the person's widest choice (clamped, no error).
+  One choice = no toggle. Toggle: `resources/views/partials/report-office-toggle.blade.php`,
+  one `@include` in `reports.blade.php` below the header (printout header untouched).
+- Sections: shared tiles (revenue, growth, events held, average, bookings, customers, refunded,
+  written off) and charts; Halls table (events, days, hours) for event offices; Hostel Rooms table
+  (stays, bed-nights = nights x guests, occupancy, bathroom type line) for the hostel. Charts compare
+  offices when several are chosen, else halls/rooms. Combined reports count a customer once and
+  say so on the printout.
+- Print: a single-office report may now run onto a second page (the tables move whole to page 2);
+  Bahay Alumni on A4 still fits one page with the test data.
+- Tests: `tests/Feature/AdminSettings/ReportsTest.php`; flow `admina-dashboard-reports-backup` step 3.

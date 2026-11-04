@@ -422,7 +422,9 @@
           USeP Tagum&ndash;Mabini Campus
         </span>
         <h1 data-hero-item>Reserve a campus venue in <br>minutes, not visits.</h1>
+@if ($lpWhat) {{-- none: a counter with no office --}}
         <p class="lp-hero-sub" data-hero-item>{{ $lpWhat }} &mdash; check real availability, reserve online, and pay by GCash or cash.</p>
+@endif
 
 @if ($lpVenueCount) {{-- counter mode shows the session's own offices only (DB-DECISIONS 28) --}}
         <div class="lp-hero-actions" data-hero-item>

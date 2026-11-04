@@ -535,3 +535,32 @@ ends by listing every admin and its role. Applied to the test/flows snapshot
 - Print: a single-office report may now run onto a second page (the tables move whole to page 2);
   Bahay Alumni on A4 still fits one page with the test data.
 - Tests: `tests/Feature/AdminSettings/ReportsTest.php`; flow `admina-dashboard-reports-backup` step 3.
+
+### 14c. Phase D (2026-11-05 night, no migration)
+- **Counter mode by office:** the counter start page (`/customer/venues?counter=1`) draws only the
+  viewer's offices: the room lists were already narrowed by `staff_sees_venue()`; the hostel card,
+  section, hero button, footer and top-bar link now follow `office_hostel_shown()` (offices.php).
+  Heading and counts adapt ("One/Two/Three places on campus", the hero line). No office (only a
+  normal admin left without a group can be in that state: a trigger gives every staff member an
+  office) -> "You have no office yet. Ask an admin to assign one." Another office's room or hostel
+  page in counter mode is refused in `BookingAccess` (redirect back to the counter start page with
+  "<office> is another office..."); booking-create still refuses at save. Public page unchanged.
+- **Forgot password for staff, admins and the super admin:** `admin/forgot-password` +
+  `admin/reset-password`, the same controller, views and `password-reset.php` rules as the customer
+  pages; the side comes from the route name (`pr_*` take `$staff`). Each side's links work on its own
+  page only. No link for a suspended account or a former super admin (`handed_over_at`). The link
+  uses `config('app.url')` like other mail. After the reset: other sessions end (password_changed_at),
+  remembered devices are forgotten, nobody is signed in, admins are still asked for their code.
+  The staff sign-in's "Forgot Password?" link and its one-time "Your password was changed" notice.
+- **Google safety net:** `GoogleController::start` (sign-in only) on a host/scheme other than the
+  configured `redirect_uri`'s first redirects to the same path there, keeping `?remember=1`. Test seam:
+  `config('venusep.google_config_test')` points `google_config()` at a fake file in testing only.
+- **Account-event notifications:** `notify_account_event()` (notifications.php) replaces
+  `notify_admins()`: a staff account's events (created, moved: old and new office, password reset,
+  suspended, reactivated) go to that staff member's group's normal admins; an admin account's events
+  and the handover go to the super admin (the new one, after a handover); the actor never.
+  `sp_notify_admins` stays in the DB, unused. Restore and the refund switch add no notification:
+  only the super admin can do them and nobody is told of their own action, so it would never fire.
+- Tests: `CustomerBooking/CounterOfficeTest`, `Auth/StaffPasswordResetTest`, `Auth/GoogleHostTest`,
+  `AdminPeople/AccountNotificationsTest` (+ the handover check in `RolesTest`). Flows:
+  `auth-counter-and-disabled` (refused hostel page, CEDU admin's counter), new `staff-forgot-password`.

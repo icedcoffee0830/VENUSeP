@@ -9,8 +9,10 @@ use Illuminate\Http\Request;
 use PDO;
 
 /* OFFICE SETTINGS (Aron, 2026-11-01): each office's hours, closed days, closures,
-   USeP discount, grace days, lead time and cleanup gap. Admins only: a normal admin
-   its own group's offices, the super admin every office (DB-DECISIONS 28).
+   USeP discount, grace days, lead time and cleanup gap, and its contact info (phone,
+   email, location: the public page, its customer emails, the block notice). Admins
+   only: a normal admin its own group's offices, the super admin every office (DB-DECISIONS 28).
+   Contact fields left out of a post keep their value.
    POST _token, venue_id, action=save|closure_add|closure_remove. Replies with JSON.
    A change applies to NEW bookings; existing ones keep what they were made under. */
 class OfficeSettingsController extends Controller
@@ -26,6 +28,9 @@ class OfficeSettingsController extends Controller
         'grace'    => ['Grace days', 'postpay_grace_days'],
         'lead'     => ['Lead time (hours)', 'lead_hours'],
         'gap'      => ['Cleanup gap (minutes)', 'cleanup_gap_minutes'],
+        'phone'    => ['Phone', 'contact_phone'],
+        'email'    => ['Email', 'contact_email'],
+        'location' => ['Location', 'address'],
     ];
 
     public function index()
@@ -96,7 +101,19 @@ class OfficeSettingsController extends Controller
             'days'     => implode(',', $days),
             'discount' => $int('discount', 100, 'The discount'),
             'grace'    => $int('grace', 30, 'Grace days'),
+            'phone'    => trim((string) $request->post('phone', $office['phone'])),
+            'email'    => strtolower(trim((string) $request->post('email', $office['email']))),
+            'location' => trim((string) $request->post('location', $office['location'])),
         ];
+        if ($new['phone'] === '' || mb_strlen($new['phone']) > 30) {
+            $this->reply(400, ['ok' => false, 'message' => 'Enter the office phone number (30 characters at most).']);
+        }
+        if (mb_strlen($new['email']) > 190 || !filter_var($new['email'], FILTER_VALIDATE_EMAIL)) {
+            $this->reply(400, ['ok' => false, 'message' => 'Enter a valid office email address.']);
+        }
+        if ($new['location'] === '' || mb_strlen($new['location']) > 500) {
+            $this->reply(400, ['ok' => false, 'message' => 'Enter where the office is (500 characters at most).']);
+        }
         if (count($days) === 7) {
             $this->reply(400, ['ok' => false, 'message' => 'An office cannot be closed every day. Add a closure with dates instead.']);
         }
@@ -112,7 +129,8 @@ class OfficeSettingsController extends Controller
         }
 
         $old = ['days' => implode(',', $office['closedDays']), 'discount' => $office['discount'], 'grace' => $office['grace'],
-                'opens' => $office['opens'], 'closes' => $office['closes'], 'lead' => $office['lead'], 'gap' => $office['gap']];
+                'opens' => $office['opens'], 'closes' => $office['closes'], 'lead' => $office['lead'], 'gap' => $office['gap'],
+                'phone' => $office['phone'], 'email' => $office['email'], 'location' => $office['location']];
         $changed = array_filter($new, fn ($v, $k) => (string) $v !== (string) $old[$k], ARRAY_FILTER_USE_BOTH);
         if (!$changed) {
             $this->reply(400, ['ok' => false, 'message' => 'Nothing has changed.']);

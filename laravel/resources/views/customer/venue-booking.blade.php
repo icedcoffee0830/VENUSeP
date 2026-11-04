@@ -268,6 +268,9 @@
     .lp-footer-row { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; line-height: 1.55; color: #e6d7d5; }
     .lp-footer-row svg { flex: none; margin-top: 2px; }
     .lp-footer-rows { display: grid; gap: 10px; }
+    .lp-footer-row a { color: inherit; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+    .lp-footer-row a:hover { color: #fff; }
+    .lp-footer-oname { color: #fff; font-weight: 650; }
     .lp-footer-bottom { border-top: 1px solid rgba(255,255,255,.1); padding: 16px 0 22px; display: flex; align-items: center;
       justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 13.5px; color: #96807e; }
     .lp-footer-bottom a { color: #96807e; margin-left: 24px; }
@@ -741,16 +744,14 @@
         </div>
       </div>
       <div class="lp-footer-office">
-        <h4>Venue office</h4>
+        <h4>{{ count($lpOffices) === 1 ? 'Office' : 'Offices' }}</h4>
         <div class="lp-footer-rows">
+@foreach ($lpOffices as $o)
           <div class="lp-footer-row">
             <svg class="lp-i" width="15" height="15" style="color:#96807e" aria-hidden="true"><use href="#lp-i-pin"/></svg>
-            <span>{{ $lpOfficeWhere }}</span>
+            <span><strong class="lp-footer-oname">{{ $o['name'] }}</strong><br>{{ $o['location'] }}<br>{{ office_hours_label($o) }}<br><a href="tel:{{ preg_replace('/[^\d+]/', '', $o['phone']) }}">{{ $o['phone'] }}</a> &middot; <a href="mailto:{{ $o['email'] }}">{{ $o['email'] }}</a></span>
           </div>
-          <div class="lp-footer-row">
-            <svg class="lp-i" width="15" height="15" style="color:#96807e" aria-hidden="true"><use href="#lp-i-clock"/></svg>
-            <span>{{ $lpOfficeHours }}</span>
-          </div>
+@endforeach
         </div>
       </div>
     </div>

@@ -142,4 +142,51 @@ class OfficeSettingsTest extends TestCase
         $this->assertNull(BookingRules::venueTooFarAhead(date('Y-m-d', strtotime('+365 days'))));
         $this->assertStringContainsString('1 year ahead', (string) BookingRules::venueTooFarAhead(date('Y-m-d', strtotime('+366 days'))));
     }
+
+    /* Phase E: each office's phone, email and location, edited like its other settings. */
+    public function test_a_normal_admin_edits_its_own_offices_contact_info_only(): void
+    {
+        $contact = ['phone' => '(084) 123 4567', 'email' => 'Bahay@Usep.edu.ph', 'location' => 'Bahay Alumni, Obrero'];
+        $this->actingAsAdmin('francishubero@gmail.com');
+        $this->send($this->settings($contact))->assertOk();
+        $v = $this->venue(1);
+        $this->assertSame(['(084) 123 4567', 'bahay@usep.edu.ph', 'Bahay Alumni, Obrero'], [$v->contact_phone, $v->contact_email, $v->address]);
+        $this->assertSame(1, DB::table('venue_settings_history')->where(['venue_id' => 1, 'field' => 'phone', 'new_value' => '(084) 123 4567'])->count());
+
+        $this->send($this->settings($contact + ['venue_id' => 2]))->assertStatus(403)->assertJson(['error' => 'forbidden']);
+        $this->assertNotSame('(084) 123 4567', $this->venue(2)->contact_phone);
+    }
+
+    public function test_the_super_admin_edits_any_office_and_bad_contact_info_is_refused(): void
+    {
+        $this->actingAsAdmin();
+        $this->send(['venue_id' => 3, 'action' => 'save', 'discount' => '20', 'grace' => '3', 'days' => [], 'phone' => '0911 222 3333'])->assertOk();
+        $this->assertSame('0911 222 3333', $this->venue(3)->contact_phone);
+        $this->send($this->settings(['email' => 'not an email']))->assertStatus(400)->assertJson(['message' => 'Enter a valid office email address.']);
+        $this->send($this->settings(['phone' => ' ']))->assertStatus(400);
+        $this->send($this->settings(['location' => '']))->assertStatus(400);
+    }
+
+    public function test_the_public_page_lists_every_offices_contact_and_hours(): void
+    {
+        DB::table('venues')->where('id', 1)->update(['contact_phone' => '0917 111 0001', 'closed_weekdays' => '0,6', 'opens_at' => '08:00:00', 'closes_at' => '17:00:00']);
+        DB::table('venues')->where('id', 3)->update(['contact_email' => 'hostel.desk@example.com']);
+        $page = $this->get(route('customer.venues'))->assertOk();
+        $page->assertSee('0917 111 0001')->assertSee('Monday to Friday, 8:00 AM – 5:00 PM')
+            ->assertSee('hostel.desk@example.com')->assertSee('usep.venues@example.com')
+            ->assertDontSee('Monday to Friday, 8:00 AM – 5:00 PM</span>', false);   /* the old single footer line is gone */
+    }
+
+    public function test_a_customer_email_ends_with_its_offices_contact_line(): void
+    {
+        DB::table('venues')->where('id', 2)->update(['contact_phone' => '0917 222 0002']);
+        [$id] = $this->seedVenueBooking('r5');
+        legacy('bookings', 'receipt-emails');
+        $outbox = queue_status_email(DB::connection()->getPdo(), $id, 'booking_approved', '', null);
+        $mail = DB::table('email_outbox')->where('id', $outbox)->first();
+        $this->assertStringContainsString('Contact USeP Venues: 0917 222 0002 · usep.venues@example.com', $mail->body_html);
+        $this->assertStringContainsString('Contact USeP Venues: 0917 222 0002', $mail->body_text);
+        DB::table('email_outbox')->where('id', $outbox)->delete();
+        DB::table('bookings')->where('id', $id)->delete();
+    }
 }

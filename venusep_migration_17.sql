@@ -20,6 +20,15 @@
 --    Booking notifications go to the office's staff and the group's normal
 --      admins, never to the super admin (sp_notify_venue_staff).
 --    A new email kind for the super admin handover.
+--    Office contact info (phase E): each office's phone, email and location live in
+--      the existing venues.contact_phone / contact_email / address columns; empty
+--      ones get placeholder text (confirm with each office before go-live).
+--    Blocks (phase E): customer_office_blocks, one row per block of a customer at
+--      an office (reason, who, when; lifting records who, when and why). While a
+--      block is on, no new booking for that customer at that office is accepted
+--      (trg_bookings_block_ins), and a pending request still blocked when it is
+--      due to start is cancelled by sp_expire_due_bookings (with a History note);
+--      the customer is emailed (email kind booking_block_cancelled).
 --    Starting accounts:
 --      admin@gmail.com = super admin;
 --      francishubero@gmail.com = Bahay Alumni normal admin;
@@ -35,6 +44,9 @@
 --      ALTER TABLE venues DROP COLUMN office_group;
 --      ALTER TABLE staff DROP COLUMN both_cedu_offices;
 --      then run sp_notify_venue_staff from venusep_migration_12.sql again.
+--      DROP TRIGGER trg_bookings_block_ins; DROP TABLE customer_office_blocks;
+--      then run sp_expire_due_bookings from venusep_migration_16.sql again.
+--      (The office contact text and the new email kind can stay: nothing old reads them.)
 --  The CEDU Admin account stays unless you delete it.
 -- ============================================================================
 
@@ -87,7 +99,37 @@ INSERT IGNORE INTO staff (user_id, venue_id, full_name)
 ALTER TABLE email_outbox
     MODIFY kind ENUM('walkin_booking','walkin_receipt','receipt_copy','password_reset',
                      'booking_approved','booking_rejected','payment_due','payment_overdue','booking_cancelled',
-                     'super_admin_handover') NOT NULL;
+                     'super_admin_handover','booking_block_cancelled') NOT NULL;
+
+-- ---- each office's contact info: placeholders where none is set (never overwrites) ----
+UPDATE venues SET address = 'USeP Tagum–Mabini Campus, Apokon, Tagum City' WHERE address IS NULL OR address = '';
+UPDATE venues SET contact_phone = '0900 000 0000' WHERE contact_phone IS NULL OR contact_phone = '';
+UPDATE venues SET contact_email = CONCAT(LOWER(REPLACE(venue_code, '-', '.')), '@example.com')
+ WHERE contact_email IS NULL OR contact_email = '';
+
+-- ---- a customer blocked at one office (DB-DECISIONS 28): one active block per office ----
+CREATE TABLE IF NOT EXISTS customer_office_blocks (
+    id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    customer_id        BIGINT UNSIGNED NOT NULL,
+    venue_id           BIGINT UNSIGNED NOT NULL,
+    reason             VARCHAR(500) NOT NULL,            -- never shown to the customer
+    blocked_by_user_id BIGINT UNSIGNED NULL,
+    blocked_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    lifted_at          DATETIME NULL,                    -- NULL = the block is on
+    lifted_by_user_id  BIGINT UNSIGNED NULL,
+    lift_reason        VARCHAR(500) NULL,
+    active_marker      TINYINT AS (IF(lifted_at IS NULL, 1, NULL)) PERSISTENT,
+    UNIQUE KEY uq_customer_office_blocks_active (customer_id, venue_id, active_marker),
+    KEY ix_customer_office_blocks_venue (venue_id, lifted_at),
+    CONSTRAINT fk_customer_office_blocks_customer FOREIGN KEY (customer_id) REFERENCES customers(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_customer_office_blocks_venue FOREIGN KEY (venue_id) REFERENCES venues(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_customer_office_blocks_by FOREIGN KEY (blocked_by_user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_customer_office_blocks_lifted_by FOREIGN KEY (lifted_by_user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
 
 DELIMITER $$
 
@@ -114,6 +156,79 @@ BEGIN
             OR (u.account_type = 'staff'
                 AND (s.venue_id = v_venue
                      OR (s.both_cedu_offices = 1 AND mine.office_group = 'cedu' AND v_group = 'cedu'))));
+END$$
+
+-- No new booking for a customer blocked at the room's office, online or at the counter.
+DROP TRIGGER IF EXISTS trg_bookings_block_ins$$
+CREATE TRIGGER trg_bookings_block_ins BEFORE INSERT ON bookings
+FOR EACH ROW
+BEGIN
+    IF EXISTS (SELECT 1 FROM customer_office_blocks k JOIN rooms r ON r.venue_id = k.venue_id
+                WHERE r.id = NEW.room_id AND k.customer_id = NEW.customer_id AND k.lifted_at IS NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This customer is blocked at this office, so no new booking can be made there.';
+    END IF;
+END$$
+
+-- Migration 16's procedure, plus one step: a pending request still blocked when it is
+-- due to start is cancelled (not just expired), and its History line says why.
+DROP PROCEDURE IF EXISTS sp_expire_due_bookings$$
+CREATE PROCEDURE sp_expire_due_bookings ()
+BEGIN
+    SET @venusep_actor_user_id = NULL;
+
+    SET @venusep_action_note = 'Event over; payment window opened.';
+    UPDATE bookings
+        SET payment_status = CASE WHEN payment_method = 'cash' THEN 'await_cash' ELSE 'await_gcash' END
+        WHERE refunds_allowed = FALSE AND pay_to_use = FALSE
+          AND payment_status = 'await_event'
+          AND reservation_status IN ('approved','completed')
+          AND fn_booking_last_day(id) < CURDATE();
+
+    SET @venusep_action_note = 'Cancelled automatically: the customer was still blocked at this office when the booking was due to start.';
+    UPDATE bookings
+        SET reservation_status = 'cancelled', cancelled_at = NOW()
+        WHERE reservation_status = 'pending'
+          AND fn_request_expiry(id, booking_type) <= NOW()
+          AND EXISTS (SELECT 1 FROM customer_office_blocks k JOIN rooms r ON r.venue_id = k.venue_id
+                       WHERE r.id = bookings.room_id AND k.customer_id = bookings.customer_id AND k.lifted_at IS NULL);
+
+    SET @venusep_action_note = 'Not approved before the booking date; the request expired.';
+    UPDATE bookings
+        SET reservation_status = 'released', payment_status = 'expired'
+        WHERE reservation_status = 'pending'
+          AND fn_request_expiry(id, booking_type) <= NOW();
+
+    -- A guest who checked in and has not paid (a reversed payment) is never released:
+    -- that would quietly erase the debt. Staff settle it in person.
+    SET @venusep_action_note = 'Not paid by the deadline; the hold was released.';
+    UPDATE bookings
+        SET reservation_status = 'released', payment_status = 'expired'
+        WHERE (refunds_allowed = TRUE OR pay_to_use = TRUE)
+          AND reservation_status = 'approved'
+          AND payment_status IN ('await_gcash','await_cash','await_pos')
+          AND current_deadline_at IS NOT NULL
+          AND current_deadline_at <= NOW()
+          AND NOT EXISTS (SELECT 1 FROM hostel_booking_details h
+                           WHERE h.booking_id = bookings.id AND h.checked_in = 1);
+
+    SET @venusep_action_note = 'Payment not received within the post-event window.';
+    UPDATE bookings
+        SET payment_status = 'overdue'
+        WHERE refunds_allowed = FALSE AND pay_to_use = FALSE
+          AND reservation_status IN ('approved','completed')
+          AND payment_status IN ('await_gcash','await_cash','await_pos')
+          AND current_deadline_at IS NOT NULL
+          AND current_deadline_at <= NOW();
+
+    -- Paid and finished = Completed (Aron 2026-11-01), a paid no-show included.
+    SET @venusep_action_note = 'Paid and finished.';
+    UPDATE bookings
+        SET reservation_status = 'completed'
+        WHERE reservation_status = 'approved'
+          AND payment_status IN ('confirmed','paid_cash','refund_denied')
+          AND fn_booking_last_day(id) < CURDATE();
+
+    SET @venusep_action_note = NULL;
 END$$
 
 DELIMITER ;

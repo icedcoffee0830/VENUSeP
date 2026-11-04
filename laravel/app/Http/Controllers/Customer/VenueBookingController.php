@@ -71,9 +71,8 @@ class VenueBookingController extends Controller
             'lpCounterNotice' => $lpNoOffice ? 'You have no office yet. Ask an admin to assign one.' : ($lpCounter ? session('counter_refused') : null),
             'lpSpaceCount' => count($venueRooms) + count($hostelRooms),
             'lpBedCount'   => array_sum(array_column($hostelRooms, 'beds')),
-            /* Footer facts. Confirm these with the venue office before go-live. */
-            'lpOfficeWhere' => 'USeP Tagum–Mabini Campus, Apokon, Tagum City',
-            'lpOfficeHours' => 'Monday to Friday, 8:00 AM – 5:00 PM',
+            /* Footer: each office's own contact info and hours (Office Settings, DB-DECISIONS 28) */
+            'lpOffices'     => array_values(array_filter(office_all(), fn ($o) => staff_sees_venue($o['id']))),
             'lpCounter'     => $lpCounter,
             'overdueNotice' => BookingRules::overdueNoticeForPage(),   /* an Overdue booking blocks new ones at its office (2026-11-01) */
             'lpQ'           => $lpCounter ? '?counter=1' : '',

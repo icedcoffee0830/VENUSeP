@@ -31,6 +31,10 @@ function office_all(): array
             'grace'      => (int) $v['postpay_grace_days'],
             'lead'       => (int) $v['lead_hours'],
             'gap'        => (int) $v['cleanup_gap_minutes'],
+            /* contact info (DB-DECISIONS 28), edited on Office Settings */
+            'phone'      => (string) $v['contact_phone'],
+            'email'      => (string) $v['contact_email'],
+            'location'   => (string) $v['address'],
         ];
     }
     foreach ($pdo->query('SELECT id, venue_id, from_date, until_date, reason FROM venue_closures WHERE until_date >= CURDATE() ORDER BY from_date')->fetchAll() as $c) {
@@ -56,6 +60,40 @@ function office_of_room($roomCode): ?array
     $st->execute([':c' => $roomCode]);
     $id = $st->fetchColumn();
     return $id === false ? null : office_by_id($id);
+}
+
+function office_of_booking(int $bookingId): ?array
+{
+    $pdo = venusep_db();
+    if ($pdo === null) {
+        return null;
+    }
+    $st = $pdo->prepare('SELECT r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b');
+    $st->execute([':b' => $bookingId]);
+    $id = $st->fetchColumn();
+    return $id === false ? null : office_by_id($id);
+}
+
+/* "Monday to Friday, 7:00 AM – 10:00 PM", from the office's closed days and hours.
+   The hostel has no opening hours (it books by the night): its open days only. */
+function office_hours_label(array $office): string
+{
+    $week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];   /* Monday first: index i is weekday (i + 1) % 7 */
+    $open = array_keys(array_filter($week, fn ($name, $i) => !in_array(($i + 1) % 7, $office['closedDays'], true), ARRAY_FILTER_USE_BOTH));
+    $run = count($open) === 7 ? 'Every day'
+        : (count($open) > 2 && end($open) - $open[0] === count($open) - 1
+            ? $week[$open[0]] . ' to ' . $week[end($open)]
+            : implode(', ', array_map(fn ($i) => $week[$i], $open)));
+    if ($office['type'] === 'hostel') {
+        return $run;
+    }
+    return $run . ', ' . date('g:i A', strtotime($office['opens'])) . ' – ' . date('g:i A', strtotime($office['closes']));
+}
+
+/* "USeP Venues: 0900 000 0000 · usep.venues@example.com · <location> · <hours>" (plain text). */
+function office_contact_line(array $office): string
+{
+    return $office['name'] . ': ' . implode(' · ', array_filter([$office['phone'], $office['email'], $office['location'], office_hours_label($office)], 'strlen'));
 }
 
 /* The office of the room this page is about (?room=), or null on a page about none. */

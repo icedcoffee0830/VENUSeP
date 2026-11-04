@@ -491,3 +491,28 @@ What it did:
 - Still in the PHP error log, not `laravel.log`: non-SQL failures such as SMTP errors, Google token exchange and ID decryption.
 
 **Before go-live:** set `APP_DEBUG=false`. `.env.example` has it on, and with it on visitors now see SQL errors.
+
+## 14. 2026-11-04 night — roles foundation (branch `roles`, migration 17)
+
+Built from DB-DECISIONS section 28. **Migration 17 is NOT on the real `venusep` DB yet**: Aron runs
+`C:\xampp\mysql\bin\mysql.exe -u root venusep < venusep_migration_17.sql` in cmd, after a backup. It
+ends by listing every admin and its role. Applied to the test/flows snapshot
+(`_tools\venusep_snapshot.sql`, appended like migration 16; the copy before it is `.before-m17`).
+
+- **Schema:** `venues.office_group` (bahay_alumni | cedu); `users.is_super_admin` (one only:
+  `uq_users_one_super_admin`; `chk_users_super_admin` keeps it an active admin with no group),
+  `users.office_group` (a normal admin's group), `users.handed_over_at`; `staff.both_cedu_offices`.
+  `sp_notify_venue_staff` sends booking news to the office's staff and the group's normal admins only.
+- **Accounts:** admin@gmail.com super admin; francishubero@gmail.com Bahay Alumni admin; new
+  cedu.admin@gmail.com "CEDU Admin" (temporary password `ceduadmin123`, sets up 2FA at first sign-in).
+- **One place:** `legacy/includes/auth.php` (`staff_me`, `staff_venue_scope` now a list of office ids,
+  `staff_venue_sql` takes `IN (%s)`, `staff_may_manage_account`). Route guard `staff:super`.
+- **Super admin only:** Activity, Backup & Restore, refund switch, creating admins (with a group),
+  adding or deleting an office. **Normal admin only, own offices:** GCash accounts. Office settings:
+  own offices (super admin all). Staff Management: a normal admin sees and manages its own offices'
+  staff only; the super admin any admin or staff; nobody resets the super admin; Make super admin =
+  the handover (reason + password, emails both, old account suspended for good).
+- **Not built yet (later phases):** customers page narrowed to the group, blocks, counter search
+  rules, per-office refund switch, report toggle, forgot password for staff/admins, account events
+  (`sp_notify_admins`) still go to every admin.
+- Tests: `tests/Feature/AdminPeople/RolesTest.php`; flow `roles-accounts`.

@@ -564,3 +564,44 @@ ends by listing every admin and its role. Applied to the test/flows snapshot
 - Tests: `CustomerBooking/CounterOfficeTest`, `Auth/StaffPasswordResetTest`, `Auth/GoogleHostTest`,
   `AdminPeople/AccountNotificationsTest` (+ the handover check in `RolesTest`). Flows:
   `auth-counter-and-disabled` (refused hostel page, CEDU admin's counter), new `staff-forgot-password`.
+
+### 14d. Phase E (2026-11-05 night): office contact info, per-office blocks (migration 17 grew)
+Migration 17 is still not on the real DB; the additions are in the same file, safe to re-run
+(the test/flows snapshot is again `.before-m17` + the new migration 17).
+- **Office contact info:** phone, email, location = the existing `venues.contact_phone`,
+  `contact_email`, `address` columns, edited on Office Settings (same rules as the other settings,
+  logged in its history; fields left out of a post keep their value). Hours come from opens/closes
+  and closed days (`office_hours_label()`, offices.php; the hostel shows its open days only, it has
+  no opening hours). Shown: public page footer (one block per office, replacing the hard-coded
+  footer facts), the block notice, and the footer of every customer email about a booking
+  (`re_office_line()`, receipt-emails.php). **Placeholders, confirm before go-live:** location
+  "USeP Tagum–Mabini Campus, Apokon, Tagum City" (the old footer text), phone `0900 000 0000`,
+  emails `bahay.alumni@` / `usep.venues@` / `usep.hostel@example.com`.
+- **Blocks:** `customer_office_blocks` (one active block per customer and office; reason, who,
+  when; lift: who, when, reason), `app/Queries/BlockQueries.php`. `fn_customer_blocked(customer,
+  room)` is the one copy of the rule; `trg_bookings_block_ins` refuses a new booking (online and
+  counter). The app refuses first: booking-submit (409 `blocked`, the notice + the office contact
+  line, never the reason), booking-create at the counter ("Blocked at this office..."), and
+  approving ("This customer is blocked at this office. Lift the block first, or reject the
+  request."). Booking pages show the notice up front (in `customer/overdue-notice` partial); the
+  counter's search and who-step show "Blocked at this office" and the step cannot go on; request
+  list and detail show a Blocked badge. Approved bookings are untouched.
+- **Auto-cancel:** the existing close of pending requests is `sp_expire_due_bookings()` step 2
+  (pending past `fn_request_expiry`: a venue request at its first slot's start, a hostel request at
+  the end of its check-in day -> released / expired, "Not approved before the booking date; the
+  request expired."). It runs on page load (`venusep_expire_due_bookings()`, legacy db.php, before
+  every booking read, once per request), no scheduler. A new step just before it cancels a request
+  still blocked then (cancelled, History "Cancelled automatically: the customer was still blocked
+  at this office when the booking was due to start."); the after-response `mail_status_sweep()`
+  emails the customer once (kind `booking_block_cancelled`, contact line in the footer, no reason).
+- **Customers page:** a normal admin sees customers who booked at its group's offices (booking
+  counts there only) and blocks / lifts at its own offices with a reason; the super admin sees all.
+  Suspending a whole account is the super admin's only now. Blocks and lifts appear on Activity.
+- Tests: `CustomerBooking/OfficeBlockTest`, new cases in `AdminSettings/OfficeSettingsTest` and
+  `CustomerBooking/CounterBookerTest`. Flow: new `office-block`.
+- **Harness fix:** `FlowsDb::reset` (flows tester and `flows-tool reset`) now drops every table of
+  the test/flows copy before loading the snapshot. The snapshot only drops the tables in its dump;
+  tables a migration appends with `CREATE TABLE IF NOT EXISTS` (venue_closures, document_access_log,
+  customer_office_blocks...) kept the previous run's rows, which broke a second run of `office-block`.
+- Not done: walk-ins (no account) cannot be blocked (there is no record to block; a new customer
+  row each visit). No notification bell entry for a block.

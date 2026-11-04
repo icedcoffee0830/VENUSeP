@@ -111,6 +111,15 @@ final class FlowsDb
                 . "CREATE DATABASE {$db} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
         }
 
+        /* Empty it first: the snapshot drops only the tables in its dump, and the ones a
+           migration appended creates "IF NOT EXISTS" (venue_closures, customer_office_blocks...)
+           would otherwise keep the last run's rows. guard() above: test and flows copies only. */
+        $conn->statement('SET FOREIGN_KEY_CHECKS = 0');
+        foreach ($conn->select("SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'", [$db]) as $row) {
+            $conn->statement('DROP TABLE `' . str_replace('`', '``', $row->t) . '`');
+        }
+        $conn->statement('SET FOREIGN_KEY_CHECKS = 1');
+
         $cfg = $conn->getConfig();
         $cmd = [$mysql, '--user=' . $cfg['username'], '--host=' . $cfg['host'], '--port=' . $cfg['port'], '--default-character-set=utf8mb4'];
         if ((string) ($cfg['password'] ?? '') !== '') {

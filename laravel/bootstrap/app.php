@@ -24,6 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         // "Remember me" (#23) writes and reads its own cookie (legacy/includes/remember-me.php)
         $middleware->encryptCookies(except: ['venusep_remember']);
+        /* The Cloudflare tunnel runs on this machine: believe its "this was https" header, so links and styles are built as https */
+        $middleware->trustProxies(at: ['127.0.0.1', '::1']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         /* An expired page (bad CSRF token). Laravel's check stays on EVERY route;

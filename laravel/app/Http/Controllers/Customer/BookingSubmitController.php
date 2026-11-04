@@ -99,6 +99,10 @@ class BookingSubmitController extends Controller
         }
 
         $office = office_by_id($room['venue_id']);
+        /* Blocked at this office (DB-DECISIONS 28): the notice, never the reason. */
+        if ($blocked = BookingRules::blockNotice($customerId, (int) $room['venue_id'])) {
+            return self::reply(409, ['ok' => false, 'error' => 'blocked', 'message' => $blocked['message'] . ' ' . $blocked['contact']]);
+        }
         if ($unpaid = BookingRules::tooManyUnpaid($pdo, $customerId, (int) $room['venue_id'])) {
             return self::reply(409, ['ok' => false, 'error' => 'too_many_unpaid', 'message' => $unpaid]);
         }

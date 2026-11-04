@@ -375,6 +375,26 @@
         customerAction(body, function () { window.location.reload(); });
       };
 
+      const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+      const PILL = 'cursor:pointer;background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600;border:1px solid ';
+
+      /* Block or lift at one office: a reason either way. The customer never sees it. */
+      const blockAction = async function (row, act, venueId) {
+        const b = row.blocks.find(function (x) { return x.venueId === venueId; });
+        const reason = act === 'block'
+          ? await venusepPrompt('They can still sign in and see everything, but cannot make new bookings at ' + b.office + ', online or at the counter. A pending request still blocked at its start is cancelled. The reason is kept; they never see it.',
+              { title: 'Block ' + row.name + ' at ' + b.office + '?', label: 'Reason', okLabel: 'Block', danger: true })
+          : await venusepPrompt('Blocked by ' + b.by + ' on ' + b.at + ': ' + b.reason + '. They can book at ' + b.office + ' again.',
+              { title: 'Lift the block on ' + row.name + '?', label: 'Reason for lifting', okLabel: 'Lift block' });
+        if (reason === null) return;
+        const body = new FormData();
+        body.append('action', act);
+        body.append('customer_id', row.id);
+        body.append('venue_id', venueId);
+        body.append('reason', reason);
+        customerAction(body, function () { window.location.reload(); });
+      };
+
       const table = new Tabulator('#customers-table', {
         data: data,
         layout: 'fitColumns',
@@ -401,6 +421,27 @@
             hozAlign: 'center',
           },
           {
+            /* per office (DB-DECISIONS 28): only the offices this admin may block at */
+            title: 'Office blocks',
+            field: 'blocks',
+            minWidth: 190,
+            headerSort: false,
+            formatter: function (cell) {
+              return cell.getValue().map(function (b) {
+                return b.on
+                  ? '<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin:.15rem 0"><span class="badge text-bg-danger" title="' +
+                      esc('By ' + b.by + ', ' + b.at + ': ' + b.reason) + '">Blocked · ' + esc(b.office) + '</span>' +
+                      '<button type="button" class="btn-cust-block" data-act="lift" data-venue="' + b.venueId + '" style="' + PILL + '#c3e0cd;color:#1c7a4f">Lift</button></div>'
+                  : '<div style="margin:.15rem 0"><button type="button" class="btn-cust-block" data-act="block" data-venue="' + b.venueId + '" style="' + PILL + '#e3c3c3;color:#b23a3a">Block at ' + esc(b.office) + '</button></div>';
+              }).join('');
+            },
+            cellClick: function (e, cell) {
+              const btn = e.target.closest('.btn-cust-block');
+              if (btn) blockAction(cell.getRow().getData(), btn.dataset.act, Number(btn.dataset.venue));
+            },
+          },
+@if ($cmMaySuspend)
+          {
             title: '',
             field: 'userId',
             width: 120,
@@ -419,6 +460,7 @@
               toggleActive(cell.getRow().getData());
             },
           },
+@endif
         ],
       });
 

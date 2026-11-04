@@ -19,7 +19,7 @@ class CounterBookerTest extends TestCase
         $this->assertNotNull($block, 'counter-booker.php block not on the page');
 
         $esc = "function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }";
-        $script = "const COUNTER_STAFF='Staff', DISCOUNT_PERCENT=20, CSRF='t', COUNTER_OVERDUE={}; let state; function render(){}\n"
+        $script = "const COUNTER_STAFF='Staff', DISCOUNT_PERCENT=20, CSRF='t', COUNTER_OVERDUE={}, COUNTER_BLOCKED={}; let state; function render(){}\n"
             . $esc . "\n" . $block . "\nstate = { booker: Object.assign({}, booker0) };\n" . $js;
         $file = tempnam(sys_get_temp_dir(), 'cbk') . '.js';
         file_put_contents($file, $script);
@@ -70,5 +70,24 @@ class CounterBookerTest extends TestCase
         JS);
 
         $this->assertSame('{"warned":true,"ready":true,"otherWarned":false}', $out);
+    }
+
+    /* Blocked at this office (DB-DECISIONS 28): the search result and the picked account say
+       so, and the step cannot go on. Another customer is not affected. */
+    public function test_an_account_blocked_at_this_office_is_flagged_and_cannot_be_booked(): void
+    {
+        $out = $this->runCounterScript(<<<'JS'
+            COUNTER_BLOCKED[7] = true;
+            state.booker = Object.assign({}, booker0, { mode: 'account', customerId: 7, name: 'Eve', phone: '0917***1234', verified: true, idChecked: true,
+              results: [{ id: 7, name: 'Eve', email: 'e@x.com', phone: '0917***1234' }, { id: 8, name: 'Bo', email: 'b@x.com', phone: '0917***9999' }] });
+            const html = whoScreen();
+            const ready = counterBookerReady();
+            state.booker.customerId = 8;
+            console.log(JSON.stringify({
+              listed: (html.match(/Blocked at this office/g) || []).length, ready: ready, otherReady: counterBookerReady(),
+            }));
+        JS);
+
+        $this->assertSame('{"listed":2,"ready":false,"otherReady":true}', $out);
     }
 }

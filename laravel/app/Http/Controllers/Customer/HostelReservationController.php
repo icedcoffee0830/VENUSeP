@@ -49,6 +49,9 @@ class HostelReservationController extends Controller
             /* an unpaid booking at this room's office: the customer's notice; at the counter, every customer's */
             'overdueNotice'     => BookingRules::overdueNoticeForPage($room),
             'counterOverdue'    => BookingRules::overdueForCounter($room),
+            /* the same two for a block at this room's office (DB-DECISIONS 28) */
+            'blockNotices'      => BookingRules::blockNoticesForPage($room),
+            'counterBlocked'    => BookingRules::blockedForCounter($room),
             'pricingJs'         => $pricingJs,
             'checkerJs'         => $checkerJs,
             'counterBookerJs'   => $counterBookerJs,

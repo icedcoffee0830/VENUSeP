@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\DB;
    venue_booking_slots: one row per day a venue booking holds its room.
    bed_reservations, bed_reservation_nights: the bed each hostel guest has, and each night of it.
    booking_timeline: the booking's History, one row per event.
-   Read only: rooms, venues, customers, hostel_occupants, and gcash_receipts (counted).
+   Read only: rooms, venues, customers, hostel_occupants, gcash_receipts (counted), and
+     customer_office_blocks (is the customer blocked at the booking's office).
    notifications are written by the legacy notify_* helpers (legacy/includes/notifications.php).
 
    Triggers that fire here:
@@ -38,7 +39,9 @@ class BookingQueries
                    b.approved_at, b.write_off_reason, b.deadline_extensions, b.date_moves,
                    b.room_id, r.venue_id,
                    c.user_id AS customer_user_id,
-                   COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount
+                   COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount,
+                   EXISTS (SELECT 1 FROM customer_office_blocks k
+                            WHERE k.customer_id = b.customer_id AND k.venue_id = r.venue_id AND k.lifted_at IS NULL) AS office_blocked
             FROM bookings b
             JOIN rooms r ON r.id = b.room_id
             JOIN venues v ON v.id = r.venue_id

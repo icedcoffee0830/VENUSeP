@@ -135,7 +135,10 @@ function bookings_query(array $opts = []) {
                (SELECT COALESCE(JSON_LENGTH(gr.flags_json), 0) FROM gcash_receipts gr
                  WHERE gr.booking_id = b.id ORDER BY gr.id DESC LIMIT 1) AS receipt_flags,
                /* The 5-attempt rule: every upload counts, rejected ones too. */
-               (SELECT COUNT(*) FROM gcash_receipts gr WHERE gr.booking_id = b.id) AS receipt_attempts
+               (SELECT COUNT(*) FROM gcash_receipts gr WHERE gr.booking_id = b.id) AS receipt_attempts,
+               /* the customer is blocked at this booking's office (DB-DECISIONS 28) */
+               EXISTS (SELECT 1 FROM customer_office_blocks k
+                        WHERE k.customer_id = b.customer_id AND k.venue_id = v.id AND k.lifted_at IS NULL) AS office_blocked
           FROM bookings b
           JOIN customers c                      ON c.id = b.customer_id
           LEFT JOIN users u                     ON u.id = c.user_id
@@ -271,6 +274,7 @@ function booking_shape(array $row) {
 
         'pos'           => (string) $row['pos_number'],
         'officialReceipt' => (string) $row['official_receipt_no'],
+        'officeBlocked' => (bool) $row['office_blocked'],         // staff lists show "Blocked"; never the reason
         'checkedIn'     => (bool) $row['checked_in'],
 
         'customerNotes' => (string) $row['customer_notes'],
@@ -528,6 +532,7 @@ function booking_queue_rows() {
             'room'     => $b['roomName'],
             'venue'    => $b['venueName'],
             'office'   => $mixed ? $b['venueName'] : '',
+            'blocked'  => $b['officeBlocked'],
             'dates'    => booking_date_label($b),
             'res'      => $b['reservationCode'],
             'pay'      => booking_queue_pay_key($b),

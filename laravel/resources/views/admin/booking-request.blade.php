@@ -1110,6 +1110,7 @@
               <div style="display:flex;flex-wrap:wrap;gap:0.45rem;justify-content:flex-end;margin-bottom:0.6rem">
                 <span class="br-badge ${resBadge(cur.res).c}">${esc(resBadge(cur.res).t)}</span>
                 <span class="br-badge ${payBadge(cur.pay).c}">${esc(payText())}</span>
+                ${cur.blocked ? '<span class="br-badge b-red">Blocked at this office</span>' : ''}
               </div>
               <div class="br-actions">${hdrActions()}${fileRefundButton()}${settleButtons()}</div>
               ${fileRefundPanel()}${settlePanel()}

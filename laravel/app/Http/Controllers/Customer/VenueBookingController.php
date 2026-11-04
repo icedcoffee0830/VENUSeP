@@ -75,6 +75,7 @@ class VenueBookingController extends Controller
             'lpOffices'     => array_values(array_filter(office_all(), fn ($o) => staff_sees_venue($o['id']))),
             'lpCounter'     => $lpCounter,
             'overdueNotice' => BookingRules::overdueNoticeForPage(),   /* an Overdue booking blocks new ones at its office (2026-11-01) */
+            'blockNotices'  => BookingRules::blockNoticesForPage(),   /* blocked at an office (DB-DECISIONS 28) */
             'lpQ'           => $lpCounter ? '?counter=1' : '',
         ]);
     }

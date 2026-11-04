@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 
 /* ACTIVITY (Aron, 2026-11-01): what staff and admins did, for the admins to review.
-   Newest first: booking actions, office settings, and who opened an ID. */
+   Newest first: booking actions, office settings, who opened an ID, and customer blocks
+   at an office (set and lifted, with the reasons). */
 class ActivityController extends Controller
 {
     public function __invoke()
@@ -23,6 +24,17 @@ class ActivityController extends Controller
              UNION ALL
              (SELECT l.opened_at, COALESCE(u.username, u.email), u.account_type, CONCAT('Booking #', d.booking_id), 'Opened the customer ID'
                 FROM document_access_log l JOIN booking_documents d ON d.id = l.document_id LEFT JOIN users u ON u.id = l.user_id)
+             UNION ALL
+             (SELECT k.blocked_at, COALESCE(u.username, u.email), u.account_type, CONCAT('Customer: ', c.full_name),
+                     CONCAT('Blocked at ', v.name, ': ', k.reason)
+                FROM customer_office_blocks k JOIN customers c ON c.id = k.customer_id JOIN venues v ON v.id = k.venue_id
+                LEFT JOIN users u ON u.id = k.blocked_by_user_id)
+             UNION ALL
+             (SELECT k.lifted_at, COALESCE(u.username, u.email), u.account_type, CONCAT('Customer: ', c.full_name),
+                     CONCAT('Block lifted at ', v.name, ': ', COALESCE(k.lift_reason, ''))
+                FROM customer_office_blocks k JOIN customers c ON c.id = k.customer_id JOIN venues v ON v.id = k.venue_id
+                LEFT JOIN users u ON u.id = k.lifted_by_user_id
+               WHERE k.lifted_at IS NOT NULL)
              ORDER BY at DESC LIMIT 300"
         )->fetchAll();
 

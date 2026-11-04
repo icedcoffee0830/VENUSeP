@@ -135,6 +135,8 @@ function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note
         'payment_due'       => ['Your payment is due', 'Your event is over, so your payment is now due.'],
         'payment_overdue'   => ['Your payment is overdue', 'Your payment is overdue. You cannot make new online bookings with this office until it is paid.'],
         'booking_cancelled' => ['Your booking was cancelled', 'Your booking was cancelled by the office.'],
+        /* a block at the office (DB-DECISIONS 28): the contact line is in the footer; never the reason */
+        'booking_block_cancelled' => ['Your booking request was cancelled', 'Your booking request was cancelled because you can’t make new bookings at this office right now. Please contact the office; its details are at the end of this email.'],
     ];
     if (!isset($words[$kind])) {
         return null;
@@ -199,6 +201,24 @@ function mail_status_sweep(PDO $pdo): void
     )->fetchAll();
     foreach ($rows as $r) {
         $outbox = queue_status_email($pdo, (int) $r['id'], $r['payment_status'] === 'overdue' ? 'payment_overdue' : 'payment_due', '', null);
+        if ($outbox) {
+            mail_send($pdo, $outbox);
+        }
+    }
+
+    /* A pending request the procedure cancelled because the customer was still blocked at
+       its office (its History note starts "Cancelled automatically:"). */
+    $cancelled = $pdo->query(
+        "SELECT DISTINCT b.id FROM bookings b
+           JOIN booking_timeline t ON t.booking_id = b.id AND t.action_code = 'status_changed'
+                AND t.new_reservation_status = 'cancelled' AND t.note LIKE 'Cancelled automatically:%'
+                AND t.occurred_at >= NOW() - INTERVAL 3 DAY
+          WHERE b.reservation_status = 'cancelled'
+            AND NOT EXISTS (SELECT 1 FROM email_outbox e WHERE e.booking_id = b.id AND e.kind = 'booking_block_cancelled')
+          LIMIT 3"
+    )->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($cancelled as $id) {
+        $outbox = queue_status_email($pdo, (int) $id, 'booking_block_cancelled', '', null);
         if ($outbox) {
             mail_send($pdo, $outbox);
         }

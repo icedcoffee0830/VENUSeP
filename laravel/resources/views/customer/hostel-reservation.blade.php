@@ -218,6 +218,8 @@ const COUNTER_STAFF = {!! json_encode(counter_staff_name(), JSON_UNESCAPED_UNICO
 /* Counter: customer id -> their oldest Overdue booking. Online they cannot book until it
    is paid; here staff see the warning (counter-booker.php) and may still book. */
 const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+/* Counter: customer id -> true when blocked at this room's office (DB-DECISIONS 28): no booking here. */
+const COUNTER_BLOCKED = {!! json_encode((object) $counterBlocked) !!};
 const NOW = new Date();
 const TODAY = isoOf(NOW);
 /* THE ADVANCE LIMIT (system_settings.hostel_advance_booking_max_days, 2026-10-30): a

@@ -126,6 +126,7 @@ class BookingRequestController extends Controller
             'name'      => $b['customerName'],
             'type'      => $b['isWalkIn'] ? 'Walk-in' : ($b['isUsep'] ? 'USeP affiliated' : 'Non-USeP'),
             'walkIn'    => $b['isWalkIn'],
+            'blocked'   => $b['officeBlocked'],   /* blocked at this office: approving is refused */
             'refundable' => $b['refundable'],
             /* account email; for a walk-in, the address they gave at the counter (#22) */
             'email'     => $b['customerEmail'] !== '' ? $b['customerEmail'] : (($b['contactEmail'] ?? '') !== '' ? $b['contactEmail'] : '—'),

@@ -290,7 +290,7 @@
         if (page < 1) { page = 1; }
         document.getElementById('brRows').innerHTML = all.slice((page - 1) * pageSize, page * pageSize).map(r => `
           <a class="br-row" href="{{ route('admin.booking-request') }}?id=${r.id}">
-            <span><div class="r-id">${r.id}</div><div class="r-name">${esc(r.name)}</div><div class="r-sub">${esc(r.type)}${r.office ? ' · ' + esc(r.office) : ''}</div></span>
+            <span><div class="r-id">${r.id}</div><div class="r-name">${esc(r.name)}${r.blocked ? ' <span class="br-badge b-red">Blocked</span>' : ''}</div><div class="r-sub">${esc(r.type)}${r.office ? ' · ' + esc(r.office) : ''}</div></span>
             <span class="hide-md"><div class="r-main">${esc(r.room)}</div><div class="r-sub">${esc(r.venue)}</div></span>
             <span class="hide-md r-main">${esc(r.dates)}</span>
             <span class="hide-md"><span class="br-badge ${RES[r.res].c}">${RES[r.res].t}</span></span>

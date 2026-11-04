@@ -91,7 +91,7 @@ async function verifyBooker(){
 function counterBookerReady(){
   const b = state.booker;
   if(!b.idChecked) return false;                       // staff must confirm they saw an ID
-  if(b.mode==='account') return b.customerId>0 && b.verified;
+  if(b.mode==='account') return b.customerId>0 && b.verified && !COUNTER_BLOCKED[b.customerId];   // blocked here: no booking
   return b.name.trim()!=='' && cleanPhone(b.phone)!==null && (b.noEmail || walkinEmailOk(b.email));
 }
 /* REQUIRED (decided 2026-10-04): it is where a walk-in's confirmation and
@@ -155,6 +155,7 @@ function whoScreen(){
               style="display:block;width:100%;text-align:left;border:none;border-bottom:1px solid #f0efec;background:#fff;padding:10px 12px;cursor:pointer;font-family:inherit">
         <div style="font-size:13.5px;font-weight:640;color:#1c1b19">${esc(r.name)}</div>
         <div style="font-size:12.5px;color:#8a857d">${esc(r.email)} &middot; ${esc(r.phone)}</div>
+        ${COUNTER_BLOCKED[r.id] ? `<div style="font-size:12px;font-weight:650;color:#b23a3a;margin-top:2px">Blocked at this office</div>` : ''}
       </button>`).join('');
 
     accountBlock = card(`
@@ -170,6 +171,10 @@ function whoScreen(){
         <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:14px">
           <div style="font-size:13.5px;font-weight:680;color:#1c1b19">${esc(b.name)}</div>
           <div style="font-size:12.5px;color:#8a857d;margin-bottom:10px">${esc(b.phone)}</div>
+          ${COUNTER_BLOCKED[b.customerId] ? `
+            <div role="alert" style="background:#fcecec;border:1px solid #f0c9c9;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5;color:#8a1f1f">
+              <strong>Blocked at this office.</strong> This customer can&rsquo;t make new bookings here, online or at the counter, until an admin lifts the block.
+            </div>` : ''}
           ${COUNTER_OVERDUE[b.customerId] ? `
             <div role="status" style="background:#fdf6e7;border:1px solid #efd9ab;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5;color:#5c3d0c">
               <strong>Unpaid booking:</strong> ${esc(COUNTER_OVERDUE[b.customerId])}. This customer can&rsquo;t book online at this office until it is paid &mdash; you may still book for them here.

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Customer\BookingRules;
+use App\Queries\BlockQueries;
 use Illuminate\Http\Request;
 use PDO;
 use PDOException;
@@ -164,6 +165,10 @@ class BookingCreateController extends Controller
         /* Staff take counter bookings for THEIR venue only (2026-10-27); admins for any. */
         if (!staff_may_handle_venue($room['venue_id'])) {
             $this->reply(403, ['ok' => false, 'message' => 'This room belongs to another venue. Only that venue\'s staff or an administrator can book it at the counter.']);
+        }
+        /* Blocked at this office (DB-DECISIONS 28); trg_bookings_block_ins refuses it too. */
+        if ($c['bookerMode'] === 'account' && BlockQueries::findActive($c['customerId'], (int) $room['venue_id']) !== null) {
+            $this->reply(409, ['ok' => false, 'error' => 'blocked', 'message' => 'Blocked at this office. This customer cannot make new bookings here until an admin lifts the block.']);
         }
         $c['room'] = $room;
 

@@ -244,6 +244,8 @@ class RolesTest extends TestCase
             $this->assertNotNull($now[$old->id]->handed_over_at);
             $mails = DB::table('email_outbox')->where('id', '>', $outboxBefore)->where('kind', 'super_admin_handover')->pluck('to_email')->sort()->values()->all();
             $this->assertSame(collect([$old->email, $na->email])->sort()->values()->all(), $mails);
+            /* a system-level event: the new super admin's bell, nobody else's */
+            $this->assertSame([$na->id], DB::table('notifications')->where('kind', 'super_admin_handover')->pluck('user_id')->map(fn ($id) => (int) $id)->all());
 
             /* the old account is out: its next click finds no session, and nobody can bring it back */
             $this->get(route('admin.dashboard'))->assertRedirect();

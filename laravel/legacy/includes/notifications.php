@@ -6,7 +6,7 @@
    unread until that person clicks it. Rows are WRITTEN by:
      - trg_booking_timeline_notify   every booking status change
      - notify_new_request()          a new online request (booking-submit)
-     - notify_admins()               staff/admin account events
+     - notify_account_event()        staff/admin account events
    and READ by the bell (includes/notification-bell.php) through
    notifications.php. The words are made HERE, from kind + booking, when the
    bell is shown — nothing stored is phrasing, so it can change freely.
@@ -59,13 +59,22 @@ function notify_booking_parties(PDO $pdo, int $bookingId, string $kind, int $act
                 ':a2' => $actorUserId, ':b2' => $bookingId]);
 }
 
-/* A staff/admin account event, for every admin but the one who did it.
-   $detail: email, role, venue — whatever the wording needs. */
-function notify_admins(PDO $pdo, string $kind, int $actorUserId, array $detail): void
+/* A staff/admin account event (DB-DECISIONS 28), never for the one who did it.
+   $venueIds: the staff member's offices (a move: old and new) — that group's normal
+   admins are told; null = a system-level event (an admin account, the handover) —
+   the super admin is told. $detail: email, role, venue — whatever the wording needs.
+   (Replaces sp_notify_admins, which told every admin; the procedure stays, unused.) */
+function notify_account_event(PDO $pdo, string $kind, int $actorUserId, array $detail, ?array $venueIds): void
 {
-    $s = $pdo->prepare('CALL sp_notify_admins(:k, :a, :d)');
-    $s->execute([':k' => $kind, ':a' => $actorUserId, ':d' => json_encode($detail, JSON_UNESCAPED_UNICODE)]);
-    $s->closeCursor();
+    $who = $venueIds === null
+        ? 'u.is_super_admin = 1'
+        : sprintf('u.is_super_admin = 0 AND u.office_group IN (SELECT v.office_group FROM venues v WHERE v.id IN (%s))',
+                  implode(',', array_map('intval', $venueIds) ?: [0]));
+    $pdo->prepare(
+        "INSERT INTO notifications (user_id, kind, actor_user_id, detail)
+         SELECT u.id, :k, :a, :d FROM users u
+          WHERE u.account_type = 'admin' AND u.is_active = 1 AND u.id <> :a2 AND $who"
+    )->execute([':k' => $kind, ':a' => $actorUserId, ':d' => json_encode($detail, JSON_UNESCAPED_UNICODE), ':a2' => $actorUserId]);
 }
 
 function notif_unread_count(PDO $pdo, int $userId): int
@@ -210,6 +219,8 @@ function notif_words(array $r, string $accountType): array
         case 'staff_moved':
             return [($r['actor_name'] ?: 'An administrator') . ' moved ' . ($d['email'] ?? 'a staff member') . ' to ' . ($d['venue'] ?? 'another venue') . '.',
                     'admin/venusep_staffManagement.php'];
+        case 'super_admin_handover':
+            return [($r['actor_name'] ?: 'The previous super admin') . ' handed the super admin over to you.', 'admin/venusep_staffManagement.php'];
     }
     return ['Something changed' . ($ref !== '' ? ' on ' . $ref : '') . '.', $accountType === 'customer' ? $viewLink : $staffLink];
 }

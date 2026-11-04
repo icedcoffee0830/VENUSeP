@@ -195,7 +195,8 @@ class RegisterSubmitController
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
         }
 
-        /* A new staff or admin account is announced to the other admins (2026-10-28). */
+        /* A new staff account is announced to its office group's admins, a new admin account
+           to the super admin (2026-10-28; DB-DECISIONS 28). */
         if ($kind !== 'customer') {
             legacy('notifications');
             try {
@@ -205,8 +206,8 @@ class RegisterSubmitController
                     $vn->execute([':v' => $venueId]);
                     $venueName = (string) $vn->fetchColumn();
                 }
-                notify_admins($pdo, 'account_created', (int) session('user_id'),
-                    ['email' => $email, 'role' => $kind, 'venue' => $venueName]);
+                notify_account_event($pdo, 'account_created', (int) session('user_id'),
+                    ['email' => $email, 'role' => $kind, 'venue' => $venueName], $kind === 'staff' ? [(int) $venueId] : null);
             } catch (PDOException $e) {
                 sql_failed($e, optional: true);
             }

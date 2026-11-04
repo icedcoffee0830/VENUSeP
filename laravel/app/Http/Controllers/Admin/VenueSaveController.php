@@ -122,7 +122,7 @@ class VenueSaveController extends Controller
                 $movedEmails = [];
                 $moved = $this->moveStaff($pdo, $newId, $moveIds, $movedEmails);
                 $pdo->commit();
-                $this->notifyMoves($pdo, $movedEmails, $name);
+                $this->notifyMoves($pdo, $movedEmails, $name, $newId);
 
                 $this->reply(200, ['ok' => true, 'created' => true, 'venue_id' => $newId,
                     'code' => $code, 'name' => $name, 'description' => $description, 'moved' => $moved,
@@ -142,7 +142,7 @@ class VenueSaveController extends Controller
             $movedEmails = [];
             $moved = $this->moveStaff($pdo, $venueId, $moveIds, $movedEmails);
             $pdo->commit();
-            $this->notifyMoves($pdo, $movedEmails, $name);
+            $this->notifyMoves($pdo, $movedEmails, $name, (int) $venueId);
 
             $this->reply(200, ['ok' => true, 'created' => false, 'name' => $name, 'description' => $description, 'moved' => $moved]);
         } catch (HttpResponseException $e) {
@@ -187,23 +187,23 @@ class VenueSaveController extends Controller
         /* who actually changed venue — for the admins' notifications */
         foreach ($rows as $r) {
             if ((int) $r['venue_id'] !== (int) $venueId) {
-                $movedEmails[] = $r['email'];
+                $movedEmails[$r['email']] = (int) $r['venue_id'];   // email => the office they left
             }
         }
         return array_column($rows, 'full_name');
     }
 
-    /* Tell the other admins who was moved (2026-10-28). A failure costs a
-       notification, never the save. */
-    private function notifyMoves(PDO $pdo, array $emails, $venueName)
+    /* Tell the admins of the offices each one left and joined who was moved (2026-10-28;
+       DB-DECISIONS 28). A failure costs a notification, never the save. */
+    private function notifyMoves(PDO $pdo, array $emails, $venueName, int $venueId)
     {
         if (!$emails) {
             return;
         }
         legacy('notifications');
         try {
-            foreach ($emails as $email) {
-                notify_admins($pdo, 'staff_moved', (int) session('user_id'), ['email' => $email, 'venue' => $venueName]);
+            foreach ($emails as $email => $from) {
+                notify_account_event($pdo, 'staff_moved', (int) session('user_id'), ['email' => $email, 'venue' => $venueName], [$from, $venueId]);
             }
         } catch (PDOException $e) {
             sql_failed($e, optional: true);

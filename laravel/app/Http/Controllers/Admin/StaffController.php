@@ -123,15 +123,22 @@ class StaffController
         throw new HttpResponseException($this->reply($status, $data));
     }
 
-    /* Tell the other admins (2026-10-28). A failure costs a notification, never
-       the change itself. */
-    private function notify(PDO $pdo, $kind, $actor, array $detail): void
+    /* Tell the admins who look after that account (2026-10-28; DB-DECISIONS 28):
+       $venueIds = the staff member's offices, null = an admin account (the super admin).
+       A failure costs a notification, never the change itself. */
+    private function notify(PDO $pdo, $kind, $actor, array $detail, ?array $venueIds): void
     {
         try {
-            notify_admins($pdo, $kind, (int) $actor, $detail);
+            notify_account_event($pdo, $kind, (int) $actor, $detail, $venueIds);
         } catch (PDOException $e) {
             sql_failed($e, optional: true);
         }
+    }
+
+    /* Whose admins hear of an event on this account: a staff member's office, or null for an admin. */
+    private function offices(array $user): ?array
+    {
+        return $user['account_type'] === 'staff' ? [(int) $user['venue_id']] : null;
     }
 
     /* $required: a STAFF account must have a venue (decided 2026-10-27). Only
@@ -169,7 +176,7 @@ class StaffController
        Laravel's `_token`, or the X-CSRF-TOKEN header). */
     public function save(Request $request)
     {
-        legacy('auth', 'bookings', 'notifications');   /* cb_normalise_mobile(), notify_admins() */
+        legacy('auth', 'bookings', 'notifications');   /* cb_normalise_mobile(), notify_account_event() */
 
         if (!$request->isMethod('post')) {
             return $this->reply(405, ['ok' => false, 'message' => 'Use POST.'])->header('Allow', 'POST');
@@ -249,7 +256,7 @@ class StaffController
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the venue was not changed.']);
             }
             if ((int) $user['old_venue_id'] !== (int) $venue['id']) {
-                $this->notify($pdo, 'staff_moved', $actor, ['email' => $user['email'], 'venue' => $venue['name']]);
+                $this->notify($pdo, 'staff_moved', $actor, ['email' => $user['email'], 'venue' => $venue['name']], [(int) $user['old_venue_id'], $venue['id']]);
             }
             return $this->reply(200, ['ok' => true, 'venue_id' => $venue['id'], 'venue' => $venue['name'],
                 'message' => 'Venue assignment updated.']);
@@ -326,13 +333,13 @@ class StaffController
             }
             if ($venueGiven && $user['account_type'] === 'staff' && $venue['id'] !== null
                 && (int) $user['old_venue_id'] !== (int) $venue['id']) {
-                $this->notify($pdo, 'staff_moved', $actor, ['email' => $email, 'venue' => $venue['name']]);
+                $this->notify($pdo, 'staff_moved', $actor, ['email' => $email, 'venue' => $venue['name']], [(int) $user['old_venue_id'], $venue['id']]);
             }
             return $this->reply(200, ['ok' => true, 'message' => 'Account updated.']);
         }
 
-        /* RESET PASSWORD — reset links are customer-only, so this is how a staff member
-           who forgot theirs gets back in (Aron 2026-10-31). The admin chooses a temporary
+        /* RESET PASSWORD — one way back in for a staff member who forgot theirs
+           (Aron 2026-10-31); Forgot password on the sign-in page is the other (DB-DECISIONS 28). The admin chooses a temporary
            password; password_changed_at goes back to NULL, so the staff member must replace
            it (EnforceTwoFactor). Who may reset whom: staff_may_manage_account() above; the
            super admin's own password is never reset here, it uses Forgot password. */
@@ -357,7 +364,7 @@ class StaffController
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the password was not changed.']);
             }
             \App\Http\Controllers\Auth\SignInThrottle::passed((string) $user['email']);   // a forgotten password often means a sign-in lock too
-            $this->notify($pdo, 'account_password_reset', $actor, ['email' => $user['email']]);
+            $this->notify($pdo, 'account_password_reset', $actor, ['email' => $user['email']], $this->offices($user));
             return $this->reply(200, ['ok' => true,
                 'message' => 'Password reset. Give them the temporary password; they must replace it when they sign in.']);
         }
@@ -394,7 +401,7 @@ class StaffController
             }
             if ((int) $user['is_active'] !== $active) {
                 $this->notify($pdo, $active ? 'account_reactivated' : 'account_suspended', $actor,
-                    ['email' => $user['email'], 'role' => $user['account_type']]);
+                    ['email' => $user['email'], 'role' => $user['account_type']], $this->offices($user));
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,
                 'message' => $active ? 'Account reactivated.' : 'Account suspended. They can no longer sign in.']);
@@ -458,6 +465,7 @@ class StaffController
         foreach ($outbox as $id) {
             mail_send($pdo, $id);   // never throws
         }
+        $this->notify($pdo, 'super_admin_handover', $actor, ['email' => $user['email']], null);   // the new super admin's bell
         return $this->reply(200, ['ok' => true, 'signed_out' => true,
             'message' => $user['email'] . ' is now the super admin. Your account is suspended, so you are signed out.']);
     }

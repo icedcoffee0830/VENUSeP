@@ -131,4 +131,27 @@ class StaffActionCoverageTest extends TestCase
         $this->assertSame('date_moved', $this->lastHistory($id)->action_code);
         $this->assertFalse(DB::connection()->getPdo()->inTransaction());
     }
+
+    /* A procedure's refusal (SIGNAL 45000) reads as it did before the SQL moved to DB::,
+       never with the query appended. */
+    public function test_a_database_refusal_is_shown_in_pdo_words_without_the_sql(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked');
+        DB::unprepared("
+            CREATE TRIGGER zz_test_refuse_approval BEFORE UPDATE ON bookings FOR EACH ROW
+            BEGIN
+                IF NEW.id = $id THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused by the test';
+                END IF;
+            END
+        ");
+        try {
+            $this->actingAsStaff();
+            $this->act(['booking' => $ref, 'action' => 'approve'])
+                ->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'SQLSTATE[45000]: <<Unknown error>>: 1644 refused by the test']);
+        } finally {
+            DB::statement('DROP TRIGGER IF EXISTS zz_test_refuse_approval');
+        }
+        $this->assertSame('pending', $this->booking($id)->reservation_status);
+    }
 }

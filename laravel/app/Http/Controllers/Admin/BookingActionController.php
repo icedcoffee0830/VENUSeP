@@ -8,6 +8,7 @@ use App\Queries\BookingQueries;
 use App\Queries\PaymentQueries;
 use App\Queries\RefundQueries;
 use App\Support\Status;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -105,9 +106,10 @@ class BookingActionController extends Controller
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            /* 45000 is a procedure refusing on a real rule — shown verbatim. */
+            /* 45000 is a procedure refusing on a real rule — shown verbatim, in PDO's own
+               words: a query through DB:: wraps them, and its message adds the SQL. */
             if ($e instanceof PDOException && $e->getCode() === '45000') {
-                $this->reply(409, ['ok' => false, 'message' => $e->errorInfo[2] ?? $e->getMessage()]);
+                $this->reply(409, ['ok' => false, 'message' => ($e instanceof QueryException ? $e->getPrevious() : $e)->getMessage()]);
             }
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);

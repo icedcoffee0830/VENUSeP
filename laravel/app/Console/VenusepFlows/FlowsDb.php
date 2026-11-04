@@ -135,6 +135,9 @@ final class FlowsDb
         /* the demo password counts as each account's own (staff who never set one are held on their profile) */
         $conn->update('UPDATE users SET password_hash = ?, password_changed_at = COALESCE(password_changed_at, NOW()) WHERE password_hash IS NOT NULL',
             [password_hash(self::PASSWORD, PASSWORD_ARGON2ID)]);
+        /* every admin signs in with a code: one with no key yet (the normal admins of migration 17)
+           gets the tests' key, so a flow can sign it in */
+        $conn->update("UPDATE users SET totp_secret = 'JBSWY3DPEHPK3PXP', totp_enabled_at = NOW() WHERE account_type = 'admin' AND totp_secret IS NULL");
     }
 
     /* The current authenticator code for $email (from its stored TOTP secret). */

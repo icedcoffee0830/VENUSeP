@@ -96,8 +96,9 @@ function google_config(): array
 {
     static $cfg = null;
     if ($cfg === null) {
-        /* Tests never read this machine's real settings file: they expect "not set up". */
-        $cfg = google_config_from(app()->environment('testing') ? '' : __DIR__ . '/google-config.php');
+        /* Tests never read this machine's real settings file: they expect "not set up",
+           unless a test points venusep.google_config_test at a fake one of its own. */
+        $cfg = google_config_from(app()->environment('testing') ? (string) config('venusep.google_config_test', '') : __DIR__ . '/google-config.php');
     }
     return $cfg;
 }

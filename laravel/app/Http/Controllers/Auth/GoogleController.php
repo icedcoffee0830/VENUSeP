@@ -31,7 +31,20 @@ class GoogleController
                 session(['login_notice' => 'Sign-in with Google is not set up on this server yet. Log in with your email and password.']);
                 return $this->noStore(redirect()->route('customer.customer-login'));
             }
-            return $this->noStore(redirect()->away(google_begin('signin', 0, !empty($request->query('remember')))));
+            /* One address (DB-DECISIONS 23, 28): sign-in started on another host or scheme
+               first moves to the configured one, so the session cookie and Google's
+               callback share one host. */
+            $remember = !empty($request->query('remember'));
+            $home = parse_url((string) google_config()['redirect_uri']);
+            if (isset($home['scheme'], $home['host'])) {
+                $port = $home['port'] ?? null;
+                $origin = strtolower($home['scheme'] . '://' . $home['host'])
+                        . ($port && $port !== ($home['scheme'] === 'https' ? 443 : 80) ? ':' . $port : '');   // as getSchemeAndHttpHost() writes it
+                if ($origin !== strtolower($request->getSchemeAndHttpHost())) {
+                    return $this->noStore(redirect()->away($origin . $request->getBaseUrl() . $request->getPathInfo() . ($remember ? '?remember=1' : '')));
+                }
+            }
+            return $this->noStore(redirect()->away(google_begin('signin', 0, $remember)));
         }
 
         /* link / reauth: from the profile page, for the customer who is signed in. */

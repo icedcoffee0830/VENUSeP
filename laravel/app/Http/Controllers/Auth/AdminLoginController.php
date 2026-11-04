@@ -38,6 +38,9 @@ class AdminLoginController
             $loginError = 'Admin accounts now need two-step verification. Sign in to set it up. It takes about a minute.';
         }
 
+        /* after Forgot password: "Your password was changed..." once (PasswordResetController) */
+        $loginNotice = (string) session()->pull('staff_login_notice', '');
+
         $pdo = venusep_db();
         if ($pdo === null) {
             // Do not expose database credentials/errors to users.
@@ -138,7 +141,7 @@ class AdminLoginController
 
         $response = response()->view('auth.admin-login', compact(
             'loginError', 'tfaView', 'tfaCsrf', 'tfaLock', 'tfaSecret', 'tfaError', 'pending',
-            'departments', 'selectedDepartment', 'asAdmin'
+            'departments', 'selectedDepartment', 'asAdmin', 'loginNotice'
         ));
         if ($tfaView !== 'password') {
             $response->header('Cache-Control', 'no-store');   // the secret and the recovery codes must never be cached

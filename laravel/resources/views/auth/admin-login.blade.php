@@ -221,11 +221,11 @@
 
             <div class="auth-options">
               <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="rememberAdmin" name="remember_me" /><span class="form-check-label">Remember Me</span></label>
-              <a href="#" class="auth-link">Forgot Password?</a>
+              <a href="{{ route('admin.forgot-password') }}" class="auth-link">Forgot Password?</a>
             </div>
 
             <button type="submit" class="btn-auth"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>Login</button>
-            <small class="success-message{{ $loginError !== '' ? ' is-error' : '' }}" id="loginSuccessMessage" aria-live="polite">{{ $loginError }}</small>
+            <small class="success-message{{ $loginError !== '' ? ' is-error' : '' }}" id="loginSuccessMessage" aria-live="polite">{{ $loginError !== '' ? $loginError : $loginNotice }}</small>
           </form>
           <!-- No self-registration here (2026-10-28): staff and admin accounts are
                created by a signed-in administrator — Staff Management, Add account

@@ -11,24 +11,24 @@
           </div>
           @if ($fpSent)
           <p class="auth-notice" role="status">{{ PR_REQUEST_REPLY }}</p>
-          <a class="btn-auth" href="{{ route('customer.customer-login') }}">Back to login</a>
+          <a class="btn-auth" href="{{ route($pr['login']) }}">Back to login</a>
           <div class="auth-alt">
             <span class="auth-alt-text">Didn&rsquo;t get it after a few minutes?</span>
-            <a class="btn-auth btn-auth-outline" href="{{ route('customer.forgot-password') }}">Send another link</a>
+            <a class="btn-auth btn-auth-outline" href="{{ route($pr['forgot']) }}">Send another link</a>
           </div>
           @else
-          <form id="forgotForm" action="{{ route('customer.forgot-password') }}" method="post">
+          <form id="forgotForm" action="{{ route($pr['forgot']) }}" method="post">
             @csrf
             <div class="form-group">
               <label for="fpEmail" class="form-label">Email Address</label>
-              <div class="input-group{{ $fpError !== '' ? ' is-invalid' : '' }}"><span class="input-group-text"><i class="bi bi-envelope" aria-hidden="true"></i></span><input id="fpEmail" name="email" type="email" autocomplete="email" placeholder="customer@example.com" maxlength="190" value="{{ $fpEmail }}" aria-describedby="fpEmailMsg" required autofocus /></div>
+              <div class="input-group{{ $fpError !== '' ? ' is-invalid' : '' }}"><span class="input-group-text"><i class="bi bi-envelope" aria-hidden="true"></i></span><input id="fpEmail" name="email" type="email" autocomplete="email" placeholder="{{ $pr['example'] }}" maxlength="190" value="{{ $fpEmail }}" aria-describedby="fpEmailMsg" required autofocus /></div>
               <small class="validation-message" id="fpEmailMsg" aria-live="polite">{{ $fpError }}</small>
             </div>
             <button type="submit" class="btn-auth">Send reset link</button>
           </form>
           <div class="auth-alt">
             <span class="auth-alt-text">Remembered it?</span>
-            <a class="btn-auth btn-auth-outline" href="{{ route('customer.customer-login') }}">Back to login</a>
+            <a class="btn-auth btn-auth-outline" href="{{ route($pr['login']) }}">Back to login</a>
           </div>
           @endif
 @endsection

@@ -1,12 +1,22 @@
 -- ============================================================================
 --  VENUSeP — MIGRATION 17: roles and offices (decided 2026-11-04, DB-DECISIONS 28).
---  Run against an EXISTING venusep database, after 16. Safe to re-run
+--  Run against the EXISTING database your site uses, after 16. Safe to re-run
 --  (idempotent): an account an admin has changed since is never overwritten.
 --
---      Windows (cmd, not PowerShell):
---          C:\xampp\mysql\bin\mysql.exe -u root venusep < venusep_migration_17.sql
+--  THE DATABASE NAME in these commands must be the one your site uses: DB_DATABASE in
+--  laravel\.env. Aron's site uses venusep_laravel, not venusep; a build from SETUP.md
+--  uses venusep. XAMPP installed somewhere else means another path to mysql.exe.
 --
---  It ends by listing every admin with its role, so check that list.
+--      Windows (cmd, not PowerShell), from the folder that holds this file:
+--          C:\xamp5\mysql\bin\mysqldump.exe -u root --routines --triggers --events --single-transaction venusep_laravel > %USERPROFILE%\venusep_laravel_before_m17.sql
+--          C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_17.sql
+--
+--  It ends by listing every admin with its role, then one line that must read
+--  "OK: exactly one super admin", then any office with no group (there should be
+--  none). If it says NONE (admin@gmail.com missing or suspended), pick the super
+--  admin by hand:
+--      UPDATE users SET is_super_admin = 1, office_group = NULL
+--       WHERE email = '<that admin>' AND account_type = 'admin' AND is_active = 1;
 --
 --  WHAT CHANGES
 --    Offices: each office belongs to a group (venues.office_group):
@@ -50,7 +60,11 @@
 --        up two-step verification at first sign-in, like every admin.
 --      Any other admin keeps no group (sees nothing) until Aron decides.
 --
---  ROLLBACK: restore the backup taken before running this. Or, by hand:
+--  ROLLBACK: restore the backup taken before running this, into an emptied database
+--  (the backup does not drop the tables and function this migration adds):
+--      C:\xamp5\mysql\bin\mysql.exe -u root -e "DROP DATABASE venusep_laravel; CREATE DATABASE venusep_laravel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+--      C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < %USERPROFILE%\venusep_laravel_before_m17.sql
+--  Or, by hand:
 --      ALTER TABLE users DROP CONSTRAINT chk_users_super_admin, DROP CONSTRAINT chk_users_office_group,
 --          DROP INDEX uq_users_one_super_admin, DROP COLUMN super_admin_marker,
 --          DROP COLUMN is_super_admin, DROP COLUMN office_group, DROP COLUMN handed_over_at;
@@ -186,27 +200,27 @@ DELIMITER $$
 
 -- A booking's news: that office's staff (a CEDU staff member ticked for both
 -- offices gets both) and its group's normal admins. Never the super admin.
+-- No string variable: one takes the database's default collation, and on a copy made with
+-- the server default (general_ci) comparing it to a column would stop every booking.
 DROP PROCEDURE IF EXISTS sp_notify_venue_staff$$
 CREATE PROCEDURE sp_notify_venue_staff (
     IN p_booking_id BIGINT UNSIGNED, IN p_kind VARCHAR(40),
     IN p_actor_user_id BIGINT UNSIGNED, IN p_detail TEXT
 )
 BEGIN
-    DECLARE v_venue BIGINT UNSIGNED;
-    DECLARE v_group VARCHAR(20);
-    SELECT r.venue_id, v.office_group INTO v_venue, v_group
-      FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id
-     WHERE b.id = p_booking_id;
     INSERT INTO notifications (user_id, kind, booking_id, actor_user_id, detail)
     SELECT u.id, p_kind, p_booking_id, p_actor_user_id, p_detail
-      FROM users u
+      FROM bookings b
+      JOIN rooms r ON r.id = b.room_id
+      JOIN venues v ON v.id = r.venue_id
+      JOIN users u
       LEFT JOIN staff s ON s.user_id = u.id
       LEFT JOIN venues mine ON mine.id = s.venue_id
-     WHERE u.is_active = 1 AND u.id <> COALESCE(p_actor_user_id, 0)
-       AND ((u.account_type = 'admin' AND u.is_super_admin = 0 AND u.office_group = v_group)
+     WHERE b.id = p_booking_id AND u.is_active = 1 AND u.id <> COALESCE(p_actor_user_id, 0)
+       AND ((u.account_type = 'admin' AND u.is_super_admin = 0 AND u.office_group = v.office_group)
             OR (u.account_type = 'staff'
-                AND (s.venue_id = v_venue
-                     OR (s.both_cedu_offices = 1 AND mine.office_group = 'cedu' AND v_group = 'cedu'))));
+                AND (s.venue_id = v.id
+                     OR (s.both_cedu_offices = 1 AND mine.office_group = 'cedu' AND v.office_group = 'cedu'))));
 END$$
 
 -- Is this customer blocked right now at this room's office? The one copy of the rule:
@@ -303,3 +317,8 @@ SELECT u.email,
   FROM users u
  WHERE u.account_type = 'admin'
  ORDER BY u.is_super_admin DESC, u.office_group, u.email;
+
+SELECT IF(COUNT(*) = 1, 'OK: exactly one super admin', 'NONE: no super admin, see the notes at the top') AS super_admin_check
+  FROM users WHERE is_super_admin = 1;
+
+SELECT name AS office_with_no_group FROM venues WHERE office_group IS NULL;

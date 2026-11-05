@@ -102,7 +102,7 @@
 
               <div class="br-toolbar" id="brTabs">
                 <span id="brTabBtns" style="display:contents"></span>
-                <input id="brSearch" class="br-search" type="text" placeholder="Search name, room, or request no." aria-label="Search bookings" oninput="setQ(this.value)">
+                <input id="brSearch" class="br-search" type="text" placeholder="Search name, room, or request no.…" aria-label="Search bookings" autocomplete="off" oninput="setQ(this.value)">
               </div>
 
               <div class="br-card br-list">

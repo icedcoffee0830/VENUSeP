@@ -7,8 +7,24 @@
 // The check runs on its 30-second clock and at once when a tab comes back into view; these
 // steps use the second way, so a run does not sit waiting.
 
+import { createHmac } from 'node:crypto';
+
 const STAFF = 'staff@gmail.com';
 const ADMIN = 'francishubero@gmail.com';   // Bahay Alumni's admin: the same office as the staff member
+
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+/* the code an authenticator app shows for the key on the screen */
+function totpNow(base32) {
+  let bits = '';
+  for (const c of base32.replace(/\s+/g, '').toUpperCase()) bits += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(c).toString(2).padStart(5, '0');
+  const key = Buffer.from(bits.match(/.{8}/g).map((b) => parseInt(b, 2)));
+  const step = Buffer.alloc(8);
+  step.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const h = createHmac('sha1', key).update(step).digest();
+  const o = h[19] & 15;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, '0');
+}
 
 const refOf = (b) => `VB-${b.y}-${String(b.id).padStart(3, '0')}`;
 const marked = (page) => page.evaluate(() => window.__sameLoad === true);
@@ -154,6 +170,76 @@ export default {
       await page.waitForTimeout(500);
       expect.equal(checks.length, 1, 'checks after five wake-ups at once');
       page.off('request', seen);
+    });
+
+    await step('The customer profile: a new photo reaches the chip, and the two-step panel still works after it', async () => {
+      const page = s.history;
+      await open(ctx, page, '/customer/customer-profile');
+      await page.locator('#avatarInput').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: Buffer.from(PNG_1PX, 'base64') });
+      await expect.visible(page.locator('img.hd-avatar'), 'the header chip did not take the photo');
+      await expect.visible(page.locator('img#profileAvatar'), 'the summary did not take the photo');
+      await expect.visible(page.locator('#avatarRemove'), 'no Remove button after the upload');
+
+      const panel = page.locator('[data-tfa-panel]');
+      await panel.locator('[data-tfa-action="begin"]').click();
+      await panel.locator('[data-tfa-current]').fill(ctx.password);
+      await panel.locator('[data-tfa-prompt-go]').click();
+      await panel.locator('[data-tfa-new-code]').waitFor();
+      const key = await panel.locator('[data-tfa-key]').textContent();
+      await panel.locator('[data-tfa-new-code]').fill(totpNow(key));
+      await panel.locator('[data-tfa-new-code]').press('Enter');
+      await panel.locator('[data-tfa-codes-list] li').first().waitFor();
+      s.recovery = (await panel.locator('[data-tfa-codes-list] li').first().textContent()).trim();
+      await panel.locator('[data-tfa-saved]').check();
+      await panel.locator('[data-tfa-saved-submit]').click();
+      await expect.visible(page.locator('[data-tfa-panel] .tfa-chip-on'), 'the panel does not say On');
+      expect.ok(await marked(page), 'the page reloaded');
+    });
+
+    await step('The redrawn two-step panel turns off in place; the photo goes; the eye button still works', async () => {
+      const page = s.history;
+      const panel = page.locator('[data-tfa-panel]');
+      await panel.locator('[data-tfa-action="disable"]').click();
+      await panel.locator('[data-tfa-current]').fill(s.recovery);
+      await panel.locator('[data-tfa-prompt-go]').click();
+      await expect.visible(page.locator('[data-tfa-panel] .tfa-chip-off'), 'the panel does not say Off');
+      await page.locator('#avatarRemove').click();
+      await page.locator('#avatarRemove').waitFor({ state: 'detached' });
+      await expect.visible(page.locator('span.hd-avatar'), 'the chip kept the removed photo');
+      const eye = page.locator('[data-profile-password-toggle]').first();
+      await eye.click();
+      expect.equal(await eye.getAttribute('aria-pressed'), 'true', 'the password eye button');
+      expect.ok(await marked(page), 'the page reloaded');
+    });
+
+    await step('Admin: the profile name reaches the chip; the venue form stays open after Save', async () => {
+      const page = s.list;
+      await open(ctx, page, '/admin/profile');
+      await page.locator('#profile-first').fill('Renamed');
+      await page.getByRole('button', { name: 'Save changes' }).click();
+      await page.locator('[data-live="hd-user"]', { hasText: 'Renamed' }).waitFor();
+      expect.ok(await marked(page), 'the page reloaded');
+
+      await open(ctx, page, '/admin/venue-form?id=1');
+      await page.locator('#venueDesc').fill('Flow test: saved in place');
+      await page.getByRole('button', { name: 'Save Changes' }).click();
+      await page.locator('.vz-modal .vz-ok').click();
+      expect.equal((await dbOne('SELECT description FROM venues WHERE id = 1')).description, 'Flow test: saved in place', 'venues.description');
+      expect.ok(page.url().includes('/admin/venue-form?id=1') && await marked(page), 'the venue form left or reloaded');
+    });
+
+    await step('A table keeps its page when the rows are replaced', async () => {
+      const page = s.list;
+      await page.goto(ctx.url('/admin/customer-management'));
+      await page.locator('.tabulator-row').first().waitFor();
+      const after = await page.evaluate(async () => {
+        const t = Tabulator.findTable('#customers-table')[0];
+        await t.setPageSize(3);
+        await t.setPage(2);
+        await t.replaceData(t.getData());
+        return t.getPage();
+      });
+      expect.equal(after, 2, 'the table page after replaceData');
     });
   },
 };

@@ -16,8 +16,10 @@
    Live.send(url, fields, then)  Live.post, then the usual ending: a refusal
                                  is shown, a success is said and the parts are
                                  fetched again; `then` redraws from them.
-   Live.refresh(url)             fetches the page's parts and swaps them in.
+   Live.refresh(url, only)       fetches the page's parts and swaps them in.
                                  url: another address for them (default: this page).
+                                 only: these part names, the others stay as they are
+                                 (for a page with forms wired up inside other parts).
    Live.say(text, tone)          a short message at the corner; tone 'bad' = red.
    Live.watch(kind, onChange)    the 30-second check for this page: kind 'queue'
                                  (staff booking lists) or 'mine' (the customer's
@@ -59,46 +61,47 @@
     });
   }
 
+  /* the status region stays on the page: a screen reader announces what appears inside it */
   var box = document.createElement('div'), sayTimer = null;
   box.id = 'liveSay';
   box.setAttribute('role', 'status');
-  box.hidden = true;
-  box.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:3000;max-width:min(420px,calc(100vw - 32px));' +
-    'padding:.7rem 1rem;border-radius:10px;color:#fff;font:600 .85rem/1.4 Inter,system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25)';
+  box.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:3000;max-width:min(420px,calc(100vw - 32px))';
   document.body.appendChild(box);
   function say(text, tone) {
-    box.style.background = tone === 'bad' ? '#b23a3a' : '#1f1e1e';
-    box.textContent = text;
-    box.hidden = false;
+    var note = document.createElement('div');
+    note.style.cssText = 'padding:.7rem 1rem;border-radius:10px;color:#fff;font:600 .85rem/1.4 Inter,system-ui,sans-serif;' +
+      'overflow-wrap:anywhere;box-shadow:0 8px 24px rgba(0,0,0,.25);background:' + (tone === 'bad' ? '#b23a3a' : '#1f1e1e');
+    note.textContent = text;
+    box.replaceChildren(note);
     clearTimeout(sayTimer);
-    sayTimer = setTimeout(function () { box.hidden = true; }, 5000);
+    sayTimer = setTimeout(function () { box.replaceChildren(); }, 5000);
   }
 
   /* ---- fetching the parts ---- */
-  function swap(html) {
+  function swap(html, only) {
     var parsed = document.createElement('template');
     parsed.innerHTML = html;
     var x = window.scrollX, y = window.scrollY;
     parsed.content.querySelectorAll('[data-live]').forEach(function (fresh) {
       var old = document.querySelector('[data-live="' + fresh.dataset.live + '"]');
-      if (old) old.replaceWith(fresh);
+      if (old && (!only || only.includes(fresh.dataset.live))) old.replaceWith(fresh);
     });
     window.scrollTo(x, y);
   }
 
-  function pull(url) {
+  function pull(url, only) {
     var to = new URL(url || location.href);
     to.searchParams.set('part', '1');
     return fetch(to, { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.ok ? r.text() : ''; })
-      .then(swap)
+      .then(function (html) { swap(html, only); })
       .catch(function () {});
   }
 
   /* one at a time: an action's refresh waits for one already running */
   var line = Promise.resolve();
-  function refresh(url) {
-    line = line.then(function () { return pull(url); });
+  function refresh(url, only) {
+    line = line.then(function () { return pull(url, only); });
     return line;
   }
 
@@ -112,7 +115,7 @@
   function touched(field) {
     if (field.type === 'file') return field.files.length > 0;
     if (field.type === 'checkbox' || field.type === 'radio') return field.checked !== field.defaultChecked;
-    if (field.tagName === 'SELECT') return Array.prototype.some.call(field.options, function (o) { return o.selected !== o.defaultSelected; });
+    if (field.tagName === 'SELECT') return false;   // no default to compare with: only its focus counts
     return field.value !== field.defaultValue;
   }
 
@@ -156,7 +159,9 @@
   }
 
   document.addEventListener('visibilitychange', check);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', check); else check();
+  /* after the page's own DOMContentLoaded code, which is where some pages call Live.watch */
+  function start() { setTimeout(check); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 
   window.Live = {
     post: post, send: send, refresh: refresh, data: data, say: say,

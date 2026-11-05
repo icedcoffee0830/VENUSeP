@@ -148,6 +148,8 @@
 
               <div class="profile-layout">
                 <aside class="profile-summary" aria-labelledby="profileSummaryName">
+                  @fragment('cp-avatar')
+                  <div data-live="cp-avatar" style="display:contents">
 @if ($customerProfile['photo'] !== '')
                   <img class="profile-avatar" id="profileAvatar" src="{{ asset($customerProfile['photo']) }}"
                        alt="{{ $customerProfile['name'] }}" style="object-fit:cover">
@@ -162,6 +164,8 @@
                   @endphp
                   <div class="profile-avatar" id="profileAvatar" aria-label="{{ $customerProfile['name'] }} initials">{{ strtoupper($cpIni) }}</div>
 @endif
+                  </div>
+                  @endfragment
                   <h2 id="profileSummaryName">{{ $customerProfile['name'] }}</h2>
                   <p class="profile-role">Customer</p>
                   <span class="profile-status"><i class="bi bi-check-circle" aria-hidden="true"></i>Active</span>
@@ -175,9 +179,13 @@
                        outside the web root, behind document-view.php. -->
                   <input type="file" id="avatarInput" accept="image/png,image/jpeg,image/webp" hidden>
                   <button class="btn-profile" type="button" onclick="document.getElementById('avatarInput').click()"><i class="bi bi-camera" aria-hidden="true"></i>Change Photo</button>
+                  @fragment('cp-avatar-remove')
+                  <div data-live="cp-avatar-remove" style="display:contents">
 @if ($customerProfile['photo'] !== '')
                   <button class="btn-profile" type="button" id="avatarRemove"><i class="bi bi-trash" aria-hidden="true"></i>Remove</button>
 @endif
+                  </div>
+                  @endfragment
                   <small class="signin-note" id="avatarHint" style="display:block">PNG, JPG or WebP, up to 7 MB.</small>
                   <div class="profile-validation" id="avatarMessage" aria-live="polite"></div>
                 </aside>
@@ -190,11 +198,15 @@
                         <div class="profile-form-group"><label for="fullName">Full Name</label><input class="form-control" id="fullName" name="full_name" type="text" autocomplete="name" value="{{ $customerProfile['name'] }}" aria-describedby="fullNameValidation" required><small class="profile-validation" id="fullNameValidation" aria-live="polite"></small></div>
                         <div class="profile-form-group"><label for="email">Email Address</label><input class="form-control" id="email" name="email" type="email" autocomplete="email" value="{{ $customerProfile['email'] }}" data-original="{{ strtolower($customerProfile['email']) }}" aria-describedby="emailValidation" required><small class="profile-validation" id="emailValidation" aria-live="polite"></small></div>
                         {{-- Shown only while the email is being changed: a new email needs the current password (profile-save). --}}
+                        @fragment('cp-email-password')
+                        <div data-live="cp-email-password" style="display:contents">
                         @if ($cpHasPassword)
                         <div class="profile-form-group" id="emailPasswordGroup" hidden><label for="emailPassword">Current Password <span style="font-weight:400;color:#8a857d">(to change your email)</span></label><input class="form-control" id="emailPassword" name="current_password" type="password" autocomplete="current-password" aria-describedby="emailPasswordValidation"><small class="profile-validation" id="emailPasswordValidation" aria-live="polite"></small></div>
                         @elseif (!$cpReauthOk)
                         <div class="profile-form-group" id="emailPasswordGroup" hidden><p class="signin-note" role="status">To change your email, first confirm it&rsquo;s you with Google (Account Security, below).</p></div>
                         @endif
+                        </div>
+                        @endfragment
                         <div class="profile-form-group"><label for="contactNumber">Contact Number</label><input class="form-control" id="contactNumber" name="contact_number" type="tel" autocomplete="tel" value="{{ $customerProfile['phone'] }}" aria-describedby="contactNumberValidation" required><small class="profile-validation" id="contactNumberValidation" aria-live="polite"></small></div>
                         <div class="profile-form-group"><label for="universityId">USeP ID number <span style="font-weight:400;color:#8a857d">(optional)</span></label><input class="form-control" id="universityId" name="university_id_no" type="text" value="{{ $customerProfile['universityId'] }}" placeholder="e.g. 2023-00412"><small class="profile-validation">Staff check your uploaded ID against this when applying the USeP discount.</small></div>
                         <div class="profile-form-group full-width"><label for="address">Address</label><input class="form-control" id="address" name="address" type="text" autocomplete="street-address" value="{{ $customerProfile['address'] }}" required></div>
@@ -208,6 +220,8 @@
                     <div class="profile-section-header"><h2 id="accountSecurityTitle">Account Security</h2><p>{!! $cpHasPassword
                         ? 'Use a strong password that you do not reuse elsewhere.'
                         : 'You sign in with Google. Add a password to also sign in with your email.' !!}</p></div>
+                    @fragment('cp-security')
+                    <div data-live="cp-security">
                     @if ($cpNotice !== '')<p class="signin-notice" role="status">{{ $cpNotice }}</p>@endif
                     <ul class="signin-methods" aria-label="Ways you can sign in">
                       <li><i class="bi bi-key" aria-hidden="true"></i><span class="signin-name">Email and password</span><span class="signin-state{!! $cpHasPassword ? ' is-on' : '' !!}">{!! $cpHasPassword ? 'Set' : 'Not set' !!}</span></li>
@@ -252,13 +266,16 @@
                       </div>
                     </div>
                     @endif
+                    </div>
+                    @endfragment
                   </section>
 
                   <!-- TWO-STEP VERIFICATION (DB-DECISIONS #20). Optional for customers. Driven by
                        assets/js/two-factor.js against profile-save.php; every step is re-checked there. -->
                   @php($cpTfaOn = $cpTfa !== null && $cpTfa['enabled'])
                   @php($cpTfaLow = $cpTfaOn && $cpTfa['codes_left'] <= TFA_CODES_LOW)
-                  <section class="profile-section tfa-panel" aria-labelledby="twoStepTitle" data-tfa-panel data-endpoint="{{ route('root.profile-save') }}" data-csrf="{{ $cpCsrf }}">
+                  @fragment('tfa-panel')
+                  <section class="profile-section tfa-panel" aria-labelledby="twoStepTitle" data-live="tfa-panel" data-tfa-panel data-endpoint="{{ route('root.profile-save') }}" data-csrf="{{ $cpCsrf }}">
                     <div class="profile-section-header">
                       <div class="tfa-head">
                         <h2 id="twoStepTitle">Two-step verification</h2>
@@ -298,6 +315,7 @@
                     @php(tfa_view_panel_steps($cpTfaOn, $customerProfile['email'], ['btn' => 'btn-profile', 'primary' => 'btn-profile btn-profile-primary', 'input' => 'form-control tfa-code-input']))
                     @endif
                   </section>
+                  @endfragment
 
                   <section class="profile-section" aria-labelledby="accountActionsTitle">
                     <div class="profile-section-header"><h2 id="accountActionsTitle">Account Actions</h2><p>Manage access to your VENUSeP account.</p></div>
@@ -322,17 +340,18 @@
           if (el) el.textContent = message;
         };
 
-        document.querySelectorAll('[data-profile-password-toggle]').forEach(function (toggle) {
-          toggle.addEventListener('click', function () {
-            const input = document.getElementById(toggle.dataset.profilePasswordToggle);
-            if (!input) return;
-            const showing = input.type === 'password';
-            input.type = showing ? 'text' : 'password';
-            toggle.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
-            toggle.setAttribute('aria-pressed', showing ? 'true' : 'false');
-            const icon = toggle.querySelector('i');
-            if (icon) { icon.classList.toggle('bi-eye', !showing); icon.classList.toggle('bi-eye-slash', showing); }
-          });
+        /* on the document: the Account Security section is redrawn after a change */
+        document.addEventListener('click', function (e) {
+          const toggle = e.target.closest('[data-profile-password-toggle]');
+          if (!toggle) return;
+          const input = document.getElementById(toggle.dataset.profilePasswordToggle);
+          if (!input) return;
+          const showing = input.type === 'password';
+          input.type = showing ? 'text' : 'password';
+          toggle.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+          toggle.setAttribute('aria-pressed', showing ? 'true' : 'false');
+          const icon = toggle.querySelector('i');
+          if (icon) { icon.classList.toggle('bi-eye', !showing); icon.classList.toggle('bi-eye-slash', showing); }
         });
 
         const CSRF = @json($cpCsrf);
@@ -350,9 +369,8 @@
             .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
             .then(function (res) {
               avatarMsg.textContent = res.message || '';
-              /* Reload so the header chip and the summary both pick it up
-                 rather than only the one element we happen to know about. */
-              if (res.ok) window.setTimeout(function () { window.location.reload(); }, 600);
+              /* the summary, its Remove button and the header chip all come from the server */
+              if (res.ok) Live.refresh(null, ['hd-user', 'cp-avatar', 'cp-avatar-remove']);
             })
             .catch(function () { avatarMsg.textContent = 'Could not reach the server.'; });
         };
@@ -367,16 +385,14 @@
             sendAvatar(body);
           });
         }
-        const avatarRemove = document.getElementById('avatarRemove');
-        if (avatarRemove) {
-          avatarRemove.addEventListener('click', function () {
-            const body = new FormData();
-            body.append('_token', CSRF);
-            body.append('action', 'photo');
-            body.append('remove', '1');
-            sendAvatar(body);
-          });
-        }
+        document.addEventListener('click', function (e) {
+          if (!e.target.closest('#avatarRemove')) return;
+          const body = new FormData();
+          body.append('_token', CSRF);
+          body.append('action', 'photo');
+          body.append('remove', '1');
+          sendAvatar(body);
+        });
 
         const profileForm = document.getElementById('customerProfileForm');
         if (profileForm) {
@@ -432,12 +448,11 @@
                 /* Repaint the summary card beside the form — leaving the old
                    name there after a rename would look like the save failed. */
                 document.getElementById('profileSummaryName').textContent = document.getElementById('fullName').value.trim();
+                Live.refresh(null, ['hd-user']);   /* the header chip follows the name */
               })
               .catch(function () { out.textContent = 'Could not reach the server, so nothing was saved.'; });
           });
-          profileForm.querySelectorAll('input').forEach(function (field) {
-            field.addEventListener('input', function () { setFieldError(field, field.getAttribute('aria-describedby'), ''); });
-          });
+          profileForm.addEventListener('input', function (e) { setFieldError(e.target, e.target.getAttribute('aria-describedby'), ''); });
           /* A new email needs the current password: show that field only while the email differs. */
           function toggleEmailPassword() {
             const group = document.getElementById('emailPasswordGroup');
@@ -456,6 +471,9 @@
           });
         }
 
+        /* The section again from the server, and its two forms wired up again. */
+        const redrawSecurity = function () { window.tfaRedraw(); return Live.refresh(null, ['cp-security', 'cp-email-password']).then(bindSecurity); };
+        function bindSecurity() {
         const passwordForm = document.getElementById('customerPasswordForm');
         const cur0 = document.getElementById('currentPassword');
         if (passwordForm) {
@@ -492,14 +510,14 @@
                   const t = res.field && map[res.field];
                   if (t && t[0]) { setFieldError(t[0], t[1], res.message); t[0].focus(); }
                   else { out.textContent = res.message || 'Your password was not changed.'; }
-                  /* The Google confirmation ran out: reload, which offers it again. */
-                  if (res.reauth) window.setTimeout(function () { window.location.reload(); }, 2500);
+                  /* The Google confirmation ran out: the section offers it again. */
+                  if (res.reauth) window.setTimeout(redrawSecurity, 2500);
                   return;
                 }
                 out.textContent = res.message;
                 passwordForm.reset();
                 /* A FIRST password changes what this section offers (Change, Disconnect). */
-                if (!cur) window.setTimeout(function () { window.location.reload(); }, 1500);
+                if (!cur) window.setTimeout(redrawSecurity, 1500);
               })
               .catch(function () { out.textContent = 'Could not reach the server, so your password was not changed.'; });
           });
@@ -557,11 +575,13 @@
                 if (!res.ok) { setFieldError(pw, 'googlePasswordMessage', res.message || 'Nothing was changed.'); pw.focus(); return; }
                 msg.style.color = 'var(--ok)';
                 msg.textContent = res.message;
-                window.setTimeout(function () { window.location.reload(); }, 1500);
+                window.setTimeout(redrawSecurity, 1500);
               })
               .catch(function () { go.disabled = false; setFieldError(pw, 'googlePasswordMessage', 'Could not reach the server, so nothing was changed.'); });
           });
         }
+        }
+        bindSecurity();
       });
     </script>
     <script src="{{ asset('assets/js/vendor/qrcode-generator-1.4.4.js') }}"></script>

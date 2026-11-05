@@ -74,6 +74,8 @@
               @if (!$brIsAdmin)
                 <p class="br-note">Only an administrator can download, restore or delete a backup.</p>
               @endif
+              @fragment('br-list')
+              <div data-live="br-list">
               @if (!$brBackups)
                 <p>No backups yet.</p>
               @else
@@ -100,6 +102,8 @@
                   </tbody>
                 </table>
               @endif
+              </div>
+              @endfragment
             </section>
 
             @if ($brIsAdmin)
@@ -143,17 +147,20 @@
           post({ action: 'create' }).then(function (res) {
             done();
             if (!res.ok) { venusepAlert(res.message || 'The backup was not made.'); return; }
-            venusepAlert('The backup is saved on this computer.', { tone: 'ok', title: 'Backup made' }).then(function () { location.reload(); });
+            Live.refresh();
+            venusepAlert('The backup is saved on this computer.', { tone: 'ok', title: 'Backup made' });
           });
         });
 
-        document.querySelectorAll('[data-delete]').forEach(function (b) {
-          b.addEventListener('click', async function () {
-            if (!(await venusepConfirm('This backup file is removed for good.', { title: 'Delete this backup?', okLabel: 'Delete', danger: true }))) return;
-            post({ action: 'delete', file: b.dataset.delete }).then(function (res) {
-              if (!res.ok) { venusepAlert(res.message || 'Nothing was deleted.'); return; }
-              location.reload();
-            });
+        /* on the document: the list is redrawn after a change */
+        document.addEventListener('click', async function (e) {
+          const b = e.target.closest('[data-delete]');
+          if (!b) return;
+          if (!(await venusepConfirm('This backup file is removed for good.', { title: 'Delete this backup?', okLabel: 'Delete', danger: true }))) return;
+          post({ action: 'delete', file: b.dataset.delete }).then(function (res) {
+            if (!res.ok) { venusepAlert(res.message || 'Nothing was deleted.'); return; }
+            Live.say(res.message);
+            Live.refresh();
           });
         });
 
@@ -173,11 +180,11 @@
           if (!res.ok) { venusepAlert(res.message || 'Nothing was restored.'); return; }
           venusepAlert(res.message, { tone: 'ok', title: 'Restored' }).then(function () { location.href = @json(route('admin.admin-login')); });
         }
-        document.querySelectorAll('[data-restore]').forEach(function (b) {
-          b.addEventListener('click', function () {
-            const row = b.closest('tr');
-            restore({ file: b.dataset.restore }, null, 'the backup of ' + row.cells[0].textContent.trim());
-          });
+        document.addEventListener('click', function (e) {
+          const b = e.target.closest('[data-restore]');
+          if (!b) return;
+          const row = b.closest('tr');
+          restore({ file: b.dataset.restore }, null, 'the backup of ' + row.cells[0].textContent.trim());
         });
         const up = document.getElementById('brUploadGo');
         if (up) up.addEventListener('click', function () {

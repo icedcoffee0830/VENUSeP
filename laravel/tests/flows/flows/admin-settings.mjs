@@ -214,7 +214,7 @@ export default {
       await page.keyboard.type(s.faqA);
       await Promise.all([page.waitForLoadState('load'), page.getByRole('button', { name: 'Add question' }).click()]);
       await page.waitForLoadState('load');
-      await expect.visible(page.locator('.fq-flash.ok'), 'no success message after adding the question');
+      await expect.text(page, /Question added/);
       await expect.visible(page.locator('#booking .fq-row', { hasText: s.faqQ }), 'the question is not listed under "Booking a venue"');
 
       const f = await dbOne(`SELECT section_key, answer, policy, is_active, is_builtin FROM faqs WHERE question = ?`, [s.faqQ]);
@@ -250,8 +250,6 @@ export default {
       await page.locator('#adminTerms').check();
       await page.getByRole('button', { name: 'Create Account' }).click();
       await expect.text(page, 'Staff account created');
-      // the page goes back to the dashboard by itself ~1s later; going elsewhere first gets cancelled by it
-      await page.waitForURL(/\/admin\/dashboard/);
 
       const u = await dbOne(`SELECT u.id, u.account_type, u.is_active, s.venue_id, s.full_name FROM users u JOIN staff s ON s.user_id = u.id WHERE u.email = ?`, [s.newEmail]);
       expect.ok(u, 'no users/staff row for the new account');

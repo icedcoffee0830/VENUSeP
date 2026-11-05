@@ -48,6 +48,16 @@ class FaqManagementTest extends TestCase
             ->assertSee('Built-in questions cannot be deleted — hide it instead.');
     }
 
+    public function test_a_script_gets_the_same_answers_as_json(): void
+    {
+        $this->actingAsAdmin();
+        $this->postJson(route('admin.faq-save'), ['action' => 'add', 'section' => 'nope', 'question' => 'Q', 'answer' => 'A'])->assertOk()
+            ->assertJson(['ok' => false, 'message' => 'Pick one of the six sections.']);
+        $this->postJson(route('admin.faq-save'), ['action' => 'toggle', 'id' => 26])->assertOk()
+            ->assertJson(['ok' => true, 'message' => 'Visibility updated.']);
+        $this->postJson(route('admin.faq-save'), ['action' => 'toggle', 'id' => 26])->assertOk();   // back as it was
+    }
+
     public function test_add_then_delete_an_added_question(): void
     {
         $this->actingAsAdmin();

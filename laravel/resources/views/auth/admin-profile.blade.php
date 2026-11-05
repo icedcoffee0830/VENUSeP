@@ -554,6 +554,7 @@
                       document.getElementById('vpCardName').textContent = name;
                       const av = document.getElementById('vpAvatar');
                       if (av && av.tagName !== 'IMG') av.textContent = vpInitials(name);
+                      Live.refresh(null, ['hd-user']);   /* the header chip */
                     }
                   })
                   .catch(function () { out.style.color = '#b23a3a'; out.textContent = 'Could not reach the server.'; });
@@ -602,7 +603,7 @@
                   .then(function (res) {
                     msg.style.color = res.ok ? '#1c7a4f' : '#b23a3a';
                     msg.textContent = res.message || (res.ok ? 'Saved.' : 'Nothing was changed.');
-                    if (res.ok) show(res.photo);
+                    if (res.ok) { show(res.photo); Live.refresh(null, ['hd-user']); }
                   })
                   .catch(function () { msg.style.color = '#b23a3a'; msg.textContent = 'Could not reach the server.'; });
               }
@@ -628,7 +629,8 @@
              Driven by assets/js/two-factor.js
              against profile-save.php, which refuses to turn it off for an admin. -->
         @if ($vpTfaShow)
-        <section class="dm-card tfa-panel" aria-labelledby="tfaTitle" data-tfa-panel data-endpoint="{{ route('root.profile-save') }}" data-csrf="{{ $vpCsrf }}">
+        @fragment('tfa-panel')
+        <section class="dm-card tfa-panel" aria-labelledby="tfaTitle" data-live="tfa-panel" data-tfa-panel data-endpoint="{{ route('root.profile-save') }}" data-csrf="{{ $vpCsrf }}">
           <div class="dm-top">
             <div>
               <div class="dm-title">
@@ -660,6 +662,7 @@
           </div>
           @endif
         </section>
+        @endfragment
         @endif
 
         </section>

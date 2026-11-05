@@ -22,6 +22,22 @@ use PDOException;
    ===================================================================== */
 class FaqController
 {
+    private const NOTES = [
+        'added'    => ['ok',  'Question added. Customers can see it on the FAQ page now.'],
+        'saved'    => ['ok',  'Changes saved.'],
+        'toggled'  => ['ok',  'Visibility updated.'],
+        'deleted'  => ['ok',  'Question deleted.'],
+        'restored' => ['ok',  'Original wording restored.'],
+        'moved'    => ['ok',  'Order updated.'],
+        'question' => ['bad', 'The question is required and must be 255 characters or fewer.'],
+        'answer'   => ['bad', 'The answer is required and must be 4,000 characters or fewer.'],
+        'section'  => ['bad', 'Pick one of the six sections.'],
+        'builtin'  => ['bad', 'Built-in questions cannot be deleted — hide it instead.'],
+        'expired'  => ['bad', 'This page had expired. Nothing was saved — try again.'],
+        'db'       => ['bad', 'The database could not be reached. Nothing was saved.'],
+        'missing'  => ['bad', 'That question no longer exists.'],
+    ];
+
     public function index(Request $request)
     {
         extract(legacy('faqs', 'offices'));   // $DISCOUNT_PERCENT, $POSTPAY_GRACE_DAYS, $HOSTEL_RATES, $HOSTEL_CR_LABEL
@@ -34,31 +50,16 @@ class FaqController
         $fqSections = faq_sections();
         $fqRows     = faqs_by_section(true);                      /* every row, every policy — the page filters in the browser */
         $fqMsg      = (string) $request->query('msg', '');
-        $fqNotes = [
-            'added'    => ['ok',  'Question added. Customers can see it on the FAQ page now.'],
-            'saved'    => ['ok',  'Changes saved.'],
-            'toggled'  => ['ok',  'Visibility updated.'],
-            'deleted'  => ['ok',  'Question deleted.'],
-            'restored' => ['ok',  'Original wording restored.'],
-            'moved'    => ['ok',  'Order updated.'],
-            'question' => ['bad', 'The question is required and must be 255 characters or fewer.'],
-            'answer'   => ['bad', 'The answer is required and must be 4,000 characters or fewer.'],
-            'section'  => ['bad', 'Pick one of the six sections.'],
-            'builtin'  => ['bad', 'Built-in questions cannot be deleted — hide it instead.'],
-            'expired'  => ['bad', 'This page had expired. Nothing was saved — try again.'],
-            'db'       => ['bad', 'The database could not be reached. Nothing was saved.'],
-            'missing'  => ['bad', 'That question no longer exists.'],
-        ];
         $fqTotal = 0; $fqAdded = 0; $fqHidden = 0; $fqChanged = 0;
         foreach ($fqRows as $rows) { foreach ($rows as $r) { $fqTotal++; if (!$r['is_builtin']) $fqAdded++; if (!$r['is_active']) $fqHidden++; if ($r['is_changed']) $fqChanged++; } }
 
-        return view('admin.faq-management', [
+        return live_view('admin.faq-management', [
             'fqSections' => $fqSections,
             'fqRows'     => $fqRows,
             'fqDbOk'     => !empty($fqSections),
             'fqLive'     => $fqLive,
             'fqSwitches' => $fqSwitches,
-            'fqNote'     => $fqNotes[$fqMsg] ?? null,
+            'fqNote'     => self::NOTES[$fqMsg] ?? null,
             'fqPolicies' => ['any' => 'Always shown', 'refunds_on' => 'Only where refunds are ON', 'refunds_off' => 'Only where refunds are OFF'],
             'fqTotal' => $fqTotal, 'fqAdded' => $fqAdded, 'fqHidden' => $fqHidden, 'fqChanged' => $fqChanged,
             'DISCOUNT_PERCENT' => $DISCOUNT_PERCENT,
@@ -76,6 +77,12 @@ class FaqController
 
     private function back(string $msg, string $extra = '')
     {
+        /* the page's script (public/assets/js/live.js): the same answer, no redirect */
+        if (request()->expectsJson()) {
+            [$tone, $text] = self::NOTES[$msg] ?? ['bad', 'Nothing was saved.'];
+            preg_match('/show=(\w+)/', $extra, $show);
+            return response()->json(['ok' => $tone === 'ok', 'message' => $text, 'show' => $show[1] ?? null]);
+        }
         return redirect(route('admin.faq-management') . '?msg=' . rawurlencode($msg) . $extra);
     }
 

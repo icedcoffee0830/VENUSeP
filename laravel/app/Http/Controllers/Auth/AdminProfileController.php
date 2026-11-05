@@ -67,7 +67,7 @@ class AdminProfileController
         }
         $vpTfaLow = $vpTfa !== null && $vpTfa['enabled'] && $vpTfa['codes_left'] <= TFA_CODES_LOW;
 
-        return view('auth.admin-profile', compact(
+        return live_view('auth.admin-profile', compact(
             'vpName', 'vpFirst', 'vpLast', 'vpEmail', 'vpPhone', 'vpRole', 'vpAccess', 'vpEmp', 'vpPhoto', 'vpRoleLine',
             'vpInitials', 'vpCsrf',
             'vpTfaShow', 'vpTfa', 'vpTfaLow', 'vpMustChange'

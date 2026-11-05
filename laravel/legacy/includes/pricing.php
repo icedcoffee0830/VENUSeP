@@ -62,12 +62,16 @@ function usep_is_account($email) {
     $d = $parts[1];
     return $d === $USEP_MAIL_DOMAIN || substr($d, -strlen('.' . $USEP_MAIL_DOMAIN)) === '.' . $USEP_MAIL_DOMAIN;
 }
-/* The discounted price rounds UP to the whole peso, as approval stores it
-   (sp_approve_booking, migration 18); cents first, so 800.0000001 stays 800. */
+/* The discounted price, as approval stores it (sp_approve_booking, migration 19):
+   UP to the whole peso; DOWN when up gives back the full price (3 -> 2.40 -> 2);
+   never 0 (1 -> 0.80: the full price, no discount). Cents first, so 800.0000001 stays 800. */
 function usep_discounted($price, $pct = null) {
     global $DISCOUNT_PERCENT;
     $pct = $pct ?? $DISCOUNT_PERCENT;
-    return $pct > 0 ? ceil(round($price - round($price * $pct) / 100, 2)) : $price;
+    if ($pct <= 0) return $price;
+    $exact = round($price - round($price * $pct) / 100, 2);
+    $final = ceil($exact) < $price ? ceil($exact) : floor($exact);
+    return $final > 0 ? $final : $price;
 }
 /* "~~₱5,000~~ ₱4,000 per day · 20% off" for a USeP account, plain "₱5,000"
    otherwise. A preview — staff still confirm the discount from the ID at
@@ -81,7 +85,7 @@ function usep_price_html($price, $isUsep, $unit = '', $pct = null) {
     global $DISCOUNT_PERCENT;
     $pct = $pct ?? $DISCOUNT_PERCENT;
     $full = '₱' . usep_peso($price);
-    if (!$isUsep) return $full . $unit;
+    if (!$isUsep || usep_discounted($price, $pct) >= $price) return $full . $unit;   /* no discount left (a ₱1 room) */
     return '<s style="color:#a5a19a;font-weight:400">' . $full . '</s> <strong style="color:#1c7a4f">₱' . usep_peso(usep_discounted($price, $pct)) . '</strong>' . $unit
          . ' <span style="font-size:11px;color:#1c7a4f;white-space:nowrap">· ' . (int) $pct . '% off</span>';
 }
@@ -104,11 +108,16 @@ function usep_price_html($price, $isUsep, $unit = '', $pct = null) {
 
   /* Pricing for one booking. `affiliated` is the customer's CLAIM; staff
      confirm it later, which is why the UI calls the discount provisional
-     until then. The discounted total rounds UP to the whole peso and the discount
-     is the rest, as approval stores it (sp_approve_booking, migration 18). */
+     until then. The discounted total is usep_discounted()'s rule, as approval stores it
+     (sp_approve_booking, migration 19): up to the whole peso, down when up gives back
+     the full price, never 0 (then the full price and no discount). The discount is the rest. */
   function priceWithDiscount(roomPrice, affiliated) {
-    const pct = affiliated === true ? DISCOUNT_PERCENT : 0;
-    const total = pct > 0 ? Math.ceil(Math.round((roomPrice - Math.round(roomPrice * pct) / 100) * 100) / 100) : roomPrice;
+    let pct = affiliated === true ? DISCOUNT_PERCENT : 0, total = roomPrice;
+    if (pct > 0) {
+      const exact = Math.round((roomPrice - Math.round(roomPrice * pct) / 100) * 100) / 100;
+      total = Math.ceil(exact) < roomPrice ? Math.ceil(exact) : Math.floor(exact);
+      if (total <= 0) { total = roomPrice; pct = 0; }
+    }
     return { roomPrice: roomPrice, discountPercent: pct, discountAmount: roomPrice - total, total: total };
   }
 </script>

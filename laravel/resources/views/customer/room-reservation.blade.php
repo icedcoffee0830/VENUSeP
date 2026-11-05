@@ -1075,7 +1075,7 @@ function detailScreen(){
     const facts=[
       /* USeP account: crossed-out full price + USeP price with a short "20% off" tag */
       { icon:I.tag,    text:'Reservation fee: '+peso(R.fee)+' per day',
-        html: isUsepAccount(ACCOUNT.email)
+        html: isUsepAccount(ACCOUNT.email) && priceWithDiscount(R.fee,true).discountAmount>0
           ? 'Reservation fee: <s style="color:#a5a19a">'+peso(R.fee)+'</s> <strong style="color:#1c7a4f">'+peso(priceWithDiscount(R.fee,true).total)+'</strong> per day <span style="font-size:12px;color:#1c7a4f">· '+DISCOUNT_PERCENT+'% off</span>'
           : null },
       { icon:I.clock,  text:'Bookable hours: 7 AM – 10 PM daily' },

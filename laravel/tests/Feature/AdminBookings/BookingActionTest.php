@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\AdminBookings;
 
+use App\Queries\BookingQueries;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -78,6 +79,26 @@ class BookingActionTest extends TestCase
         $this->getJson(route('root.booking-details', ['booking' => $ref]))->assertOk()
             ->assertJsonPath('details.money.total', '₱1,235.00')->assertJsonPath('details.money.discount', '−₱307.75')
             ->assertJsonPath('details.money.discountNote', '');
+    }
+
+    /* Migration 19 (Aron 2026-11-05, option B): rounding up never cancels the discount
+       (then it rounds down), and a booking is never free (then the full price, no discount).
+       The page previews (usep_discounted, priceWithDiscount) use the same rule. */
+    public function test_rounding_never_cancels_the_discount_and_never_makes_a_booking_free(): void
+    {
+        ob_start();
+        legacy('pricing');   /* ends with a <script> block for the booking pages */
+        ob_end_clean();
+        $staff = (int) DB::table('users')->where('email', 'staff@gmail.com')->value('id');
+        foreach ([[1, '1.00', '0.00'], [3, '2.00', '1.00'], [1999, '1600.00', '399.00'], [4000, '3200.00', '800.00']] as [$price, $total, $off]) {
+            [$id] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', true, true);
+            DB::table('bookings')->where('id', $id)->update(['room_price' => $price, 'total_amount' => $price]);
+            BookingQueries::approve($id, true, 20, round($price * 20 / 100, 2), $staff, 'test');
+            $b = $this->booking($id);
+            $this->assertSame([$total, $off, 'approved'], [$b->total_amount, $b->discount_amount, $b->reservation_status], "₱$price");
+            $this->assertEquals((float) $total, usep_discounted($price, 20), "preview of ₱$price");
+        }
+        $this->assertSame('₱1 per day', usep_price_html(1, true, ' per day', 20));   /* no discount left: no crossed-out price */
     }
 
     /* (legacy customer-bookings.php reads the list once per process, so this is its own test) */

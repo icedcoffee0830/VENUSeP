@@ -781,3 +781,11 @@ Decision: memory `venusep-teammate-bugs-2026-11-05`, item 11. **All of it is in 
   4. `auth/customer-login.blade.php`: the Google "Finish creating your account" terms checkbox (`gsTerms`).
   Then drop `test_no_page_links_to_it_yet` in `tests/Feature/PrivacyPageTest.php`.
 - The name has no `admin.`/`customer.`/`root.` prefix, so `venusep:check` does not request it; `PrivacyPageTest` covers it.
+
+### 15e. Phase P (2026-11-05, branch `fixes-3`, migration 19)
+**Migration 19 is NOT on the real DB**: Aron runs, in cmd, after the backup in its header,
+`C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_19.sql`; it ends with
+"OK: sp_approve_booking has the migration 19 rounding". It only replaces `sp_approve_booking`: the discounted total
+rounds UP to the peso, DOWN when up gives back the full price (₱3 -> ₱2), never 0 (₱1 stays ₱1, no discount).
+`usep_discounted()` / `priceWithDiscount()` use the same rule. The test/flows snapshot is `.before-m19` + a blank line
++ migration 19.

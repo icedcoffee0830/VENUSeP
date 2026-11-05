@@ -20,6 +20,14 @@ class BookingHistoryTest extends TestCase
         $this->actingAsStaff()->get(route('customer.booking-history'))->assertRedirect(route('customer.customer-login'));
     }
 
+    /* On a phone the rows are cards ("display: grid"), which beat the hidden attribute the
+       filters use, so every filter showed every booking. The hidden rule must stay. */
+    public function test_filtered_out_rows_stay_hidden_on_a_phone(): void
+    {
+        $this->actingAsCustomer()->get(route('customer.booking-history'))->assertOk()
+            ->assertSee('.booking-history-table tbody tr[hidden] { display: none; }', false);
+    }
+
     public function test_customer_sees_only_their_own_bookings(): void
     {
         $mine = $this->ref($this->firstBookingOf(1));

@@ -112,6 +112,8 @@
         .booking-history-table { min-width: 0; }
         .booking-history-table thead { display: none; }
         .booking-history-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 14px 16px; border-bottom: 1px solid #ece8e1; }
+        /* the filters hide rows with the hidden attribute; "display: grid" above would beat it */
+        .booking-history-table tbody tr[hidden] { display: none; }
         .booking-history-table tbody tr:hover { background: transparent; }
         .booking-history-table td { display: block; padding: 0; border: 0; white-space: normal; font-size: 13px; }
         .booking-history-table td::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }

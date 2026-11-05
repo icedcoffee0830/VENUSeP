@@ -65,6 +65,7 @@
       .badge-overdue { background: #fcecec; color: #b23a3a; }
       .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
       .booking-pay-note.is-overdue { color: #b23a3a; }
+      .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); }
       .booking-overdue-help { flex-basis: 100%; max-width: 26rem; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; }
       .booking-overdue-help strong { color: #b23a3a; }
       /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
@@ -228,7 +229,7 @@
                           <td data-label="Event">{{ $booking['eventName'] }}</td>
                           <td data-label="Event date">{{ $booking['eventDate'] }}</td>
                           <td data-label="Booked on">{{ $booking['bookingDate'] }}</td>
-                          <td class="booking-amount" data-label="Amount">{{ $booking['amount'] }}</td>
+                          <td class="booking-amount" data-label="Amount">{{ $booking['amount'] }}@if ($booking['discountPending'])<span class="booking-amount-note">USeP discount applied once your ID is verified</span>@endif</td>
                           <td data-label="Payment">
                             <span class="booking-badge {{ bh_badge($booking['paymentStatus']) }}">{{ $booking['paymentStatus'] }}</span>
                             {{-- post-pay bookings say WHEN — the date comes from the shared rule (legacy refund-policy.php) --}}

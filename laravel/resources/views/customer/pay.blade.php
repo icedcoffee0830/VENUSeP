@@ -81,7 +81,7 @@
                   <div><div class="pay-k">Reference</div><div class="pay-v">{{ $payB['bookingId'] }}</div></div>
                   <div><div class="pay-k">{{ $payIsHostel ? 'Stay' : 'Event' }}</div><div class="pay-v">{{ $payB['eventName'] }}</div></div>
                   <div><div class="pay-k">{{ $payIsHostel ? 'Check-in' : 'Date' }}</div><div class="pay-v">{{ $payB['eventDate'] }}</div></div>
-                  <div><div class="pay-k">Amount due</div><div class="pay-v">{{ $payB['amount'] }}</div></div>
+                  <div><div class="pay-k">Amount due</div><div class="pay-v">{{ $payB['amount'] }}</div>@if ($payB['discountPending'])<div style="font-size:12px;color:#6b675f;margin-top:3px">USeP discount applied once your ID is verified</div>@endif</div>
                   <div><div class="pay-k">Payment</div><div class="pay-v">{{ $payB['paymentStatus'] }}</div></div>
                   @if ($payOpen || in_array($payCode, ['await_event', 'overdue'], true))
                     <div><div class="pay-k">{{ $payCode === 'overdue' ? 'Was due' : 'Pay by' }}</div><div class="pay-v">{{ customer_pay_by_label($payB['payment']) }}</div></div>

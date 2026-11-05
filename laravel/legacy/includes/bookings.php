@@ -241,7 +241,10 @@ function booking_shape(array $row) {
         'discountPercent' => (float) $row['discount_percent'],
         'discountAmount'  => (float) $row['discount_amount'],
         'amountValue'   => (float) $row['total_amount'],
-        'amount'        => '₱' . number_format((float) $row['total_amount']),
+        /* centavos only when there are any: an older discounted total (1,234.20) must not read as 1,234 */
+        'amount'        => '₱' . number_format((float) $row['total_amount'], fmod((float) $row['total_amount'], 1.0) == 0.0 ? 0 : 2),
+        /* still a request with a USeP claim: the discount is decided at approval (Aron 2026-11-05) */
+        'discountPending' => $row['reservation_status'] === 'pending' && (bool) $row['is_usep_affiliated'] && (float) $row['discount_amount'] <= 0,
 
         /* Customers read the softened label, staff the full taxonomy. Both come
            from the lookup tables — neither side writes its own wording. */

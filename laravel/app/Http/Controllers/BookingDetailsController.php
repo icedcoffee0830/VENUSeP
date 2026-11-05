@@ -94,6 +94,8 @@ class BookingDetailsController extends Controller
             'discountPercent' => (float) $b['discountPercent'],
             'discount'        => (float) $b['discountAmount'] > 0 ? '−₱' . number_format((float) $b['discountAmount'], 2) : '',
             'total'           => '₱' . number_format((float) $b['amountValue'], 2),
+            'discountNote'    => $b['discountPending']
+                                   ? ($bdIsStaff ? 'USeP discount claimed: applied once the ID is verified' : 'USeP discount applied once your ID is verified') : '',
             'method'          => $b['method'],
             'paymentStatus'   => $bdIsStaff ? $b['paymentStatusStaff'] : $b['paymentStatus'],
             'payBy'           => in_array($b['paymentCode'], ['await_gcash', 'await_cash', 'overdue', 'await_event', 'locked', 'await_pos'], true)

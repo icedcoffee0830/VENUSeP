@@ -19,7 +19,7 @@ class PayController
 {
     public function __invoke(Request $request)
     {
-        extract(legacy('customer-bookings', 'payment-settings'));
+        extract(legacy('customer-bookings', 'payment-settings', 'offices'));
 
         $payRef = (string) $request->query('booking', '');
         /* Scoped to THIS customer's own bookings: typing another
@@ -30,7 +30,8 @@ class PayController
         }
 
         $payCode     = (string) $payB['paymentCode'];
-        $payOpen     = in_array($payCode, ['await_gcash', 'await_cash', 'overdue'], true);
+        /* Overdue is closed until staff extend the deadline, which puts it back to await_* (Aron 2026-11-05). */
+        $payOpen     = in_array($payCode, ['await_gcash', 'await_cash'], true);
         $payIsHostel = $payB['type'] === 'hostel';
         $payAccount  = gcAccountFor($gcAccounts, $payB['venueName']);   /* null = this venue cannot take GCash yet */
         /* The receipt staff are reviewing, if one is in. */
@@ -86,6 +87,8 @@ class PayController
             case 'confirmed':
             case 'paid_cash':   return ['Paid', 'Your payment is confirmed. Nothing more to do.'];
             case 'expired':     return ['This booking expired', $b['expiryNote'] ?: 'It was not paid before its deadline, so the dates were released.'];
+            case 'overdue':     $office = office_of_booking($b['id']);
+                                return ['Payment overdue. Please contact the office.', $office ? office_contact_line($office) : ''];
             default:            return ['Nothing to pay here', 'This booking is not waiting on a payment.'];
         }
     }

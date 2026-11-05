@@ -1,6 +1,7 @@
 // Flow — what stops a GCash payment that should not count.
 // Seed: booking 20 (customer@gmail.com) and booking 13 (jmdelacruz@usep.edu.ph),
-// both overdue at USeP Venues (one GCash account). customer@ pays booking 20 with
+// both overdue at USeP Venues (one GCash account); an admin extends both first, since an
+// overdue booking is not paid until it is extended. customer@ pays booking 20 with
 // reference R. jmdelacruz then sends a receipt with the SAME reference R for his
 // own booking 13 — his browser has never seen R, so only the SERVER can catch it:
 // the attempt is recorded as rejected (duplicate_ref) and booking 13 stays unpaid.
@@ -45,6 +46,18 @@ export default {
       await page.getByRole('button', { name: 'Submit receipt' }).click();
     }
 
+    /* Overdue is not paid until staff extend the deadline (Aron 2026-11-05): extend both first. */
+    await step('An admin extends both overdue deadlines, so the two can be paid', async () => {
+      const page = await ctx.loginAdmin('admin@gmail.com');
+      for (const id of [A.booking, B.booking]) {
+        const b = await bookingInfo(id);
+        await page.goto(ctx.url('/admin/booking-request?id=' + encodeURIComponent(b.ref)));
+        await page.getByRole('button', { name: 'Extend 48 h' }).click();
+        await expect.text(page, 'Awaiting GCash payment', 20_000);
+        expect.equal((await dbOne(`SELECT payment_status FROM bookings WHERE id = ?`, [id])).payment_status, 'await_gcash', `booking ${id} after the extension`);
+      }
+    });
+
     await step('Customer A pays booking 20 by GCash with reference R', async () => {
       s.a = await bookingInfo(A.booking);
       s.b = await bookingInfo(B.booking);
@@ -76,7 +89,7 @@ export default {
       expect.equal(Number(g.dup), 1, 'duplicate_ref flag');
       expect.equal(g.payment_id, null, 'a payments row was created for a rejected receipt');
       const b = await dbOne(`SELECT payment_status FROM bookings WHERE id = ?`, [B.booking]);
-      expect.equal(b.payment_status, 'overdue', 'booking 13 payment_status (still unpaid)');
+      expect.equal(b.payment_status, 'await_gcash', 'booking 13 payment_status (still unpaid)');
       return page;
     }, { timeout: 180_000 });
 

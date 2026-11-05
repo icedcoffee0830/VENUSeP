@@ -53,6 +53,19 @@ export default {
       ctx.note(`extend ${s.refA} (customer ${s.a.email}), no release on ${s.refB}`);
     });
 
+    await step('The customer: an overdue booking has no Pay now, only "contact the office"', async () => {
+      s.cust = await ctx.loginCustomer(s.a.email);
+      const page = s.cust;
+      await page.goto(ctx.url('/customer/booking-history'));
+      const row = page.locator(`tr[data-booking-id="${s.refA}"]`);
+      await expect.visible(row, `${s.refA} is not in the customer's booking history`);
+      expect.equal(await row.locator('a.booking-action-pay').count(), 0, 'Pay now on the overdue booking');
+      await expect.visible(row.getByText('Payment overdue. Please contact the office.'), 'no "contact the office" line on the overdue row');
+      await page.goto(ctx.url('/customer/pay?booking=' + encodeURIComponent(s.refA)));
+      await expect.text(page, 'Payment overdue. Please contact the office.');
+      expect.equal(await page.locator('#payApp').count(), 0, 'the payment form on the overdue booking');
+    });
+
     await step('Extend 48 h: payment reopens, the timeline names the staff member', async () => {
       const page = s.staff;
       await open(page, s.refA);
@@ -67,6 +80,12 @@ export default {
       expect.ok(!/You \(staff\)|Jul 14, 2026/.test(await page.locator('.br-tl').textContent()), 'a fake timeline stamp is still drawn');
       await expect.text(page, /Pay-by deadline extended 48 hours/);
       s.extendW = w;
+    });
+
+    await step('After the extension the customer has Pay now again', async () => {
+      const page = s.cust;
+      await page.goto(ctx.url('/customer/booking-history'));
+      await expect.visible(page.locator(`tr[data-booking-id="${s.refA}"] a.booking-action-pay`), 'no Pay now after the extension');
     });
 
     await step('The same entry is there after a reload', async () => {

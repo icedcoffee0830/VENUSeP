@@ -42,7 +42,25 @@ class UploadLimitTest extends TestCase
         $this->assertSame(self::MESSAGE, $err);
     }
 
+    /* Booking 20 is overdue, which cannot be paid until staff extend it (Aron 2026-11-05):
+       extend it the way extend_deadline does, run $fn, put it back. */
+    private function withBooking20Extended(callable $fn): void
+    {
+        $was = DB::table('bookings')->where('id', 20)->first(['payment_status', 'current_deadline_at']);
+        DB::table('bookings')->where('id', 20)->update(['payment_status' => 'await_gcash', 'current_deadline_at' => now()->addDays(2)]);
+        try {
+            $fn();
+        } finally {
+            DB::table('bookings')->where('id', 20)->update((array) $was);
+        }
+    }
+
     public function test_a_gcash_receipt_over_7mb_is_refused_and_not_counted(): void
+    {
+        $this->withBooking20Extended(fn () => $this->postBigReceipt());
+    }
+
+    private function postBigReceipt(): void
     {
         $before = DB::table('gcash_receipts')->count();
         $this->actingAsCustomer('customer@gmail.com')->withSession(['_token' => 't'])
@@ -76,8 +94,8 @@ class UploadLimitTest extends TestCase
 
     public function test_the_pay_page_states_the_7mb_limit(): void
     {
-        $this->actingAsCustomer('customer@gmail.com')->get(route('customer.pay', ['booking' => $this->ref(20)]))
-            ->assertOk()->assertSee('PNG or JPG, up to 7 MB', false);
+        $this->withBooking20Extended(fn () => $this->actingAsCustomer('customer@gmail.com')->get(route('customer.pay', ['booking' => $this->ref(20)]))
+            ->assertOk()->assertSee('PNG or JPG, up to 7 MB', false));
     }
 
     public function test_the_refund_page_states_the_7mb_limit(): void

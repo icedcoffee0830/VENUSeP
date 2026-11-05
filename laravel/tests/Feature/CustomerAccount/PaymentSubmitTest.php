@@ -9,12 +9,44 @@ use Tests\TestCase;
 
 /* customer/payment-submit — the JSON endpoint pay.blade.php posts to. Writes
    are undone at the end of each test (booking 20: customer@gmail.com,
-   overdue, ₱9,000, USeP Venues — GCash 09183345566). */
+   overdue, ₱9,000, USeP Venues — GCash 09183345566). An overdue booking is not
+   paid until staff extend its deadline (Aron 2026-11-05), so each test starts it
+   extended: back to await_gcash with a future deadline, as extend_deadline does. */
 class PaymentSubmitTest extends TestCase
 {
     use BookingRefs;
 
     private const BOOKING = 20;
+
+    private ?object $was = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->was = DB::table('bookings')->where('id', self::BOOKING)->first(['payment_status', 'payment_method', 'current_deadline_at']);
+        DB::table('bookings')->where('id', self::BOOKING)
+            ->update(['payment_status' => 'await_gcash', 'current_deadline_at' => now()->addDays(2)]);
+    }
+
+    protected function tearDown(): void
+    {
+        DB::table('bookings')->where('id', self::BOOKING)->update((array) $this->was);
+        parent::tearDown();
+    }
+
+    public function test_an_overdue_booking_is_refused_until_its_deadline_is_extended(): void
+    {
+        DB::table('bookings')->where('id', self::BOOKING)->update((array) $this->was);   // overdue, not extended
+        $before = DB::table('gcash_receipts')->count();
+        foreach (['cash', 'gcash'] as $method) {
+            $this->asCustomerWithToken()
+                ->post(route('customer.payment-submit'), ['_token' => 'test-token', 'booking' => $this->ref(self::BOOKING), 'method' => $method,
+                    'receipt' => $this->receiptPng(), 'ref' => '1234567890123', 'amount_centavos' => '900000'])
+                ->assertStatus(409)->assertExactJson(['ok' => false, 'message' => 'Payment overdue. Please contact the office.']);
+        }
+        $this->assertSame('overdue', DB::table('bookings')->where('id', self::BOOKING)->value('payment_status'));
+        $this->assertSame($before, DB::table('gcash_receipts')->count());
+    }
 
     private function asCustomerWithToken(): static
     {
@@ -68,12 +100,9 @@ class PaymentSubmitTest extends TestCase
             ->post(route('customer.payment-submit'), ['_token' => 'test-token', 'booking' => $this->ref(self::BOOKING), 'method' => 'cash'])
             ->assertOk()
             ->assertExactJson(['ok' => true, 'status' => 'await_cash', 'message' => 'Pay at the venue office — staff will record it.']);
-        // overdue stays overdue (the old UPDATE skips it); the method switches
         $row = DB::table('bookings')->where('id', self::BOOKING)->first();
         $this->assertSame('cash', $row->payment_method);
-        $this->assertSame('overdue', $row->payment_status);
-
-        DB::table('bookings')->where('id', self::BOOKING)->update(['payment_method' => 'gcash']);
+        $this->assertSame('await_cash', $row->payment_status);
     }
 
     public function test_a_matching_gcash_receipt_is_accepted_and_goes_to_staff(): void
@@ -153,7 +182,7 @@ class PaymentSubmitTest extends TestCase
         }
         DB::table('gcash_receipts')->where('booking_id', self::BOOKING)->delete();
         DB::table('payments')->where('booking_id', self::BOOKING)->where('payment_record_status', 'under_review')->delete();
-        DB::table('bookings')->where('id', self::BOOKING)->update(['payment_status' => 'overdue', 'payment_method' => 'gcash']);
+        DB::table('bookings')->where('id', self::BOOKING)->update(['payment_status' => 'await_gcash', 'payment_method' => 'gcash']);
     }
 
     /* The browser sends whatever date text its OCR matched; PHP cannot parse every

@@ -12,7 +12,7 @@ class BookingHistoryController
 {
     public function __invoke()
     {
-        extract(legacy('customer-bookings'));
+        extract(legacy('customer-bookings', 'offices'));
 
         $bookingHistory = $customerBookings;
 
@@ -43,6 +43,15 @@ class BookingHistoryController
             ];
         }
 
+        /* An overdue booking is not paid here unless staff extend its deadline (Aron
+           2026-11-05): the row says to contact its office instead. booking id => contact line. */
+        $bhOverdue = [];
+        foreach ($customerBookings as $bhB) {
+            if ($bhB['paymentCode'] === 'overdue' && ($bhOffice = office_of_booking($bhB['id'])) !== null) {
+                $bhOverdue[$bhB['id']] = office_contact_line($bhOffice);
+            }
+        }
+
         return view('customer.booking-history', [
             'customerContact' => $customerContact,
             'bookingHistory' => $bookingHistory,
@@ -50,6 +59,7 @@ class BookingHistoryController
             'bookingHistoryVenues' => $bookingHistoryVenues,
             'emptyBookingMessage' => 'No booking history found.',
             'bhRefunds' => $bhRefunds,
+            'bhOverdue' => $bhOverdue,
         ]);
     }
 }

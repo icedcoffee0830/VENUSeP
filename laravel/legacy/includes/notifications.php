@@ -157,7 +157,7 @@ function notif_words(array $r, string $accountType): array
     $staffLink = 'admin/booking-request.php?id=' . rawurlencode($ref);
     $viewLink  = 'customer/booking-history.php?view=' . rawurlencode($ref);
     $payLink   = 'customer/pay.php?booking=' . rawurlencode($ref);
-    $payOpen   = in_array($r['payment_status'] ?? '', ['await_gcash', 'await_cash', 'overdue'], true);
+    $payOpen   = in_array($r['payment_status'] ?? '', ['await_gcash', 'await_cash'], true);   // overdue: closed until extended
 
     switch ($r['kind']) {
         /* ---- the customer's own bookings ---- */

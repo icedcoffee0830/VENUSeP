@@ -65,6 +65,8 @@
       .badge-overdue { background: #fcecec; color: #b23a3a; }
       .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
       .booking-pay-note.is-overdue { color: #b23a3a; }
+      .booking-overdue-help { flex-basis: 100%; max-width: 26rem; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; }
+      .booking-overdue-help strong { color: #b23a3a; }
       /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
       .badge-expired, .badge-released { background: #eef0f2; color: #55606b; }
       .booking-status-note { display: block; margin-top: 4px; max-width: 220px; font-size: 11px; line-height: 1.4; color: var(--muted); }
@@ -235,7 +237,7 @@
                             @elseif ($booking['paymentStatus'] === 'Payment due')
                               <span class="booking-pay-note">pay by {{ customer_pay_by_label($booking['payment']) }}</span>
                             @elseif ($booking['paymentStatus'] === 'Overdue')
-                              <span class="booking-pay-note is-overdue">was due {{ customer_pay_by_label($booking['payment']) }} &middot; can still be paid</span>
+                              <span class="booking-pay-note is-overdue">was due {{ customer_pay_by_label($booking['payment']) }}</span>
                             @endif
                           </td>
                           <td data-label="Status"><span class="booking-badge {{ bh_badge($booking['bookingStatus']) }}">{{ $booking['bookingStatus'] }}</span>
@@ -243,8 +245,9 @@
                           <td data-label="Actions" class="booking-actions-cell">
                             <div class="booking-actions">
                               {{-- Payment is open (or a receipt is with staff): the way back to
-                                   the payment step, customer.pay. --}}
-                              @if (in_array($booking['paymentCode'], ['await_gcash', 'await_cash', 'overdue'], true))
+                                   the payment step, customer.pay. Overdue: closed until staff extend
+                                   the deadline (that puts it back to await_*). --}}
+                              @if (in_array($booking['paymentCode'], ['await_gcash', 'await_cash'], true))
                                 <a class="booking-action booking-action-pay" href="{{ route('customer.pay', ['booking' => $booking['bookingId']]) }}">
                                   <i class="bi bi-wallet2" aria-hidden="true"></i>Pay now
                                 </a>
@@ -252,6 +255,8 @@
                                 <a class="booking-action" href="{{ route('customer.pay', ['booking' => $booking['bookingId']]) }}">
                                   <i class="bi bi-hourglass-split" aria-hidden="true"></i>Payment
                                 </a>
+                              @elseif ($booking['paymentCode'] === 'overdue')
+                                <p class="booking-overdue-help"><strong>Payment overdue. Please contact the office.</strong>@isset($bhOverdue[$booking['id']])<br>{{ $bhOverdue[$booking['id']] }}@endisset</p>
                               @endif
                               <!-- the booking and its payment, in a modal over this page — same as
                                    Transaction History's View (includes/booking-details-modal.php) -->

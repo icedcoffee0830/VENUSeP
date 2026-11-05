@@ -83,7 +83,7 @@
                   <div><div class="pay-k">{{ $payIsHostel ? 'Check-in' : 'Date' }}</div><div class="pay-v">{{ $payB['eventDate'] }}</div></div>
                   <div><div class="pay-k">Amount due</div><div class="pay-v">{{ $payB['amount'] }}</div></div>
                   <div><div class="pay-k">Payment</div><div class="pay-v">{{ $payB['paymentStatus'] }}</div></div>
-                  @if ($payOpen || $payCode === 'await_event')
+                  @if ($payOpen || in_array($payCode, ['await_event', 'overdue'], true))
                     <div><div class="pay-k">{{ $payCode === 'overdue' ? 'Was due' : 'Pay by' }}</div><div class="pay-v">{{ customer_pay_by_label($payB['payment']) }}</div></div>
                   @endif
                 </div>
@@ -104,15 +104,13 @@
 
               @elseif (!$payOpen)
                 @php [$payNoteHead, $payNoteText] = $payStateNote; @endphp
-                <div class="pay-note {{ in_array($payCode, ['confirmed', 'paid_cash'], true) ? 'is-ok' : ($payCode === 'expired' ? 'is-bad' : 'is-info') }}">
+                <div class="pay-note {{ in_array($payCode, ['confirmed', 'paid_cash'], true) ? 'is-ok' : (in_array($payCode, ['expired', 'overdue'], true) ? 'is-bad' : 'is-info') }}">
                   <i class="bi {{ in_array($payCode, ['confirmed', 'paid_cash'], true) ? 'bi-check-circle' : 'bi-info-circle' }}" aria-hidden="true"></i>
                   <div><strong>{{ $payNoteHead }}</strong>{{ $payNoteText }}</div>
                 </div>
 
               @else
-                @if ($payCode === 'overdue')
-                  <div class="pay-note is-bad"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><div><strong>This payment is overdue</strong>It was due {{ customer_pay_by_label($payB['payment']) }}.{{ $payB['payment']['policy'] === 'postpay' ? ' Please pay it now — it can still be paid here.' : ' It can still be paid, but staff may release the slot.' }}</div></div>
-                @elseif (!empty($payB['payToUse']))
+                @if (!empty($payB['payToUse']))
                   <!-- the hostel is pay to use (2026-10-27, DB-DECISIONS #26) -->
                   <div class="pay-note is-info"><i class="bi bi-info-circle" aria-hidden="true"></i><div><strong>Pay before you check in</strong>Pay here by GCash, or in cash at the front desk when you arrive. If it is not paid by the end of {{ $payB['payment']['payByLabel'] }}, the beds are released. You get your bed once the stay is paid.</div></div>
                 @endif

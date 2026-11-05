@@ -123,6 +123,8 @@ export default {
       const [tab] = await Promise.all([page.waitForEvent('popup'), page.getByRole('link', { name: 'Terms and Conditions' }).click()]);
       await tab.waitForLoadState();
       expect.match(await tab.title(), /Terms and Conditions/, 'the new tab');
+      await tab.setViewportSize({ width: 390, height: 844 });
+      expect.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the terms page scrolls sideways on a phone');
       await tab.close();
       expect.ok(!(await page.locator('#terms').isChecked()), 'the tap ticked the box');
       expect.equal(await name.inputValue(), 'Half Filled', 'the form was lost');

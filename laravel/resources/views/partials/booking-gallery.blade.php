@@ -2,7 +2,7 @@
    ✕, Esc or a tap on the dark area closes it; arrows, swipe and the arrow keys change the photo.
    No zoom. The 360° tour stays separate. A native <dialog>: it keeps focus inside and hands it back. */
 const PV_CSS=`
-  .pv{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:0;border:0;background:rgba(12,11,10,.94);color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:pan-y}
+  .pv{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:0;border:0;background:rgba(12,11,10,.94);color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:pan-y;overscroll-behavior:contain}
   .pv::backdrop{background:transparent}
   .pv-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:56px 16px}
   .pv-stage img{max-width:100%;max-height:100%;object-fit:contain;display:block;border-radius:4px;user-select:none;-webkit-user-drag:none}

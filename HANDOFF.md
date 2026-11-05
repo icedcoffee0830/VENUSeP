@@ -797,3 +797,11 @@ rounds UP to the peso, DOWN when up gives back the full price (₱3 -> ₱2), ne
 - **My bookings** is cards below 1280px (the table needs about 1245px).
 - **Booking Management blank list**: proven to be the written_off row fixed in 1245c9f, for every role (flow `booking-list-roles`). An admin with no group lists nothing, by design (`BookingListRolesTest`).
 - New flows: `booking-dates`, `booking-history-due`, `booking-list-roles`, `table-pagers`, `my-bookings-widths`.
+
+### 15g. Phase S (2026-11-05, branch `fixes-3`, no migration)
+- **Counter price change**: `BookingCreateController` answers like online: 409 `price_changed` (rate differs from `shown_rate`) or `room_changed` (closed or deleted). Both replies live in `BookingRules::priceChanged()` / `roomClosed()`. After a refusal the hostel's cash step says "You already took ₱X" (`state.cashTaken`).
+- **Details modal** (`BookingDetailsController::payStep()`, customers only): Pay now with the amount, or why not. It shows on Transaction History's View too (same modal).
+- **Terms**: `/terms` (`terms.blade.php`), linked from the register and Google finish checkboxes in a new tab. It does not link or name the privacy page, which stays unlinked everywhere. Style shared in `partials/legal-page-style`.
+- **Block strip**: back on the landing page on every load (`blockNoticesForLanding()`); the popup stays once per session.
+- **Photo viewer**: `partials/booking-gallery` is now one native `<dialog>` viewer, `openGallery(i)`. Strip photos are buttons. The hostel page has no summary picture (its `heroTile` is unused).
+- New flow: `photo-viewer` (also covers the Terms link).

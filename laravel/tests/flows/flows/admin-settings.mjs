@@ -247,7 +247,6 @@ export default {
       await page.locator('#adminContactNumber').fill('09171234321');
       await page.locator('#adminPassword').fill(ctx.password);
       await page.locator('#adminConfirmPassword').fill(ctx.password);
-      await page.locator('#adminTerms').check();
       await page.getByRole('button', { name: 'Create Account' }).click();
       await expect.text(page, 'Staff account created');
 

@@ -68,7 +68,8 @@ class RegisterSubmitController
         if ($pass !== $confirm) {
             $this->reply(400, ['ok' => false, 'field' => 'confirm_password', 'message' => 'The two passwords do not match.']);
         }
-        if (empty($post->get('terms'))) {
+        /* customers only: an admin making someone else's account agrees to nothing for them */
+        if ($kind === 'customer' && empty($post->get('terms'))) {
             $this->reply(400, ['ok' => false, 'field' => 'terms', 'message' => 'Please accept the terms to continue.']);
         }
         /* A phone is optional, but if given it must be a PH mobile (GCash refunds). */

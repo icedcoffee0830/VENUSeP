@@ -104,7 +104,7 @@
                   <h3>All Transactions</h3>
                   <div class="th-search">
                     <i class="bi bi-search" aria-hidden="true"></i>
-                    <input id="table-filter" type="search" placeholder="Filter rows..." aria-label="Filter rows" />
+                    <input id="table-filter" type="search" placeholder="Search customer, venue or booking no.…" aria-label="Search customer, venue or booking number" />
                   </div>
                 </div>
 

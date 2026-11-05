@@ -49,4 +49,17 @@ class DesignPassTest extends TestCase
         $this->get(route('admin.booking-request', ['id' => sprintf('VB-%d-%03d', $rejected->y, $rejected->id)]))->assertOk()
             ->assertSee('"discountPct":null', false);
     }
+
+    public function test_the_words_say_what_each_box_does_and_the_phone_bar_is_crimson(): void
+    {
+        $this->actingAsAdmin();
+        $this->get(route('admin.staff'))->assertOk()->assertSee('Search name or email…')->assertSee('content="#7d1120"', false)
+            ->assertDontSee('Filter rows')->assertDontSee('breadcrumb');
+        $this->get(route('admin.customer-management'))->assertOk()->assertSee('Name, email or phone…')->assertSee('content="#7d1120"', false)
+            ->assertDontSee('Filter rows')->assertDontSee('breadcrumb');
+        $this->get(route('admin.transaction-history'))->assertOk()->assertSee('Search customer, venue or booking no.…')->assertDontSee('Filter rows');
+        $this->flushSession();
+        $this->actingAsCustomer()->get(route('customer.transaction-history'))->assertOk()->assertSee('Venue or booking no.…')
+            ->assertSee('No payments yet. When you pay for a booking, it shows here with its receipt.')->assertSee('No payments match these filters.');
+    }
 }

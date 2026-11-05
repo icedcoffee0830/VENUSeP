@@ -42,9 +42,9 @@ class BackupActionController
         if (!session()->has('user_id') || !in_array($type, ['admin', 'staff'], true)) {
             return $this->bk(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
         }
-        /* Admin only (Aron 2026-10-31): a backup holds everyone's IDs and password hashes. */
-        if ($type !== 'admin') {
-            return $this->bk(403, ['ok' => false, 'message' => 'Only an administrator can use backups.']);
+        /* The super admin only (DB-DECISIONS 28): a backup holds everyone's IDs and password hashes. */
+        if (!admin_is_super()) {
+            return $this->bk(403, ['ok' => false, 'message' => 'Only the super admin can use backups.']);
         }
         $actor = (int) session('user_id');
         $pdo = venusep_db();
@@ -123,15 +123,15 @@ class BackupActionController
         try {
             $pdo->beginTransaction();
             $u = $pdo->prepare(
-                'SELECT id, password_hash, account_type, is_active, reauth_failed_attempts, reauth_lock_level,
+                'SELECT id, password_hash, account_type, is_active, is_super_admin, reauth_failed_attempts, reauth_lock_level,
                         CASE WHEN reauth_locked_until > NOW() THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
                    FROM users WHERE id = :id FOR UPDATE'
             );
             $u->execute([':id' => $actor]);
             $me = $u->fetch();
-            if (!$me || !(bool) $me['is_active'] || $me['account_type'] !== 'admin') {
+            if (!$me || !(bool) $me['is_active'] || $me['account_type'] !== 'admin' || !(bool) $me['is_super_admin']) {
                 $pdo->rollBack();
-                return $this->bk(403, ['ok' => false, 'message' => 'Only an administrator can restore a backup.']);
+                return $this->bk(403, ['ok' => false, 'message' => 'Only the super admin can restore a backup.']);
             }
             if ($no = reauth_verify($pdo, $me, $password)) {
                 return isset($no['locked'])

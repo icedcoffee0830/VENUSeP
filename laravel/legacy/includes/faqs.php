@@ -4,8 +4,8 @@
    Read from the database (faqs + faq_sections, 2026-09-18).
 
    Included by:
-     customer/faq.php              (the ACTIVE rows for the CURRENT refund
-                                    policy, per section)
+     customer/faq.php              (the ACTIVE rows each office's refund
+                                    switch shows, per section: faq_row_for)
      admin/faq-management.php      (every row, with a preview switch:
                                     "as customers see it with refunds ON / OFF")
      admin/faq-save.php            (the only writer)
@@ -27,10 +27,11 @@
      {cr_communal} {cr_private}  -> the live values (pricing.php,
                                     refund-policy.php, hostel-rooms.php)
 
-   POLICY — the refund switch decides which rows show: 'any' always,
-   'refunds_on' / 'refunds_off' only under that state. The switch also
-   sets the payment-timing wording (DB-DECISIONS #18), which is why the
-   same question can exist twice with different answers.
+   POLICY — the refund switches (one per office, DB-DECISIONS 28) decide
+   which rows show: 'any' always, 'refunds_on' / 'refunds_off' while an
+   office the row is about is in that state. The switch also sets the
+   payment-timing wording (DB-DECISIONS #18), which is why the same
+   question can exist twice with different answers.
 
    FAIL SAFE: if the database cannot be reached the lists come back empty;
    the customer page says the FAQ is temporarily unavailable.
@@ -65,11 +66,9 @@ function faq_sections()
     return $cache;
 }
 
-/* [section_key => [row, ...]] in sort_order.
-     $includeHidden  true = the admin view (hidden rows too)
-     $policy         null = every row (admin); true/false = only the rows the
-                     customer sees with refunds ON / OFF                        */
-function faqs_by_section($includeHidden = false, $policy = null)
+/* [section_key => [row, ...]] in sort_order, every policy.
+     $includeHidden  true = the admin view (hidden rows too)                    */
+function faqs_by_section($includeHidden = false)
 {
     $out = [];
     $pdo = venusep_db();
@@ -80,9 +79,7 @@ function faqs_by_section($includeHidden = false, $policy = null)
     if (!$includeHidden) {
         $where[] = "is_active = 1";
     }
-    if ($policy !== null) {
-        $where[] = "policy IN ('any', '" . ($policy ? 'refunds_on' : 'refunds_off') . "')";
-    }
+
     try {
         $sql = "SELECT id, section_key, question, answer, sort_order, is_active, is_builtin, policy,
                        default_question, default_answer, updated_at
@@ -100,6 +97,29 @@ function faqs_by_section($includeHidden = false, $policy = null)
         $out = [];
     }
     return $out;
+}
+
+/* Does the customer see this row (one refund switch per office, DB-DECISIONS 28)?
+   null = no; '' = yes; else yes, naming the offices it speaks for. An 'any' row always
+   shows. A 'refunds_on' / 'refunds_off' row speaks for the offices of its section
+   (hostel: the hostel; booking, cash: the event offices; the rest: all) whose switch is
+   in that state. It names them only when the section's offices differ.
+   $offices: office_all() rows, the ones this page shows. */
+function faq_row_for(array $row, array $offices): ?string
+{
+    if ($row['policy'] === 'any') {
+        return '';
+    }
+    $about = array_filter($offices, fn ($o) => match ($row['section_key']) {
+        'hostel'          => $o['type'] === 'hostel',
+        'booking', 'cash' => $o['type'] !== 'hostel',
+        default           => true,
+    });
+    $for = array_filter($about, fn ($o) => $o['refunds'] === ($row['policy'] === 'refunds_on'));
+    if (!$for) {
+        return null;
+    }
+    return count($for) === count($about) ? '' : \Illuminate\Support\Arr::join(array_column($for, 'name'), ', ', ' and ');
 }
 
 /* The live values a question may quote. Escaped here, once. */

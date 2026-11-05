@@ -36,8 +36,8 @@ async function pickHostelDate(page, field, day) {
 async function counterWho(ctx, page) {
   const { expect } = ctx;
   await expect.text(page, 'Who is this booking for?');
-  await page.locator('#bkSearch').fill('Nikka');
-  const hit = page.locator('button', { hasText: CUSTOMER });
+  await page.locator('#bkSearch').fill(CUSTOMER);   // the exact email; results show it masked
+  const hit = page.locator('button', { hasText: CUSTOMER_NAME });
   await expect.visible(hit, 'the customer search never listed ' + CUSTOMER);
   await hit.first().click();
   await page.locator('#bkPassword').fill(ctx.password);

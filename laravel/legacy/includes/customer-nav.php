@@ -57,6 +57,9 @@ $navLinks = array_merge($navLinks, [
   ['bookings', route('customer.booking-history'),         'My bookings'],
   ['faq',      route('customer.faq') . $navCounterQ,      'FAQ'],
 ]);
+if (!office_hostel_shown()) {                                           /* counter mode: another office's hostel (DB-DECISIONS 28) */
+  $navLinks = array_values(array_filter($navLinks, function ($l) { return $l[0] !== 'hostel'; }));
+}
 if (!$navAuthed) {                                                      /* a guest has no bookings to show */
   $navLinks = array_values(array_filter($navLinks, function ($l) { return $l[0] !== 'bookings'; }));
 }

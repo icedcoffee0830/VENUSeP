@@ -35,7 +35,7 @@ class PostPayDayAfterTest extends TestCase
     public function test_landing_page_says_the_day_after(): void
     {
         $this->get(route('customer.venues'))->assertOk()
-            ->assertSee('pay by GCash or over the counter by the day after it.', false);
+            ->assertSee('<strong>USeP Venues:</strong> after your event, by the day after it.', false);   // each office's own line (DB-DECISIONS 28)
     }
 
     public function test_details_modal_customer_gets_the_day_after_staff_also_the_overdue_date(): void
@@ -62,8 +62,8 @@ class PostPayDayAfterTest extends TestCase
 
     public function test_counter_reply_and_walk_in_email_say_the_day_after_plus_overdue_after(): void
     {
-        legacy('refund-policy');
-        $this->assertFalse(refunds_enabled(), 'the test DB is post-pay (refunds off)');
+        legacy('offices');
+        $this->assertFalse(office_of_room('r1')['refunds'], 'the test DB is post-pay (refunds off)');
         do {
             $day = now()->addDays(random_int(400, 4000))->toDateString();
         } while (DB::table('venue_booking_slots as s')->join('rooms as r', 'r.id', '=', 's.room_id')

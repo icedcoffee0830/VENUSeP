@@ -2,7 +2,8 @@
   The frame of a customer auth page (was includes/customer-auth-shell.php,
   cas_open() / cas_close()) — the same split layout as the customer login
   page, for the pages that only put a form in the card: forgot-password and
-  reset-password. Styles: assets/css/customer-auth.css.
+  reset-password (both sides: $pr holds the side's route names). Styles:
+  assets/css/customer-auth.css.
 
   A page provides:
     @section('page-title', 'Forgot password')
@@ -42,9 +43,9 @@
         <p class="auth-hero-foot">&copy; 2026 VENUSeP &middot; University of Southeastern Philippines</p>
       </aside>
       <section class="auth-panel" aria-labelledby="@yield('labelledby')">
-        <a class="auth-back" href="{{ route('customer.customer-login') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Back to login</a>
+        <a class="auth-back" href="{{ route($pr['login']) }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Back to login</a>
         <div class="auth-card">
-          <a class="auth-brand" href="{{ route('customer.venues') }}" title="Back to VENUSeP"><img src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP" /></a>
+          <a class="auth-brand" href="{{ route($pr['home']) }}" title="Back to VENUSeP"><img src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP" /></a>
 @yield('card')
         </div>
       </section>

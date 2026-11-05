@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Queries\AccountQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDO;
@@ -15,13 +16,15 @@ use PDOException;
    Suspended map onto users.is_active, the only account state there is.
 
    STAFF SAVE — an ADMIN editing SOMEBODY ELSE'S account. JSON.
-     POST action=update|set_venue|set_active|reset_password, user_id
+     POST action=update|set_venue|set_active|reset_password|handover, user_id
        update:     full_name, email, employee_no, position_role, phone[, venue_id]
        set_venue:  venue_id (required for a staff account — no unassigned staff;
-                   the DB trigger trg_staff_venue_required says the same)
+                   the DB trigger trg_staff_venue_required says the same)[, both_cedu=0|1]
        set_active: active=0|1
-       reset_password: new_password — STAFF accounts only
+       reset_password: new_password — never your own
+       handover:   password, reason — the super admin to a normal admin
    · ADMIN ONLY, re-checked here — answered as JSON, not a redirect.
+   · WHO MANAGES WHOM: staff_may_manage_account() (auth.php, DB-DECISIONS 28).
    · The target must be a STAFF-SIDE account.
    · SELF-LOCKOUT GUARDS: no suspending yourself, no suspending the LAST
      active admin.
@@ -35,19 +38,25 @@ class StaffController
 {
     public function index()
     {
-        legacy('db');
+        legacy('db', 'auth');
         $smRows = [];
         $smVenues = [];
         try {
             $smPdo = venusep_db_or_fail();
+            /* the offices this admin may move staff to (DB-DECISIONS 28) */
             foreach ($smPdo->query('SELECT id, name FROM venues ORDER BY id') as $venue) {
-                $smVenues[] = ['id' => (int) $venue['id'], 'name' => (string) $venue['name']];
+                if (staff_may_handle_venue($venue['id'])) {
+                    $smVenues[] = ['id' => (int) $venue['id'], 'name' => (string) $venue['name']];
+                }
             }
             $smStmt = $smPdo->query(
                 "SELECT u.id, u.email, u.account_type, u.is_active, u.last_login_at,
+                        u.is_super_admin, u.office_group, u.handed_over_at,
                         COALESCE(s.full_name, u.username) AS full_name,
                         s.employee_no, s.position_role, s.phone, s.venue_id,
-                        v.name AS venue_name
+                        v.name AS venue_name, v.office_group AS venue_group,
+                        s.both_cedu_offices = 1 AND v.office_group = 'cedu' AS both_cedu,
+                        (SELECT GROUP_CONCAT(o.name ORDER BY o.id SEPARATOR ' and ') FROM venues o WHERE o.office_group = 'cedu') AS cedu_names
                    FROM users u
                    LEFT JOIN staff s ON s.user_id = u.id
                    LEFT JOIN venues v ON v.id = s.venue_id
@@ -55,19 +64,34 @@ class StaffController
                   ORDER BY u.account_type, COALESCE(s.full_name, u.username)"
             );
             foreach ($smStmt as $r) {
+                $isSelf = (int) $r['id'] === (int) session('user_id');
+                $canManage = !$isSelf && staff_may_manage_account($r);
+                if (!$isSelf && !$canManage && !admin_is_super()) {
+                    continue;   // a normal admin sees its own offices' staff only
+                }
+                $role = $r['is_super_admin'] ? 'Super admin' : ($r['account_type'] === 'admin' ? 'Admin' : 'Staff');
                 $smRows[] = [
                     'id'       => (int) $r['id'],
                     'name'     => (string) $r['full_name'],
                     'email'    => (string) $r['email'],
-                    'role'     => $r['account_type'] === 'admin' ? 'Admin' : 'Staff',
+                    'role'     => $role,
                     'status'   => $r['is_active'] ? 'Active' : 'Suspended',
                     'employee' => (string) $r['employee_no'],
                     'position' => (string) $r['position_role'],
                     'phone'    => (string) $r['phone'],
                     'venueId'  => $r['venue_id'] === null ? '' : (string) (int) $r['venue_id'],
-                    'venue'    => $r['account_type'] === 'admin' ? 'All venues' : ($r['venue_name'] === null ? 'Choose a venue' : (string) $r['venue_name']),
+                    'venue'    => match (true) {   // the office label
+                        $role === 'Super admin'   => 'All offices',
+                        $role === 'Admin'         => OFFICE_GROUPS[$r['office_group']] ?? 'No group yet',
+                        (bool) $r['both_cedu']    => (string) $r['cedu_names'],
+                        default                   => $r['venue_name'] === null ? 'Choose a venue' : (string) $r['venue_name'],
+                    },
+                    'both'     => (bool) $r['both_cedu'],
                     'lastLogin'=> $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
-                    'isSelf'   => (int) $r['id'] === (int) session('user_id'),
+                    'isSelf'   => $isSelf,
+                    'canManage'=> $canManage,
+                    'canBoth'  => $canManage && $role === 'Staff' && $r['venue_group'] === 'cedu',
+                    'canHandOver' => admin_is_super() && $role === 'Admin' && $r['is_active'] && $r['handed_over_at'] === null,
                 ];
             }
         } catch (PDOException $e) {
@@ -81,9 +105,9 @@ class StaffController
 
     public function register()
     {
-        extract(legacy('venues'));   // $venuesById
+        extract(legacy('venues'));   // $venuesById: only the offices this admin handles
 
-        return view('admin.admin-register', ['venuesById' => $venuesById]);
+        return view('admin.admin-register', ['venuesById' => $venuesById, 'canCreateAdmin' => admin_is_super()]);
     }
 
     /* ---------------------------------------------------------------- save */
@@ -99,15 +123,22 @@ class StaffController
         throw new HttpResponseException($this->reply($status, $data));
     }
 
-    /* Tell the other admins (2026-10-28). A failure costs a notification, never
-       the change itself. */
-    private function notify(PDO $pdo, $kind, $actor, array $detail): void
+    /* Tell the admins who look after that account (2026-10-28; DB-DECISIONS 28):
+       $venueIds = the staff member's offices, null = an admin account (the super admin).
+       A failure costs a notification, never the change itself. */
+    private function notify(PDO $pdo, $kind, $actor, array $detail, ?array $venueIds): void
     {
         try {
-            notify_admins($pdo, $kind, (int) $actor, $detail);
+            notify_account_event($pdo, $kind, (int) $actor, $detail, $venueIds);
         } catch (PDOException $e) {
             sql_failed($e, optional: true);
         }
+    }
+
+    /* Whose admins hear of an event on this account: a staff member's office, or null for an admin. */
+    private function offices(array $user): ?array
+    {
+        return $user['account_type'] === 'staff' ? [(int) $user['venue_id']] : null;
     }
 
     /* $required: a STAFF account must have a venue (decided 2026-10-27). Only
@@ -127,13 +158,17 @@ class StaffController
         if (!ctype_digit($raw) || (int) $raw < 1) {
             $this->fail(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue.']);
         }
-        $stmt = $pdo->prepare('SELECT id, name FROM venues WHERE id = :id');
+        $stmt = $pdo->prepare('SELECT id, name, office_group FROM venues WHERE id = :id');
         $stmt->execute([':id' => (int) $raw]);
         $venue = $stmt->fetch();
         if (!$venue) {
             $this->fail(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'That venue does not exist.']);
         }
-        return ['id' => (int) $venue['id'], 'name' => (string) $venue['name']];
+        /* Move staff: the super admin anywhere, a normal admin inside its own offices (DB-DECISIONS 28) */
+        if (!staff_may_handle_venue($venue['id'])) {
+            $this->fail(403, ['ok' => false, 'field' => 'venue_id', 'message' => 'You can only assign staff to your own offices.']);
+        }
+        return ['id' => (int) $venue['id'], 'name' => (string) $venue['name'], 'cedu' => $venue['office_group'] === 'cedu'];
     }
 
     /* The route skips Laravel's CSRF middleware so an expired page still gets
@@ -141,7 +176,7 @@ class StaffController
        Laravel's `_token`, or the X-CSRF-TOKEN header). */
     public function save(Request $request)
     {
-        legacy('auth', 'bookings', 'notifications');   /* cb_normalise_mobile(), notify_admins() */
+        legacy('auth', 'bookings', 'notifications');   /* cb_normalise_mobile(), notify_account_event() */
 
         if (!$request->isMethod('post')) {
             return $this->reply(405, ['ok' => false, 'message' => 'Use POST.'])->header('Allow', 'POST');
@@ -177,7 +212,8 @@ class StaffController
         }
 
         $row = $pdo->prepare(
-            'SELECT u.id, u.email, u.account_type, u.is_active, s.user_id AS staff_user_id, s.venue_id AS old_venue_id
+            'SELECT u.id, u.email, u.account_type, u.is_active, u.is_super_admin, u.handed_over_at,
+                    s.user_id AS staff_user_id, s.venue_id AS old_venue_id, s.venue_id, s.full_name
                FROM users u
                LEFT JOIN staff s ON s.user_id = u.id
               WHERE u.id = :u'
@@ -191,6 +227,14 @@ class StaffController
         if (!in_array($user['account_type'], ['admin', 'staff'], true)) {
             return $this->reply(403, ['ok' => false, 'message' => 'That account is not a staff account.']);
         }
+        /* Who manages whom (DB-DECISIONS 28): the super admin any admin or staff; a normal
+           admin the staff of its own offices, never another admin. Your own row: update only. */
+        if ($target !== $actor && !staff_may_manage_account($user)) {
+            return $this->reply(403, ['ok' => false, 'message' => 'You cannot manage that account.']);
+        }
+        if ($action === 'handover') {
+            return $this->handOver($request, $pdo, $actor, $user);
+        }
 
         /* VENUE ASSIGNMENT — which venue's bookings this staff member handles.
            Required: there are no unassigned staff. */
@@ -202,15 +246,17 @@ class StaffController
                 return $this->reply(409, ['ok' => false, 'message' => 'That staff account has no staff profile to update.']);
             }
             $venue = $this->resolveVenue($pdo, $request->input('venue_id', ''));
+            /* both_cedu = ticked for USeP Venues and USeP Hostel: only inside CEDU; not sent = unchanged */
+            $both = $request->has('both_cedu') ? (int) !empty($request->input('both_cedu')) : null;
             try {
-                $pdo->prepare('UPDATE staff SET venue_id = :v WHERE user_id = :u')
-                    ->execute([':v' => $venue['id'], ':u' => $target]);
+                $pdo->prepare('UPDATE staff SET venue_id = :v, both_cedu_offices = IF(:c, COALESCE(:b, both_cedu_offices), 0) WHERE user_id = :u')
+                    ->execute([':v' => $venue['id'], ':c' => (int) $venue['cedu'], ':b' => $both, ':u' => $target]);
             } catch (PDOException $e) {
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the venue was not changed.']);
             }
             if ((int) $user['old_venue_id'] !== (int) $venue['id']) {
-                $this->notify($pdo, 'staff_moved', $actor, ['email' => $user['email'], 'venue' => $venue['name']]);
+                $this->notify($pdo, 'staff_moved', $actor, ['email' => $user['email'], 'venue' => $venue['name']], [(int) $user['old_venue_id'], $venue['id']]);
             }
             return $this->reply(200, ['ok' => true, 'venue_id' => $venue['id'], 'venue' => $venue['name'],
                 'message' => 'Venue assignment updated.']);
@@ -287,19 +333,19 @@ class StaffController
             }
             if ($venueGiven && $user['account_type'] === 'staff' && $venue['id'] !== null
                 && (int) $user['old_venue_id'] !== (int) $venue['id']) {
-                $this->notify($pdo, 'staff_moved', $actor, ['email' => $email, 'venue' => $venue['name']]);
+                $this->notify($pdo, 'staff_moved', $actor, ['email' => $email, 'venue' => $venue['name']], [(int) $user['old_venue_id'], $venue['id']]);
             }
             return $this->reply(200, ['ok' => true, 'message' => 'Account updated.']);
         }
 
-        /* RESET PASSWORD — reset links are customer-only, so this is how a staff member
-           who forgot theirs gets back in (Aron 2026-10-31). The admin chooses a temporary
+        /* RESET PASSWORD — one way back in for a staff member who forgot theirs
+           (Aron 2026-10-31); Forgot password on the sign-in page is the other (DB-DECISIONS 28). The admin chooses a temporary
            password; password_changed_at goes back to NULL, so the staff member must replace
-           it (EnforceTwoFactor). Never another admin's: that would be a way to take over
-           an account with the same power. */
+           it (EnforceTwoFactor). Who may reset whom: staff_may_manage_account() above; the
+           super admin's own password is never reset here, it uses Forgot password. */
         if ($action === 'reset_password') {
-            if ($user['account_type'] !== 'staff') {
-                return $this->reply(403, ['ok' => false, 'message' => 'Only a staff account can be reset here.']);
+            if ($target === $actor) {
+                return $this->reply(403, ['ok' => false, 'message' => 'Change your own password on your Profile page.']);
             }
             $new = (string) $request->input('new_password', '');
             if (strlen($new) < 8) {
@@ -318,7 +364,7 @@ class StaffController
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the password was not changed.']);
             }
             \App\Http\Controllers\Auth\SignInThrottle::passed((string) $user['email']);   // a forgotten password often means a sign-in lock too
-            $this->notify($pdo, 'account_password_reset', $actor, ['email' => $user['email']]);
+            $this->notify($pdo, 'account_password_reset', $actor, ['email' => $user['email']], $this->offices($user));
             return $this->reply(200, ['ok' => true,
                 'message' => 'Password reset. Give them the temporary password; they must replace it when they sign in.']);
         }
@@ -355,12 +401,72 @@ class StaffController
             }
             if ((int) $user['is_active'] !== $active) {
                 $this->notify($pdo, $active ? 'account_reactivated' : 'account_suspended', $actor,
-                    ['email' => $user['email'], 'role' => $user['account_type']]);
+                    ['email' => $user['email'], 'role' => $user['account_type']], $this->offices($user));
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,
                 'message' => $active ? 'Account reactivated.' : 'Account suspended. They can no longer sign in.']);
         }
 
         return $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
+    }
+
+    /* HAND OVER THE SUPER ADMIN (DB-DECISIONS 28): the super admin picks an active normal
+       admin, retypes their own password and writes a reason. In one step that admin becomes
+       the super admin and the old one is suspended for good. Both are emailed. No undo. */
+    private function handOver(Request $request, PDO $pdo, int $actor, array $user)
+    {
+        if (!admin_is_super()) {
+            return $this->reply(403, ['ok' => false, 'message' => 'Only the super admin can hand over the super admin.']);
+        }
+        if ($user['account_type'] !== 'admin' || (bool) $user['is_super_admin'] || !(bool) $user['is_active']) {
+            return $this->reply(400, ['ok' => false, 'message' => 'Pick an active normal admin.']);
+        }
+        $reason = trim((string) $request->input('reason', ''));
+        if ($reason === '' || mb_strlen($reason) > 500) {
+            return $this->reply(400, ['ok' => false, 'field' => 'reason', 'message' => 'Write the reason (up to 500 characters).']);
+        }
+        $password = (string) $request->input('password', '');
+        if ($password === '') {
+            return $this->reply(400, ['ok' => false, 'error' => 'no_password', 'message' => 'Enter your password to confirm.']);
+        }
+
+        legacy('receipt-emails');
+        try {
+            $pdo->beginTransaction();
+            $me = $pdo->prepare(
+                'SELECT u.id, u.email, u.password_hash, u.account_type, u.is_active, u.is_super_admin,
+                        u.reauth_failed_attempts, u.reauth_lock_level, COALESCE(s.full_name, u.username) AS full_name,
+                        CASE WHEN u.reauth_locked_until > NOW() THEN TIMESTAMPDIFF(SECOND, NOW(), u.reauth_locked_until) ELSE 0 END AS lock_seconds
+                   FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = :id FOR UPDATE'
+            );
+            $me->execute([':id' => $actor]);
+            $me = $me->fetch();
+            if (!$me || !(bool) $me['is_super_admin']) {
+                $pdo->rollBack();
+                return $this->reply(403, ['ok' => false, 'message' => 'Only the super admin can hand over the super admin.']);
+            }
+            if ($no = reauth_verify($pdo, $me, $password)) {   // the shared lockout (auth.php)
+                return isset($no['locked'])
+                    ? $this->reply(423, ['ok' => false, 'error' => 'locked', 'message' => 'Too many wrong passwords. Try again in ' . $no['locked'] . ' seconds.'])
+                    : $this->reply(401, ['ok' => false, 'error' => 'wrong_password',
+                        'message' => 'Wrong password. ' . $no['attemptsLeft'] . ' attempt(s) left before a temporary lock.']);
+            }
+            AccountQueries::handOverSuperAdmin($actor, (int) $user['id']);
+            $outbox = queue_handover_emails($pdo,
+                ['email' => (string) $me['email'], 'name' => (string) $me['full_name']],
+                ['email' => (string) $user['email'], 'name' => (string) ($user['full_name'] ?? $user['email'])],
+                $reason, $actor);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            sql_failed($e);
+            return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
+        }
+        foreach ($outbox as $id) {
+            mail_send($pdo, $id);   // never throws
+        }
+        $this->notify($pdo, 'super_admin_handover', $actor, ['email' => $user['email']], null);   // the new super admin's bell
+        return $this->reply(200, ['ok' => true, 'signed_out' => true,
+            'message' => $user['email'] . ' is now the super admin. Your account is suspended, so you are signed out.']);
     }
 }

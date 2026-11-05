@@ -1,7 +1,8 @@
 // Flow — the admin's overview pages and system switches, checked against the database.
 // admin signs in → Dashboard tiles (today's bookings, this quarter's revenue) match the
 // database → Quarterly Reports tiles match it for the current and the previous quarter,
-// and the print layout names the chosen quarter → staff make a backup and cannot
+// and the print layout names the chosen quarter → the office toggle (Hostel, CEDU) matches
+// the database, and one-office staff get only their own office → staff make a backup and cannot
 // download it → the admin downloads it, then deletes it → a customer
 // opens a notification (marked read in the database, lands on the right page) and
 // marks the rest read.
@@ -31,6 +32,14 @@ const QUARTER_REVENUE = `SELECT COALESCE(SUM(b.total_amount), 0) AS v FROM booki
     LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
    WHERE b.payment_status IN ('confirmed', 'paid_cash', 'refund_requested', 'refund_correction',
                               'refund_await_or', 'refund_processing', 'refund_denied')
+     AND YEAR(COALESCE(vd.start_date, hd.check_in_date)) = ? AND QUARTER(COALESCE(vd.start_date, hd.check_in_date)) = ?`;
+/* the same, for some offices only (venue ids, whole numbers from this file) */
+const officeRevenue = (ids) => QUARTER_REVENUE.replace('WHERE', `JOIN rooms r ON r.id = b.room_id WHERE r.venue_id IN (${ids.join(',')}) AND`);
+/* a booking of room r whose event falls in the quarter */
+const QUARTER_ROOM_BOOKINGS = `SELECT 1 FROM bookings b
+    LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
+    LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
+   WHERE b.room_id = r.id
      AND YEAR(COALESCE(vd.start_date, hd.check_in_date)) = ? AND QUARTER(COALESCE(vd.start_date, hd.check_in_date)) = ?`;
 
 export default {
@@ -68,8 +77,10 @@ export default {
       await expect.visible(page.locator('#rpStatus', { hasText: 'In progress' }), 'the current quarter is not "In progress"');
       const rev = await dbOne(QUARTER_REVENUE, [s.y, s.q]);
       expect.equal(digits(await page.locator('#totalRevenue').textContent()), digits(Math.round(Number(rev.v))), `Total Revenue ${cur}`);
-      const venues = await dbOne(`SELECT COUNT(*) AS n FROM venues WHERE is_active = 1`);
-      expect.equal(await page.locator('#venueReportRows tr').count(), Number(venues.n), 'one table row per active venue');
+      /* one row per active hall or hostel room, plus an inactive one with business in the quarter */
+      const rooms = await dbOne(`SELECT COUNT(*) AS n FROM rooms r JOIN venues v ON v.id = r.venue_id
+          WHERE (r.is_active = 1 AND v.is_active = 1) OR EXISTS (${QUARTER_ROOM_BOOKINGS})`, [s.y, s.q]);
+      expect.equal(await page.locator('#hallRows tr, #hostelRows tr').count(), Number(rooms.n), 'one table row per room');
 
       const py = s.q === 1 ? s.y - 1 : s.y, pq = s.q === 1 ? 4 : s.q - 1;
       const prev = `Q${pq} ${py}`;
@@ -86,6 +97,40 @@ export default {
       await page.emulateMedia({ media: 'screen' });
       await page.evaluate(() => restoreAfterPrint());
       return page;
+    });
+
+    await step('Reports office toggle: the admin picks the Hostel, then CEDU; staff get their own office only', async () => {
+      const page = s.admin;
+      const cur = `Q${s.q} ${s.y}`;
+      await page.goto(ctx.url('/admin/reports'));
+      await expect.visible(page.locator('.rp-office-tabs a[aria-current="page"]', { hasText: 'All offices' }), 'the admin opens on All offices');
+      await page.locator('.rp-office-tabs a', { hasText: 'USeP Hostel' }).click();
+      await expect.url(page, /office=usep-hostel/);
+      const hostel = await dbOne(officeRevenue([3]), [s.y, s.q]);
+      expect.equal(digits(await page.locator('#totalRevenue').textContent()), digits(Math.round(Number(hostel.v))), `Hostel revenue ${cur}`);
+      expect.equal(await page.locator('#hallRows').count(), 0, 'the hostel report has no halls table');
+      await expect.visible(page.locator('#bathroomTypes', { hasText: 'By bathroom type' }), 'no bathroom types line');
+
+      await page.locator('.rp-office-tabs a', { hasText: 'USeP CEDU (both)' }).click();
+      await expect.url(page, /office=cedu/);
+      const cedu = await dbOne(officeRevenue([2, 3]), [s.y, s.q]);
+      expect.equal(digits(await page.locator('#totalRevenue').textContent()), digits(Math.round(Number(cedu.v))), `CEDU revenue ${cur}`);
+      await expect.visible(page.locator('.rp-office-note', { hasText: 'counted once' }), 'no combined-customers line');
+      await page.evaluate(() => prepareForPrint());
+      await expect.visible(page.locator('.rp-office-name', { hasText: 'USeP CEDU (both)' }), 'the printout does not name the office');
+      await page.emulateMedia({ media: 'print' });
+      await page.screenshot({ path: `${ctx.outDir}/${ctx.name}-print-cedu.png`, fullPage: true });
+      await page.emulateMedia({ media: 'screen' });
+      await page.evaluate(() => restoreAfterPrint());
+
+      s.staff = await ctx.loginStaff(STAFF);
+      await s.staff.goto(ctx.url('/admin/reports?office=usep-hostel'));   // asks for another office
+      expect.equal(await s.staff.locator('.rp-office-tabs').count(), 0, 'one-office staff get no toggle');
+      await expect.visible(s.staff.locator('.rp-office-name', { hasText: 'Bahay Alumni' }), 'staff report is not their office');
+      const bahay = await dbOne(officeRevenue([1]), [s.y, s.q]);
+      expect.equal(digits(await s.staff.locator('#totalRevenue').textContent()), digits(Math.round(Number(bahay.v))), `staff see their office's money ${cur}`);
+      ctx.note(`${cur}: hostel ₱${Math.round(Number(hostel.v))}, CEDU ₱${Math.round(Number(cedu.v))}, Bahay ₱${Math.round(Number(bahay.v))}`);
+      return s.staff;
     });
 
     await step('Staff are kept out of backups; the admin makes one', async () => {

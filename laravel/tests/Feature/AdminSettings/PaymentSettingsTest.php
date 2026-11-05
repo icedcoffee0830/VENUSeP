@@ -36,7 +36,7 @@ class PaymentSettingsTest extends TestCase
     public function test_staff_sees_the_card_read_only(): void
     {
         $this->actingAsStaff()->get(route('admin.payment-settings'))->assertOk()
-            ->assertSee('Only the administrator can change this')->assertDontSee('id="rsModal"', false);
+            ->assertSee('Only the super admin can change this')->assertDontSee('id="rsModal"', false);
     }
 
     /* The GCash save is admin-only on the server, so staff get no Edit button that
@@ -53,10 +53,11 @@ class PaymentSettingsTest extends TestCase
     {
         $name = 'Admina Test Hall ' . bin2hex(random_bytes(3));
         $venueId = DB::table('venues')->insertGetId(['venue_code' => strtoupper(str_replace(' ', '-', $name)),
-            'name' => $name, 'venue_type' => 'event', 'description' => 'test', 'is_active' => 1]);
+            'name' => $name, 'venue_type' => 'event', 'description' => 'test', 'is_active' => 1, 'office_group' => 'bahay_alumni']);
+        $this->adminEmail = 'francishubero@gmail.com';   // the group's normal admin sets its GCash accounts
         $this->useKnownAdminPassword();
         try {
-            $this->actingAsAdmin()->withTestCsrf()->get(route('admin.payment-settings'))->assertOk()
+            $this->actingAsAdmin($this->adminEmail)->withTestCsrf()->get(route('admin.payment-settings'))->assertOk()
                 ->assertSee('data-venue="' . $name . '"', false)
                 ->assertSee('No GCash account yet: customers cannot pay this venue by GCash until one is set.');
 
@@ -85,16 +86,16 @@ class PaymentSettingsTest extends TestCase
         }
     }
 
-    public function test_admin_gets_the_gcash_edit_buttons(): void
+    public function test_the_offices_admin_gets_the_gcash_edit_buttons(): void
     {
-        $this->actingAsAdmin()->get(route('admin.payment-settings'))->assertOk()
+        $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.payment-settings'))->assertOk()
             ->assertSeeInOrder(['<div class="ps-foot">', '<button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>'], false);
     }
 
     public function test_saved_flash(): void
     {
-        $this->actingAsAdmin()->get(route('admin.payment-settings', ['refunds' => 'saved']))->assertOk()
-            ->assertSee('Saved. Refund requests are now OFF.');
+        $this->actingAsAdmin()->get(route('admin.payment-settings', ['refunds' => 'saved', 'office' => 1]))->assertOk()
+            ->assertSee('Saved. Refund requests at Bahay Alumni are now OFF.');
     }
 
     /* ---- refund switch ---- */
@@ -105,16 +106,18 @@ class PaymentSettingsTest extends TestCase
             ->assertJson(['ok' => false, 'error' => 'method']);
         $this->post(route('admin.refund-switch'))->assertStatus(401)->assertJson(['error' => 'not_logged_in']);
         $this->actingAsStaff()->withTestCsrf()->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '1', 'password' => 'x'])
-            ->assertStatus(403)->assertJson(['error' => 'not_admin', 'message' => 'Only the administrator can change the refund setting.']);
+            ->assertStatus(403)->assertJson(['error' => 'not_admin', 'message' => 'Only the super admin can change the refund setting.']);
     }
 
     public function test_refund_switch_csrf_and_validation(): void
     {
         $this->actingAsAdmin()->withTestCsrf()->post(route('admin.refund-switch'), ['_token' => 'wrong', 'enable' => '1', 'password' => 'x'])
             ->assertStatus(400)->assertExactJson(['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
-        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '2', 'password' => 'x'])
+        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'venue_id' => '1', 'enable' => '2', 'password' => 'x'])
             ->assertStatus(400)->assertJson(['error' => 'bad_value']);
-        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '1'])
+        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '1', 'password' => 'x'])
+            ->assertStatus(400)->assertJson(['error' => 'bad_value']);   // no office
+        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'venue_id' => '1', 'enable' => '1'])
             ->assertStatus(400)->assertJson(['error' => 'no_password']);
     }
 
@@ -123,12 +126,12 @@ class PaymentSettingsTest extends TestCase
         $this->useKnownAdminPassword();
         $this->actingAsAdmin()->withTestCsrf();
         for ($i = 1; $i <= 4; $i++) {
-            $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '1', 'password' => 'nope'])
+            $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'venue_id' => '1', 'enable' => '1', 'password' => 'nope'])
                 ->assertStatus(401)->assertJson(['error' => 'wrong_password', 'attemptsLeft' => 5 - $i]);
         }
-        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '1', 'password' => 'nope'])
+        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'venue_id' => '1', 'enable' => '1', 'password' => 'nope'])
             ->assertStatus(423)->assertJson(['error' => 'locked', 'seconds' => 10, 'justLocked' => true]);
-        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '1', 'password' => $this->pw])
+        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'venue_id' => '1', 'enable' => '1', 'password' => $this->pw])
             ->assertStatus(423)->assertJson(['error' => 'locked']);
         $this->assertSame(1, (int) DB::table('users')->where('email', 'admin@gmail.com')->value('reauth_lock_level'));
     }
@@ -136,16 +139,20 @@ class PaymentSettingsTest extends TestCase
     public function test_refund_switch_turns_on_and_writes_history(): void
     {
         $this->useKnownAdminPassword();
-        $before = DB::table('system_settings_history')->where('setting_key', 'refunds_enabled')->count();
+        $history = fn () => DB::table('venue_settings_history')->where('venue_id', 2)->where('field', 'refunds')->count();
+        $before = $history();
         $this->actingAsAdmin()->withTestCsrf()
-            ->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '1', 'password' => $this->pw])
+            ->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'venue_id' => '2', 'enable' => '1', 'password' => $this->pw])
             ->assertOk()->assertExactJson(['ok' => true, 'enabled' => true, 'changed' => true]);
-        $this->assertSame('1', DB::table('system_settings')->where('setting_key', 'refunds_enabled')->value('setting_value'));
-        $this->assertSame($before + 1, DB::table('system_settings_history')->where('setting_key', 'refunds_enabled')->count());
+        $this->assertSame([1 => 0, 2 => 1, 3 => 0], DB::table('venues')->orderBy('id')->pluck('refunds_enabled', 'id')->map(fn ($v) => (int) $v)->all(),
+            'only that office changed');
+        $this->assertSame($before + 1, $history());
 
-        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'enable' => '0', 'password' => $this->pw])
+        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'venue_id' => '2', 'enable' => '0', 'password' => $this->pw])
             ->assertOk()->assertJson(['enabled' => false, 'changed' => true]);
-        $this->assertSame('0', DB::table('system_settings')->where('setting_key', 'refunds_enabled')->value('setting_value'));
+        $this->assertSame(0, (int) DB::table('venues')->where('id', 2)->value('refunds_enabled'));
+        $this->post(route('admin.refund-switch'), ['_token' => 'test-csrf-token', 'venue_id' => '999', 'enable' => '1', 'password' => $this->pw])
+            ->assertStatus(404)->assertJson(['error' => 'no_office']);
     }
 
     /* ---- GCash account ---- */
@@ -155,16 +162,17 @@ class PaymentSettingsTest extends TestCase
         $this->actingAsStaff()->withTestCsrf()->post(route('admin.gcash-account-save'), ['_token' => 'test-csrf-token'])
             ->assertStatus(403)->assertJson(['error' => 'not_admin']);
         $this->flushSession();
-        $this->actingAsAdmin()->withTestCsrf()->post(route('admin.gcash-account-save'), [
+        $this->actingAsAdmin('francishubero@gmail.com')->withTestCsrf()->post(route('admin.gcash-account-save'), [
             '_token' => 'test-csrf-token', 'venue' => 'Bahay Alumni', 'account_name' => 'X', 'mobile_number' => '0812', 'password' => 'x',
         ])->assertStatus(400)->assertJson(['field' => 'mobile_number']);
     }
 
     public function test_gcash_save_supersedes_the_old_row(): void
     {
+        $this->adminEmail = 'francishubero@gmail.com';   // Bahay Alumni's normal admin
         $this->useKnownAdminPassword();
         $old = DB::table('gcash_accounts')->where('venue_id', 1)->where('is_active', 1)->first();
-        $this->actingAsAdmin()->withTestCsrf()->post(route('admin.gcash-account-save'), [
+        $this->actingAsAdmin($this->adminEmail)->withTestCsrf()->post(route('admin.gcash-account-save'), [
             '_token' => 'test-csrf-token', 'venue' => 'Bahay Alumni', 'account_name' => 'Test Payee',
             'mobile_number' => '0917 000 1111', 'password' => $this->pw,
         ])->assertOk()->assertJson(['ok' => true, 'number' => '09170001111', 'previous' => $old->mobile_number]);

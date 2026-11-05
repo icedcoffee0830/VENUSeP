@@ -29,7 +29,7 @@ use Throwable;
    a new booking stores the full price with affiliation_verified = 0, and
    approval applies the rate (DB-DECISIONS #3).
 
-   THE POLICY IS SNAPSHOTTED. refunds_allowed copies the live switch at the
+   THE POLICY IS SNAPSHOTTED. refunds_allowed copies the office's switch at the
    moment of booking and never changes again (DB-DECISIONS #18).
 
    An expired token is answered by Laravel's CSRF check, which bootstrap/app.php
@@ -99,6 +99,10 @@ class BookingSubmitController extends Controller
         }
 
         $office = office_by_id($room['venue_id']);
+        /* Blocked at this office (DB-DECISIONS 28): the notice, never the reason. */
+        if ($blocked = BookingRules::blockNotice($customerId, (int) $room['venue_id'])) {
+            return self::reply(409, ['ok' => false, 'error' => 'blocked', 'message' => $blocked['message'] . ' ' . $blocked['contact']]);
+        }
         if ($unpaid = BookingRules::tooManyUnpaid($pdo, $customerId, (int) $room['venue_id'])) {
             return self::reply(409, ['ok' => false, 'error' => 'too_many_unpaid', 'message' => $unpaid]);
         }
@@ -116,8 +120,8 @@ class BookingSubmitController extends Controller
             return self::reply(400, ['ok' => false, 'message' => $idError]);
         }
 
-        /* The policy snapshot — read once, stored on the booking, never re-read. */
-        $refundsAllowed = refunds_enabled() ? 1 : 0;
+        /* The policy snapshot — this office's switch (DB-DECISIONS 28), read once, stored on the booking, never re-read. */
+        $refundsAllowed = $office['refunds'] ? 1 : 0;
 
         /* While refunds are OFF the customer must acknowledge the booking is final. */
         if (!$refundsAllowed && empty($request->post('agree_no_refund'))) {

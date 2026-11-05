@@ -6,7 +6,8 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/* admin_require_login(): `staff` = admin or staff, `staff:admin` = admins only.
+/* admin_require_login(): `staff` = admin or staff, `staff:admin` = admins only,
+   `staff:super` = the super admin only (DB-DECISIONS 28).
    Not signed in on the staff side -> sign-in page; staff on an admin-only page
    -> dashboard; suspended / demoted / 2FA-reset accounts are handled by
    staff_session_heal(). */

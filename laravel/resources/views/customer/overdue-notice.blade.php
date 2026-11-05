@@ -1,6 +1,8 @@
 {{-- An Overdue booking blocks new online bookings at its office (2026-11-01):
      booking-submit refuses, and the booking pages say so up front.
-     $overdueNotice = BookingRules::overdueNoticeForPage() (null: nothing shown). --}}
+     $overdueNotice = BookingRules::overdueNoticeForPage() (null: nothing shown).
+     A block at an office (DB-DECISIONS 28) is told the same way, with the office's contact
+     info and never the reason: $blockNotices = BookingRules::blockNoticesForPage(). --}}
 @if ($overdueNotice)
 <div style="padding:{{ $noticeGutter ?? '0 16px' }}">
   <div role="alert" style="max-width:1120px;margin:{{ $noticeMargin ?? '16px auto 0' }};padding:12px 16px;background:#fdf6e7;border:1px solid #efd9ab;border-radius:12px;color:#5c3d0c;font-size:14px;line-height:1.55;text-align:left;box-sizing:border-box">
@@ -9,3 +11,10 @@
   </div>
 </div>
 @endif
+@foreach ($blockNotices ?? [] as $block)
+<div style="padding:{{ $noticeGutter ?? '0 16px' }}">
+  <div role="alert" style="max-width:1120px;margin:{{ $noticeMargin ?? '16px auto 0' }};padding:12px 16px;background:#fdf6e7;border:1px solid #efd9ab;border-radius:12px;color:#5c3d0c;font-size:14px;line-height:1.55;text-align:left;box-sizing:border-box;overflow-wrap:anywhere">
+    <strong>{{ $block['message'] }}</strong><br>{{ $block['contact'] }}
+  </div>
+</div>
+@endforeach

@@ -12,7 +12,7 @@ class BackupRestoreController
         legacy('backup');
 
         return view('admin.backup-restore', [
-            'brIsAdmin' => admin_is_admin(),
+            'brIsAdmin' => admin_is_super(),   // the super admin only (DB-DECISIONS 28)
             'brBackups' => backup_list(),
             'brVersion' => backup_schema_version(),
             'brCsrf'    => csrf_token(),

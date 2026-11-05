@@ -10,10 +10,10 @@
             <h1 class="auth-title" id="resetTitle">This link can&rsquo;t be used</h1>
             <p class="auth-subtitle">It has expired, was already used, or a newer link was sent after it. Links work once, for 30 minutes.</p>
           </div>
-          <a class="btn-auth" href="{{ route('customer.forgot-password') }}">Send a new link</a>
+          <a class="btn-auth" href="{{ route($pr['forgot']) }}">Send a new link</a>
           <div class="auth-alt">
             <span class="auth-alt-text">Remembered your password?</span>
-            <a class="btn-auth btn-auth-outline" href="{{ route('customer.customer-login') }}">Back to login</a>
+            <a class="btn-auth btn-auth-outline" href="{{ route($pr['login']) }}">Back to login</a>
           </div>
           @else
           <div class="auth-heading">
@@ -21,7 +21,7 @@
             <p class="auth-subtitle">For {{ $reset['email'] }}</p>
           </div>
           @if (!empty($rpErrors['form']))<p class="auth-notice" role="alert">{{ $rpErrors['form'] }}</p>@endif
-          <form id="resetForm" action="{{ route('customer.reset-password') }}" method="post">
+          <form id="resetForm" action="{{ route($pr['reset']) }}" method="post">
             @csrf
             <input type="email" name="username" value="{{ $reset['email'] }}" autocomplete="username" hidden />
             <div class="form-group">

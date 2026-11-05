@@ -2,49 +2,70 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Queries\ReportQueries;
+use Illuminate\Http\Request;
+
 /* Quarterly Reports (was admin/Quarterly_Reports.php). Route middleware: staff.
-   Computed from `bookings` (legacy bookings.php), so the reports describe
-   whatever the business actually did. */
+   One page, one set of queries (ReportQueries), for the office choice in ?office=
+   (DB-DECISIONS 28). The choices come from who is signed in, never from the URL:
+   a choice they may not have falls back to their default one. */
 class ReportsController
 {
-    public function __invoke()
+    public function __invoke(Request $request)
     {
-        legacy('bookings');
+        legacy('auth');
 
-        $rpQuarters = report_quarters(4);
-        $rpVenues   = report_by_venue();          // all time — the default view
-
-        $venueRow = function ($v) {
-            return ['venue' => $v['venue'], 'events' => (int) $v['events'],
-                    'discounted' => (int) $v['discounted'], 'cancelled' => (int) $v['cancelled'],
-                    'revenue' => (float) $v['revenue']];
-        };
-
-        /* The venue breakdown for EACH quarter in the window, so the Reporting Period
-           dropdown can narrow the per-venue charts and the stat tiles without a page
-           reload. The TREND charts deliberately keep showing all four quarters. */
-        $rpByQuarter = [];
-        foreach ($rpQuarters as $rpQ) {
-            if (!preg_match('/^Q(\d) (\d{4})$/', $rpQ['label'], $m)) {
-                continue;
-            }
-            $rpByQuarter[] = [
-                'label'     => $rpQ['label'],
-                'revenue'   => (float) $rpQ['revenue'],
-                'avg'       => (float) $rpQ['avg'],
-                'bookings'  => (int) $rpQ['bookings'],
-                'cancelled' => (int) $rpQ['cancelled'],
-                'venues'    => array_map($venueRow, report_by_venue((int) $m[2], (int) $m[1])),
-            ];
+        $rpChoices = $this->choices();
+        $rpOffice = $request->query('office');
+        if (!is_string($rpOffice) || !isset($rpChoices[$rpOffice])) {
+            $rpOffice = array_key_last($rpChoices);          // the widest choice; null = no office at all
         }
+        $offices = $rpOffice === null ? [] : $rpChoices[$rpOffice]['offices'];
+        $ids = array_column($offices, 'id');
+        $kinds = array_unique(array_column($offices, 'venue_type'));
+        $rpHalls = in_array('event', $kinds, true);
+        $rpHostel = in_array('hostel', $kinds, true);
+        /* several offices: the charts compare the offices; one office: its halls or rooms */
+        $rpBy = count($offices) > 1 ? 'Office' : ($rpHostel ? 'Room' : 'Hall');
 
-        /* If there are no quarters at all (a brand-new database), the charts fall
-           back to the all-time breakdown. */
-        $allTimeVenues = array_map($venueRow, $rpVenues);
+        $rpQuarters = ReportQueries::quarters($ids, 4);
+        $rpByQuarter = [];
+        foreach ($rpQuarters as $q) {
+            $rpByQuarter[] = $q + ['rooms' => ReportQueries::rooms($ids, $q['year'], $q['quarter'])];
+        }
+        /* If there are no quarters at all, the charts fall back to the all-time breakdown. */
+        $allTimeRooms = ReportQueries::rooms($ids);
 
         /* Today's quarter comes from the server, not the viewer's clock. */
         $currentQuarter = 'Q' . (int) ceil((int) date('n') / 3) . ' ' . date('Y');
 
-        return view('admin.reports', compact('rpQuarters', 'rpByQuarter', 'allTimeVenues', 'currentQuarter'));
+        return view('admin.reports', compact('rpChoices', 'rpOffice', 'rpBy', 'rpHalls', 'rpHostel',
+            'rpQuarters', 'rpByQuarter', 'allTimeRooms', 'currentQuarter'));
+    }
+
+    /* What this person may report on, narrowest first, key => [label, offices]: each of
+       their offices; each group they have two or more offices of ("USeP CEDU (both)"); and
+       for the super admin, every office. So a normal admin or staff member with one office
+       has one choice (no toggle), and nobody gets an office staff_venue_scope() leaves out. */
+    private function choices(): array
+    {
+        $offices = ReportQueries::offices(staff_venue_scope());
+        $choices = [];
+        $groups = [];
+        foreach ($offices as $o) {
+            $choices[strtolower($o['venue_code'])] = ['label' => $o['name'], 'offices' => [$o]];
+            if ($o['office_group'] !== null) {
+                $groups[$o['office_group']][] = $o;
+            }
+        }
+        foreach ($groups as $group => $list) {
+            if (count($list) > 1) {
+                $choices[$group] = ['label' => (OFFICE_GROUPS[$group] ?? $group) . ' (both)', 'offices' => $list];
+            }
+        }
+        if (admin_is_super() && count($offices) > 1) {
+            $choices['all'] = ['label' => 'All offices', 'offices' => $offices];
+        }
+        return $choices;
     }
 }

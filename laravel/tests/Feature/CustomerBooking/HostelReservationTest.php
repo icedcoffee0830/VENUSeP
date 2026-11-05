@@ -44,7 +44,8 @@ class HostelReservationTest extends TestCase
 
     public function test_staff_at_the_counter_get_counter_mode(): void
     {
-        $this->actingAsStaff()->get(route('customer.hostel-reservation', ['room' => 'h1', 'counter' => 1]))->assertOk()
+        /* jakemerson@gmail.com handles the hostel; another office's room is refused (CounterOfficeTest) */
+        $this->actingAsStaff('jakemerson@gmail.com')->get(route('customer.hostel-reservation', ['room' => 'h1', 'counter' => 1]))->assertOk()
             ->assertSee('const COUNTER = true;', false)
             ->assertSee(json_encode(route('admin.customer-verify')), false)
             ->assertSee(route('admin.calendar'), false);

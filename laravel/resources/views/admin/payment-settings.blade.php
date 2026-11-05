@@ -126,6 +126,10 @@
       .rs-meta strong { color: var(--ps-muted); font-weight: 600; }
       .rs-flash { align-items: center; color: #1c7a4f; display: flex; font-size: 0.8rem; font-weight: 600; gap: 0.4rem; margin-bottom: 0.6rem; }
       .rs-error { color: #b23a3a; }
+      /* one row per office (DB-DECISIONS 28) */
+      .rs-office { align-items: flex-start; border-top: 1px solid #f0efec; display: flex; flex-wrap: wrap; gap: 0.9rem; justify-content: space-between; margin-top: 0.85rem; padding-top: 0.85rem; }
+      .rs-office h3 { font-size: 0.92rem; font-weight: 650; margin: 0; }
+      .rs-office .rs-meta { border-top: 0; margin-top: 0.35rem; padding-top: 0; }
 
       /* ---- the warning + password window ---- */
       .rs-backdrop { align-items: center; background: rgba(15, 12, 10, 0.5); display: flex; inset: 0; justify-content: center; padding: 16px; position: fixed; z-index: 2000; }
@@ -162,54 +166,67 @@
               </div>
             </div>
 
-            <!-- REFUND REQUESTS — the admin-only switch (includes/refund-policy.php).
-                 Everything shown here is re-checked by admin/refund-switch.php. -->
+            <!-- REFUND REQUESTS — one switch per office, the super admin's only (DB-DECISIONS 28).
+                 Everything shown here is re-checked by RefundSwitchController. -->
             <section class="rs-card" id="rsCard" aria-labelledby="rsTitle">
-              @if ($rsJustSaved && $rsDbOk)
-                <div class="rs-flash" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>Saved. Refund requests are now {{ $rsEnabled ? 'ON' : 'OFF' }}.</div>
+              @if ($rsJustSaved)
+                <div class="rs-flash" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>Saved. Refund requests at {{ $rsJustSaved['name'] }} are now {{ $rsJustSaved['refunds'] ? 'ON' : 'OFF' }}.</div>
               @endif
               <div class="rs-top">
-                <div>
-                  <div class="rs-title">
-                    <h2 id="rsTitle">Refund Requests</h2>
-                    @if ($rsDbOk)
-                      <span class="rs-pill {{ $rsEnabled ? 'rs-pill-on' : 'rs-pill-off' }}">{{ $rsEnabled ? 'ON' : 'OFF' }}</span>
-                    @endif
-                  </div>
-                  @if (!$rsDbOk)
-                    <p class="rs-state rs-error">The database cannot be reached, so this setting cannot be read or changed right now. Until it is back, customers are shown the no-refund policy.</p>
-                  @elseif ($rsEnabled)
-                    <p class="rs-state"><strong>Customers may request refunds</strong> on bookings they make while this is ON. Those bookings are <strong>paid before the event</strong> (after approval, by the day before).</p>
-                  @else
-                    <p class="rs-state"><strong>All new bookings are non-refundable</strong> and are <strong>paid after the event</strong> &mdash; payment opens and is due the day after the last booked day; unpaid bookings go overdue after {{ (int) $POSTPAY_GRACE_DAYS }} days, nothing is released. Customers must confirm they understand this before they book. This is USeP's normal policy.</p>
-                  @endif
+                <div class="rs-title">
+                  <h2 id="rsTitle">Refund Requests</h2>
                 </div>
-                <div>
-                  @if (!$rsDbOk)
-                    <span class="rs-lock"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>Unavailable</span>
-                  @elseif ($rsIsAdmin)
-                    <button type="button" class="ps-btn {{ $rsEnabled ? 'ps-btn-primary' : 'rs-btn-on' }}" id="rsOpen">
-                      {{ $rsEnabled ? 'Turn refunds OFF' : 'Turn refunds ON' }}
-                    </button>
-                  @else
-                    <span class="rs-lock"><i class="bi bi-lock-fill" aria-hidden="true"></i>Only the administrator can change this</span>
-                  @endif
-                </div>
+                @if ($rsDbOk && !$rsIsAdmin)
+                  <span class="rs-lock"><i class="bi bi-lock-fill" aria-hidden="true"></i>Only the super admin can change this</span>
+                @endif
               </div>
-              <ul class="rs-rules">
-                <li>A change applies to <strong>new bookings only</strong>. Every booking keeps the policy it was made under.</li>
-                <li>Closures by USeP are not affected. Those customers are always offered a replacement room, a new date, or their money back.</li>
-                <li>Changing it needs your password, and every change is recorded.</li>
-              </ul>
-              @if ($rsDbOk)
-                <div class="rs-meta">
-                  @if ($rsDetails['updated_by'])
-                    Last changed by <strong>{{ $rsDetails['updated_by'] }}</strong> on {{ date('M j, Y \a\t g:i A', strtotime($rsDetails['updated_at'])) }}
-                  @else
-                    Not changed since the system was set up (default: OFF).
+              @if (!$rsDbOk)
+                <p class="rs-state rs-error">The database cannot be reached, so this setting cannot be read or changed right now. Until it is back, customers are shown the no-refund policy.</p>
+              @endif
+              @foreach ($rsOffices as $o)
+                @php $hostel = $o['type'] === 'hostel'; @endphp
+                <div class="rs-office">
+                  <div>
+                    <div class="rs-title">
+                      <h3>{{ $o['name'] }}</h3>
+                      <span class="rs-pill {{ $o['refunds'] ? 'rs-pill-on' : 'rs-pill-off' }}">{{ $o['refunds'] ? 'ON' : 'OFF' }}</span>
+                    </div>
+                    <p class="rs-state">
+                      @if ($o['refunds'])
+                        <strong>Customers may request refunds</strong> on {{ $hostel ? 'stays' : 'bookings' }} made while this is ON.
+                      @else
+                        <strong>New {{ $hostel ? 'stays' : 'bookings' }} are non-refundable.</strong> Customers confirm this before they book.
+                      @endif
+                      <br>
+                      @switch (office_payment_policy($o))
+                        @case ('pay_to_use') Payment: always before the stay (fixed). @break
+                        @case ('prepay') Payment: <strong>before the event</strong>, after approval, by the day before. @break
+                        @default Payment: <strong>after the event</strong>, due the day after the last booked day; overdue after {{ $o['grace'] }} days, nothing is released.
+                      @endswitch
+                    </p>
+                    <div class="rs-meta">
+                      @if ($o['last'])
+                        Last changed by <strong>{{ $o['last']['email'] ?? 'a removed account' }}</strong> on {{ date('M j, Y \a\t g:i A', strtotime($o['last']['changed_at'])) }}
+                      @else
+                        Not changed since each office got its own switch (default: OFF).
+                      @endif
+                    </div>
+                  </div>
+                  @if ($rsIsAdmin)
+                    <button type="button" class="ps-btn {{ $o['refunds'] ? 'ps-btn-primary' : 'rs-btn-on' }}" data-rs-open
+                            data-venue="{{ $o['id'] }}" data-name="{{ $o['name'] }}" data-on="{{ $o['refunds'] ? 1 : 0 }}" data-hostel="{{ $hostel ? 1 : 0 }}"
+                            data-stay="{{ $o['stay'] }}" data-open="{{ $o['open'] }}" data-grace="{{ $o['grace'] }}"
+                            aria-label="{{ ($o['refunds'] ? 'Turn refunds OFF at ' : 'Turn refunds ON at ') . $o['name'] }}">
+                      {{ $o['refunds'] ? 'Turn refunds OFF' : 'Turn refunds ON' }}
+                    </button>
                   @endif
                 </div>
-              @endif
+              @endforeach
+              <ul class="rs-rules">
+                <li>A change applies to <strong>new bookings at that office only</strong>. Every booking keeps the policy it was made under.</li>
+                <li>Closures by USeP are not affected. Those customers are always offered a replacement room, a new date, or their money back.</li>
+                <li>Changing it needs your password, and every change is recorded in the office's settings history.</li>
+              </ul>
             </section>
 
             <div class="ps-why">
@@ -240,10 +257,10 @@
                 </div>
 
                 <div class="ps-foot">
-                  @if ($rsIsAdmin)
+                  @if ($psCanEdit)
                     <button type="button" class="ps-btn" onclick="psEdit(this)">Edit</button>
                   @else
-                    <span class="rs-lock"><i class="bi bi-lock-fill" aria-hidden="true"></i>Only the administrator can change this</span>
+                    <span class="rs-lock"><i class="bi bi-lock-fill" aria-hidden="true"></i>Only the office's admin can change this</span>
                   @endif
                 </div>
               </div>
@@ -295,11 +312,10 @@
          ============================================================ -->
     <script>
       (function () {
-        const ENABLED = {{ $rsEnabled ? 'true' : 'false' }};
         const CSRF = @json($rsCsrf);
-        const STAY_REFUNDABLE = {{ (int) $rsStayRefundable }};
         let lockUntil = Date.now() + {{ (int) $rsLockSeconds }} * 1000;
         let timer = null, busy = false;
+        let office = null, openBtn = null;   /* the office whose button opened the window (data-* on it) */
 
         const modal = document.getElementById('rsModal');
         const title = document.getElementById('rsModalTitle');
@@ -308,17 +324,11 @@
         const pw = document.getElementById('rsPassword');
         const msg = document.getElementById('rsMsg');
         const confirmBtn = document.getElementById('rsConfirm');
-        const openBtn = document.getElementById('rsOpen');
 
         const plural = function (n, one, many) { return n + ' ' + (n === 1 ? one : many); };
-        /* Refunds still open when the switch is about to be turned OFF. Open
-           requests are finished by staff even after it goes off (DB-DECISIONS
-           #16), so this is a warning, not a blocker. Counted server-side from
-           the `refunds` table — it used to come from browser storage, which
-           meant the warning only ever counted requests filed in THIS browser
-           and read zero for everyone else. */
-        const OPEN_REFUNDS = {{ (int) $rsOpenRefunds }};
-        function openRequests() { return OPEN_REFUNDS; }
+        /* Per office, counted server-side: refund requests still open (finished by staff even
+           after the switch goes off, DB-DECISIONS #16: a warning, not a blocker) and bookings
+           made while it was ON, which keep their refund right. */
 
         function show(kind, text) { msg.className = 'rs-msg ' + (kind === 'lock' ? 'rs-msg-lock' : 'rs-msg-bad'); msg.textContent = text; msg.hidden = false; }
         function hideMsg() { msg.hidden = true; }
@@ -340,21 +350,29 @@
           tick();
         }
 
-        function open() {
-          const turningOn = !ENABLED;
-          title.textContent = turningOn ? 'Enable refund requests?' : 'Disable refund requests?';
+        function open(btn) {
+          openBtn = btn;
+          office = { id: btn.dataset.venue, name: btn.dataset.name, on: btn.dataset.on === '1', hostel: btn.dataset.hostel === '1',
+                     stay: +btn.dataset.stay, open: +btn.dataset.open, grace: +btn.dataset.grace };
+          const turningOn = !office.on;
+          const at = ' at <strong>' + office.name.replace(/[&<>"]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }) + '</strong>';
+          title.textContent = (turningOn ? 'Enable refund requests at ' : 'Disable refund requests at ') + office.name + '?';
           confirmBtn.textContent = turningOn ? 'Enable refunds' : 'Disable refunds';
           const items = turningOn ? [
-            'Customers will be able to request refunds on bookings made <strong>from now on</strong>.',
+            'Customers will be able to request refunds on bookings made' + at + ' <strong>from now on</strong>. The other offices do not change.',
             'Bookings made while refunds were OFF <strong>stay non-refundable</strong>, because their customers agreed to that.',
-            'The landing page, FAQ and checkout will stop saying bookings are non-refundable.',
-            'New bookings switch to <strong>pre-pay</strong>: paid after approval, by the day before the event; unpaid holds are released.',
+            'The landing page, FAQ and checkout will stop saying this office\'s bookings are non-refundable.',
+            office.hostel
+              ? 'Payment does not change: hostel stays are always paid before the stay.'
+              : 'New bookings switch to <strong>pre-pay</strong>: paid after approval, by the day before the event; unpaid holds are released.',
             '<strong>Only enable this if the University\'s policy officially allows refunds.</strong>'
           ] : [
-            'Customers <strong>can no longer request refunds</strong> on new bookings, and must confirm a booking is non-refundable before making it.',
-            '<strong>' + plural(openRequests(), 'open refund request is', 'open refund requests are') + '</strong> still waiting. Staff can still finish them.',
-            '<strong>' + plural(STAY_REFUNDABLE, 'booking', 'bookings') + '</strong> made while refunds were ON <strong>' + (STAY_REFUNDABLE === 1 ? 'stays' : 'stay') + ' refundable</strong>, because their customers were promised that.',
-            'New bookings switch to <strong>post-pay</strong>: nothing is paid until the event is over, then it is due the day after the event. Unpaid bookings go overdue after ' + {{ (int) $POSTPAY_GRACE_DAYS }} + ' days instead of being released.',
+            'Customers <strong>can no longer request refunds</strong> on new bookings' + at + ', and must confirm a booking is non-refundable before making it.',
+            '<strong>' + plural(office.open, 'open refund request is', 'open refund requests are') + '</strong> still waiting. Staff can still finish them.',
+            '<strong>' + plural(office.stay, 'booking', 'bookings') + '</strong> made while refunds were ON <strong>' + (office.stay === 1 ? 'stays' : 'stay') + ' refundable</strong>, because their customers were promised that.',
+            office.hostel
+              ? 'Payment does not change: hostel stays are always paid before the stay.'
+              : 'New bookings switch to <strong>post-pay</strong>: nothing is paid until the event is over, then it is due the day after the event. Unpaid bookings go overdue after ' + office.grace + ' days instead of being released.',
             'Closures by USeP are not affected. Those customers are still offered a replacement or their money back.'
           ];
           list.innerHTML = items.map(function (t) { return '<li>' + t + '</li>'; }).join('');
@@ -369,7 +387,7 @@
           if (openBtn) openBtn.focus();
         }
 
-        if (openBtn) openBtn.addEventListener('click', open);
+        document.querySelectorAll('[data-rs-open]').forEach(function (b) { b.addEventListener('click', function () { open(b); }); });
         document.getElementById('rsCancel').addEventListener('click', close);
         modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) close(); });
@@ -381,7 +399,8 @@
 
           const body = new FormData();
           body.append('_token', CSRF);
-          body.append('enable', ENABLED ? '0' : '1');
+          body.append('venue_id', office.id);
+          body.append('enable', office.on ? '0' : '1');
           body.append('password', pw.value);
 
           busy = true; confirmBtn.disabled = true; pw.disabled = true; hideMsg();
@@ -389,7 +408,7 @@
             .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'Unexpected reply from the server.' }; }); })
             .then(function (res) {
               busy = false;
-              if (res.ok) { location.replace(@json(route('admin.payment-settings', ['refunds' => 'saved']))); return; }
+              if (res.ok) { location.replace(@json(route('admin.payment-settings', ['refunds' => 'saved'])) + '&office=' + encodeURIComponent(office.id)); return; }
               pw.value = '';
               if (res.error === 'locked') { startCountdown(res.seconds || 10); return; }
               confirmBtn.disabled = false; pw.disabled = false;

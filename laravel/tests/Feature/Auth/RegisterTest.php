@@ -81,7 +81,7 @@ class RegisterTest extends TestCase
         $f = ['kind' => 'staff'] + $this->customerFields($email);
         $this->submit($f)->assertStatus(403)
             ->assertJson(['message' => 'Only an administrator can create a staff or admin account.']);
-        $admin = $this->makeAccount('admin', ['totp' => 'JBSWY3DPEHPK3PXP']);
+        $admin = $this->makeAccount('admin', ['totp' => 'JBSWY3DPEHPK3PXP', 'group' => 'bahay_alumni']);   // venue 1's group
         $as = ['user_id' => $admin->id, 'account_type' => 'admin', 'tfa_passed' => true];
         $this->submit($f, $as)->assertStatus(400)->assertJson(['field' => 'venue_id', 'message' => 'Choose the venue this staff member will handle.']);
         $this->submit(['venue_id' => 'x'] + $f, $as)->assertStatus(400)->assertJson(['message' => 'Select a valid venue.']);
@@ -93,12 +93,27 @@ class RegisterTest extends TestCase
         $this->assertSame(1, (int) DB::table('staff')->where('user_id', $u->id)->value('venue_id'));
     }
 
+    /* Only the super admin creates admins (DB-DECISIONS 28): admin@gmail.com, with a known
+       password for the test, put back afterwards. */
     public function test_a_new_admin_needs_the_creators_password_with_the_reauth_ladder(): void
     {
-        $admin = $this->makeAccount('admin', ['totp' => 'JBSWY3DPEHPK3PXP']);
+        $this->actingAsAdmin();   // gives the super admin its authenticator key if it has none
+        $admin = DB::table('users')->where('email', 'admin@gmail.com')->first();
+        DB::table('users')->where('id', $admin->id)->update(['password_hash' => password_hash(self::PASSWORD, PASSWORD_ARGON2ID)]);
+        try {
+            $this->newAdminLadder($admin);
+        } finally {
+            DB::table('users')->where('id', $admin->id)->update(['password_hash' => $admin->password_hash,
+                'reauth_failed_attempts' => 0, 'reauth_lock_level' => 0, 'reauth_locked_until' => null]);
+        }
+    }
+
+    private function newAdminLadder(object $admin): void
+    {
         $as = ['user_id' => $admin->id, 'account_type' => 'admin', 'tfa_passed' => true];
         $email = 'lvtest-ad' . bin2hex(random_bytes(4)) . '@test.local';
-        $f = ['kind' => 'admin'] + $this->customerFields($email);
+        $f = ['kind' => 'admin', 'office_group' => 'cedu'] + $this->customerFields($email);
+        $this->submit(['office_group' => ''] + $f, $as)->assertStatus(400)->assertJson(['field' => 'office_group']);
         $this->submit($f, $as)->assertStatus(400)->assertJson(['error' => 'no_password']);
         $this->submit(['creator_password' => 'wrong'] + $f, $as)->assertStatus(401)
             ->assertJson(['error' => 'wrong_password', 'attemptsLeft' => 4,
@@ -115,6 +130,7 @@ class RegisterTest extends TestCase
         $this->forget($email);
         $u = DB::table('users')->where('email', $email)->first();
         $this->assertSame('admin', $u->account_type);
+        $this->assertSame('cedu', $u->office_group);
         $this->assertNull(DB::table('staff')->where('user_id', $u->id)->value('venue_id'));
         $this->assertSame(0, (int) DB::table('users')->where('id', $admin->id)->value('reauth_lock_level'));
     }

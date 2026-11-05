@@ -67,7 +67,7 @@ function booking_id_from_reference($ref) {
      customer_id   int    only this customer's bookings
      booking_id    int    a single booking
      limit         int    cap the rows (the queue pages page in the browser)
-     venue_id      int    only this venue's bookings (0 = none)
+     venue_id      int[]  only these offices' bookings ([] = none)
    --------------------------------------------------------------------- */
 function bookings_query(array $opts = []) {
     $pdo = venusep_db();
@@ -87,8 +87,7 @@ function bookings_query(array $opts = []) {
         $args[':bid'] = (int) $opts['booking_id'];
     }
     if (isset($opts['venue_id'])) {
-        $where[] = 'v.id = :vid';
-        $args[':vid'] = (int) $opts['venue_id'];
+        $where[] = 'v.id IN (' . implode(',', array_map('intval', (array) $opts['venue_id']) ?: [0]) . ')';
     }
     $sql = "
         SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
@@ -136,7 +135,9 @@ function bookings_query(array $opts = []) {
                (SELECT COALESCE(JSON_LENGTH(gr.flags_json), 0) FROM gcash_receipts gr
                  WHERE gr.booking_id = b.id ORDER BY gr.id DESC LIMIT 1) AS receipt_flags,
                /* The 5-attempt rule: every upload counts, rejected ones too. */
-               (SELECT COUNT(*) FROM gcash_receipts gr WHERE gr.booking_id = b.id) AS receipt_attempts
+               (SELECT COUNT(*) FROM gcash_receipts gr WHERE gr.booking_id = b.id) AS receipt_attempts,
+               /* the customer is blocked at this booking's office (DB-DECISIONS 28) */
+               fn_customer_blocked(b.customer_id, b.room_id) AS office_blocked
           FROM bookings b
           JOIN customers c                      ON c.id = b.customer_id
           LEFT JOIN users u                     ON u.id = c.user_id
@@ -272,6 +273,7 @@ function booking_shape(array $row) {
 
         'pos'           => (string) $row['pos_number'],
         'officialReceipt' => (string) $row['official_receipt_no'],
+        'officeBlocked' => (bool) $row['office_blocked'],         // staff lists show "Blocked"; never the reason
         'checkedIn'     => (bool) $row['checked_in'],
 
         'customerNotes' => (string) $row['customer_notes'],
@@ -360,8 +362,8 @@ function bookings_for_customer($customerId) {
     return bookings_query(['customer_id' => (int) $customerId]);
 }
 
-/* Every booking — the staff queue, the admin calendar, the reports. A staff
-   member gets their own venue's only. */
+/* Every booking — the staff queue, the admin calendar, the reports. Narrowed to
+   the offices the session handles (staff_list_venue()). */
 function bookings_all(array $opts = []) {
     $venue = staff_list_venue();
     return bookings_query($venue === null ? $opts : $opts + ['venue_id' => $venue]);
@@ -515,6 +517,7 @@ function booking_queue_class(array $b) {
    finished bookings hides the 30 that need someone. */
 function booking_queue_rows() {
     $rows = [];
+    $mixed = staff_sees_many_offices();   // several offices in one list: each row names its office (DB-DECISIONS 28)
     foreach (bookings_all() as $b) {
         if ($b['reservationCode'] === 'completed'
             && in_array($b['paymentCode'], ['confirmed', 'paid_cash'], true)) {
@@ -527,6 +530,8 @@ function booking_queue_rows() {
                             : ($b['isUsep'] ? 'USeP' . ($b['usepVerified'] ? ' · verified' : ' · unverified') : 'Non-USeP'),
             'room'     => $b['roomName'],
             'venue'    => $b['venueName'],
+            'office'   => $mixed ? $b['venueName'] : '',
+            'blocked'  => $b['officeBlocked'],
             'dates'    => booking_date_label($b),
             'res'      => $b['reservationCode'],
             'pay'      => booking_queue_pay_key($b),
@@ -613,144 +618,6 @@ function transaction_rows($customerId = null) {
         ];
     }
     return $rows;
-}
-
-/* =====================================================================
-   REPORTS — aggregates for admin/Quarterly_Reports.php.
-
-   Those charts were four hard-coded arrays covering Q3 2025 to Q2 2026,
-   which by now ended fifteen months in the past and named venues ("Social
-   Hall") that are not in the catalog. They are computed here instead, so
-   the reports describe whatever the business actually did.
-
-   A booking counts toward the quarter its EVENT falls in, not the quarter
-   it was booked or paid in: a venue's quarter is the business it hosted.
-   REVENUE counts only money actually collected (confirmed / paid at the
-   cashier), so an unpaid or overdue booking inflates nothing. Collected money
-   stays counted until its refund payout is COMPLETE (`refunded`): a refund
-   requested, in progress or denied has not left USeP (DB-DECISIONS #16 —
-   only a completed payout frees the booking).
-   ===================================================================== */
-
-/* One derived table both report queries read: every booking with its event
-   date, whether its money landed, and whether it fell through. */
-function report_base_sql() {
-    return "SELECT b.id, b.room_id, b.total_amount, b.discount_percent,
-                   b.reservation_status, b.payment_status,
-                   COALESCE(vd.start_date, hd.check_in_date) AS event_date,
-                   IF(b.payment_status IN ('confirmed','paid_cash','refund_requested','refund_correction',
-                                           'refund_await_or','refund_processing','refund_denied'),
-                      b.total_amount, 0) AS collected,
-                   IF(b.reservation_status IN ('cancelled','rejected','released'), 1, 0) AS fell_through
-              FROM bookings b
-              LEFT JOIN venue_booking_details vd  ON vd.booking_id = b.id
-              LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id" . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id = %d)');
-}
-
-/* The last $count quarters up to and including the current one, oldest first.
-   Quarters with no business still appear, as zeroes — a missing quarter would
-   silently compress the x-axis and make a quiet period look like growth.
-   $now (a timestamp) is "today"; tests pass a fixed date. */
-function report_quarters($count = 4, $now = null) {
-    $pdo = venusep_db();
-    $out = [];
-    $now = $now === null ? time() : (int) $now;
-
-    /* Build the window first, so empty quarters are present by construction.
-       It starts from the FIRST DAY of the current quarter: "-9 months" from a
-       31st overflows (Mar 31 - 9 months = "Jun 31" = Jul 1) and skips a quarter. */
-    $firstMonth = 3 * ((int) ceil((int) date('n', $now) / 3) - 1) + 1;
-    $cursor = mktime(0, 0, 0, $firstMonth - 3 * ($count - 1), 1, (int) date('Y', $now));
-    for ($i = 0; $i < $count; $i++) {
-        $y = (int) date('Y', $cursor);
-        $q = (int) ceil((int) date('n', $cursor) / 3);
-        $out["$y-$q"] = [
-            'label' => 'Q' . $q . ' ' . $y,
-            'revenue' => 0.0, 'bookings' => 0, 'cancelled' => 0, 'avg' => 0.0,
-        ];
-        $cursor = strtotime('+3 months', $cursor);
-    }
-    if ($pdo === null) {
-        return array_values($out);
-    }
-
-    try {
-        $rows = $pdo->query(
-            "SELECT YEAR(x.event_date) AS y, QUARTER(x.event_date) AS q,
-                    SUM(x.collected) AS revenue,
-                    SUM(x.fell_through = 0) AS bookings,
-                    SUM(x.fell_through)     AS cancelled,
-                    SUM(x.collected > 0)    AS paid_bookings
-               FROM (" . report_base_sql() . ") x
-              WHERE x.event_date IS NOT NULL
-              GROUP BY y, q"
-        )->fetchAll();
-        foreach ($rows as $r) {
-            $key = $r['y'] . '-' . $r['q'];
-            if (!isset($out[$key])) {
-                continue;                       // outside the window we are charting
-            }
-            $out[$key]['revenue']   = (float) $r['revenue'];
-            $out[$key]['bookings']  = (int) $r['bookings'];
-            $out[$key]['cancelled'] = (int) $r['cancelled'];
-            /* Average per PAID booking, not per booking: dividing collected
-               money by bookings that never paid understates every quarter. */
-            $out[$key]['avg'] = $r['paid_bookings'] > 0
-                ? round((float) $r['revenue'] / (int) $r['paid_bookings'])
-                : 0;
-        }
-    } catch (PDOException $e) { sql_failed($e); /* the zeroed window still renders */ }
-
-    return array_values($out);
-}
-
-/* Per-venue totals for the breakdown charts and the table.
-   Pass a year+quarter to narrow it; omit both for all time.
-
-   EVENTS HELD = approved or completed only: a booking that fell through
-   (cancelled / rejected / released), is still pending review, or whose room
-   was closed (disrupted) is not an event the venue hosted.
-
-   EVERY ACTIVE VENUE APPEARS, even with nothing in it. A venue that simply
-   vanishes from the breakdown in a quiet quarter reads as "this venue was
-   removed", and the donut silently re-proportions around the gap — a quiet
-   quarter and a deleted venue must not look the same.
-
-   An INACTIVE venue appears too while it has bookings in the period, marked
-   "(inactive)": the quarter totals count its money and bookings, so dropping
-   its row would leave the donut and the table short of the totals. */
-function report_by_venue($year = null, $quarter = null) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
-        return [];
-    }
-    $where = '';
-    $args  = [];
-    if ($year !== null && $quarter !== null) {
-        $where = ' AND YEAR(x.event_date) = :y AND QUARTER(x.event_date) = :q';
-        $args  = [':y' => (int) $year, ':q' => (int) $quarter];
-    }
-    try {
-        $stmt = $pdo->prepare(
-            "SELECT IF(v.is_active = 1, v.name, CONCAT(v.name, ' (inactive)')) AS venue,
-                    COALESCE(SUM(x.reservation_status IN ('approved','completed')), 0) AS events,
-                    COALESCE(SUM(x.discount_percent > 0), 0) AS discounted,
-                    COALESCE(SUM(x.fell_through), 0)         AS cancelled,
-                    COALESCE(SUM(x.collected), 0)            AS revenue
-               FROM venues v
-               LEFT JOIN rooms r ON r.venue_id = v.id
-               LEFT JOIN (" . report_base_sql() . ") x
-                      ON x.room_id = r.id" . $where . staff_venue_sql('v.id = %d') . "
-              GROUP BY v.id, v.name, v.is_active
-             HAVING v.is_active = 1 OR COUNT(x.id) > 0
-              ORDER BY v.id"
-        );
-        $stmt->execute($args);
-        return $stmt->fetchAll();
-    } catch (PDOException $e) {
-        sql_failed($e);
-        return [];
-    }
 }
 
 /* =====================================================================

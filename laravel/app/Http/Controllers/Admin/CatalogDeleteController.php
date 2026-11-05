@@ -22,7 +22,7 @@ class CatalogDeleteController extends Controller
             $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
         }
 
-        legacy('db', 'venue-photos');   /* + room-photos: rp_room_dir(), vp_delete_cover_file() */
+        legacy('db', 'auth', 'venue-photos');   /* + room-photos: rp_room_dir(), vp_delete_cover_file() */
         $pdo = venusep_db();
         if ($pdo === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so nothing was deleted.']);
@@ -52,12 +52,16 @@ class CatalogDeleteController extends Controller
                 }
 
                 $pdo->beginTransaction();
-                $room = $pdo->prepare('SELECT id, name FROM rooms WHERE room_code = :code FOR UPDATE');
+                $room = $pdo->prepare('SELECT id, name, venue_id FROM rooms WHERE room_code = :code FOR UPDATE');
                 $room->execute([':code' => $roomCode]);
                 $roomRow = $room->fetch();
                 if (!$roomRow) {
                     $pdo->rollBack();
                     $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
+                }
+                if (!staff_may_handle_venue($roomRow['venue_id'])) {   // a normal admin: its own offices only
+                    $pdo->rollBack();
+                    $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'This room belongs to another office.']);
                 }
                 $roomId = (int) $roomRow['id'];
 
@@ -107,6 +111,10 @@ class CatalogDeleteController extends Controller
                     $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Invalid venue.']);
                 }
                 $venueId = (int) $rawVenueId;
+                /* The offices are fixed (DB-DECISIONS 28): only the super admin adds or deletes one. */
+                if (!admin_is_super()) {
+                    $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only the super admin can delete an office.']);
+                }
 
                 $pdo->beginTransaction();
                 $venue = $pdo->prepare('SELECT id, name FROM venues WHERE id = :id FOR UPDATE');

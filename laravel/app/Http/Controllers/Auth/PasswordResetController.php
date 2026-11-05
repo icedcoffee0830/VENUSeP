@@ -5,16 +5,27 @@ namespace App\Http\Controllers\Auth;
 use Illuminate\Http\Request;
 use Throwable;
 
-/* customer/forgot-password.php and customer/reset-password.php — customers
-   only (#23). legacy/includes/password-reset.php explains the flow and its
-   security; the rules are unchanged. */
+/* customer/forgot-password and customer/reset-password (#23), and the same two
+   pages for staff and admin accounts under admin/ (DB-DECISIONS 28): one flow, the
+   side taken from the route. legacy/includes/password-reset.php explains the flow
+   and its security; the rules are the same on both sides. */
 class PasswordResetController
 {
+    /* The side this request is on, and where its pages link. */
+    private function side(Request $request): array
+    {
+        $staff = $request->routeIs('admin.*');
+        return [$staff, $staff
+            ? ['forgot' => 'admin.forgot-password', 'reset' => 'admin.reset-password', 'login' => 'admin.admin-login', 'home' => 'admin.admin-login', 'example' => 'staff@example.com']
+            : ['forgot' => 'customer.forgot-password', 'reset' => 'customer.reset-password', 'login' => 'customer.customer-login', 'home' => 'customer.venues', 'example' => 'customer@example.com']];
+    }
+
     /* STEP 1 — ask for the email, send a reset link. The reply is the same
        whatever happened, shown after a redirect. */
     public function forgot(Request $request)
     {
         legacy('auth', 'db', 'password-reset');
+        [$staff, $pr] = $this->side($request);
 
         $fpError = '';
         $fpEmail = '';
@@ -29,20 +40,20 @@ class PasswordResetController
                     $fpError = 'The database is unreachable right now. Please try again in a few minutes.';
                 } else {
                     try {
-                        pr_request($pdo, $fpEmail, $request->server('REMOTE_ADDR'));
+                        pr_request($pdo, $fpEmail, $request->server('REMOTE_ADDR'), null, $staff);
                     } catch (Throwable $e) {
                         /* Logged, never shown: the reply must not differ for an address that exists. */
                         sql_failed($e, optional: true);
                     }
                     session(['forgot_sent' => true]);
-                    return redirect()->route('customer.forgot-password')->header('Cache-Control', 'no-store');
+                    return redirect()->route($pr['forgot'])->header('Cache-Control', 'no-store');
                 }
             }
         }
         $fpSent = !empty(session('forgot_sent'));
         session()->forget('forgot_sent');
 
-        return response()->view('auth.forgot-password', compact('fpError', 'fpEmail', 'fpSent'))
+        return response()->view('auth.forgot-password', compact('fpError', 'fpEmail', 'fpSent', 'pr'))
             ->header('Cache-Control', 'no-store');
     }
 
@@ -51,22 +62,23 @@ class PasswordResetController
     public function reset(Request $request)
     {
         legacy('auth', 'db', 'password-reset');
+        [$staff, $pr] = $this->side($request);
         $pdo = venusep_db();
 
         /* ---- the link itself: check it, then drop it from the URL ---- */
         if ($request->query->has('token')) {
             session()->forget('pw_reset');
             $token = $request->query('token');
-            $found = $pdo !== null && is_string($token) ? pr_find($pdo, $token) : null;
+            $found = $pdo !== null && is_string($token) ? pr_find($pdo, $token, $staff) : null;
             if ($found !== null) {
                 session()->migrate(true);   // the old session_regenerate_id(true)
                 session(['pw_reset' => ['id' => $found['id'], 'user_id' => $found['user_id']]]);
             }
-            return $this->noLeak(redirect()->route('customer.reset-password'));
+            return $this->noLeak(redirect()->route($pr['reset']));
         }
 
         $state = session('pw_reset');
-        $reset = ($pdo !== null && is_array($state)) ? pr_find_id($pdo, (int) $state['id'], (int) $state['user_id']) : null;
+        $reset = ($pdo !== null && is_array($state)) ? pr_find_id($pdo, (int) $state['id'], (int) $state['user_id'], $staff) : null;
 
         $rpErrors = [];
         if ($reset !== null && $request->isMethod('post')) {
@@ -88,8 +100,8 @@ class PasswordResetController
                 }
                 if ($done === true) {
                     session()->forget('pw_reset');
-                    session(['login_notice' => 'Your password was changed. Log in with your new password.']);
-                    return $this->noLeak(redirect()->route('customer.customer-login'));
+                    session([($staff ? 'staff_login_notice' : 'login_notice') => 'Your password was changed. Log in with your new password.']);
+                    return $this->noLeak(redirect()->route($pr['login']));
                 }
                 if ($done === false) {
                     $reset = null;   // used in another tab, replaced by a newer link, or expired meanwhile
@@ -100,7 +112,7 @@ class PasswordResetController
             session()->forget('pw_reset');
         }
 
-        return $this->noLeak(response()->view('auth.reset-password', compact('reset', 'rpErrors')));
+        return $this->noLeak(response()->view('auth.reset-password', compact('reset', 'rpErrors', 'pr')));
     }
 
     private function noLeak($response)

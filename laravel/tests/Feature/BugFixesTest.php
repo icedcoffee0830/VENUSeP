@@ -50,11 +50,12 @@ class BugFixesTest extends TestCase
     /* 5. Saving a GCash account from Payment Settings (which sends no note) wiped the note. */
     public function test_a_gcash_save_without_a_note_keeps_the_current_note(): void
     {
+        $this->adminEmail = 'francishubero@gmail.com';   // Bahay Alumni's normal admin (DB-DECISIONS 28)
         $this->useKnownAdminPassword();
         $old = DB::table('gcash_accounts')->where('venue_id', 1)->where('is_active', 1)->whereNull('valid_until')->first();
         DB::table('gcash_accounts')->where('id', $old->id)->update(['note' => 'Cashier: ask for the OR']);
         try {
-            $this->actingAsAdmin()->withTestCsrf()->post(route('admin.gcash-account-save'), [
+            $this->actingAsAdmin($this->adminEmail)->withTestCsrf()->post(route('admin.gcash-account-save'), [
                 '_token' => 'test-csrf-token', 'venue' => 'Bahay Alumni', 'account_name' => 'Test Payee',
                 'mobile_number' => '0917 000 2222', 'password' => $this->pw,
             ])->assertOk()->assertJson(['ok' => true]);
@@ -71,18 +72,19 @@ class BugFixesTest extends TestCase
         }
     }
 
-    /* 6. A suspended admin's still-open session could keep managing staff. */
+    /* 6. A suspended admin's still-open session could keep managing staff. (Francis: the
+          super admin can never be suspended, chk_users_super_admin.) */
     public function test_a_suspended_admin_cannot_manage_staff(): void
     {
-        $this->actingAsAdmin()->withTestCsrf();
-        DB::table('users')->where('email', 'admin@gmail.com')->update(['is_active' => 0]);
+        $this->actingAsAdmin('francishubero@gmail.com')->withTestCsrf();
+        DB::table('users')->where('email', 'francishubero@gmail.com')->update(['is_active' => 0]);
         try {
             $staffId = DB::table('users')->where('email', 'staff@gmail.com')->value('id');
             $this->post(route('admin.staff-save'), ['_token' => 'test-csrf-token', 'action' => 'set_active', 'user_id' => $staffId, 'active' => '0'])
                 ->assertStatus(403)->assertJson(['ok' => false, 'message' => 'Only an administrator can manage staff accounts.']);
             $this->assertSame(1, (int) DB::table('users')->where('id', $staffId)->value('is_active'));
         } finally {
-            DB::table('users')->where('email', 'admin@gmail.com')->update(['is_active' => 1]);
+            DB::table('users')->where('email', 'francishubero@gmail.com')->update(['is_active' => 1]);
         }
     }
 }

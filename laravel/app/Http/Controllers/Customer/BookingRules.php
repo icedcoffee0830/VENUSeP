@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\BlockQueries;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -174,6 +175,42 @@ final class BookingRules
     public static function overdueForCounter(mixed $room): array
     {
         return (counter_mode() && is_string($room) && ($pdo = venusep_db())) ? self::overdueBookings($pdo, $room) : [];
+    }
+
+    /* THE OFFICE BLOCK (DB-DECISIONS 28): an admin blocked the customer at one office. They
+       may still sign in and see everything, but make no new booking there, online or at the
+       counter (trg_bookings_block_ins refuses it too). The reason is never shown to them.
+       What they see instead: ['message' => ..., 'contact' => that office's contact line]. */
+    public static function blockNotice(int $customerId, int $venueId): ?array
+    {
+        legacy('offices');
+        $office = office_by_id($venueId);
+        if ($office === null || BlockQueries::findActive($customerId, $venueId) === null) {
+            return null;
+        }
+        return ['message' => "You can't make new bookings at " . $office['name'] . ' right now. Please contact the office.',
+                'contact' => office_contact_line($office)];
+    }
+
+    /* For a booking page: the signed-in customer's notices, never at the counter.
+       $room: the room on the page; the landing page has none and lists every office. */
+    public static function blockNoticesForPage(mixed $room = null): array
+    {
+        if (counter_mode() || !customer_logged_in()) {
+            return [];
+        }
+        legacy('offices');
+        $customerId = (int) session('customer_id');
+        $venueIds = is_string($room) ? array_filter([office_of_room($room)['id'] ?? null]) : BlockQueries::activeOfficeIds($customerId);
+        return array_values(array_filter(array_map(fn ($v) => self::blockNotice($customerId, (int) $v), $venueIds)));
+    }
+
+    /* For the counter's "who" step: the customers blocked at THIS room's office, id => true. */
+    public static function blockedForCounter(mixed $room): array
+    {
+        legacy('offices');
+        $office = counter_mode() && is_string($room) ? office_of_room($room) : null;
+        return $office ? BlockQueries::blockedCustomersAt($office['id']) : [];
     }
 
     /* Opens a new booking's transaction (booking-submit and the counter). The

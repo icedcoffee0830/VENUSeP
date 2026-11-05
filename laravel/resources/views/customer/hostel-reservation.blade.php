@@ -192,7 +192,7 @@
    belongs to the hostel — so gcAccount() below is constant. It is still a
    function because that is the checker's contract. */
 const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-/* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
+/* This room's office's refund switch (includes/refund-policy.php, venues.refunds_enabled, DB-DECISIONS 28).
    OFF = the stay is non-refundable and the guest must tick that they understand
    before submitting. ON leaves the hostel's refund text as it was — a stay booked
    with refunds on can be refunded like a venue booking (Aron, 2026-10-30). */
@@ -218,6 +218,8 @@ const COUNTER_STAFF = {!! json_encode(counter_staff_name(), JSON_UNESCAPED_UNICO
 /* Counter: customer id -> their oldest Overdue booking. Online they cannot book until it
    is paid; here staff see the warning (counter-booker.php) and may still book. */
 const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+/* Counter: customer id -> true when blocked at this room's office (DB-DECISIONS 28): no booking here. */
+const COUNTER_BLOCKED = {!! json_encode((object) $counterBlocked) !!};
 const NOW = new Date();
 const TODAY = isoOf(NOW);
 /* THE ADVANCE LIMIT (system_settings.hostel_advance_booking_max_days, 2026-10-30): a
@@ -572,7 +574,7 @@ async function submitRequest(){
     fd.append('cash_received', '1');
     const k = state.booker;
     fd.append('booker_mode', k.mode);
-    if(k.mode==='account') fd.append('customer_id', k.customerId);
+    if(k.mode==='account'){ fd.append('customer_id', k.customerId); fd.append('id_identity', k.idIdentity ? '1' : '0'); }
     else { fd.append('walkin_name', k.name.trim()); fd.append('walkin_phone', cleanPhone(k.phone) || ''); fd.append('walkin_address', k.address.trim()); fd.append('walkin_email', k.noEmail ? '' : k.email.trim()); fd.append('walkin_no_email', k.noEmail ? '1' : '0'); }
     fd.append('id_checked', k.idChecked ? '1' : '0');
     fd.append('usep_id', k.usepId ? '1' : '0');
@@ -1034,7 +1036,7 @@ function reviewScreen(){
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px;font-size:13px;line-height:1.7;color:#1c1b19">
       &check; Valid ID checked in person by <strong>${esc(COUNTER_STAFF)}</strong>${state.booker.usepId?' &middot; <strong>USeP ID</strong>, discount applied':''}<br>
       ${state.booker.mode==='account'
-        ? '&check; Account confirmed by the guest&rsquo;s password &mdash; <strong>'+esc(state.booker.name)+'</strong>'
+        ? counterAccountLine()
         : '&middot; Walk-in with no account &mdash; <strong>'+esc(state.booker.name)+'</strong> &middot; '+esc(state.booker.phone)+' &middot; pays at the counter'}
     </div>` : `
     <!-- USeP AFFILIATION — same rule as the venue page: a CLAIM the customer

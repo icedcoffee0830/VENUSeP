@@ -764,7 +764,7 @@ function vmMaint($m, $today) {
           <p>Manage locations and the rooms available under them.</p>
         </div>
         <div class="vm-actions">
-@if (admin_is_admin()) {{-- adding a venue is admin-only (venue-save refuses staff too) --}}
+@if (admin_is_super()) {{-- adding a venue (an office) is the super admin's only (venue-save refuses others too) --}}
           <a class="vm-btn vm-btn-primary" href="{{ route('admin.venue-form') }}">+ Add Venue</a>
 @endif
           <a class="vm-btn vm-btn-outline" href="{{ route('admin.room-form') }}">+ Add Room</a>
@@ -850,10 +850,10 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
-@if ($vmMyVenue === null || $venueName === $vmMyVenue) {{-- staff: own venue only --}}
+@if ($vmMyVenue === null || in_array($venueName, $vmMyVenue, true)) {{-- staff: own venue only --}}
               <a class="vm-edit-link" href="{{ route('admin.venue-form', ['id' => $venueId]) }}"><span class="plus">✎</span> Edit Details</a>
 @endif
-@if (admin_is_admin())
+@if (admin_is_super())
               <button type="button" class="vm-delete-link" data-delete-entity="venue" data-delete-id="{{ $venueId }}" data-delete-name="{{ $venueName }}">Delete Venue</button>
 @endif
             </div>
@@ -902,7 +902,7 @@ function vmMaint($m, $today) {
 @endif
 @if ($mt)
             <span class="vm-status" title="{{ $mt['reason'] }}"><span class="vm-dot {{ $mt['dot'] }}"></span> {{ $mt['label'] }}</span>
-@if ($mt['review'] && ($vmMyVenue === null || $room['venue'] === $vmMyVenue)) {{-- staff: own venue's rooms only --}}
+@if ($mt['review'] && ($vmMyVenue === null || in_array($room['venue'], $vmMyVenue, true))) {{-- staff: own venue's rooms only --}}
             <!-- The rot guard. An indefinite closure is the only window that
                  cannot end on its own, so this is the only thing that will ever
                  ask about it. It asks, and it carries the answer (Reopen) —
@@ -915,7 +915,7 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
-@if ($vmMyVenue === null || $room['venue'] === $vmMyVenue) {{-- staff: own venue's rooms only --}}
+@if ($vmMyVenue === null || in_array($room['venue'], $vmMyVenue, true)) {{-- staff: own venue's rooms only --}}
               <a class="vm-edit-link" href="{{ route('admin.room-form', ['id' => $room['id']]) }}"><span class="plus">✎</span> Edit Room</a>
               <button type="button" class="vm-toggle-link{{ $room['active'] ? '' : ' is-off' }}" data-toggle-id="{{ $room['id'] }}" data-toggle-name="{{ $room['name'] }}">{{ $room['active'] ? 'Disable' : 'Enable' }}</button>
 @endif
@@ -985,7 +985,7 @@ function vmMaint($m, $today) {
 @endif
 @if ($mt)
             <span class="vm-status" title="{{ $mt['reason'] }}"><span class="vm-dot {{ $mt['dot'] }}"></span> {{ $mt['label'] }}</span>
-@if ($mt['review'] && ($vmMyVenue === null || $room['venue'] === $vmMyVenue)) {{-- staff: own venue's rooms only --}}
+@if ($mt['review'] && ($vmMyVenue === null || in_array($room['venue'], $vmMyVenue, true))) {{-- staff: own venue's rooms only --}}
             <span class="vm-review">Closed {{ $mt['days'] }} days &mdash; still closed?
               <a href="{{ route('admin.hostel-room-form', ['id' => $room['id']]) }}" title="[SIM] opens the room's maintenance window">Reopen</a>
             </span>
@@ -994,7 +994,7 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
-@if ($vmMyVenue === null || $room['venue'] === $vmMyVenue) {{-- staff: own venue's rooms only --}}
+@if ($vmMyVenue === null || in_array($room['venue'], $vmMyVenue, true)) {{-- staff: own venue's rooms only --}}
               <a class="vm-edit-link" href="{{ route('admin.hostel-room-form', ['id' => $room['id']]) }}"><span class="plus">✎</span> Edit Room</a>
               <button type="button" class="vm-toggle-link{{ $room['active'] ? '' : ' is-off' }}" data-toggle-id="{{ $room['id'] }}" data-toggle-name="{{ $room['name'] }}">{{ $room['active'] ? 'Disable' : 'Enable' }}</button>
 @endif

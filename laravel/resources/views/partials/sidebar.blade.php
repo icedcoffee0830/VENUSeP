@@ -4,6 +4,7 @@
   Edit the menu HERE and every page updates.
 --}}
 @php
+  legacy('auth');   /* admin_is_super() */
   $items = $portal === 'customer'
     ? [
         //  label                  route                            icon
@@ -19,7 +20,7 @@
         ['Dashboard',           route('admin.dashboard'),              'bi-speedometer2'],
         ['Venue Management',    route('admin.venue-management'),       'bi-building'],
         ['Office Settings',     route('admin.office-settings'),        'bi-sliders', 'admin'],
-        ['Activity',            route('admin.activity'),               'bi-clock-history', 'admin'],
+        ['Activity',            route('admin.activity'),               'bi-clock-history', 'super'],
         ['Booking Management',  route('admin.booking-requests'),       'bi-calendar-check'],
         ['Transaction History', route('admin.transaction-history'),    'bi-receipt'],
         ['Calendar',            route('admin.calendar'),               'bi-calendar-event'],
@@ -28,12 +29,17 @@
         ['Reports',             route('admin.reports'),                'bi-bar-chart'],
         ['Payment Settings',    route('admin.payment-settings'),       'bi-wallet2'],
         ['FAQ Management',      route('admin.faq-management'),         'bi-question-circle', 'admin'],   /* admin-added FAQ entries (2026-09-18) */
-        ['Backup & Restore',    route('admin.backup-restore'),         'bi-database-check', 'admin'],    /* staff: back up; admins: download / restore (2026-10-27) */
+        ['Backup & Restore',    route('admin.backup-restore'),         'bi-database-check', 'super'],    /* the super admin only (DB-DECISIONS 28) */
         ['Settings',            route('admin.profile'),                'bi-gear'],
         ['Log Out',             route('admin.logout'),                 'bi-box-arrow-right'],   /* ends the session */
       ];
-  /* a 4th column 'admin' = an admin-only page: staff are not shown the link (Bug 5) */
-  $items = array_filter($items, fn ($i) => ($i[3] ?? '') !== 'admin' || session('account_type') === 'admin');
+  /* a 4th column 'admin' = an admin-only page: staff are not shown the link (Bug 5);
+     'super' = the super admin's only */
+  $items = array_filter($items, fn ($i) => match ($i[3] ?? '') {
+      'admin' => session('account_type') === 'admin',
+      'super' => admin_is_super(),
+      default => true,
+  });
 @endphp
 <style>
   /* crimson to black, continuous with the header. */

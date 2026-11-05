@@ -13,6 +13,7 @@ const EVENT_ROOM = 'r2';          // Heritage Function Room, Bahay Alumni
 const HOSTEL_ROOM = 'h2';         // Hostel Room 2
 const TOGGLE_ROOM = 'r5';         // USeP Gymnasium — disabled and enabled again
 const GCASH_VENUE = 'USeP Venues';
+const CEDU_ADMIN = 'cedu.admin@gmail.com';   // GCash accounts are each office's normal admin's, never the super admin's (DB-DECISIONS 28)
 
 /* the shared venusepAlert/venusepConfirm/venusepPrompt modal (assets/js/confirm-modal.js) */
 async function modal(ctx, page, { expect: re, fill, ok } = {}) {
@@ -161,8 +162,8 @@ export default {
       return page;
     });
 
-    await step(`Payment Settings: changes the ${GCASH_VENUE} GCash account (password re-asked) — the note is kept`, async () => {
-      const page = s.admin;
+    await step(`Payment Settings: the CEDU admin changes the ${GCASH_VENUE} GCash account (password re-asked) — the note is kept`, async () => {
+      const page = await ctx.loginAdmin(CEDU_ADMIN);
       const before = await dbOne(`SELECT g.id, g.note FROM gcash_accounts g JOIN venues v ON v.id = g.venue_id
           WHERE v.name = ? AND g.is_active = 1 AND g.valid_until IS NULL`, [GCASH_VENUE]);
       expect.ok(before && before.note, `no active GCash account with a note for ${GCASH_VENUE}`);

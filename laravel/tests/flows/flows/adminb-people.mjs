@@ -2,7 +2,7 @@
 // a customer registers with a name that contains "</script>" → staff see it as plain
 // text on Customer Management (no script runs) → staff disable the account: stored,
 // and the customer's open session ends → staff re-enable it: they can sign in again →
-// the counter search treats "%%%" literally → staff add a FAQ question with typed
+// the counter search treats "%%%" literally and finds a whole email only → staff add a FAQ question with typed
 // HTML (customers see it as text), move it to another section by editing it (it goes
 // to the end there), then delete it.
 
@@ -106,7 +106,7 @@ export default {
       return again;
     });
 
-    await step('Staff are kept out of Customer Management; counter search: "%%%" matches nothing, part of the email finds them', async () => {
+    await step('Staff are kept out of Customer Management; counter search: "%%%" and part of the email match nothing, the whole email finds them (masked)', async () => {
       s.staff = await ctx.loginStaff(STAFF);
       const page = s.staff;
       await page.goto(ctx.url('/admin/customer-management'));
@@ -115,10 +115,13 @@ export default {
         ctx.url('/admin/customer-search?q=' + encodeURIComponent(q)));
       const wild = await search('%%%');
       expect.equal(JSON.stringify(wild), JSON.stringify({ ok: true, results: [] }), '"%%%" search');
-      const found = await search(s.email.split('@')[0]);
+      const part = await search(s.email.split('@')[0]);
+      expect.equal(part.results.length, 0, 'results for part of the email');
+      const found = await search(s.email.toUpperCase());
       expect.equal(found.results.length, 1, 'results for the email');
       expect.equal(found.results[0].name, s.name, 'name in the search result');
       expect.match(found.results[0].phone, /^0917•+2244$/, 'masked phone');
+      expect.equal(found.results[0].email, 'fl•••@example.com', 'masked email');
       return page;
     });
 

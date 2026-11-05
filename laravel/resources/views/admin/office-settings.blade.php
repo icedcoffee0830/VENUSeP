@@ -58,6 +58,12 @@
                     <label><input type="checkbox" name="days[]" value="{{ $i }}" @checked(in_array($i, $o['closedDays'], true))> {{ $day }}</label>
 @endforeach
                   </div>
+                  <h3>Contact info <span class="os-muted">(customers see this on the public page, in emails and when they cannot book)</span></h3>
+                  <div class="os-grid">
+                    <div class="os-field"><label for="phone{{ $o['id'] }}">Phone</label><input id="phone{{ $o['id'] }}" name="phone" type="tel" maxlength="30" autocomplete="off" value="{{ $o['phone'] }}"></div>
+                    <div class="os-field"><label for="email{{ $o['id'] }}">Email</label><input id="email{{ $o['id'] }}" name="email" type="email" maxlength="190" autocomplete="off" spellcheck="false" value="{{ $o['email'] }}"></div>
+                    <div class="os-field" style="grid-column:1 / -1"><label for="location{{ $o['id'] }}">Location</label><input id="location{{ $o['id'] }}" name="location" type="text" maxlength="500" autocomplete="off" value="{{ $o['location'] }}"><small>Hours: {{ office_hours_label($o) }} (from the opening times and closed days above).</small></div>
+                  </div>
                   <div class="os-field" style="margin-top:.9rem"><label for="reason{{ $o['id'] }}">Reason for this change</label><input id="reason{{ $o['id'] }}" name="reason" type="text" maxlength="500"><small>Required when the discount or grace days change. It goes in the history.</small></div>
                   <div class="os-row"><button class="os-btn" type="submit">Save {{ $o['name'] }}</button><span class="os-msg" role="status"></span></div>
                 </form>

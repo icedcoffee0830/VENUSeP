@@ -7,8 +7,9 @@ use Illuminate\Http\Request;
 use PDOException;
 
 /* register-submit.php — the ONLY way an account is created. JSON replies.
-   customer: anyone (public sign-up) · staff: admins only, with a venue ·
-   admin: admins only, re-entering THEIR OWN password (users.reauth_* lockout).
+   customer: anyone (public sign-up) · staff: admins only, with a venue the admin handles ·
+   admin: the super admin only, with a group, re-entering THEIR OWN password
+   (users.reauth_* lockout) — DB-DECISIONS 28.
    See the old file's header for the full reasoning; the rules are unchanged. */
 class RegisterSubmitController
 {
@@ -39,6 +40,13 @@ class RegisterSubmitController
         /* Creating a staff or admin account is an ADMIN action, re-checked server-side. */
         if ($kind !== 'customer' && !admin_is_admin()) {
             $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can create a staff or admin account.']);
+        }
+        if ($kind === 'admin' && !admin_is_super()) {
+            $this->reply(403, ['ok' => false, 'message' => 'Only the super admin can create an admin account.']);
+        }
+        $group = (string) $post->get('office_group', '');
+        if ($kind === 'admin' && !in_array($group, ['bahay_alumni', 'cedu'], true)) {
+            $this->reply(400, ['ok' => false, 'field' => 'office_group', 'message' => 'Choose the group this admin will run.']);
         }
 
         $name    = trim((string) $post->get('full_name', ''));
@@ -91,6 +99,9 @@ class RegisterSubmitController
             if ($venueId === false) {
                 $this->reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'That venue does not exist.']);
             }
+            if (!staff_may_handle_venue($venueId)) {   // a normal admin: its own offices only
+                $this->reply(403, ['ok' => false, 'field' => 'venue_id', 'message' => "You can only add staff to your own offices."]);
+            }
             $venueId = (int) $venueId;
         }
 
@@ -105,16 +116,16 @@ class RegisterSubmitController
             try {
                 $pdo->beginTransaction();
                 $u = $pdo->prepare(
-                    'SELECT id, password_hash, account_type, is_active, reauth_failed_attempts, reauth_lock_level,
+                    'SELECT id, password_hash, account_type, is_active, is_super_admin, reauth_failed_attempts, reauth_lock_level,
                             CASE WHEN reauth_locked_until > NOW()
                                  THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
                        FROM users WHERE id = :id FOR UPDATE'
                 );
                 $u->execute([':id' => (int) session('user_id')]);
                 $creator = $u->fetch();
-                if (!$creator || !(bool) $creator['is_active'] || $creator['account_type'] !== 'admin') {
+                if (!$creator || !(bool) $creator['is_active'] || $creator['account_type'] !== 'admin' || !(bool) $creator['is_super_admin']) {
                     $pdo->rollBack();
-                    $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can create an admin account.']);
+                    $this->reply(403, ['ok' => false, 'message' => 'Only the super admin can create an admin account.']);
                 }
                 if ($no = reauth_verify($pdo, $creator, $creatorPw)) {   // the shared lockout (auth.php)
                     isset($no['locked'])
@@ -151,13 +162,14 @@ class RegisterSubmitController
         try {
             $pdo->beginTransaction();
             $pdo->prepare(
-                'INSERT INTO users (email, username, password_hash, account_type)
-                 VALUES (:e, :u, :p, :t)'
-            )->execute([':e' => $email, ':u' => $username, ':p' => venusep_password_hash($pass), ':t' => $kind]);
+                'INSERT INTO users (email, username, password_hash, account_type, office_group)
+                 VALUES (:e, :u, :p, :t, :g)'
+            )->execute([':e' => $email, ':u' => $username, ':p' => venusep_password_hash($pass), ':t' => $kind,
+                        ':g' => $kind === 'admin' ? $group : null]);
             $userId = (int) $pdo->lastInsertId();
 
             if ($kind !== 'customer') {
-                /* staff: their one venue; admin: none — they handle every venue */
+                /* staff: their one venue; admin: none — its group decides its offices */
                 $pdo->prepare(
                     'INSERT INTO staff (user_id, venue_id, full_name, phone) VALUES (:u, :v, :n, :p)'
                 )->execute([':u' => $userId, ':v' => $kind === 'staff' ? $venueId : null, ':n' => $name, ':p' => $phoneNorm]);
@@ -183,7 +195,8 @@ class RegisterSubmitController
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
         }
 
-        /* A new staff or admin account is announced to the other admins (2026-10-28). */
+        /* A new staff account is announced to its office group's admins, a new admin account
+           to the super admin (2026-10-28; DB-DECISIONS 28). */
         if ($kind !== 'customer') {
             legacy('notifications');
             try {
@@ -193,8 +206,8 @@ class RegisterSubmitController
                     $vn->execute([':v' => $venueId]);
                     $venueName = (string) $vn->fetchColumn();
                 }
-                notify_admins($pdo, 'account_created', (int) session('user_id'),
-                    ['email' => $email, 'role' => $kind, 'venue' => $venueName]);
+                notify_account_event($pdo, 'account_created', (int) session('user_id'),
+                    ['email' => $email, 'role' => $kind, 'venue' => $venueName], $kind === 'staff' ? [(int) $venueId] : null);
             } catch (PDOException $e) {
                 sql_failed($e, optional: true);
             }

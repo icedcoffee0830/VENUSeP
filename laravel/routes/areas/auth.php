@@ -13,6 +13,9 @@ Route::get('/customer/customer-register', Auth\CustomerRegisterController::class
 Route::match(['get', 'post'], '/register-submit', Auth\RegisterSubmitController::class)->name('root.register-submit');
 Route::match(['get', 'post'], '/customer/forgot-password', [Auth\PasswordResetController::class, 'forgot'])->name('customer.forgot-password');
 Route::match(['get', 'post'], '/customer/reset-password', [Auth\PasswordResetController::class, 'reset'])->name('customer.reset-password');
+/* the same two pages for staff and admin accounts (DB-DECISIONS 28): the side comes from the route name */
+Route::match(['get', 'post'], '/admin/forgot-password', [Auth\PasswordResetController::class, 'forgot'])->name('admin.forgot-password');
+Route::match(['get', 'post'], '/admin/reset-password', [Auth\PasswordResetController::class, 'reset'])->name('admin.reset-password');
 Route::match(['get', 'post'], '/customer/google-start', [Auth\GoogleController::class, 'start'])->name('customer.google-start');
 Route::match(['get', 'post'], '/customer/google-callback', [Auth\GoogleController::class, 'callback'])->name('customer.google-callback');
 Route::match(['get', 'post'], '/customer/logout', [Auth\LogoutController::class, 'customer'])->name('customer.logout');

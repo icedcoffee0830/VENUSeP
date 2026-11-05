@@ -111,6 +111,15 @@ final class FlowsDb
                 . "CREATE DATABASE {$db} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
         }
 
+        /* Empty it first: the snapshot drops only the tables in its dump, and the ones a
+           migration appended creates "IF NOT EXISTS" (venue_closures, customer_office_blocks...)
+           would otherwise keep the last run's rows. guard() above: test and flows copies only. */
+        $conn->statement('SET FOREIGN_KEY_CHECKS = 0');
+        foreach ($conn->select("SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'", [$db]) as $row) {
+            $conn->statement('DROP TABLE `' . str_replace('`', '``', $row->t) . '`');
+        }
+        $conn->statement('SET FOREIGN_KEY_CHECKS = 1');
+
         $cfg = $conn->getConfig();
         $cmd = [$mysql, '--user=' . $cfg['username'], '--host=' . $cfg['host'], '--port=' . $cfg['port'], '--default-character-set=utf8mb4'];
         if ((string) ($cfg['password'] ?? '') !== '') {
@@ -131,10 +140,16 @@ final class FlowsDb
             if ($n === 0 && !$conn->selectOne('SELECT 1 AS x FROM system_settings WHERE setting_key = ?', [(string) $key])) {
                 throw new RuntimeException("Unknown setting '{$key}' (see the system_settings table).");
             }
+            if ($key === 'refunds_enabled') {   // one switch per office now (DB-DECISIONS 28): the flow's value for every office
+                $conn->update('UPDATE venues SET refunds_enabled = ?', [(int) $value]);
+            }
         }
         /* the demo password counts as each account's own (staff who never set one are held on their profile) */
         $conn->update('UPDATE users SET password_hash = ?, password_changed_at = COALESCE(password_changed_at, NOW()) WHERE password_hash IS NOT NULL',
             [password_hash(self::PASSWORD, PASSWORD_ARGON2ID)]);
+        /* every admin signs in with a code: one with no key yet (the normal admins of migration 17)
+           gets the tests' key, so a flow can sign it in */
+        $conn->update("UPDATE users SET totp_secret = 'JBSWY3DPEHPK3PXP', totp_enabled_at = NOW() WHERE account_type = 'admin' AND totp_secret IS NULL");
     }
 
     /* The current authenticator code for $email (from its stored TOTP secret). */

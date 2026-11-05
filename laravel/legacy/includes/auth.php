@@ -57,7 +57,8 @@ function admin_require_login(array $allowed = ['admin', 'staff'])
     if (!venusep_is_staff_session()) {
         venusep_redirect_now(route('admin.admin-login'));
     }
-    if (!in_array(session('account_type'), $allowed, true)) {
+    /* 'super' = the super admin only (DB-DECISIONS 28) */
+    if (!in_array(session('account_type'), $allowed, true) && !(in_array('super', $allowed, true) && admin_is_super())) {
         venusep_redirect_now(route('admin.dashboard'));   // staff on an admin-only page
     }
     staff_session_heal();
@@ -146,69 +147,100 @@ function admin_is_admin()
 }
 
 /* =====================================================================
-   WHICH VENUE A STAFF MEMBER HANDLES (decided 2026-10-27).
-   null = admin (every venue); the staff member's venue id; 0 = unknown
-   (matches nothing — refuse rather than allow). Re-read every request.
+   ROLES AND OFFICES (DB-DECISIONS 28, decided 2026-11-04). Re-read every request.
+     super admin (users.is_super_admin): every office;
+     normal admin: its group's offices (users.office_group = venues.office_group),
+       none while it has no group;
+     staff: staff.venue_id, plus the other USeP CEDU office when ticked for both
+       (staff.both_cedu_offices).
+   Customers and guests are never narrowed: staff_list_venue() is null for them.
    ===================================================================== */
-function staff_venue_scope()
+const OFFICE_GROUPS = ['bahay_alumni' => 'Bahay Alumni', 'cedu' => 'USeP CEDU'];   // users/venues.office_group
+
+function staff_me(): array
 {
-    if (session('account_type') === 'admin') {
-        return null;
-    }
-    $uid = session('user_id');
-    if ($uid === null) {
-        return 0;
-    }
-    $key = 'venusep_venue_scope:' . $uid;
+    $uid = (int) session('user_id');
+    $key = 'venusep_staff_me:' . $uid;
     if (request()->attributes->has($key)) {
         return request()->attributes->get($key);
     }
+    $me = ['super' => false, 'offices' => []];   // unknown = no office: refuse rather than allow
     $pdo = venusep_db();
-    if ($pdo === null) {
-        request()->attributes->set($key, 0);
-        return 0;
+    if ($uid > 0 && $pdo !== null && venusep_is_staff_session()) {
+        try {
+            $st = $pdo->prepare("SELECT is_super_admin FROM users WHERE id = :u AND account_type = 'admin'");
+            $st->execute([':u' => $uid]);
+            $me['super'] = (bool) $st->fetchColumn();
+            $st = $pdo->prepare(
+                "SELECT v.id FROM users u
+                   LEFT JOIN staff s ON s.user_id = u.id
+                   LEFT JOIN venues mine ON mine.id = s.venue_id
+                   JOIN venues v ON (u.account_type = 'admin' AND v.office_group = u.office_group)
+                                 OR (u.account_type = 'staff'
+                                     AND (v.id = s.venue_id
+                                          OR (s.both_cedu_offices = 1 AND mine.office_group = 'cedu' AND v.office_group = 'cedu')))
+                  WHERE u.id = :u ORDER BY v.id"
+            );
+            $st->execute([':u' => $uid]);
+            $me['offices'] = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+        } catch (PDOException $e) {
+            sql_failed($e);
+        }
     }
-    $st = $pdo->prepare('SELECT s.venue_id FROM staff s JOIN users u ON u.id = s.user_id
-                          WHERE s.user_id = :u AND u.account_type = \'staff\'');
-    $st->execute([':u' => (int) $uid]);
-    $venue = $st->fetchColumn();
-    $scope = ($venue === false || $venue === null) ? 0 : (int) $venue;
-    request()->attributes->set($key, $scope);
-    return $scope;
+    request()->attributes->set($key, $me);
+    return $me;
+}
+
+function admin_is_super(): bool
+{
+    return admin_is_admin() && staff_me()['super'];
+}
+
+/* null = every office (the super admin); otherwise the office (venue) ids this
+   session handles, [] = none. */
+function staff_venue_scope()
+{
+    return admin_is_super() ? null : staff_me()['offices'];
 }
 
 function staff_may_handle_venue($venueId)
 {
     $scope = staff_venue_scope();
-    return $scope === null || ($scope !== 0 && $scope === (int) $venueId);
+    return $scope === null || in_array((int) $venueId, $scope, true);
 }
 
-/* The venue STAFF lists are narrowed to (decided 2026-10-31: the three
-   departments never see each other's bookings): null = no narrowing (admins,
-   customers); a staff member's venue id; 0 = staff with no venue (sees nothing). */
+/* The offices a staff-side session's lists are narrowed to: null = no narrowing
+   (the super admin, customers, guests); otherwise the office ids, [] = none. */
 function staff_list_venue()
 {
-    return session('account_type') === 'staff' ? staff_venue_scope() : null;
+    return venusep_is_staff_session() ? staff_venue_scope() : null;
 }
 
-/* Does a list shown to this session include the venue? Staff see their own
-   only — venue/room lists, GCash cards, the counter's rooms (2026-10-31). */
+/* Does a list shown to this session include the office? Venue/room lists, GCash
+   cards, the counter's rooms. */
 function staff_sees_venue($venueId)
 {
-    $venue = staff_list_venue();
-    return $venue === null || $venue === (int) $venueId;
+    $offices = staff_list_venue();
+    return $offices === null || in_array((int) $venueId, $offices, true);
 }
 
-/* The same rule inside SQL: " $glue $sql" with the staff venue id in $sql's
-   %d, or '' for anyone not narrowed. */
+/* Does this session see more than one office? Its booking lists then label each row. */
+function staff_sees_many_offices(): bool
+{
+    $offices = staff_list_venue();
+    return $offices === null || count($offices) > 1;
+}
+
+/* The same rule inside SQL: " $glue $sql" with the office ids in $sql's %s
+   (write it as "x IN (%s)"), or '' for anyone not narrowed. */
 function staff_venue_sql($sql, $glue = 'WHERE')
 {
-    $venue = staff_list_venue();
-    return $venue === null ? '' : " $glue " . sprintf($sql, (int) $venue);
+    $offices = staff_list_venue();
+    return $offices === null ? '' : " $glue " . sprintf($sql, implode(',', $offices ?: [0]));
 }
 
-/* May this staff session see / handle the booking? Admins and non-staff: yes
-   (their own checks apply). An unknown booking passes: the caller's 404 handles it. */
+/* May this session see / handle the booking? Customers: yes (their own checks
+   apply). An unknown booking passes: the caller's 404 handles it. */
 function staff_may_handle_booking($bookingId)
 {
     if (staff_list_venue() === null) {
@@ -222,6 +254,22 @@ function staff_may_handle_booking($bookingId)
     $st->execute([':b' => (int) $bookingId]);
     $venue = $st->fetchColumn();
     return $venue === false || staff_may_handle_venue($venue);
+}
+
+/* May this admin manage (edit, move, reset the password of, suspend) that
+   staff-side account? $acct: account_type, venue_id, is_super_admin, handed_over_at.
+   Super admin: any admin or staff. Normal admin: staff of its own offices only,
+   never another admin. Nobody manages the super admin or a former one.
+   (Your own account is refused by the caller.) */
+function staff_may_manage_account(array $acct): bool
+{
+    if (!admin_is_admin() || !empty($acct['is_super_admin']) || !empty($acct['handed_over_at'])) {
+        return false;
+    }
+    if (admin_is_super()) {
+        return true;
+    }
+    return $acct['account_type'] === 'staff' && $acct['venue_id'] !== null && staff_may_handle_venue($acct['venue_id']);
 }
 
 /* =====================================================================

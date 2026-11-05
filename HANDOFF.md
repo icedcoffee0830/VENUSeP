@@ -491,3 +491,193 @@ What it did:
 - Still in the PHP error log, not `laravel.log`: non-SQL failures such as SMTP errors, Google token exchange and ID decryption.
 
 **Before go-live:** set `APP_DEBUG=false`. `.env.example` has it on, and with it on visitors now see SQL errors.
+
+## 14. 2026-11-04 night — roles foundation (branch `roles`, migration 17)
+
+Built from DB-DECISIONS section 28. **Migration 17 is NOT on the real `venusep` DB yet**: Aron runs
+`C:\xampp\mysql\bin\mysql.exe -u root venusep < venusep_migration_17.sql` in cmd, after a backup. It
+ends by listing every admin and its role. Applied to the test/flows snapshot
+(`_tools\venusep_snapshot.sql`, appended like migration 16; the copy before it is `.before-m17`).
+
+- **Schema:** `venues.office_group` (bahay_alumni | cedu); `users.is_super_admin` (one only:
+  `uq_users_one_super_admin`; `chk_users_super_admin` keeps it an active admin with no group),
+  `users.office_group` (a normal admin's group), `users.handed_over_at`; `staff.both_cedu_offices`.
+  `sp_notify_venue_staff` sends booking news to the office's staff and the group's normal admins only.
+- **Accounts:** admin@gmail.com super admin; francishubero@gmail.com Bahay Alumni admin; new
+  cedu.admin@gmail.com "CEDU Admin" (temporary password `ceduadmin123`, sets up 2FA at first sign-in).
+- **One place:** `legacy/includes/auth.php` (`staff_me`, `staff_venue_scope` now a list of office ids,
+  `staff_venue_sql` takes `IN (%s)`, `staff_may_manage_account`). Route guard `staff:super`.
+- **Super admin only:** Activity, Backup & Restore, refund switch, creating admins (with a group),
+  adding or deleting an office. **Normal admin only, own offices:** GCash accounts. Office settings:
+  own offices (super admin all). Staff Management: a normal admin sees and manages its own offices'
+  staff only; the super admin any admin or staff; nobody resets the super admin; Make super admin =
+  the handover (reason + password, emails both, old account suspended for good).
+- **Not built yet (later phases):** customers page narrowed to the group, blocks, counter search
+  rules, per-office refund switch, forgot password for staff/admins, account events
+  (`sp_notify_admins`) still go to every admin.
+- Tests: `tests/Feature/AdminPeople/RolesTest.php`; flow `roles-accounts`.
+
+### 14b. Reports office filter + toggle (phase C, no migration)
+- One page, one set of queries: `app/Queries/ReportQueries.php` (moved out of legacy
+  `bookings.php`; the old `report_quarters()` / `report_by_venue()` are gone). Every query takes a
+  list of office ids and filters with a plain `r.venue_id IN (...)`. The Dashboard revenue tile
+  reads the same `quarters()`.
+- `ReportsController::choices()` builds the toggle from `staff_venue_scope()`: each own office, each
+  group with two or more of them ("USeP CEDU (both)"), and "All offices" for the super admin only.
+  `?office=` outside the list falls back to the person's widest choice (clamped, no error).
+  One choice = no toggle. Toggle: `resources/views/partials/report-office-toggle.blade.php`,
+  one `@include` in `reports.blade.php` below the header (printout header untouched).
+- Sections: shared tiles (revenue, growth, events held, average, bookings, customers, refunded,
+  written off) and charts; Halls table (events, days, hours) for event offices; Hostel Rooms table
+  (stays, bed-nights = nights x guests, occupancy, bathroom type line) for the hostel. Charts compare
+  offices when several are chosen, else halls/rooms. Combined reports count a customer once and
+  say so on the printout.
+- Print: a single-office report may now run onto a second page (the tables move whole to page 2);
+  Bahay Alumni on A4 still fits one page with the test data.
+- Tests: `tests/Feature/AdminSettings/ReportsTest.php`; flow `admina-dashboard-reports-backup` step 3.
+
+### 14c. Phase D (2026-11-05 night, no migration)
+- **Counter mode by office:** the counter start page (`/customer/venues?counter=1`) draws only the
+  viewer's offices: the room lists were already narrowed by `staff_sees_venue()`; the hostel card,
+  section, hero button, footer and top-bar link now follow `office_hostel_shown()` (offices.php).
+  Heading and counts adapt ("One/Two/Three places on campus", the hero line). No office (only a
+  normal admin left without a group can be in that state: a trigger gives every staff member an
+  office) -> "You have no office yet. Ask an admin to assign one." Another office's room or hostel
+  page in counter mode is refused in `BookingAccess` (redirect back to the counter start page with
+  "<office> is another office..."); booking-create still refuses at save. Public page unchanged.
+- **Forgot password for staff, admins and the super admin:** `admin/forgot-password` +
+  `admin/reset-password`, the same controller, views and `password-reset.php` rules as the customer
+  pages; the side comes from the route name (`pr_*` take `$staff`). Each side's links work on its own
+  page only. No link for a suspended account or a former super admin (`handed_over_at`). The link
+  uses `config('app.url')` like other mail. After the reset: other sessions end (password_changed_at),
+  remembered devices are forgotten, nobody is signed in, admins are still asked for their code.
+  The staff sign-in's "Forgot Password?" link and its one-time "Your password was changed" notice.
+- **Google safety net:** `GoogleController::start` (sign-in only) on a host/scheme other than the
+  configured `redirect_uri`'s first redirects to the same path there, keeping `?remember=1`. Test seam:
+  `config('venusep.google_config_test')` points `google_config()` at a fake file in testing only.
+- **Account-event notifications:** `notify_account_event()` (notifications.php) replaces
+  `notify_admins()`: a staff account's events (created, moved: old and new office, password reset,
+  suspended, reactivated) go to that staff member's group's normal admins; an admin account's events
+  and the handover go to the super admin (the new one, after a handover); the actor never.
+  `sp_notify_admins` stays in the DB, unused. Restore and the refund switch add no notification:
+  only the super admin can do them and nobody is told of their own action, so it would never fire.
+- Tests: `CustomerBooking/CounterOfficeTest`, `Auth/StaffPasswordResetTest`, `Auth/GoogleHostTest`,
+  `AdminPeople/AccountNotificationsTest` (+ the handover check in `RolesTest`). Flows:
+  `auth-counter-and-disabled` (refused hostel page, CEDU admin's counter), new `staff-forgot-password`.
+
+### 14d. Phase E (2026-11-05 night): office contact info, per-office blocks (migration 17 grew)
+Migration 17 is still not on the real DB; the additions are in the same file, safe to re-run
+(the test/flows snapshot is again `.before-m17` + the new migration 17).
+- **Office contact info:** phone, email, location = the existing `venues.contact_phone`,
+  `contact_email`, `address` columns, edited on Office Settings (same rules as the other settings,
+  logged in its history; fields left out of a post keep their value). Hours come from opens/closes
+  and closed days (`office_hours_label()`, offices.php; the hostel shows its open days only, it has
+  no opening hours). Shown: public page footer (one block per office, replacing the hard-coded
+  footer facts), the block notice, and the footer of every customer email about a booking
+  (`re_office_line()`, receipt-emails.php). **Placeholders, confirm before go-live:** location
+  "USeP Tagum–Mabini Campus, Apokon, Tagum City" (the old footer text), phone `0900 000 0000`,
+  emails `bahay.alumni@` / `usep.venues@` / `usep.hostel@example.com`.
+- **Blocks:** `customer_office_blocks` (one active block per customer and office; reason, who,
+  when; lift: who, when, reason), `app/Queries/BlockQueries.php`. `fn_customer_blocked(customer,
+  room)` is the one copy of the rule; `trg_bookings_block_ins` refuses a new booking (online and
+  counter). The app refuses first: booking-submit (409 `blocked`, the notice + the office contact
+  line, never the reason), booking-create at the counter ("Blocked at this office..."), and
+  approving ("This customer is blocked at this office. Lift the block first, or reject the
+  request."). Booking pages show the notice up front (in `customer/overdue-notice` partial); the
+  counter's search and who-step show "Blocked at this office" and the step cannot go on; request
+  list and detail show a Blocked badge. Approved bookings are untouched.
+- **Auto-cancel:** the existing close of pending requests is `sp_expire_due_bookings()` step 2
+  (pending past `fn_request_expiry`: a venue request at its first slot's start, a hostel request at
+  the end of its check-in day -> released / expired, "Not approved before the booking date; the
+  request expired."). It runs on page load (`venusep_expire_due_bookings()`, legacy db.php, before
+  every booking read, once per request), no scheduler. A new step just before it cancels a request
+  still blocked then (cancelled, History "Cancelled automatically: the customer was still blocked
+  at this office when the booking was due to start."); the after-response `mail_status_sweep()`
+  emails the customer once (kind `booking_block_cancelled`, contact line in the footer, no reason).
+- **Customers page:** a normal admin sees customers who booked at its group's offices (booking
+  counts there only) and blocks / lifts at its own offices with a reason; the super admin sees all.
+  Suspending a whole account is the super admin's only now. Blocks and lifts appear on Activity.
+- Tests: `CustomerBooking/OfficeBlockTest`, new cases in `AdminSettings/OfficeSettingsTest` and
+  `CustomerBooking/CounterBookerTest`. Flow: new `office-block`.
+- **Harness fix:** `FlowsDb::reset` (flows tester and `flows-tool reset`) now drops every table of
+  the test/flows copy before loading the snapshot. The snapshot only drops the tables in its dump;
+  tables a migration appends with `CREATE TABLE IF NOT EXISTS` (venue_closures, document_access_log,
+  customer_office_blocks...) kept the previous run's rows, which broke a second run of `office-block`.
+- Not done: walk-ins (no account) cannot be blocked (there is no record to block; a new customer
+  row each visit). No notification bell entry for a block.
+
+### 14e. Phase F (2026-11-05): refund switch per office (migration 17 grew)
+Migration 17 is still not on the real DB; the addition is in the same file, safe to re-run (the
+test/flows snapshot is again `.before-m17` + the new migration 17).
+- **Schema:** `venues.refunds_enabled` (default off). The first run copies the old site-wide
+  `system_settings.refunds_enabled` into every office, so nothing changes on day one; a re-run never
+  overwrites a later change. The old row stays (its description says "No longer read").
+  No booking backfill: bookings already store their rule since #16 / #26 (`refunds_allowed`,
+  `pay_to_use`), so a backfill from today's value would have taken refunds away from bookings made
+  while it was on.
+- **Rule:** Bahay Alumni and USeP Venues: on = pay before + refunds, off = pay after + no refunds.
+  USeP Hostel always pays before (`pay_to_use`, unchanged); its switch is refunds only.
+- **One place:** `office_all()['refunds']` (offices.php). `$REFUNDS_ENABLED` (refund-policy.php) is now
+  the switch of the page's office (`office_page()`, the booking pages); off on a page about no office.
+  `office_payment_policy()` (same file) is the one copy of "hostel always before, a venue follows its
+  switch" for the pages. `refunds_enabled()` and `refund_setting_details()` are gone. New bookings snapshot their office's
+  switch: `BookingSubmitController` (online) and `BookingCreateController` (counter). Every read of an
+  existing booking already used its snapshot (refund request, staff actions, emails, procedures).
+- **Payment Settings:** one row per office (the ones the viewer sees), each with its pill, its rule
+  ("Payment: always before the stay (fixed)." on the hostel row), last change, and for the super
+  admin only a button. Same modal and re-type-password guard, per office. `RefundSwitchController`
+  takes `venue_id`; the change is logged in `venue_settings_history` (field `refunds`), so Office
+  Settings history and Activity show it.
+- **Public page:** "How it works" step 4 has one line per office; the refund card says the one rule
+  when the offices agree, else "Refunds depend on the office." and names them. **FAQ:** the
+  "After you book" section opens with each office's rule; a refunds-ON/OFF question shows while an
+  office it is about is in that state (`faq_row_for`, faqs.php: hostel section = the hostel, booking
+  and cash = the event offices, the rest = all), tagged with the office names when the offices
+  differ. Admin FAQ preview: "Live now" per office; starts on Everything while they differ.
+- **Flows:** a flow's `settings: { refunds_enabled }` sets every office (FlowsDb). The
+  refund-and-rejection flow turns Bahay Alumni on in the UI and checks the other offices stay off.
+- Tests: `AdminSettings/RefundSwitchPerOfficeTest` (per-office timing, hostel fixed pay-before,
+  super-admin only, snapshot kept after a flip, public page and FAQ per office), updated
+  `PaymentSettingsTest` and `PostPayDayAfterTest`.
+- Note: the Payment Settings text still says closures by USeP are "offered ... or their money back"
+  (unchanged wording); memory venusep-refund-policy says with the switch off nothing is refundable,
+  a closure included. Left as is: not part of this phase.
+
+### 14f. Phase G (2026-11-05): the counter's customer handling (migration 17 grew)
+Migration 17 is still not on the real DB; the additions are in the same file, safe to re-run
+(checked by loading it twice on the test DB; the test/flows snapshot is again `.before-m17` + the
+new migration 17).
+- **Schema:** `customers.counter_venue_id` (the office whose counter made the account, FK venues,
+  NULL = signed up themselves); `customer_email_fixes` (old, new, reason, who, when); email kind
+  `counter_welcome`. "Never signed into" = `users.last_login_at IS NULL`, "Google" =
+  `users.google_sub` set: both already stored, nothing added for them.
+- **Search** (`CounterCustomerController::search`, SQL in `app/Queries/CustomerQueries.php`):
+  every office's active customer accounts, by exact email (any case), exact mobile (any spacing,
+  +63 too), or a name with 3+ letters; 10 at most; email and phone masked (`ms•••@usep.edu.ph`,
+  `0917•••0188`); `usep` = a usep.edu.ph address; `noPassword`. Nothing about bookings. Not logged.
+  Part of an email or a number now finds nothing (it used to match part of an email).
+- **New account at the counter:** who-step mode "New account" (name, email, mobile) ->
+  `admin/customer-create` with `check=1` (a taken email of ANY account: 409 "This person already
+  has an account. Search for them instead."; a mobile another account uses: a warning) -> the
+  confirm step shows the email large, "Read this email address back to the customer" -> made with
+  no password and the office of the page's room; the welcome email (`queue_counter_welcome`,
+  receipt-emails.php) says to choose a password through Forgot password. Domain typo suggestion:
+  `emailSuggestion()` (edit distance <= 2 to gmail.com, yahoo.com, outlook.com, hotmail.com,
+  usep.edu.ph), a click-to-fix link.
+- **"ID checked":** an account with no password (Google, or just made at the counter) shows an
+  "ID checked: I looked at a valid ID and it is this person" box instead of the password;
+  booking-create accepts `id_identity=1` only for an account whose password is really NULL (a
+  password account still needs the password proof) and writes History `counter_identity_id_checked`
+  (who, when). `customer-verify` answers such an account 409 `noPassword`.
+- **Fixing a wrong email** (`CustomerController` action `fix_email`, Customers page "Fix email"):
+  a normal admin of the group whose counter made it (CEDU: either counter), never signed into, not
+  Google, reason required; the super admin and staff cannot. It also clears any password chosen
+  from the old address and spends its unused reset links, records the fix, and sends the welcome
+  email to the new address. The Customers page now also lists the group's counter-made accounts
+  that never booked.
+- Tests: `AdminPeople/CounterAccountsTest` (new), updated `CounterCustomerTest`,
+  `CustomerBooking/CounterBookerTest` (suggestion, confirm step, ID checked). Flows: new
+  `counter-new-account`; `adminb-people` step 6 (part of an email finds nothing; masked email);
+  `hostel-and-counter` and `abook-staff-actions` now search the counter customer by exact email.
+- Not done: email fixes are not on the Activity page (they are in `customer_email_fixes`); a
+  counter account has no "resend welcome email" button; walk-in email entry has no typo suggestion.

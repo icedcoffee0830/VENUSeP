@@ -89,6 +89,10 @@
   .fq-section .fq-a + .fq-a { margin-top: -8px; }
   .fq-section .fq-a ul { margin: 8px 0 0; padding-left: 20px; }
   .fq-section .fq-a li { margin-top: 5px; }
+  /* one refund switch per office (DB-DECISIONS 28): the rules list, and the offices a row is for */
+  .fq-section .fq-rules { margin-top: 18px; }
+  .fq-section .fq-for { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px; vertical-align: middle;
+    background: rgba(255,255,255,.08); border: 1px solid var(--line); font-family: var(--font-body); font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
 
   /* ---------- still need help ---------- */
   .fq-help { margin-top: 64px; display: flex; align-items: center; justify-content: space-between; gap: 30px; padding: 30px 34px; border-radius: 22px;
@@ -175,7 +179,7 @@
         <a href="#hostel">Hostel beds</a>
         <a href="#gcash">Paying with GCash</a>
         <a href="#cash">Paying in cash</a>
-        <a href="#after">After you book &middot; {{ $REFUNDS_ENABLED ? 'refunds' : 'refund policy' }}</a>
+        <a href="#after">After you book &middot; {{ $fqAnyRefunds ? 'refunds' : 'refund policy' }}</a>
       </nav>
 
       <div>
@@ -212,7 +216,7 @@
 
         <!-- ==================== AFTER / REFUNDS ==================== -->
         <section class="fq-section" id="after" data-reveal>
-          <h2><span>06</span>After you book &middot; {{ $REFUNDS_ENABLED ? 'refunds' : 'refund policy' }}</h2>
+          <h2><span>06</span>After you book &middot; {{ $fqAnyRefunds ? 'refunds' : 'refund policy' }}</h2>
 {!! $fqSections['after'] !!}
         </section>
 
@@ -254,7 +258,7 @@
         <h4>Help</h4>
         <div class="fq-footer-links">
           <a href="#gcash">How to pay by GCash</a>
-          <a href="#after">{{ $REFUNDS_ENABLED ? 'Request a refund' : 'Refund policy' }}</a>
+          <a href="#after">{{ $fqAnyRefunds ? 'Request a refund' : 'Refund policy' }}</a>
           <a href="#discount">USeP discount rules</a>
           @if (!$fqCounterQ)<a href="{{ route('customer.transaction-history') }}">Transaction history</a>@endif
         </div>

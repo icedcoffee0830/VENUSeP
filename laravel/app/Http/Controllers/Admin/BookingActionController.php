@@ -205,6 +205,9 @@ class BookingActionController extends Controller
         if ($booking['reservation_status'] !== Status::PENDING) {
             $this->reply(409, ['ok' => false, 'message' => 'Only a pending booking can be approved.']);
         }
+        if ($booking['office_blocked']) {
+            $this->reply(409, ['ok' => false, 'error' => 'blocked', 'message' => 'This customer is blocked at this office. Lift the block first, or reject the request.']);
+        }
         $withDiscount = !empty($request->post('discount'));
         if ($withDiscount && !$booking['is_usep_affiliated']) {
             $this->reply(400, ['ok' => false, 'message' => 'This booking did not claim USeP affiliation.']);

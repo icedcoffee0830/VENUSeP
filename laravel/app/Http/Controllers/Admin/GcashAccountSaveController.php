@@ -15,7 +15,8 @@ use PDOException;
 
    This number is where customers' money goes (payment screen + receipt
    checker both read it), so it re-asks for the password, using the same
-   users.reauth_* lockout the refund switch uses. ADMIN ONLY, re-checked here.
+   users.reauth_* lockout the refund switch uses. The office's NORMAL ADMIN only
+   (DB-DECISIONS 28: not staff, not the super admin), re-checked here.
 
    A CHANGE IS A NEW ROW, NOT AN EDIT. The old account is superseded
    (valid_until set) and a new active one inserted; uq_gcash_one_active
@@ -31,9 +32,9 @@ class GcashAccountSaveController
         if (!$request->isMethod('post')) {
             return $this->reply(405, ['ok' => false, 'message' => 'Use POST.'], ['Allow' => 'POST']);
         }
-        if (!session()->has('user_id') || !admin_is_admin()) {
+        if (!session()->has('user_id') || !admin_is_admin() || admin_is_super()) {
             return $this->reply(403, ['ok' => false, 'error' => 'not_admin',
-                'message' => 'Only an administrator can change where a venue is paid.']);
+                'message' => "Only the office's admin can change where it is paid."]);
         }
         if (!$this->csrfOk($request)) {
             return $this->reply(400, ['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
@@ -101,6 +102,11 @@ class GcashAccountSaveController
             if ($venueId === false) {
                 $pdo->rollBack();
                 return $this->reply(404, ['ok' => false, 'message' => 'Unknown venue.']);
+            }
+            if (!staff_may_handle_venue($venueId)) {
+                $pdo->rollBack();
+                return $this->reply(403, ['ok' => false, 'error' => 'not_admin',
+                    'message' => "Only the office's admin can change where it is paid."]);
             }
 
             /* Nothing to do if neither field moved — avoids filling the history with

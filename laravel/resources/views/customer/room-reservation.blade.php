@@ -192,7 +192,7 @@
 <script>
 /* Every venue's GCash account, from the gcash_accounts table. */
 const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-/* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
+/* This room's office's refund switch (includes/refund-policy.php, venues.refunds_enabled, DB-DECISIONS 28).
    OFF = this booking is non-refundable, and the customer must tick that they
    understand before the request can be submitted. Whatever it is at submit time
    is what the booking keeps (bookings.refunds_allowed) — it never changes later. */
@@ -282,6 +282,8 @@ const COUNTER_STAFF = {!! json_encode(counter_staff_name(), JSON_UNESCAPED_UNICO
 /* Counter: customer id -> their oldest Overdue booking. Online they cannot book until it
    is paid; here staff see the warning (counter-booker.php) and may still book. */
 const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+/* Counter: customer id -> true when blocked at this room's office (DB-DECISIONS 28): no booking here. */
+const COUNTER_BLOCKED = {!! json_encode((object) $counterBlocked) !!};
 /* SAME DAY, DIFFERENT TIME (2026-10-27): minutes kept free before and after
    every booking of a room. From system_settings, the same value
    sp_add_venue_slot() enforces. */
@@ -863,7 +865,7 @@ async function submitRequest(){
   if(COUNTER){
     const b = state.booker;
     fd.append('booker_mode', b.mode);
-    if(b.mode==='account') fd.append('customer_id', b.customerId);
+    if(b.mode==='account'){ fd.append('customer_id', b.customerId); fd.append('id_identity', b.idIdentity ? '1' : '0'); }
     else { fd.append('walkin_name', b.name.trim()); fd.append('walkin_phone', cleanPhone(b.phone) || ''); fd.append('walkin_address', b.address.trim()); fd.append('walkin_email', b.noEmail ? '' : b.email.trim()); fd.append('walkin_no_email', b.noEmail ? '1' : '0'); }
     fd.append('id_checked', b.idChecked ? '1' : '0');
     fd.append('usep_id', b.usepId ? '1' : '0');
@@ -1459,7 +1461,7 @@ function reviewScreen(){
       <div style="font-size:13px;color:#1c7a4f;line-height:1.6">
         &check; Valid ID checked in person by <strong>${esc(COUNTER_STAFF)}</strong>${state.booker.usepId?' &middot; <strong>USeP ID</strong>, discount applied':''}<br>
         ${state.booker.mode==='account'
-          ? '&check; Account confirmed by the customer&rsquo;s password &mdash; <strong>'+esc(state.booker.name)+'</strong>'
+          ? counterAccountLine()
           : '&middot; Walk-in with no account &mdash; <strong>'+esc(state.booker.name)+'</strong> &middot; '+esc(state.booker.phone)}
       </div>
     </div>`:`

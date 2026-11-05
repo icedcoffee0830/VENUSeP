@@ -19,7 +19,7 @@ class CounterBookerTest extends TestCase
         $this->assertNotNull($block, 'counter-booker.php block not on the page');
 
         $esc = "function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }";
-        $script = "const COUNTER_STAFF='Staff', DISCOUNT_PERCENT=20, CSRF='t', COUNTER_OVERDUE={}; let state; function render(){}\n"
+        $script = "const COUNTER_STAFF='Staff', DISCOUNT_PERCENT=20, CSRF='t', COUNTER_OVERDUE={}, COUNTER_BLOCKED={}; let state; function render(){}\n"
             . $esc . "\n" . $block . "\nstate = { booker: Object.assign({}, booker0) };\n" . $js;
         $file = tempnam(sys_get_temp_dir(), 'cbk') . '.js';
         file_put_contents($file, $script);
@@ -70,5 +70,58 @@ class CounterBookerTest extends TestCase
         JS);
 
         $this->assertSame('{"warned":true,"ready":true,"otherWarned":false}', $out);
+    }
+
+    /* Blocked at this office (DB-DECISIONS 28): the search result and the picked account say
+       so, and the step cannot go on. Another customer is not affected. */
+    public function test_an_account_blocked_at_this_office_is_flagged_and_cannot_be_booked(): void
+    {
+        $out = $this->runCounterScript(<<<'JS'
+            COUNTER_BLOCKED[7] = true;
+            state.booker = Object.assign({}, booker0, { mode: 'account', customerId: 7, name: 'Eve', phone: '0917***1234', verified: true, idChecked: true,
+              results: [{ id: 7, name: 'Eve', email: 'e@x.com', phone: '0917***1234' }, { id: 8, name: 'Bo', email: 'b@x.com', phone: '0917***9999' }] });
+            const html = whoScreen();
+            const ready = counterBookerReady();
+            state.booker.customerId = 8;
+            console.log(JSON.stringify({
+              listed: (html.match(/Blocked at this office/g) || []).length, ready: ready, otherReady: counterBookerReady(),
+            }));
+        JS);
+
+        $this->assertSame('{"listed":2,"ready":false,"otherReady":true}', $out);
+    }
+
+    /* A new account (DB-DECISIONS 28): a domain close to a common one gets a click-to-fix
+       suggestion; the confirm step shows the email large, to read back. */
+    public function test_a_new_account_suggests_the_email_domain_and_confirms_the_email_large(): void
+    {
+        $out = $this->runCounterScript(<<<'JS'
+            const s = ['ju@gmial.com', 'ju@yaho.com', 'ju@outlok.com', 'ju@hotmial.com', 'ju@usep.edu.hp', 'ju@gmail.com', 'ju@company.org', 'nope'].map(emailSuggestion);
+            state.booker = Object.assign({}, booker0, { mode: 'new', name: 'Ju', email: 'ju@gmial.com', phone: '09170002222' });
+            const form = whoScreen();
+            state.booker.email = 'ju@gmail.com'; state.booker.confirmNew = true; state.booker.warning = 'Another account already uses this mobile number.';
+            const confirm = whoScreen();
+            console.log(JSON.stringify({ s, fix: form.includes('Did you mean <strong>ju@gmail.com</strong>?'), ready: counterBookerReady(),
+              big: /id="bkConfirmEmail" style="font-size:24px[^"]*">ju@gmail.com</.test(confirm),
+              readBack: confirm.includes('Read this email address back to the customer'), warned: confirm.includes('already uses this mobile') }));
+        JS);
+
+        $this->assertSame('{"s":["ju@gmail.com","ju@yahoo.com","ju@outlook.com","ju@hotmail.com","ju@usep.edu.ph","","",""],'
+            . '"fix":true,"ready":false,"big":true,"readBack":true,"warned":true}', $out);
+    }
+
+    /* No password on the account (Google, or just made here): "ID checked" stands in for it. */
+    public function test_an_account_with_no_password_is_ready_once_id_checked_is_ticked(): void
+    {
+        $out = $this->runCounterScript(<<<'JS'
+            state.booker = Object.assign({}, booker0, { mode: 'account', customerId: 7, name: 'Eve', phone: '0917•••1234', idChecked: true, noPassword: true });
+            const html = whoScreen();
+            const before = counterBookerReady();
+            state.booker.idIdentity = true;
+            console.log(JSON.stringify({ box: html.includes('id="bkIdIdentity"'), noPwInput: !html.includes('id="bkPassword"'),
+              before, after: counterBookerReady(), line: counterAccountLine().includes('ID checked') }));
+        JS);
+
+        $this->assertSame('{"box":true,"noPwInput":true,"before":false,"after":true,"line":true}', $out);
     }
 }

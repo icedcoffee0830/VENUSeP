@@ -1,10 +1,12 @@
 <?php
 /* =====================================================================
-   FORGOT PASSWORD — customers only (DB-DECISIONS #23).
+   FORGOT PASSWORD (DB-DECISIONS #23; staff and admins too since #28).
 
-     customer/forgot-password.php   asks for the email, calls pr_request()
-     customer/reset-password.php    the link lands here: pr_find(), then
+     customer/forgot-password       asks for the email, calls pr_request()
+     customer/reset-password        the link lands here: pr_find(), then
                                     the new password, pr_complete()
+     admin/forgot-password,         the same two pages for staff and admin
+     admin/reset-password           accounts ($staff = true), from the staff sign-in
 
    SECURITY
      - The reply is the SAME whether or not the email has an account, so
@@ -23,7 +25,9 @@
        and forgets every remembered device — whoever was in the account is out.
      - It does NOT sign anyone in. They log in with the new password, and a
        customer with two-step verification on is still asked for the code.
-     - Staff and admin accounts are never sent a link from here.
+     - Each side sends links for its own accounts only: the customer pages never
+       for a staff or admin account, the staff pages never for a customer. A
+       suspended account or a former super admin (handed over) gets none.
    ===================================================================== */
 
 require_once __DIR__ . '/db.php';
@@ -35,6 +39,14 @@ const PR_RESET_TTL_MIN      = 30;   // minutes a link works
 const PR_RESET_THROTTLE_MIN = 5;    // minutes between emails to one account
 const PR_REQUEST_REPLY      = 'If that email belongs to a VENUSeP account, we’ve sent it a link to reset the password. The link works for 30 minutes. Check your spam folder if it doesn’t arrive.';
 
+/* The accounts one side's links are for. */
+function pr_side_sql(bool $staff): string
+{
+    return $staff
+        ? "u.account_type IN ('admin', 'staff') AND u.is_active = 1 AND u.handed_over_at IS NULL"
+        : "u.account_type = 'customer' AND u.is_active = 1";
+}
+
 function pr_hash(string $token): string
 {
     return hash('sha256', $token);
@@ -43,18 +55,18 @@ function pr_hash(string $token): string
 /* "Forgot password" for this email. Says nothing about whether it worked: the
    caller always shows PR_REQUEST_REPLY. Throws PDOException only.
    $mailConfig: the tests pass the log transport, so nothing leaves the machine. */
-function pr_request(PDO $pdo, string $email, ?string $ip, ?array $mailConfig = null): void
+function pr_request(PDO $pdo, string $email, ?string $ip, ?array $mailConfig = null, bool $staff = false): void
 {
     $stmt = $pdo->prepare(
-        "SELECT u.id, u.email, c.full_name
-           FROM users u JOIN customers c ON c.user_id = u.id
-          WHERE u.email = :e AND u.account_type = 'customer' AND u.is_active = 1
+        "SELECT u.id, u.email, COALESCE(c.full_name, s.full_name, u.username, u.email) AS full_name
+           FROM users u LEFT JOIN customers c ON c.user_id = u.id LEFT JOIN staff s ON s.user_id = u.id
+          WHERE u.email = :e AND " . pr_side_sql($staff) . "
           LIMIT 1"
     );
     $stmt->execute([':e' => $email]);
     $who = $stmt->fetch();
     if (!$who) {
-        return;   // no customer account: nothing is sent, and the reply is the same
+        return;   // no such account on this side: nothing is sent, and the reply is the same
     }
     $userId = (int) $who['id'];
 
@@ -68,7 +80,7 @@ function pr_request(PDO $pdo, string $email, ?string $ip, ?array $mailConfig = n
     }
 
     $token = pr_b64url(random_bytes(32));
-    $link  = mail_base_url() . '/customer/reset-password?token=' . $token;   // LARAVEL: the page's new URL (route customer.reset-password)
+    $link  = mail_base_url() . ($staff ? '/admin' : '/customer') . '/reset-password?token=' . $token;   // routes customer.reset-password / admin.reset-password
     $m     = pr_email(re_first_name((string) $who['full_name']), $link, (string) $who['email']);
 
     $pdo->beginTransaction();
@@ -110,29 +122,29 @@ function pr_b64url(string $bytes): string
 }
 
 /* The reset a link points to, if it can still be used: unused, not expired,
-   for an active customer. Null otherwise — the page never says which. */
-function pr_find(PDO $pdo, string $token): ?array
+   for an active account of this side. Null otherwise — the page never says which. */
+function pr_find(PDO $pdo, string $token, bool $staff = false): ?array
 {
     if ($token === '' || strlen($token) > 128 || preg_match('/[^A-Za-z0-9_-]/', $token)) {
         return null;
     }
-    return pr_row($pdo, 'r.token_hash = :k', [':k' => pr_hash($token)]);
+    return pr_row($pdo, 'r.token_hash = :k', [':k' => pr_hash($token)], $staff);
 }
 
 /* The same check by id, for the form's second request (the token itself is
    no longer in the URL by then — it was moved into the session). */
-function pr_find_id(PDO $pdo, int $resetId, int $userId): ?array
+function pr_find_id(PDO $pdo, int $resetId, int $userId, bool $staff = false): ?array
 {
-    return pr_row($pdo, 'r.id = :k AND r.user_id = :u', [':k' => $resetId, ':u' => $userId]);
+    return pr_row($pdo, 'r.id = :k AND r.user_id = :u', [':k' => $resetId, ':u' => $userId], $staff);
 }
 
-function pr_row(PDO $pdo, string $where, array $args): ?array
+function pr_row(PDO $pdo, string $where, array $args, bool $staff): ?array
 {
     $stmt = $pdo->prepare(
         "SELECT r.id, r.user_id, u.email
            FROM password_resets r JOIN users u ON u.id = r.user_id
           WHERE {$where} AND r.used_at IS NULL AND r.expires_at > NOW()
-            AND u.account_type = 'customer' AND u.is_active = 1
+            AND " . pr_side_sql($staff) . "
           LIMIT 1"
     );
     $stmt->execute($args);
@@ -140,7 +152,7 @@ function pr_row(PDO $pdo, string $where, array $args): ?array
     return $row ? ['id' => (int) $row['id'], 'user_id' => (int) $row['user_id'], 'email' => (string) $row['email']] : null;
 }
 
-/* Uses the link: the new password, the link spent, every other link for the
+/* Uses the link (found by pr_find_id() for its side just before): the new password, the link spent, every other link for the
    account cancelled, and password_changed_at set so older sessions end. All or
    nothing; false if the link stopped being usable in the meantime. */
 function pr_complete(PDO $pdo, int $resetId, int $userId, string $newPassword): bool
@@ -159,7 +171,7 @@ function pr_complete(PDO $pdo, int $resetId, int $userId, string $newPassword): 
         }
         $pdo->prepare(
             "UPDATE users SET password_hash = :h, password_changed_at = NOW()
-              WHERE id = :u AND account_type = 'customer' AND is_active = 1"
+              WHERE id = :u AND is_active = 1"
         )->execute([':h' => $hash, ':u' => $userId]);
         $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE user_id = :u AND used_at IS NULL')
             ->execute([':u' => $userId]);

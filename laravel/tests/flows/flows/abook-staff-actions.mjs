@@ -201,8 +201,8 @@ export default {
       await page.locator('.bed-row').first().getByRole('button', { name: 'Male', exact: true }).click();
       await page.locator('#hbGo').click();
       await expect.text(page, 'Who is this booking for?');
-      await page.locator('#bkSearch').fill('Rafael');
-      await page.locator('button', { hasText: COUNTER_CUSTOMER }).first().click();
+      await page.locator('#bkSearch').fill(COUNTER_CUSTOMER);   // the exact email; results show it masked
+      await page.locator('button', { hasText: 'Rafael Lim' }).first().click();
       await page.locator('#bkPassword').fill(ctx.password);
       await page.getByRole('button', { name: 'Confirm identity' }).click();
       await expect.text(page, 'Identity confirmed');

@@ -69,11 +69,15 @@ class StaffFirstPasswordTest extends TestCase
             ->assertRedirect(route('admin.profile', ['password' => 'required']));
     }
 
+    /* DB-DECISIONS 28: a normal admin never resets another admin, nobody resets the super
+       admin here, and staff reset nobody. */
     public function test_another_admin_cannot_be_reset_and_staff_cannot_reset_anyone(): void
     {
-        $other = $this->makeAccount('admin');
-        $this->actingAsAdmin();
+        $other = $this->makeAccount('admin', ['group' => 'cedu']);
+        $na = $this->makeAccount('admin', ['totp' => 'JBSWY3DPEHPK3PXP', 'group' => 'cedu']);
+        $this->signInAs($na, 'admin');
         $this->reset($other->id, 'Temp-Pass-2026')->assertStatus(403)->assertJson(['ok' => false]);
+        $this->reset((int) DB::table('users')->where('email', 'admin@gmail.com')->value('id'), 'Temp-Pass-2026')->assertStatus(403);
         $this->flushSession();
         $victim = $this->makeAccount('staff');
         $this->actingAsStaff();

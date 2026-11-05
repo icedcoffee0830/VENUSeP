@@ -1055,7 +1055,7 @@ document.getElementById('adRows').innerHTML = BR.slice()
     const pay = PAY[r.pay] || { t: r.pay || 'Unknown payment status', c: 'b-gray' };
     return `
     <a class="ad-row" href="${BR_DETAIL}?id=${r.id}">
-      <span><div class="r-name">${esc(r.name)}</div><div class="r-sub">${r.id} · ${esc(r.type)}</div></span>
+      <span><div class="r-name">${esc(r.name)}</div><div class="r-sub">${r.id} · ${esc(r.type)}${r.office ? ' · ' + esc(r.office) : ''}</div></span>
       <span class="r-roomcol"><div class="r-room">${esc(r.room)}</div><div class="r-sub">${esc(r.dates)}</div></span>
       <span>
         <span class="r-badges">

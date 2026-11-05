@@ -20,6 +20,7 @@
 
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/system-receipt.php';
+require_once __DIR__ . '/offices.php';
 
 /* The walk-in contact for a booking: only for a customer with NO account who
    gave an email at the counter. Account holders are never auto-emailed. */
@@ -47,6 +48,19 @@ function re_first_name(string $fullName): string
    Gmail account a reply would land in an inbox nobody answers — so every
    email says so, in the HTML and in the plain-text version alike. */
 const RE_NO_REPLY = 'This is an automated email from VENUSeP. Please do not reply to it. For questions about your booking, contact the venue office.';
+
+/* How to reach the booking's office, one plain line for an email's footer (DB-DECISIONS 28), or ''. */
+function re_office_line(int $bookingId): string
+{
+    $office = office_of_booking($bookingId);
+    return $office ? 'Contact ' . office_contact_line($office) : '';
+}
+
+/* The same line as a footer addition: '' or '<br>line'. */
+function re_office_footer(string $line): string
+{
+    return $line !== '' ? '<br>' . bh_e($line) : '';
+}
 
 /* ---- the shared frame: crimson rule, logo, title, greeting, intro, body, footer ---- */
 function re_frame(string $preheader, string $title, string $firstName, string $introHtml, string $bodyHtml, string $footerHtml): string
@@ -121,6 +135,8 @@ function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note
         'payment_due'       => ['Your payment is due', 'Your event is over, so your payment is now due.'],
         'payment_overdue'   => ['Your payment is overdue', 'Your payment is overdue. You cannot make new online bookings with this office until it is paid.'],
         'booking_cancelled' => ['Your booking was cancelled', 'Your booking was cancelled by the office.'],
+        /* a block at the office (DB-DECISIONS 28): the contact line is in the footer; never the reason */
+        'booking_block_cancelled' => ['Your booking request was cancelled', 'Your booking request was cancelled because you can’t make new bookings at this office right now. Please contact the office; its details are at the end of this email.'],
     ];
     if (!isset($words[$kind])) {
         return null;
@@ -137,14 +153,59 @@ function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note
     [$title, $intro] = $words[$kind];
     $first = re_first_name((string) $who['full_name']);
     $line = $b['roomName'] . ', ' . $b['venueName'] . '. ' . booking_date_label($b) . '. Reference ' . $b['bookingId'] . '.';
+    $office = re_office_line($bookingId);
     $html = re_frame($line, $title, $first, bh_e($intro),
         re_paragraph(bh_e($line)) . ($note !== '' ? re_paragraph(bh_e($note)) : ''),
-        'You&rsquo;re getting this because of your VENUSeP booking ' . bh_e($b['bookingId']) . '.');
+        'You&rsquo;re getting this because of your VENUSeP booking ' . bh_e($b['bookingId']) . '.' . re_office_footer($office));
     return mail_enqueue($pdo, [
         'kind' => $kind, 'booking_id' => $bookingId, 'requested_by_user_id' => $actorUserId ?: null,
         'to_email' => $who['email'], 'subject' => $title . ': ' . $b['bookingId'],
         'body_html' => $html,
-        'body_text' => $title . "\n\nGood day, " . $first . "!\n" . $intro . "\n\n" . $line . ($note !== '' ? "\n\n" . $note : ''),
+        'body_text' => $title . "\n\nGood day, " . $first . "!\n" . $intro . "\n\n" . $line . ($note !== '' ? "\n\n" . $note : '') . ($office !== '' ? "\n\n" . $office : ''),
+    ]);
+}
+
+/* The super admin handover (DB-DECISIONS 28): both people are told, with the reason.
+   $old, $new: email and name. Returns the two outbox ids. */
+function queue_handover_emails(PDO $pdo, array $old, array $new, string $reason, int $actorUserId): array
+{
+    $line = $new['name'] . ' (' . $new['email'] . ') is now the VENUSeP super admin. '
+          . $old['name'] . ' (' . $old['email'] . ') handed it over and that account is suspended. This cannot be undone.';
+    $ids = [];
+    foreach ([[$old, 'You handed over the super admin'], [$new, 'You are now the super admin']] as [$who, $title]) {
+        $first = re_first_name($who['name']);
+        $ids[] = mail_enqueue($pdo, [
+            'kind' => 'super_admin_handover', 'requested_by_user_id' => $actorUserId, 'to_email' => $who['email'],
+            'subject' => 'VENUSeP: ' . $title,
+            'body_html' => re_frame($line, $title, $first, bh_e($line), re_paragraph('Reason: ' . bh_e($reason)),
+                'You&rsquo;re getting this because your VENUSeP admin account changed.'),
+            'body_text' => $title . "\n\nGood day, " . $first . "!\n" . $line . "\n\nReason: " . $reason . "\n\n" . RE_NO_REPLY,
+        ]);
+    }
+    return $ids;
+}
+
+/* The welcome email of an account made at an office's counter (DB-DECISIONS 28), sent
+   again to the corrected address after an email fix. The account has no password yet:
+   it says how to choose one. Returns the outbox id. */
+function queue_counter_welcome(PDO $pdo, string $name, string $email, array $office, int $actorUserId): int
+{
+    $first = re_first_name($name);
+    $forgot = mail_base_url() . '/customer/forgot-password';   // route customer.forgot-password
+    $intro = 'Staff at the ' . bh_e($office['name']) . ' counter made a VENUSeP account for you with this email address.';
+    $how = 'To book or pay online, choose a password: open <a href="' . bh_e($forgot) . '" style="color:#a11626;">' . bh_e($forgot)
+         . '</a>, enter this email address, and follow the link we send you.';
+    $contact = 'Contact ' . office_contact_line($office);
+    return mail_enqueue($pdo, [
+        'kind' => 'counter_welcome', 'requested_by_user_id' => $actorUserId, 'to_email' => $email,
+        'subject' => 'Your VENUSeP account is ready',
+        'body_html' => re_frame('Your VENUSeP account is ready. Choose a password to use it online.', 'Your account is ready', $first, $intro,
+            re_paragraph($how) . re_paragraph('Not you? Ignore this email.', '18px 32px 28px 32px', '13px', '#6e6a64'),
+            'You&rsquo;re getting this because ' . bh_e($email) . ' was given at the VENUSeP counter.' . re_office_footer($contact)),
+        'body_text' => "Your account is ready\n\nGood day, " . $first . "!\n"
+            . 'Staff at the ' . $office['name'] . " counter made a VENUSeP account for you with this email address.\n\n"
+            . "To book or pay online, choose a password: open " . $forgot . ", enter this email address, and follow the link we send you.\n\n"
+            . "Not you? Ignore this email.\n\n" . $contact . "\n\n" . RE_NO_REPLY,
     ]);
 }
 
@@ -164,6 +225,24 @@ function mail_status_sweep(PDO $pdo): void
     )->fetchAll();
     foreach ($rows as $r) {
         $outbox = queue_status_email($pdo, (int) $r['id'], $r['payment_status'] === 'overdue' ? 'payment_overdue' : 'payment_due', '', null);
+        if ($outbox) {
+            mail_send($pdo, $outbox);
+        }
+    }
+
+    /* A pending request the procedure cancelled because the customer was still blocked at
+       its office (its History note starts "Cancelled automatically:"). */
+    $cancelled = $pdo->query(
+        "SELECT DISTINCT b.id FROM bookings b
+           JOIN booking_timeline t ON t.booking_id = b.id AND t.action_code = 'status_changed'
+                AND t.new_reservation_status = 'cancelled' AND t.note LIKE 'Cancelled automatically:%'
+                AND t.occurred_at >= NOW() - INTERVAL 3 DAY
+          WHERE b.reservation_status = 'cancelled'
+            AND NOT EXISTS (SELECT 1 FROM email_outbox e WHERE e.booking_id = b.id AND e.kind = 'booking_block_cancelled')
+          LIMIT 3"
+    )->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($cancelled as $id) {
+        $outbox = queue_status_email($pdo, (int) $id, 'booking_block_cancelled', '', null);
         if ($outbox) {
             mail_send($pdo, $outbox);
         }
@@ -224,6 +303,7 @@ function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
           . '<h2 style="margin:0;font-size:16px;line-height:1.3;color:#1d1214;">' . bh_e($heading) . '</h2>'
           . '<p style="margin:6px 0 0 0;font-size:14px;line-height:1.6;color:#4a4440;">' . $how . '</p></td></tr>';
 
+    $office = re_office_line($bookingId);
     $html = re_frame(
         $b['roomName'] . ', ' . booking_date_label($b) . '. Amount due ' . $due . '.',
         'Your booking is confirmed',
@@ -231,13 +311,13 @@ function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
         'Thank you for booking with VENUSeP. Here are the details of the booking we made for you at the counter. Your reference is ' . $ref . '.',
         $details . $amounts . $next
             . re_paragraph('Keep this email. You booked without an account, so this email and the counter are where your booking details live.', '22px 32px 28px 32px', '13px', '#6e6a64'),
-        'You&rsquo;re getting this because you gave ' . bh_e($who['email']) . ' at the VENUSeP counter. Not you? Ignore this email.'
+        'You&rsquo;re getting this because you gave ' . bh_e($who['email']) . ' at the VENUSeP counter. Not you? Ignore this email.' . re_office_footer($office)
     );
     $text = "Your booking is confirmed\n\n"
           . 'Good day, ' . re_first_name($who['name']) . "!\nThank you for booking with VENUSeP. Here are the details of the booking we made for you at the counter.\n\n"
           . 'Reference: ' . $b['bookingId'] . "\nRoom: " . $b['roomName'] . ', ' . $b['venueName']
           . "\nEvent: " . $b['eventName'] . "\nDate: " . strip_tags(str_replace('<br>', '; ', $when)) . "\nAmount due: " . $due . "\n\n"
-          . strip_tags(html_entity_decode($heading . '. ' . $how, ENT_QUOTES, 'UTF-8')) . "\n\nKeep this email.\n\n" . RE_NO_REPLY;
+          . strip_tags(html_entity_decode($heading . '. ' . $how, ENT_QUOTES, 'UTF-8')) . "\n\nKeep this email.\n\n" . ($office !== '' ? $office . "\n\n" : '') . RE_NO_REPLY;
 
     return mail_enqueue($pdo, [
         'kind' => 'walkin_booking', 'booking_id' => $bookingId, 'requested_by_user_id' => $actorUserId ?: null,
@@ -302,11 +382,12 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
         . '<strong>Your receipt is attached: ' . bh_e($v['number']) . '.pdf</strong><br>'
         . '<span style="color:#4a4440;font-size:13px;">Download it to keep or print. The summary below is for quick reading.</span></td></tr></table></td></tr>';
 
+    $office = re_office_line((int) $receipt['booking_id']);
     $html = re_frame(
         'Payment of ' . $v['paid'] . ' for ' . $s['room_name'] . ', ' . $s['dates'] . '. Your receipt is attached as a PDF.',
         $title, $firstName, $intro,
         $attached . $numberRow . $details . $amounts . re_paragraph($keep, '20px 32px 28px 32px'),
-        $footer
+        $footer . re_office_footer($office)
     );
     $text = $title . "\n\nGood day, " . $firstName . "!\n"
           . strip_tags(html_entity_decode($intro, ENT_QUOTES, 'UTF-8'))
@@ -314,7 +395,7 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
           . 'System Receipt ' . $v['number'] . "\nBooking: " . $v['booking_ref']
           . "\nRoom: " . $s['room_name'] . ', ' . $s['venue_name'] . "\nDates: " . $s['dates']
           . "\nPaid by: " . strip_tags(html_entity_decode($paidBy, ENT_QUOTES, 'UTF-8'))
-          . "\nAmount paid: " . $v['paid'] . "\n\n" . RE_NO_REPLY;
+          . "\nAmount paid: " . $v['paid'] . "\n\n" . ($office !== '' ? $office . "\n\n" : '') . RE_NO_REPLY;
 
     return [
         'subject' => 'VENUSeP System Receipt ' . $v['number'] . ' — booking ' . $v['booking_ref'],

@@ -24,7 +24,8 @@ use Illuminate\Support\Facades\DB;
        and frees its dates when the booking closes.
      trg_bookings_type_upd: refuses a booking whose type does not match its room.
      trg_booking_timeline_notify: a new History line may notify the customer or staff.
-   Procedures: sp_approve_booking, sp_add_venue_slot; fn_payment_deadline works out a pay-by date. */
+   Procedures: sp_approve_booking, sp_add_venue_slot; fn_payment_deadline works out a pay-by date,
+   fn_customer_blocked tells whether the customer is blocked at the booking's office. */
 class BookingQueries
 {
     use SavesWithHistory;
@@ -38,7 +39,8 @@ class BookingQueries
                    b.approved_at, b.write_off_reason, b.deadline_extensions, b.date_moves,
                    b.room_id, r.venue_id,
                    c.user_id AS customer_user_id,
-                   COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount
+                   COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount,
+                   fn_customer_blocked(b.customer_id, b.room_id) AS office_blocked
             FROM bookings b
             JOIN rooms r ON r.id = b.room_id
             JOIN venues v ON v.id = r.venue_id

@@ -7,20 +7,21 @@ use Illuminate\Http\Request;
 use Throwable;
 
 /* =====================================================================
-   REFUND SWITCH (was admin/refund-switch.php) — the ONLY way
-   system_settings.refunds_enabled changes. Called by the "Refund Requests"
-   card on Payment Settings.
+   REFUND SWITCH (was admin/refund-switch.php) — the ONLY way an office's
+   venues.refunds_enabled changes (one switch per office, DB-DECISIONS 28).
+   Called by the "Refund Requests" card on Payment Settings.
 
-   POST  _token  enable=0|1  password=<the admin's password>
+   POST  _token  venue_id=<office>  enable=0|1  password=<the admin's password>
    Replies with JSON.
 
    EVERY CHECK HAPPENS HERE, ON THE SERVER (agreed 2026-09-16). In order:
      1. POST only, logged-in session, CSRF token matches
-     2. the account is re-read from the database: still active, still ADMIN
-        (a staff account is refused even if it forges the request)
+     2. the account is re-read from the database: still active, still the SUPER ADMIN
+        (anyone else is refused even if they forge the request)
      3. the account is not currently locked out
      4. the password is correct
-     5. only then: change the value + write system_settings_history
+     5. only then: change the office's value + write venue_settings_history
+        (field 'refunds': Office Settings history and Activity show it)
 
    PASSWORD LOCKOUT — reauth_verify() in legacy auth.php.
    ===================================================================== */
@@ -39,15 +40,16 @@ class RefundSwitchController
         if (!session()->has('user_id') || !in_array($sessionType, ['admin', 'staff'], true)) {
             return $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
         }
-        if ($sessionType !== 'admin') {
-            return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the administrator can change the refund setting.']);
+        if (!admin_is_super()) {   // the super admin only (DB-DECISIONS 28)
+            return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the super admin can change the refund setting.']);
         }
         if (!$this->csrfOk($request)) {
             return $this->reply(400, ['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.']);
         }
 
         $enable = $request->input('enable');
-        if (!is_string($enable) || !in_array($enable, ['0', '1'], true)) {
+        $venueId = $request->input('venue_id');
+        if (!is_string($enable) || !in_array($enable, ['0', '1'], true) || !is_string($venueId) || !ctype_digit($venueId)) {
             return $this->reply(400, ['ok' => false, 'error' => 'bad_value', 'message' => 'Invalid request.']);
         }
         $password = $request->input('password', '');
@@ -66,7 +68,7 @@ class RefundSwitchController
 
             /* FOR UPDATE: two wrong attempts sent at the same moment must both count. */
             $stmt = $pdo->prepare(
-                'SELECT id, email, password_hash, account_type, is_active,
+                'SELECT id, email, password_hash, account_type, is_active, is_super_admin,
                         reauth_failed_attempts, reauth_lock_level,
                         CASE WHEN reauth_locked_until > NOW()
                              THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
@@ -75,9 +77,9 @@ class RefundSwitchController
             $stmt->execute([':id' => (int) session('user_id')]);
             $user = $stmt->fetch();
 
-            if (!$user || !(bool) $user['is_active'] || $user['account_type'] !== 'admin') {
+            if (!$user || !(bool) $user['is_active'] || $user['account_type'] !== 'admin' || !(bool) $user['is_super_admin']) {
                 $pdo->rollBack();
-                return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the administrator can change the refund setting.']);
+                return $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only the super admin can change the refund setting.']);
             }
 
             if ($no = reauth_verify($pdo, $user, $password)) {   // the shared lockout (auth.php)
@@ -87,26 +89,23 @@ class RefundSwitchController
                     : $this->reply(401, ['ok' => false, 'error' => 'wrong_password', 'attemptsLeft' => $no['attemptsLeft'], 'message' => 'Wrong password.']);
             }
 
-            $cur = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'refunds_enabled' FOR UPDATE");
-            $cur->execute();
+            $cur = $pdo->prepare('SELECT refunds_enabled FROM venues WHERE id = :v FOR UPDATE');
+            $cur->execute([':v' => (int) $venueId]);
             $old = $cur->fetchColumn();
             if ($old === false) {
                 $pdo->rollBack();
-                return $this->reply(500, ['ok' => false, 'error' => 'missing_setting',
-                    'message' => 'The refunds_enabled setting is missing from the database. Re-run venusep_schema.sql.']);
+                return $this->reply(404, ['ok' => false, 'error' => 'no_office', 'message' => 'That office no longer exists.']);
             }
 
-            $changed = ((string) $old !== $enable);
+            $changed = ((string) (int) $old !== $enable);
             if ($changed) {
+                $pdo->prepare('UPDATE venues SET refunds_enabled = :x WHERE id = :v')->execute([':x' => (int) $enable, ':v' => (int) $venueId]);
                 $pdo->prepare(
-                    "UPDATE system_settings SET setting_value = :v, updated_by_user_id = :u WHERE setting_key = 'refunds_enabled'"
-                )->execute([':v' => $enable, ':u' => $user['id']]);
-
-                $pdo->prepare(
-                    "INSERT INTO system_settings_history (setting_key, old_value, new_value, change_note, changed_by_user_id)
-                     VALUES ('refunds_enabled', :old, :new, :note, :u)"
+                    "INSERT INTO venue_settings_history (venue_id, field, old_value, new_value, note, changed_by_user_id)
+                     VALUES (:v, 'refunds', :old, :new, :note, :u)"
                 )->execute([
-                    ':old' => $old,
+                    ':v' => (int) $venueId,
+                    ':old' => (string) (int) $old,
                     ':new' => $enable,
                     ':note' => $enable === '1'
                         ? 'Refund requests turned ON (Payment Settings, password confirmed).'

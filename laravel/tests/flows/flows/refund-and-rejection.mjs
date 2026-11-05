@@ -6,9 +6,10 @@
 // files a refund (reason, GCash number, documents) → staff record the payout with
 // a GCash receipt → the customer sees the booking refunded.
 //
-// The switch is reset to OFF so the admin step always flips it in the UI. It must
-// be ON before the booking is MADE: each booking snapshots it (refunds_allowed,
-// DB-DECISIONS #16), and refunds ON also means pre-pay (#18). A refund can only be
+// The switches are reset to OFF so the admin step always flips Bahay Alumni's in the
+// UI (one switch per office, DB-DECISIONS 28; the others stay OFF). It must be ON
+// before the booking is MADE: each booking snapshots it (refunds_allowed, #16), and
+// refunds ON also means pre-pay (#18). A refund can only be
 // filed before the event (cb_is_refundable), so the date is two weeks out.
 import { copyFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -55,22 +56,25 @@ export default {
       return text;
     }
 
-    await step('The admin turns refund requests ON in Payment Settings (password confirmed)', async () => {
+    await step('The super admin turns refund requests ON for Bahay Alumni in Payment Settings (password confirmed)', async () => {
       s.admin = await ctx.loginAdmin(ADMIN);
       const page = s.admin;
       await page.goto(ctx.url('/admin/payment-settings'));
-      await expect.visible(page.locator('#rsCard .rs-pill', { hasText: 'OFF' }), 'the Refund Requests card does not say OFF');
-      await page.locator('#rsOpen').click();
-      await expect.text(page, 'Enable refund requests?');
+      const row = (name) => page.locator('#rsCard .rs-office', { hasText: name });
+      await expect.visible(row('Bahay Alumni').locator('.rs-pill', { hasText: 'OFF' }), 'the Bahay Alumni row does not say OFF');
+      await expect.visible(row('USeP Hostel').getByText('Payment: always before the stay (fixed).'), 'the hostel row does not say its payment is fixed');
+      await page.locator('[data-rs-open][data-venue="1"]').click();
+      await expect.text(page, 'Enable refund requests at Bahay Alumni?');
       await page.locator('#rsPassword').fill(ctx.password);
       await page.locator('#rsConfirm').click();
       await expect.url(page, /refunds=saved/, 20_000);
-      await expect.text(page, 'Saved. Refund requests are now ON.');
-      await expect.visible(page.locator('#rsCard .rs-pill', { hasText: 'ON' }), 'the card does not say ON after saving');
-      const set = await dbOne(`SELECT setting_value FROM system_settings WHERE setting_key = 'refunds_enabled'`);
-      expect.equal(set.setting_value, '1', 'system_settings.refunds_enabled');
-      const hist = await dbOne(`SELECT COUNT(*) AS n FROM system_settings_history WHERE setting_key = 'refunds_enabled' AND new_value = '1'`);
-      expect.ok(Number(hist.n) >= 1, 'no system_settings_history row for the switch');
+      await expect.text(page, 'Saved. Refund requests at Bahay Alumni are now ON.');
+      await expect.visible(row('Bahay Alumni').locator('.rs-pill', { hasText: 'ON' }), 'the Bahay Alumni row does not say ON after saving');
+      await expect.visible(row('USeP Venues').locator('.rs-pill', { hasText: 'OFF' }), 'USeP Venues changed too');
+      const v = await dbOne(`SELECT GROUP_CONCAT(refunds_enabled ORDER BY id) AS s FROM venues`);
+      expect.equal(v.s, '1,0,0', 'venues.refunds_enabled (Bahay Alumni only)');
+      const hist = await dbOne(`SELECT COUNT(*) AS n FROM venue_settings_history WHERE venue_id = 1 AND field = 'refunds' AND new_value = '1'`);
+      expect.ok(Number(hist.n) >= 1, 'no venue_settings_history row for the switch');
     });
 
     await step('A new customer registers and signs in', async () => {

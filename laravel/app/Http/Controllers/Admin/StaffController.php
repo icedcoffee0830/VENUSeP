@@ -69,6 +69,7 @@ class StaffController
                   ORDER BY u.account_type, COALESCE(s.full_name, u.username)"
             );
             $hallsByStaff = StaffHallQueries::hallsByStaff();
+            $hallNames = array_column(StaffHallQueries::hallsOf(array_column($smPdo->query('SELECT id FROM venues')->fetchAll(), 'id')), 'name', 'id');
             foreach ($smStmt as $r) {
                 $isSelf = (int) $r['id'] === (int) session('user_id');
                 $canManage = !$isSelf && staff_may_manage_account($r);
@@ -76,6 +77,13 @@ class StaffController
                     continue;   // a normal admin sees its own offices' staff only
                 }
                 $role = $r['is_super_admin'] ? 'Super admin' : ($r['account_type'] === 'admin' ? 'Admin' : 'Staff');
+                /* the halls only they cover: a move across groups names who takes each */
+                $lastHalls = [];
+                if ($canManage && $role === 'Staff') {
+                    foreach (StaffHallQueries::lastStaffOf((int) $r['id']) as $hallId => $hallName) {
+                        $lastHalls[] = ['id' => $hallId, 'name' => $hallName];
+                    }
+                }
                 $smRows[] = [
                     'id'       => (int) $r['id'],
                     'name'     => (string) $r['full_name'],
@@ -92,7 +100,9 @@ class StaffController
                         default                   => $r['venue_name'] === null ? 'Choose a venue' : (string) $r['venue_name'],
                     },
                     'halls'    => $hallsByStaff[(int) $r['id']] ?? [],
+                    'hallNames'=> implode(', ', array_intersect_key($hallNames, array_flip($hallsByStaff[(int) $r['id']] ?? []))),
                     'wholeHostel' => $role === 'Staff' && $r['venue_type'] === 'hostel',
+                    'lastHalls' => $lastHalls,
                     'lastLogin'=> $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
                     'isSelf'   => $isSelf,
                     'canManage'=> $canManage,
@@ -105,10 +115,8 @@ class StaffController
             $smRows = [];
             $smVenues = [];
         }
-        /* the halls of those offices, for the Halls dialog (the hostel has none: one unit) */
-        $smHalls = StaffHallQueries::hallsOf(array_column($smVenues, 'id'));
 
-        return view('admin.staff-management', ['smRows' => $smRows, 'smVenues' => $smVenues, 'smHalls' => $smHalls]);
+        return view('admin.staff-management', ['smRows' => $smRows, 'smVenues' => $smVenues, 'smCover' => StaffCoverController::pageData()]);
     }
 
     public function register()

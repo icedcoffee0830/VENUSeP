@@ -505,6 +505,7 @@
               <div id="users-table"></div>
             </div>
           </section>
+@include('partials.staff-covers')
         </div>
       </div>
     </main>
@@ -615,15 +616,6 @@
         });
       };
 
-      /* Ticked for both USeP Venues and USeP Hostel: CEDU staff only. */
-      const setBoth = function (row, on) {
-        const body = new FormData();
-        body.append('action', 'set_venue');
-        body.append('user_id', row.id);
-        body.append('venue_id', row.venueId);
-        body.append('both_cedu', on ? '1' : '0');
-        staffAction(body).then(function () { window.location.reload(); });
-      };
 
       const table = new Tabulator('#users-table', {
         data: data,
@@ -670,18 +662,20 @@
             },
           },
           {
-            title: 'Both offices',
-            field: 'both',
+            title: 'Halls',
+            field: 'hallNames',
             headerSort: false,
-            width: 125,
-            hozAlign: 'center',
+            minWidth: 170,
+            variableHeight: true,
             formatter: function (cell) {
               const r = cell.getRow().getData();
-              if (!r.canBoth) return r.both ? 'Yes' : '';
-              return '<input type="checkbox" class="sm-both" aria-label="' + escText(r.name) + ' handles both USeP Venues and USeP Hostel"' + (r.both ? ' checked' : '') + '>';
+              cell.getElement().style.whiteSpace = 'normal';
+              if (r.wholeHostel) return 'Whole hostel';
+              const edit = r.canHalls ? ' <button type="button" class="sm-btn sm-halls-edit" aria-label="Change the halls of ' + escText(r.name) + '">Change</button>' : '';
+              return escText(r.hallNames || (r.role === 'Staff' ? 'No halls' : '')) + edit;
             },
             cellClick: function (e, cell) {
-              if (e.target.classList.contains('sm-both')) setBoth(cell.getRow().getData(), e.target.checked);
+              if (e.target.closest('.sm-halls-edit')) window.smOpenHalls(cell.getRow().getData());
             },
           },
           {
@@ -724,7 +718,8 @@
               const reset = row.canManage
                 ? '<button type="button" class="btn-staff-reset" style="cursor:pointer;border:1px solid #d5d0c8;color:#1f1e1e;background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">Reset password</button>'
                 : '';
-              return '<div style="display:flex;flex-direction:column;align-items:center;gap:.3rem">' + handover + reset + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
+              const move = row.role === 'Staff' && suspend ? '<button type="button" class="sm-btn btn-staff-move">Move group</button>' : '';
+              return '<div style="display:flex;flex-direction:column;align-items:center;gap:.3rem">' + handover + reset + move + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
                 (suspend ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
                 ';background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">' +
                 (suspend ? 'Suspend' : 'Reactivate') + '</button></div>';
@@ -732,6 +727,7 @@
             cellClick: function (e, cell) {
               if (e.target.closest('.btn-staff-reset')) { resetPassword(cell.getRow().getData()); return; }
               if (e.target.closest('.btn-staff-handover')) { handOver(cell.getRow().getData()); return; }
+              if (e.target.closest('.btn-staff-move')) { window.smOpenMove(cell.getRow().getData()); return; }
               if (!e.target.closest('.btn-staff-toggle')) return;
               toggleActive(cell.getRow().getData());
             },

@@ -17,6 +17,12 @@ class TermsPageTest extends TestCase
             ->assertDontSee(route('privacy'), false)->assertDontSee('Privacy');
     }
 
+    public function test_the_receipts_line_uses_the_one_name(): void
+    {
+        $this->get(route('terms'))
+            ->assertSee('You will find it in My bookings. It is not an Official Receipt.')->assertDontSee('System Receipt');
+    }
+
     public function test_the_numbers_come_from_the_settings(): void
     {
         config(['venusep.max_days_ahead' => 90, 'venusep.max_unpaid' => 2]);

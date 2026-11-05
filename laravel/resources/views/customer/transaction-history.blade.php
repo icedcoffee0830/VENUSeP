@@ -188,7 +188,7 @@
           const viewBtn = `<button type="button" class="th-act" onclick="openBookingDetails('${encodeURIComponent(row.bookingId)}')"><i class="bi bi-eye"></i>View</button>`;
           const receiptBtn = row.hasReceipt
             ? `<a class="th-act" href="${RECEIPT_URL}?booking=${encodeURIComponent(row.bookingId)}"><i class="bi bi-receipt"></i>Receipt</a>`
-            : `<span class="th-act is-disabled" title="No System Receipt yet — issued once staff confirm payment"><i class="bi bi-receipt"></i>Receipt</span>`;
+            : `<span class="th-act is-disabled" title="No Transaction Receipt yet — issued once staff confirm payment"><i class="bi bi-receipt"></i>Receipt</span>`;
           const rebookPage = row.type === 'hostel' ? @json(route('customer.hostel-reservation')) : @json(route('customer.room-reservation'));
           const rebookBtn = row.roomCode
             ? `<a class="th-act" href="${rebookPage}?room=${encodeURIComponent(row.roomCode)}"><i class="bi bi-arrow-repeat"></i>Rebook</a>`

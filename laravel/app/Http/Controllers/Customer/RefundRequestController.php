@@ -63,7 +63,7 @@ class RefundRequestController
            the refund can be PAID. A cash payer's proof of payment IS the OR. */
         $requiredDocs = [];
         if ($booking !== null) {
-            $requiredDocs[] = ['key' => 'txn', 'label' => 'VENUSeP System Receipt', 'optional' => false,
+            $requiredDocs[] = ['key' => 'txn', 'label' => 'VENUSeP Transaction Receipt', 'optional' => false,
                 'hint' => 'Issued by VENUSeP when your booking was confirmed.'];
             if ($booking['method'] === 'GCash') {
                 $requiredDocs[] = ['key' => 'gcash', 'label' => 'GCash Payment Receipt', 'optional' => false,

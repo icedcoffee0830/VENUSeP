@@ -222,7 +222,7 @@
           // it here would never let staff just LOOK at the receipt in the tab.
           const receiptBtn = row.hasReceipt
             ? `<a class="th-act" href="{{ route('admin.receipt') }}?booking=${encodeURIComponent(row.bookingId)}"><i class="bi bi-receipt"></i>Receipt</a>`
-            : `<span class="th-act is-disabled" title="No System Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
+            : `<span class="th-act is-disabled" title="No Transaction Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
           return `
             <div class="th-actions">
               ${viewBtn}

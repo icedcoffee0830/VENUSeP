@@ -844,11 +844,11 @@ function detailScreen(){
       ${policy('Nights, not days','A stay is counted in <strong>nights</strong>: check in on the 1st and out on the 4th and that is 3 nights. Your check-out day is not charged. A stay must be <strong>continuous</strong> — if the room is closed for maintenance on any night in your range, those dates cannot be booked at all.')}
       ${policy('Pay before you check in','The hostel is <strong>pay to use</strong>: your stay must be paid before you get your bed. Once staff approve your booking, pay any time up to your check-in day — <strong>GCash</strong> to the designated staff account from My Bookings (send the <strong>exact amount</strong> — a different amount is not confirmed automatically and has to be reviewed by staff), or <strong>cash at the front desk</strong> when you arrive. A stay not paid by the <strong>end of its check-in day</strong> is released.')}
       ${policy('One full payment','The whole stay is paid at once, up front. There is no per-night billing and no partial payment.')}
-      ${policy('Your receipts','You get a <strong>VENUSeP System Receipt</strong> once your payment is confirmed, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already paid — the booking is not waiting on it.')}
+      ${policy('Your receipts','You get a <strong>VENUSeP Transaction Receipt</strong> once your payment is confirmed, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already paid — the booking is not waiting on it.')}
       ${policy('At check-in','Show the staff the valid ID you submitted. Check-in needs a <strong>paid</strong> stay: a GCash receipt still being reviewed is confirmed by staff first. Each guest sleeps in the bed booked under their name.')}
       ${!REFUNDS_ENABLED
         ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your dates and guests before you submit and pay. If USeP has to close the room, the hostel office will offer you a <strong>replacement room or new dates</strong> instead; if you cannot accept either, your payment is returned.')
-        : policy('Refunds','A refund requires the VENUSeP System Receipt, the GCash Payment Receipt (if you paid by GCash), <strong>and</strong> the Official Receipt. Requests missing any of these cannot be processed.')}`;
+        : policy('Refunds','A refund requires the VENUSeP Transaction Receipt, the GCash Payment Receipt (if you paid by GCash), <strong>and</strong> the Official Receipt. Requests missing any of these cannot be processed.')}`;
   }
 
   /* --- booking panel --- */
@@ -1264,7 +1264,7 @@ function doneScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:4px 18px;margin-top:24px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
       ${st('Payment', cash?'Awaiting cash at the front desk':'Sent — staff confirm it','#fdf3e6','#8a5a12')}
-      ${st('VENUSeP System Receipt','In My Bookings once confirmed','#fff','#6b675f')}
+      ${st('VENUSeP Transaction Receipt','In My Bookings once confirmed','#fff','#6b675f')}
       ${!cash?st('GCash payment receipt','Yours to keep','#e8f2ec','#1c7a4f'):''}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0">
         <span style="font-size:13.5px;color:#4a463f">Official Receipt (${esc(CASHIER.name)})</span>
@@ -1344,7 +1344,7 @@ function counterDoneScreen(){
         ${blk2('Beds', esc(x.bedsLabel))}
         ${blk2('Paid in cash', peso(x.d.total))}
       </div>
-      <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:12px;font-size:12.5px;color:#4a463f;line-height:1.6">${next} The System Receipt is on the booking${state.booker.mode==='walkin'&&!state.booker.noEmail?' and was emailed to the guest':''}.</div>
+      <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:12px;font-size:12.5px;color:#4a463f;line-height:1.6">${next} The Transaction Receipt is on the booking${state.booker.mode==='walkin'&&!state.booker.noEmail?' and was emailed to the guest':''}.</div>
       <div style="font-size:12.5px;color:#8a857d;line-height:1.6;margin-top:8px">
         ${state.booker.mode==='walkin'
           ? 'No account, so any refund is handled by staff at the counter.'

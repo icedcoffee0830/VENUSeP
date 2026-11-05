@@ -1127,7 +1127,7 @@ function detailScreen(){
         : policy('Payment — GCash or cash (after your event)','You pay <strong>after the event</strong>, not before: payment opens and is due <strong>the day after your last booked day</strong>. Pay online through GCash (send the <strong>exact amount</strong> shown — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment cannot be made earlier. A booking left unpaid is marked <strong>overdue</strong>; it can still be paid, but overdue accounts may not be able to book again until settled.')}
       ${!REFUNDS_ENABLED
         ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your date, room and details before you submit and pay. If USeP has to close or cancel your venue, the venue office will offer you a <strong>replacement room or a new date</strong> instead; if you cannot accept either, your payment is returned.')
-        : policy('Refunds','A refund needs the VENUSeP System Receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
+        : policy('Refunds','A refund needs the VENUSeP Transaction Receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
       ${policy('Confirmation','After you pay, staff verify the payment — the GCash reference in the business account, or the cashier record — and give the final confirmation. You are notified at each step.')}`;
   }
 
@@ -1794,8 +1794,8 @@ function doneScreen(){
         ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter as your proof of payment. This booking is non-refundable.'
         : 'Keep your GCash receipt and this reference number as your proof of payment. This booking is non-refundable.')
       : cash
-      ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the VENUSeP System Receipt and the Official Receipt.'
-      : 'Keep your GCash receipt and this reference number. A refund request needs the VENUSeP System Receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
+      ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the VENUSeP Transaction Receipt and the Official Receipt.'
+      : 'Keep your GCash receipt and this reference number. A refund request needs the VENUSeP Transaction Receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
 
     <button onclick="restart()" style="height:48px;padding:0 26px;border:none;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:660;cursor:pointer;margin-top:24px">Browse more rooms</button>
   </main>`;

@@ -235,7 +235,7 @@ class BookingCreateController extends Controller
         }
         if ($c['walkinNoEmail']) {
             $tl->execute([':b' => $bookingId, ':a' => 'counter_no_email', ':u' => $c['actor'],
-                ':n' => 'Guest has no email: nothing is emailed; the System Receipt is printed at the counter.']);
+                ':n' => 'Guest has no email: nothing is emailed; the Transaction Receipt is printed at the counter.']);
         }
     }
 

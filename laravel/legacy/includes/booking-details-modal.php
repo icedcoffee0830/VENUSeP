@@ -88,7 +88,7 @@ $bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route(
       const when = d.when.map(w => kv(w.label, w.value)).join('');
       /* same tab (2026-10-28): each page has its own Back */
       const links = d.idRemovedOn ? [] : [`<a class="bdm-link" href="<?php echo e(route('root.valid-id-view')); ?>?booking=${encodeURIComponent(d.reference)}">Valid ID</a>`];
-      if (d.hasReceipt) links.push(`<a class="bdm-link" href="<?php echo e($bdmReceiptUrl); ?>?booking=${encodeURIComponent(d.reference)}">System Receipt</a>`);
+      if (d.hasReceipt) links.push(`<a class="bdm-link" href="<?php echo e($bdmReceiptUrl); ?>?booking=${encodeURIComponent(d.reference)}">Transaction Receipt</a>`);
       const p = d.pay;   /* customers only: Pay now, or why not yet */
       const pay = p ? `<div class="bdm-pay">${p.note ? `<div class="bdm-note">${e(p.note)}</div>` : ''}${p.url ? `<a class="bdm-link${p.primary ? ' bdm-link-pay' : ''}" href="${e(p.url)}">${e(p.label)}</a>` : ''}</div>` : '';
       return `

@@ -298,7 +298,7 @@ function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
         $how = 'Pay <strong style="color:#1d1214;">' . bh_e($due) . '</strong> in cash at the counter by '
              . bh_e($b['payment']['payByLabel']) . '. Bring this reference: ' . $ref . '.';
     }
-    $how .= ' We&rsquo;ll email your VENUSeP System Receipt once staff record the payment.';
+    $how .= ' We&rsquo;ll email your VENUSeP Transaction Receipt once staff record the payment.';
     $next = '<tr><td style="padding:20px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;">'
           . '<h2 style="margin:0;font-size:16px;line-height:1.3;color:#1d1214;">' . bh_e($heading) . '</h2>'
           . '<p style="margin:6px 0 0 0;font-size:14px;line-height:1.6;color:#4a4440;">' . $how . '</p></td></tr>';
@@ -337,7 +337,7 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
 
     $numberRow = '<tr><td style="padding:22px 32px 0 32px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
         . 'style="font-family:Arial,Helvetica,sans-serif;border-top:1px solid #efe0db;border-bottom:1px solid #efe0db;"><tr>'
-        . '<td style="padding:12px 0;font-size:13px;color:#6e6a64;">System Receipt</td>'
+        . '<td style="padding:12px 0;font-size:13px;color:#6e6a64;">Transaction Receipt</td>'
         . '<td align="right" style="padding:12px 0;font-size:13px;color:#1d1214;font-weight:bold;">' . bh_e($v['number']) . '</td></tr></table></td></tr>';
 
     $paidBy = $s['method'] === 'GCash'
@@ -364,10 +364,10 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
         ? '<strong style="color:#1d1214;">Keep this receipt.</strong> You can download it again anytime from My Bookings.'
         : '<strong style="color:#1d1214;">Keep this receipt.</strong> It&rsquo;s your record that the booking is paid. You booked without an account, so ask at the counter if you need another copy.';
 
-    $title = $isCopy ? 'Your VENUSeP System Receipt' : 'Payment received';
+    $title = $isCopy ? 'Your VENUSeP Transaction Receipt' : 'Payment received';
     $intro = $isCopy
-        ? 'Here is the copy of your VENUSeP System Receipt for booking ' . $ref . ' that you asked for from My Bookings.'
-        : 'Thank you for your payment. Here is your VENUSeP System Receipt for booking ' . $ref . '.';
+        ? 'Here is the copy of your VENUSeP Transaction Receipt for booking ' . $ref . ' that you asked for from My Bookings.'
+        : 'Thank you for your payment. Here is your VENUSeP Transaction Receipt for booking ' . $ref . '.';
     $footer = $isCopy
         ? 'Sent because you asked for it from your VENUSeP account (' . bh_e($toEmail) . ').'
         : 'You&rsquo;re getting this because you gave ' . bh_e($toEmail) . ' at the VENUSeP counter.';
@@ -392,13 +392,13 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
     $text = $title . "\n\nGood day, " . $firstName . "!\n"
           . strip_tags(html_entity_decode($intro, ENT_QUOTES, 'UTF-8'))
           . "\n\nYour receipt is attached: " . $v['number'] . ".pdf. Download it to keep or print.\n\n"
-          . 'System Receipt ' . $v['number'] . "\nBooking: " . $v['booking_ref']
+          . 'Transaction Receipt ' . $v['number'] . "\nBooking: " . $v['booking_ref']
           . "\nRoom: " . $s['room_name'] . ', ' . $s['venue_name'] . "\nDates: " . $s['dates']
           . "\nPaid by: " . strip_tags(html_entity_decode($paidBy, ENT_QUOTES, 'UTF-8'))
           . "\nAmount paid: " . $v['paid'] . "\n\n" . ($office !== '' ? $office . "\n\n" : '') . RE_NO_REPLY;
 
     return [
-        'subject' => 'VENUSeP System Receipt ' . $v['number'] . ' — booking ' . $v['booking_ref'],
+        'subject' => 'VENUSeP Transaction Receipt ' . $v['number'] . ' — booking ' . $v['booking_ref'],
         'html'    => $html,
         'text'    => $text,
     ];

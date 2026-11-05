@@ -225,6 +225,9 @@ function receipt_view(array $receipt): array
         'confirmed'   => $confirmed,
         'footer'      => 'VENUSeP System Receipt, issued automatically when staff confirmed the payment. '
                        . 'University of Southeastern Philippines venue and hostel booking.',
+        /* the slip on screen; 'footer' above is the PDF's printed footer, the teammate's area */
+        'slip_note'   => 'VENUSeP Transaction Receipt, issued automatically when staff confirmed the payment. '
+                       . 'University of Southeastern Philippines venue and hostel booking.',
     ];
 }
 
@@ -248,7 +251,7 @@ function receipt_pdf_bytes(array $receipt): string
     $v = receipt_view($receipt);
     $t = 'receipt_pdf_text';
     $pdf = new FPDF('P', 'mm', 'A4');
-    $pdf->SetTitle($t('VENUSeP System Receipt ' . $v['number']));
+    $pdf->SetTitle($t('VENUSeP Transaction Receipt ' . $v['number']));
     $pdf->SetAuthor('VENUSeP');
     $pdf->SetAutoPageBreak(false);
     $pdf->SetMargins(20, 20, 20);

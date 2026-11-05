@@ -56,7 +56,7 @@ class ReceiptTest extends TestCase
         $this->actingAsCustomer('customer@gmail.com')
             ->get(route('customer.receipt', ['booking' => $ref, 'confirm' => 1]))
             ->assertOk()
-            ->assertSee('System Receipt')
+            ->assertSee('Transaction Receipt')->assertDontSee('System Receipt')
             ->assertSee('A refund request needs this receipt.')
             ->assertSee('<a class="rc-back" href="' . route('customer.booking-history') . '">', false)
             ->assertSee('Back to My bookings')
@@ -87,6 +87,7 @@ class ReceiptTest extends TestCase
             ->assertStatus(303);
         $this->assertContains($res->headers->get('Location'), [$self . '&sent=1', $self . '&failed=1']);
         $this->assertSame(1, DB::table('email_outbox')->where('receipt_id', $this->receiptId)->where('kind', 'receipt_copy')->count());
+        $this->assertStringContainsString('VENUSeP Transaction Receipt', DB::table('email_outbox')->where('receipt_id', $this->receiptId)->value('subject'));
 
         if ($res->headers->get('Location') === $self . '&sent=1') {
             // a second one within 5 minutes is not queued

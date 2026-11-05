@@ -206,7 +206,7 @@ export default {
       expect.match(await row.getAttribute('data-payment-status'), /Paid/i, 'payment status in My Bookings');
       await row.locator('a.booking-action-receipt').click();
       await expect.url(page, /\/customer\/receipt\?booking=/);
-      await expect.visible(page.getByRole('heading', { name: 'System Receipt' }), 'no "System Receipt" heading');
+      await expect.visible(page.getByRole('heading', { name: 'Transaction Receipt' }), 'no "Transaction Receipt" heading');
       await expect.text(page, s.ref);
       // the fixed top nav used to cover the two top buttons (2026-11-05)
       const under = await page.evaluate(() => {

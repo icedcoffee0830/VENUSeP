@@ -429,7 +429,7 @@
         'Other — see the note below',
       ];
       function fixDocOptions() {
-        const docs = ['VENUSeP System Receipt'];
+        const docs = ['VENUSeP Transaction Receipt'];
         if (cur.method === 'gcash') docs.push('GCash Payment Receipt');
         docs.push('Official Receipt (OR)');
         return docs;
@@ -608,7 +608,7 @@
           refund_outside: ['Record a refund made outside the system', 'Only after the school has returned the money through the Cashier. The booking becomes Cancelled and Refunded, and this cannot be edited.',
             sel({ closure: 'Office closure', school: 'School decision', other: 'Other' }) + note('Explanation (the customer reads this)')
             + `<div class="br-fld"><label for="xRef">Cashier reference</label><input id="xRef"></div><div class="br-fld"><label for="xOn">Date returned</label><input id="xOn" type="date"></div><div class="br-fld"><label for="xFile">Proof from the Cashier</label><input id="xFile" type="file" accept="image/*,application/pdf"></div>`],
-          reverse_payment: ['Reverse this payment', 'Check the office\'s GCash app first. The payment is rejected, the System Receipt becomes VOID, and the customer gets 48 hours to pay.',
+          reverse_payment: ['Reverse this payment', 'Check the office\'s GCash app first. The payment is rejected, the Transaction Receipt becomes VOID, and the customer gets 48 hours to pay.',
             sel({ fake: 'Fake receipt', wrong: 'Recorded on the wrong booking', never: 'The money never arrived', other: 'Other' }) + note('Note (at least 10 characters)')
             + `<div class="br-fld"><label for="xPass">Your password</label><span class="vz-pw"><input id="xPass" type="password" autocomplete="current-password">${venusepEye}</span></div>`],
         }[cur.xMode];
@@ -928,7 +928,7 @@
                 'They chose cash in Pay now, so GCash is closed for them. If they cancel that choice, this button goes away and GCash opens again.') +
               `<div class="br-kvgrid">${kv('Pay by', 'end of ' + esc(cur.checkIn))}${kv('Amount due', esc(cur.total))}</div>
                <div style="margin-top:0.8rem"><button class="br-btn br-btn-primary" onclick="cashReceived()">Cash received &mdash; ${esc(cur.total)}</button></div>
-               <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.45rem">Press once the cash is in your hand. The stay is marked paid and its System Receipt is issued.</div>`;
+               <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.45rem">Press once the cash is in your hand. The stay is marked paid and its Transaction Receipt is issued.</div>`;
           }
         }
         /* HOSTEL: the POS gate sits in FRONT of every payment state. Without a
@@ -1002,7 +1002,7 @@
           case 'confirmed': return banner('bn-green', 'Payment confirmed', 'Confirmed by ' + esc(cur.confirmedBy || 'staff') + '. The reference number is permanently locked.') + (cur.receipt ? receiptBlock() : '');
           case 'paid_cash': return isHostel()
               /* the hostel takes cash at the front desk; its OR comes later from the cashier */
-              ? banner('bn-green', 'Paid in cash at the front desk', esc(cur.confirmedBy || 'Recorded by staff') + ' · the System Receipt is issued; the Official Receipt follows from the University Cashier.')
+              ? banner('bn-green', 'Paid in cash at the front desk', esc(cur.confirmedBy || 'Recorded by staff') + ' · the Transaction Receipt is issued; the Official Receipt follows from the University Cashier.')
               : banner('bn-green', 'Paid at the cashier', esc(cur.confirmedBy || 'Recorded by staff') + ' · official receipt issued at the counter.');
           case 'overdue': return banner('bn-red', 'Payment overdue', (cur.postpay
               ? 'It was due ' + esc(cur.payBy) + ' and the grace period ended ' + esc(cur.graceEnds || cur.payBy) + ' with no valid payment. The event already happened, so the booking is not released: the payment stays on record and can still be made. Extend the deadline or follow up with the customer.'
@@ -1268,7 +1268,7 @@
           note = 'No automatic emails for account holders. They download the receipt or email it to themselves from My Bookings.';
         }
         const rcpt = d.receipt
-          ? `<div class="br-rcpt"><span>System Receipt ${esc(d.receipt.number)}</span><a class="br-btn" href="{{ route('root.receipt-pdf') }}?booking=${encodeURIComponent(cur.id)}">Download PDF</a></div>`
+          ? `<div class="br-rcpt"><span>Transaction Receipt ${esc(d.receipt.number)}</span><a class="br-btn" href="{{ route('root.receipt-pdf') }}?booking=${encodeURIComponent(cur.id)}">Download PDF</a></div>`
           : '';
         return `<div class="br-card"><div class="br-sec">
             <h2 class="br-h2">Receipt &amp; emails <span class="br-mail-to">${to}</span></h2>
@@ -1311,7 +1311,7 @@
       /* PAY TO USE (2026-10-27): the guest paid cash at the front desk. The
          stay becomes a cash booking, paid, with its System Receipt. */
       async function cashReceived() {
-        if (!(await venusepConfirm('Mark ' + cur.total + ' as received in cash? The stay is marked paid and its System Receipt is issued.',
+        if (!(await venusepConfirm('Mark ' + cur.total + ' as received in cash? The stay is marked paid and its Transaction Receipt is issued.',
               { title: 'Cash received?', okLabel: 'Cash received' }))) return;
         staffAction('cash_received', {}, function (out) {
           if (out.booking && out.booking.method) cur.method = String(out.booking.method).toLowerCase();

@@ -30,8 +30,8 @@ use PHPMailer\PHPMailer\PHPMailer;
 /* Every email kind => the name staff see for it (the booking page's "Receipt & emails" panel). */
 const MAIL_KINDS = [
     'walkin_booking'          => 'Booking confirmation',
-    'walkin_receipt'          => 'System Receipt',
-    'receipt_copy'            => 'System Receipt',
+    'walkin_receipt'          => 'Transaction Receipt',
+    'receipt_copy'            => 'Transaction Receipt',
     'password_reset'          => 'Password reset',
     'booking_approved'        => 'Booking approved',
     'booking_rejected'        => 'Booking rejected',

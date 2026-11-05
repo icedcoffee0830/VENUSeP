@@ -63,7 +63,7 @@
     <section aria-labelledby="tc-receipts">
       <h2 id="tc-receipts">Receipts</h2>
       <ul>
-        <li><strong>Transaction Receipt:</strong> VENUSeP issues this once your payment is confirmed. You will find it in My bookings as your System Receipt. It is not an Official Receipt.</li>
+        <li><strong>Transaction Receipt:</strong> VENUSeP issues this once your payment is confirmed. You will find it in My bookings. It is not an Official Receipt.</li>
         <li><strong>Official Receipt:</strong> this comes from the University Cashier after staff hand over your payment. It can arrive after your booking is paid, and your booking does not wait for it.</li>
       </ul>
     </section>

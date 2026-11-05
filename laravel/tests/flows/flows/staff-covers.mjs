@@ -24,6 +24,7 @@ async function modal(ctx, page, { expect: re, fill, ok } = {}) {
 /* Fill the form; times come from the database clock, not the browser's time zone. */
 async function fillCover(ctx, page, { staff, office, fromSql, toSql }) {
   const t = await ctx.dbOne(`SELECT DATE_FORMAT(${fromSql}, '%Y-%m-%dT%H:%i') AS f, DATE_FORMAT(${toSql}, '%Y-%m-%dT%H:%i') AS t`);
+  await page.locator('.lp-seg [data-tab="covers"]').click();
   await page.locator('#smCoverOpen').click();
   const form = page.locator('#smCoverDlg');
   await ctx.expect.visible(form, 'the cover form did not open');
@@ -109,7 +110,7 @@ export default {
       expect.equal(await coverRow(page, 'waiting').getByRole('button', { name: 'Approve' }).count(), 0, 'Approve buttons for the admin who asked');
 
       const bahay = s.bahay = await ctx.loginAdmin(BAHAY_ADMIN);
-      await bahay.goto(ctx.url('/admin/staff'));
+      await bahay.goto(ctx.url('/admin/staff?tab=covers'));
       const reloaded = bahay.waitForResponse((r) => r.url().includes('part=1'));
       await coverRow(bahay, 'waiting').getByRole('button', { name: 'Reject' }).click();
       await modal(ctx, bahay, { expect: /Reject this request/, fill: 'Flow test: no room for it', ok: 'Reject' });
@@ -124,7 +125,7 @@ export default {
       const form = await fillCover(ctx, page, { staff: s.jake, office: 'Bahay Alumni', fromSql: 'NOW() + INTERVAL 1 DAY', toSql: 'NOW() + INTERVAL 2 DAY' });
       await saveCover(page, form);
       const bahay = s.bahay;
-      await bahay.goto(ctx.url('/admin/staff'));
+      await bahay.goto(ctx.url('/admin/staff?tab=covers'));
       const reloaded = bahay.waitForResponse((r) => r.url().includes('part=1'));
       await coverRow(bahay, 'waiting').getByRole('button', { name: 'Approve' }).click();
       await reloaded;

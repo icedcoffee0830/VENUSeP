@@ -15,460 +15,19 @@
 @push('styles')
   <style>
 @include('partials.people-css-shell')
-
-.app-main {
-  margin-left: var(--venusep-sidebar-width) !important;
-  padding-top: var(--venusep-header-height) !important;
-  width: calc(100vw - var(--venusep-sidebar-width)) !important;
-  min-height: 100vh;
-  background: var(--venusep-cream);
-}
-
-.container-fluid {
-  width: 100%;
-  padding-inline: 1.35rem;
-}
-
-.navbar-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.navbar .container-fluid {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.ms-auto {
-  margin-left: auto !important;
-}
-
-.align-items-center {
-  align-items: center !important;
-}
-
-.d-flex {
-  display: flex !important;
-}
-
-.app-header .nav-link {
-  color: #fff;
-  font-size: 0.95rem;
-  line-height: 1;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.45rem;
-}
-
-.sidebar-toggle {
-  width: 38px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: #34312f;
-  border: 1px solid #46413d;
-  cursor: default;
-  pointer-events: none;
-}
-
-.user-menu {
-  gap: 0.45rem;
-  margin-left: 0.7rem;
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.82rem;
-}
-
-.user-avatar {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #6f7983;
-  border: 1px solid #9aa2aa;
-  color: #d8dde2;
-  font-size: 0.32rem;
-}
-
-.sidebar {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: var(--venusep-sidebar-width);
-  height: 100vh;
-  background: var(--venusep-black);
-  color: #fff;
-  z-index: 1035;
-  border-right: 1px solid #2d2b29;
-}
-
-.logo {
-  height: var(--venusep-header-height);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 14px 20px;
-  border-bottom: 1px solid #333;
-}
-
-.logo img {
-  display: block;
-  max-width: 150px;
-  max-height: 36px;
-  width: auto;
-  height: auto;
-}
-
-.menu {
-  list-style: none;
-  padding: 15px 10px;
-  margin: 0;
-}
-
-.menu li {
-  margin-bottom: 8px;
-}
-
-.menu a {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  height: 42px;
-  padding: 0 15px;
-  color: #e5e5e5;
-  text-decoration: none;
-  border-radius: 10px;
-  transition: 0.2s;
-}
-
-.menu a:hover {
-  background: #343333;
-}
-
-.menu a.active {
-  background: #343333;
-  border: 1px solid #ffffff40;
-}
-
-.menu i {
-  width: 20px;
-  text-align: center;
-  font-size: 18px;
-}
-
-.menu span {
-  font-size: 14px;
-}
-
-.staff-content {
-  min-height: calc(100vh - var(--venusep-header-height));
-  padding: 26px 30px 40px !important; /* uniform content inset — 26px top, 30px sides, same as every admin page */
-  background: var(--venusep-cream);
-}
-
-.staff-content > .container-fluid {
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 24px !important;
-}
-
-.page-heading h1 {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 800;
-}
-
-.breadcrumb {
-  display: flex;
-  gap: 0.4rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.82rem;
-}
-
-.breadcrumb-item + .breadcrumb-item::before {
-  content: "/";
-  margin-right: 0.4rem;
-  color: #777;
-}
-
-.breadcrumb a {
-  color: #005dff;
-  text-decoration: none;
-}
-
-.staff-panel {
-  width: 100%;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid var(--venusep-border);
-  border-radius: 10px;
-  box-shadow: 0 18px 34px rgba(31, 30, 30, 0.06);
-}
-
-.staff-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.9rem 1rem;
-  background: #fff;
-  border-bottom: 1px solid var(--venusep-border);
-}
-
-.staff-panel-header h2 {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 800;
-}
-
-.table-search {
-  width: min(100%, 18rem);
-}
-
-.staff-panel-tools {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.staff-panel-tools .table-search {
-  width: 16rem;
-  flex: none;
-}
-
-@media (max-width: 640px) {
-  .staff-panel-header { flex-wrap: wrap; }
-  .staff-panel-tools { flex-wrap: wrap; width: 100%; justify-content: flex-start; }
-  .staff-panel-tools .table-search { width: 100%; flex: 1 1 100%; }
-}
-
-.btn-staff-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  height: 32px;
-  padding: 0 0.85rem;
-  border-radius: 8px;
-  background: #a11626;
-  color: #fff;
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.btn-staff-add:hover {
-  background: #7d0f1e;
-  color: #fff;
-}
-
-.input-group-text,
-.form-control {
-  border-color: var(--venusep-border);
-  font: inherit;
-}
-
-.form-control:focus {
-  border-color: #1d1b1b;
-  box-shadow: 0 0 0 0.15rem rgba(29, 27, 27, 0.14);
-}
-
-.staff-panel-body {
-  padding: 1rem;
-}
-
-#users-table {
-  font-family: inherit;
-}
-
-.tabulator {
-  border: 0;
-  background: #fff;
-  font-size: 0.88rem;
-}
-
-.tabulator .tabulator-header {
-  border-bottom: 1px solid #dfe3e6;
-  background: #fff;
-  color: #2b2f33;
-  font-weight: 800;
-}
-
-.tabulator .tabulator-header .tabulator-col,
-.tabulator .tabulator-header .tabulator-col-row-handle {
-  background: #fff;
-  border-right: 0;
-}
-
-.tabulator .tabulator-tableholder .tabulator-table {
-  color: #25292d;
-  background: #fff;
-}
-
-.tabulator-row {
-  background: #fff !important;
-  border-bottom: 1px solid #ece8e2;
-}
-
-.tabulator-row.tabulator-row-even {
-  background: #fff !important;
-}
-
-.tabulator-row.tabulator-row-odd {
-  background: #fff !important;
-}
-
-.tabulator-row:hover {
-  background: #faf9f7 !important;
-}
-
-.tabulator-row .tabulator-cell {
-  border-right: 0;
-  padding: 0.75rem 1rem;
-}
-
-.tabulator .tabulator-footer {
-  border-top: 1px solid #e5e8eb;
-  background: #fff;
-  padding: 0.8rem 0;
-}
-
-.tabulator .tabulator-footer .tabulator-page-size {
-  min-height: 34px;
-  margin-inline: 0.4rem;
-  padding: 0.35rem 2rem 0.35rem 0.75rem;
-  border: 1px solid var(--venusep-border);
-  border-radius: 7px;
-  background-color: #fff;
-  color: #1d1b1b;
-  font: inherit;
-  font-weight: 700;
-}
-
-.tabulator .tabulator-footer .tabulator-pages {
-  display: inline-flex;
-  gap: 0.35rem;
-  align-items: center;
-  margin-left: 0.55rem;
-}
-
-.tabulator .tabulator-footer .tabulator-page {
-  min-width: 34px;
-  min-height: 34px;
-  margin: 0;
-  padding: 0.35rem 0.7rem;
-  border: 1px solid var(--venusep-border);
-  border-radius: 7px;
-  background: #fff;
-  color: #1d1b1b;
-  font: inherit;
-  font-weight: 800;
-  line-height: 1;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.tabulator .tabulator-footer .tabulator-page:hover:not(:disabled) {
-  border-color: #1d1b1b;
-  background: #f8f7f5;
-  color: #000;
-}
-
-.tabulator .tabulator-footer .tabulator-page.active {
-  border-color: #1d1b1b;
-  background: #1d1b1b;
-  color: #fff;
-}
-
-.tabulator .tabulator-footer .tabulator-page:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.tabulator .tabulator-footer .tabulator-paginator {
-  color: #2b2f33;
-  font-weight: 700;
-}
-
-.badge-role {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0.25rem 0.55rem;
-  border-radius: 6px;
-  background: #1d1b1b;
-  color: #fff;
-  font-weight: 700;
-}
-
-.tabulator .badge {
-  border-radius: 6px;
-  font-weight: 700;
-}
-
+@include('partials.list-page-css')
+.sm-halls-names { flex: 1 1 0; color: #6e6a64; font-size: 12.5px; }
+.sm-halls-count { flex: none; border-radius: 999px; }
 @media (max-width: 767.98px) {
-  :root {
-    --venusep-sidebar-width: 0px;
-    --venusep-header-height: 56px;
-  }
-
-  .sidebar {
-    transform: translateX(-100%);
-  }
-
-  .app-header {
-    left: 0;
-  }
-
-  .app-main {
-    margin-left: 0 !important;
-    width: 100vw !important;
-  }
-
-  .staff-content {
-    padding: 1.1rem 1rem 3rem !important;
-  }
-
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    margin-bottom: 1.5rem !important;
-  }
-
-  .staff-panel-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .table-search {
-    width: 100%;
-  }
-
-  .user-name {
-    display: none;
-  }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="role"] { grid-column: 2; grid-row: 1; justify-self: end; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="venueId"] { grid-column: 1; grid-row: 2; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="status"] { grid-column: 2; grid-row: 2; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="hallNames"] { order: 5; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="actions"] { order: 6; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="venueId"]::before { content: "Office"; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="hallNames"]::before { content: "Halls"; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="status"]::before { content: "Status"; }
+  .sm-halls-count { flex: none; min-height: 44px; }
 }
 
   @include('partials.tabulator-pager-css')
@@ -479,31 +38,44 @@
     <main class="app-main">
       <div class="app-content staff-content">
         <div class="container-fluid">
-          <div class="page-heading">
-            <h1>Staff Management</h1>
-            <nav aria-label="breadcrumb">
-              <ol class="breadcrumb">
-                <li class="breadcrumb-item">Dashboard</li>
-                <li class="breadcrumb-item active" aria-current="page">Staff Management</li>
-              </ol>
-            </nav>
-          </div>
+          <header class="lp-head">
+            <div>
+              <h1>Staff Management</h1>
+              <p>Accounts, halls and covers for the offices you manage.</p>
+            </div>
+            <!-- the way to the account form (2026-10-28): it is admin-only, and so is this page -->
+            <a class="btn-staff-add" href="{{ route('admin.admin-register') }}"><i class="bi bi-person-plus" aria-hidden="true"></i>Add account</a>
+          </header>
 
-          <section class="staff-panel">
-            <div class="staff-panel-header">
-              <h2>Users</h2>
-              <div class="staff-panel-tools">
-                <div class="input-group input-group-sm table-search">
-                  <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
-                  <input id="table-filter" type="search" class="form-control" placeholder="Filter rows..." aria-label="Filter rows"/>
-                </div>
-                <!-- the way to the account form (2026-10-28): it is admin-only, and so is this page -->
-                <a class="btn-staff-add" href="{{ route('admin.admin-register') }}"><i class="bi bi-person-plus" aria-hidden="true"></i>Add account</a>
-              </div>
+@php $smTab = in_array(request('tab'), ['covers', 'moves'], true) ? request('tab') : 'people'; @endphp
+          @fragment('sm-tabs')
+          @php
+            $smWaiting = fn ($list) => count(array_filter($list, fn ($x) => $x['canAnswer']));
+            $smTabs = [['people', 'People', count($smRows), 0], ['covers', 'Covers', count($smCover['covers']), $smWaiting($smCover['covers'])],
+                       ['moves', 'Moves between groups', count($smCover['moves']), $smWaiting($smCover['moves'])]];
+          @endphp
+          <nav class="lp-seg" aria-label="Staff Management sections" data-live="sm-tabs">
+@foreach ($smTabs as [$key, $label, $count, $waiting])
+            <a href="{{ route('admin.staff', ['tab' => $key]) }}" data-tab="{{ $key }}"@if ($smTab === $key) aria-current="page"@endif>{{ $label }}
+@if ($waiting)
+              <span class="vz-chip vz-chip-amber">{{ $waiting }} waiting for you</span>
+@else
+              <span class="vz-chip vz-chip-grey">{{ $count }}</span>
+@endif
+            </a>
+@endforeach
+          </nav>
+          @endfragment
+
+          <section class="staff-panel" data-tab-panel="people"@if ($smTab !== 'people') hidden @endif>
+            <div class="lp-tools">
+              <label class="lp-search"><i class="bi bi-search" aria-hidden="true"></i><input id="table-filter" type="search" placeholder="Search name or email…" aria-label="Search name or email" autocomplete="off"/></label>
+              <button type="button" class="lp-filters-btn" aria-expanded="false"><i class="bi bi-sliders" aria-hidden="true"></i>Filters</button>
+              <div class="lp-field"><label for="smRole">Role</label><select id="smRole" data-filter="role"><option value="">All roles</option><option>Staff</option><option>Admin</option><option>Super admin</option></select></div>
+              <div class="lp-field"><label for="smOffice">Office</label><select id="smOffice" data-filter="venueId"><option value="">All offices</option>@foreach ($smVenues as $venue)<option value="{{ $venue['id'] }}">{{ $venue['name'] }}</option>@endforeach</select></div>
+              <div class="lp-field"><label for="smStatus">Status</label><select id="smStatus" data-filter="status"><option value="">All statuses</option><option>Active</option><option>Suspended</option></select></div>
             </div>
-            <div class="staff-panel-body">
-              <div id="users-table"></div>
-            </div>
+            <div id="users-table" class="lp-table"></div>
           </section>
 @include('partials.staff-covers')
         </div>
@@ -517,16 +89,9 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
   <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
+  <script src="{{ asset('assets/js/list-page.js') }}"></script>
   @fragment('sm-rows')<script type="application/json" data-live="sm-rows">{!! json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
   <script>
-    const roleBadge = (cell) => `<span class="badge-role">${cell.getValue()}</span>`;
-    const statusBadge = (cell) => {
-      const value = cell.getValue();
-      const map = { Active: 'success', Invited: 'info', Suspended: 'secondary' };
-      const color = map[value] || 'secondary';
-      return `<span class="badge text-bg-${color}">${value}</span>`;
-    };
-
     document.addEventListener('DOMContentLoaded', () => {
       /* The real staff-side accounts, from `users` + `staff`. */
       const data = Live.data('sm-rows');
@@ -535,10 +100,8 @@
          venue, and staff-save.php refuses an empty one. The list holds only the
          offices this admin may move staff to (DB-DECISIONS 28). */
       const venueEditorValues = {};
-      const venueFilterValues = { '': 'All Venues' };
       venues.forEach(function (venue) {
         venueEditorValues[String(venue.id)] = venue.name;
-        venueFilterValues[String(venue.id)] = venue.name;
       });
       /* A venue name is typed by an admin: it is text, never markup. Tabulator
          puts a formatter's string and each list item's label in as HTML, so both
@@ -620,7 +183,37 @@
       };
 
 
-      const table = new Tabulator('#users-table', {
+      /* a row's buttons, as many as this person allows */
+      const rowActions = function (row) {
+        /* No button on your own row. The server refuses it anyway, but offering a click
+           that can only fail is worse than not offering it, and this is the click that
+           would end your own access. */
+        if (row.isSelf) return '<span class="lp-acts"><span class="lp-you">This is you</span></span>';
+        if (!row.canManage) return '';
+        const active = row.status === 'Active';
+        const staffActive = row.role === 'Staff' && active;
+        return '<div class="lp-acts">'
+          + (row.canHandOver ? '<button type="button" class="lp-btn btn-staff-handover">Make super admin</button>' : '')
+          + '<button type="button" class="lp-btn btn-staff-reset">Reset password</button>'
+          + (staffActive ? '<button type="button" class="lp-btn btn-staff-cover">Set up cover</button><button type="button" class="lp-btn btn-staff-move">Move group</button>' : '')
+          + '<button type="button" class="lp-btn btn-staff-toggle ' + (active ? 'lp-btn-no">Suspend' : 'lp-btn-ok">Reactivate') + '</button></div>';
+      };
+
+      const hallsCell = function (r) {
+        if (r.wholeHostel) return '<span class="vz-chip vz-chip-grey">Whole hostel</span>';
+        if (r.role === 'Super admin') return '<span class="sm-halls-names">All halls</span>';
+        if (r.role === 'Admin') return '<span class="sm-halls-names">All halls of ' + escText(r.venue) + '</span>';
+        const n = r.halls.length;
+        const edit = function (text, icon) {
+          return r.canHalls ? '<button type="button" class="lp-btn sm-halls-edit sm-halls-count" aria-label="Change the halls of ' + escText(r.name) + '">' + text + ' <i class="bi ' + icon + '" aria-hidden="true"></i></button>' : '';
+        };
+        if (!n) return '<div class="lp-row"><span class="vz-chip vz-chip-amber">No halls</span>' + edit('Assign', 'bi-plus') + '</div>';
+        const count = n + (n === 1 ? ' hall' : ' halls');
+        return '<div class="lp-row" title="' + escText(r.hallNames) + '">' + (edit(count, 'bi-pencil') || '<strong>' + count + '</strong>')
+          + '<span class="sm-halls-names lp-ell">' + escText(r.hallNames) + '</span></div>';
+      };
+
+      const table = new Tabulator('#users-table', Object.assign({
         data: data,
         layout: 'fitColumns',
         pagination: true,
@@ -628,17 +221,16 @@
         paginationSizeSelector: [10, 25, 50, 100],
         movableColumns: true,
         columns: [
-          { title: '#', field: 'id', width: 55, headerSort: true },
-          { title: 'Name', field: 'name', headerFilter: 'input', minWidth: 160 },
-          { title: 'Email', field: 'email', headerFilter: 'input', minWidth: 200 },
           {
-            title: 'Role',
-            field: 'role',
-            formatter: roleBadge,
-            headerFilter: 'list',
-            headerFilterParams: { values: ['', 'Staff', 'Admin', 'Super admin'] },
-            width: 100,
-            hozAlign: 'center',
+            title: 'Person', field: 'name', minWidth: 190,
+            formatter: function (cell) {
+              const r = cell.getRow().getData();
+              return '<div class="lp-stack"><span class="lp-name">' + escText(r.name) + '</span><span class="lp-sub">' + escText(r.email) + '</span></div>';
+            },
+          },
+          {
+            title: 'Role', field: 'role', width: 118,
+            formatter: function (cell) { return '<span class="vz-chip vz-chip-' + (cell.getValue() === 'Staff' ? 'line' : 'crimson') + '">' + escText(cell.getValue()) + '</span>'; },
           },
           {
             title: 'Office',
@@ -647,13 +239,7 @@
             editor: 'list',
             editorParams: { values: venueEditorValues, itemFormatter: escText },
             editable: function (cell) { const r = cell.getRow().getData(); return r.role === 'Staff' && r.canManage; },
-            headerFilter: 'list',
-            headerFilterParams: { values: venueFilterValues, clearable: true, itemFormatter: escText },
-            headerFilterFunc: function (filterValue, rowValue) {
-              if (!filterValue) return true;
-              return String(rowValue) === String(filterValue);
-            },
-            width: 190,
+            width: 112,
             tooltip: function (e, cell) { return cell.getRow().getData().venue; },   // a long office label is cut short in the cell
             cellEdited: function (cell) {
               const row = cell.getRow().getData();
@@ -665,95 +251,64 @@
             },
           },
           {
-            title: 'Halls',
-            field: 'hallNames',
-            headerSort: false,
-            minWidth: 170,
-            variableHeight: true,
-            formatter: function (cell) {
-              const r = cell.getRow().getData();
-              cell.getElement().style.whiteSpace = 'normal';
-              if (r.wholeHostel) return 'Whole hostel';
-              const edit = r.canHalls ? ' <button type="button" class="sm-btn sm-halls-edit" aria-label="Change the halls of ' + escText(r.name) + '">Change</button>' : '';
-              return escText(r.hallNames || (r.role === 'Staff' ? 'No halls' : '')) + edit;
-            },
+            title: 'Halls', field: 'hallNames', headerSort: false, minWidth: 145, cssClass: 'lp-wide',
+            formatter: function (cell) { return hallsCell(cell.getRow().getData()); },
             cellClick: function (e, cell) {
               if (e.target.closest('.sm-halls-edit')) window.smOpenHalls(cell.getRow().getData());
             },
           },
           {
-            title: 'Status',
-            field: 'status',
-            formatter: statusBadge,
-            headerFilter: 'list',
-            /* 'Invited' is gone: users.is_active is a boolean, and nothing in
-               the system can send an invitation, so no account could ever have
-               entered or left that state. */
-            headerFilterParams: { values: ['', 'Active', 'Suspended'] },
-            width: 105,
-            hozAlign: 'center',
-          },
-          {
-            title: 'Last sign-in',
-            field: 'lastLogin',
-            width: 120,
-            hozAlign: 'center',
-          },
-          {
-            title: '',
-            field: 'id',
-            width: 155,
-            hozAlign: 'center',
-            headerSort: false,
+            title: 'Status', field: 'status', width: 160,
             formatter: function (cell) {
-              const row = cell.getRow().getData();
-              /* No button on your own row. The server refuses it anyway, but
-                 offering a click that can only fail is worse than not offering
-                 it — and this is the click that would end your own access. */
-              if (row.isSelf) {
-                return '<span style="color:#8a857d;font-size:.78rem">you</span>';
-              }
-              if (!row.canManage) return '';
-              const suspend = row.status === 'Active';
-              const handover = row.canHandOver
-                ? '<button type="button" class="btn-staff-handover" style="cursor:pointer;border:1px solid #e3c3c3;color:#b23a3a;background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">Make super admin</button>'
-                : '';
-              const reset = row.canManage
-                ? '<button type="button" class="btn-staff-reset" style="cursor:pointer;border:1px solid #d5d0c8;color:#1f1e1e;background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">Reset password</button>'
-                : '';
-              const move = row.role === 'Staff' && suspend ? '<button type="button" class="sm-btn btn-staff-move">Move group</button>' : '';
-              return '<div style="display:flex;flex-direction:column;align-items:center;gap:.3rem">' + handover + reset + move + '<button type="button" class="btn-staff-toggle" style="cursor:pointer;border:1px solid ' +
-                (suspend ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
-                ';background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">' +
-                (suspend ? 'Suspend' : 'Reactivate') + '</button></div>';
+              const r = cell.getRow().getData();
+              /* 'Invited' is gone: users.is_active is a boolean, and nothing in the system
+                 can send an invitation, so no account could ever have been in that state. */
+              return '<div class="lp-stack"><span class="vz-chip vz-chip-' + (r.status === 'Active' ? 'green' : 'grey') + '">' + escText(r.status) + '</span>'
+                + '<span class="lp-sub">' + (r.lastLogin === 'never' ? 'Never signed in' : 'Signed in ' + escText(r.lastLogin)) + '</span></div>';
             },
+          },
+          {
+            title: 'Actions',
+            field: 'actions',
+            width: 240,
+            headerSort: false,
+            formatter: function (cell) { return rowActions(cell.getRow().getData()); },
             cellClick: function (e, cell) {
-              if (e.target.closest('.btn-staff-reset')) { resetPassword(cell.getRow().getData()); return; }
-              if (e.target.closest('.btn-staff-handover')) { handOver(cell.getRow().getData()); return; }
-              if (e.target.closest('.btn-staff-move')) { window.smOpenMove(cell.getRow().getData()); return; }
-              if (!e.target.closest('.btn-staff-toggle')) return;
-              toggleActive(cell.getRow().getData());
+              const row = cell.getRow().getData();
+              if (e.target.closest('.btn-staff-reset')) resetPassword(row);
+              else if (e.target.closest('.btn-staff-handover')) handOver(row);
+              else if (e.target.closest('.btn-staff-cover')) window.smOpenCover(row);
+              else if (e.target.closest('.btn-staff-move')) window.smOpenMove(row);
+              else if (e.target.closest('.btn-staff-toggle')) toggleActive(row);
             },
           },
         ],
-      });
+      }, venusepPager('people')));
       table.on('tableBuilt', () => table.element.prepend(table.element.querySelector('.tabulator-footer')));   /* the pager goes above the rows */
 
-      document.getElementById('table-filter').addEventListener('input', (event) => {
-        const value = event.target.value;
-        if (value) {
-          table.setFilter([
-            [
-              { field: 'name', type: 'like', value: value },
-              { field: 'email', type: 'like', value: value },
-              { field: 'role', type: 'like', value: value },
-              { field: 'venue', type: 'like', value: value },
-              { field: 'status', type: 'like', value: value },
-            ],
-          ]);
-        } else {
-          table.clearFilter();
-        }
+      /* the search and the three boxes work together */
+      const search = document.getElementById('table-filter');
+      const boxes = document.querySelectorAll('[data-filter]');
+      const applyFilters = function () {
+        const filters = [];
+        if (search.value) filters.push([{ field: 'name', type: 'like', value: search.value }, { field: 'email', type: 'like', value: search.value }]);
+        boxes.forEach(function (box) { if (box.value) filters.push({ field: box.dataset.filter, type: '=', value: box.value }); });
+        table.setFilter(filters);
+      };
+      search.addEventListener('input', applyFilters);
+      boxes.forEach(function (box) { box.addEventListener('change', applyFilters); });
+
+      /* People / Covers / Moves: the address keeps the tab, so a refresh or the sidebar's link lands on it */
+      document.addEventListener('click', function (event) {
+        const link = event.target.closest('.lp-seg [data-tab]');
+        if (!link) return;
+        event.preventDefault();
+        history.replaceState(null, '', link.href);
+        document.querySelectorAll('.lp-seg [data-tab]').forEach(function (a) {
+          if (a === link) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+        });
+        document.querySelectorAll('[data-tab-panel]').forEach(function (panel) { panel.hidden = panel.dataset.tabPanel !== link.dataset.tab; });
+        if (link.dataset.tab === 'people') table.redraw(true);   /* a table drawn while hidden has no sizes */
       });
     });
   </script>

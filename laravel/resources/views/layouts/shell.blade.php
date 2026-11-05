@@ -86,6 +86,9 @@
       }
     </style>
     @endif
+    <style>
+@include('partials.chips-css')
+    </style>
     @stack('styles')
   </head>
   <body @hasSection('body-class') class="@yield('body-class')" @endif>

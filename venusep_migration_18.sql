@@ -1,7 +1,9 @@
 -- ============================================================================
---  VENUSeP — MIGRATION 18: employee numbers, the discounted price rounds up (decided 2026-11-05).
+--  VENUSeP — MIGRATION 18: employee numbers, the discounted price rounds up, deleted rooms,
+--  staff per hall, covers and moves between groups (decided 2026-11-05).
 --  Run against the EXISTING database your site uses, after 17. Safe to re-run
---  (idempotent): a number already given is never changed, a stored amount never moves.
+--  (idempotent): a number already given is never changed, a stored amount never moves, and a
+--  hall an admin took from a staff member is not given back (the hall backfill runs once).
 --
 --  THE DATABASE NAME in these commands must be the one your site uses: DB_DATABASE in
 --  laravel\.env. Aron's site uses venusep_laravel, not venusep; a build from SETUP.md
@@ -12,7 +14,12 @@
 --          C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_18.sql
 --
 --  It ends by listing every staff and admin account with its employee number, then one
---  line that must read "OK: every staff and admin account has an employee number".
+--  line that must read "OK: every staff and admin account has an employee number". After it:
+--    - anyone who had the tick for both CEDU offices (no list = nobody). They keep their own
+--      office only: set a cover where they still need the other one (7 days at most);
+--    - any hall with no active staff member, then one line: "OK: every hall has a staff
+--      member", or "NO STAFF: n hall(s)...". Nothing breaks then: bookings of such a hall
+--      reach the group's admin only. Assign someone on Staff Management.
 --
 --  WHAT CHANGES
 --    Employee numbers: every staff and admin account has one, in the format the first
@@ -30,11 +37,34 @@
 --      discount is the rest (room price - final price), so the numbers always add up.
 --      Done in sp_approve_booking, which every approval goes through (staff approving a
 --      request, and the counter). Bookings approved before this keep their amounts.
+--    Deleted rooms: deleting a hall or hostel room sets rooms.deleted_at / deleted_by_user_id
+--      (and is_active = 0, chk_rooms_deleted_inactive). The row stays, hidden, so past bookings,
+--      receipts, History and reports keep its name. No undo, none while a booking is pending,
+--      coming up or going on (fn_room_live_bookings, trg_rooms_deleted_upd), and no new booking
+--      on it (trg_bookings_room_deleted_ins). Its name is free again: uq_rooms_venue_name now
+--      counts undeleted rooms only (rooms.live_name_marker).
+--    Staff per hall: staff_halls, one row per staff member and hall of their own office
+--      (trg_staff_halls_ins). The hostel is one unit: its staff have no rows. Every existing
+--      staff member gets every hall of their office, so nothing narrows on day one; a new or
+--      moved one gets them too (trg_staff_halls_new_ins, trg_staff_halls_follow_upd), and a
+--      hall moved to another office goes to its staff (trg_rooms_halls_follow_upd).
+--      Booking news goes to the staff of that hall and the group's normal admins
+--      (fn_staff_on_room, sp_notify_venue_staff).
+--    Covers: staff_covers replaces the tick for both CEDU offices (staff.both_cedu_offices stays
+--      as a record of who had it, no longer read). Moves between groups: staff_moves.
 --
 --  ROLLBACK: restore the backup taken before running this, into an emptied database:
 --      C:\xamp5\mysql\bin\mysql.exe -u root -e "DROP DATABASE venusep_laravel; CREATE DATABASE venusep_laravel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 --      C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < %USERPROFILE%\venusep_laravel_before_m18.sql
 --  Or, by hand:
+--      DROP TRIGGER trg_rooms_deleted_upd; DROP TRIGGER trg_bookings_room_deleted_ins;
+--      DROP TRIGGER trg_staff_halls_ins; DROP TRIGGER trg_staff_halls_new_ins;
+--      DROP TRIGGER trg_staff_halls_follow_upd; DROP TRIGGER trg_rooms_halls_follow_upd;
+--      DROP FUNCTION fn_room_live_bookings; DROP FUNCTION fn_staff_on_room;
+--      then run sp_notify_venue_staff from venusep_migration_17.sql again.
+--      DROP TABLE staff_moves; DROP TABLE staff_covers; DROP TABLE staff_halls;
+--      (rooms.deleted_at and its two companions can stay only while no room is deleted: a
+--      deleted room would show again to the old code. Restore the backup if any was deleted.)
 --      DROP TRIGGER trg_staff_employee_no_ins; DROP TRIGGER trg_staff_employee_no_upd;
 --      DROP TABLE employee_no_counters;
 --      ALTER TABLE staff MODIFY employee_no VARCHAR(80) NULL;

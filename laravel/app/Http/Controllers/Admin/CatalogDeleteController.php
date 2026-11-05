@@ -57,30 +57,24 @@ class CatalogDeleteController extends Controller
                 /* Deleted for users, kept as a hidden row (Aron 2026-11-05): past bookings,
                    receipts, History and reports keep its name. No undo. Refused while any
                    booking is pending, still to come or going on (trg_rooms_deleted_upd too). */
-                $roomRow = null;
-                $live = 0;
-                DB::transaction(function () use ($roomCode, &$roomRow, &$live) {
-                    $roomRow = RoomQueries::findLiveForUpdate($roomCode);
-                    if ($roomRow === null || !staff_may_handle_venue($roomRow['venue_id'])) {   // a normal admin: its own offices only
-                        return;
+                $roomRow = DB::transaction(function () use ($roomCode) {
+                    $room = RoomQueries::findLiveForUpdate($roomCode);
+                    if ($room === null) {
+                        $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
                     }
-                    $live = RoomQueries::liveBookings((int) $roomRow['id']);
-                    if ($live === 0) {
-                        RoomQueries::delete((int) $roomRow['id'], (int) session('user_id'));
+                    if (!staff_may_handle_venue($room['venue_id'])) {   // a normal admin: its own offices only
+                        $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'This room belongs to another office.']);
                     }
+                    $live = RoomQueries::liveBookings((int) $room['id']);
+                    if ($live > 0) {
+                        $this->reply(409, ['ok' => false, 'error' => 'live_bookings', 'count' => $live,
+                            'message' => $room['name'] . ' has ' . $live . ($live === 1 ? ' booking' : ' bookings')
+                                . ' still pending, coming up or going on, so it cannot be deleted. Finish, cancel or reject '
+                                . ($live === 1 ? 'it' : 'them') . ' first.']);
+                    }
+                    RoomQueries::delete((int) $room['id'], (int) session('user_id'));
+                    return $room;
                 });
-                if ($roomRow === null) {
-                    $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
-                }
-                if (!staff_may_handle_venue($roomRow['venue_id'])) {
-                    $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'This room belongs to another office.']);
-                }
-                if ($live > 0) {
-                    $this->reply(409, ['ok' => false, 'error' => 'live_bookings', 'count' => $live,
-                        'message' => $roomRow['name'] . ' has ' . $live . ($live === 1 ? ' booking' : ' bookings')
-                            . ' still pending, coming up or going on, so it cannot be deleted. Finish, cancel or reject '
-                            . ($live === 1 ? 'it' : 'them') . ' first.']);
-                }
                 /* the photos are not records: their files go (the code passed the regex
                    above, so this stays inside the rooms folder) */
                 File::deleteDirectory(rp_room_dir($roomCode));

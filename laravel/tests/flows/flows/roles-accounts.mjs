@@ -1,6 +1,5 @@
 // Flow — roles and offices on Staff Management (DB-DECISIONS 28, migration 17).
-// The CEDU admin sees only its offices' staff and ticks a Hostel staff member for both
-// CEDU offices → the super admin hands the super admin over to the CEDU admin → the old
+// The CEDU admin sees only its offices' staff → the super admin hands the super admin over to the CEDU admin → the old
 // one is signed out and cannot sign in → the new super admin has Activity.
 
 const SUPER = 'admin@gmail.com';
@@ -23,7 +22,7 @@ async function modal(ctx, page, { expect: re, fill, ok } = {}) {
 
 export default {
   name: 'roles-accounts',
-  title: 'Roles — a CEDU admin\'s staff, both CEDU offices, handing over the super admin',
+  title: 'Roles — a CEDU admin\'s staff, handing over the super admin',
 
   async run(ctx) {
     const { step, expect, dbOne } = ctx;
@@ -37,19 +36,6 @@ export default {
       expect.match(await row.textContent(), /USeP Hostel/, 'the office label in the row');
       expect.equal(await page.locator('.tabulator-row', { hasText: BAHAY_STAFF }).count(), 0, 'Bahay Alumni staff rows shown to the CEDU admin');
       expect.equal(await page.locator('.tabulator-row', { hasText: 'Super admin' }).count(), 0, 'the super admin row shown to a normal admin');
-      return page;
-    });
-
-    await step('Ticks the Hostel staff member for both CEDU offices', async () => {
-      const page = s.cedu;
-      const reloaded = page.waitForEvent('load');
-      await page.locator('.tabulator-row', { hasText: HOSTEL_STAFF }).locator('input.sm-both').check();
-      await reloaded;
-      const row = page.locator('.tabulator-row', { hasText: HOSTEL_STAFF });
-      await expect.visible(row.locator('input.sm-both:checked'), 'the tick is gone after the reload');
-      expect.match(await row.textContent(), /USeP Venues and USeP Hostel/, 'the office label after the tick');
-      const st = await dbOne(`SELECT s.venue_id, s.both_cedu_offices FROM staff s JOIN users u ON u.id = s.user_id WHERE u.email = ?`, [HOSTEL_STAFF]);
-      expect.equal(Number(st.both_cedu_offices), 1, 'staff.both_cedu_offices');
       return page;
     });
 

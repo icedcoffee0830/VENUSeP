@@ -788,8 +788,8 @@ Agreed with Aron on 2026-11-03 and 2026-11-04.
 - **Super admin:** exactly one. Sees everything. Handles the technical side, and also
   does daily admin work (approving bookings and so on).
 - **Normal admin:** belongs to exactly one group, always. Sees only that group.
-- **Staff:** sees their own office. A CEDU staff member can be ticked for both Venues
-  and Hostel; that is set per person, and only inside CEDU.
+- **Staff:** sees their own office. (The tick for both CEDU offices is replaced by covers:
+  see "Halls, covers and moves" at the end of this section.)
 - Two-step verification is required for the super admin and normal admins. Staff are
   still excluded (as in #20).
 
@@ -926,3 +926,25 @@ Agreed with Aron on 2026-11-03 and 2026-11-04.
 - One address everywhere. A small safety net in the code: if sign-in starts on a different
   host, it first moves to the configured one.
 - Aron checks the Google Cloud redirect addresses and the publishing status himself.
+
+**Halls, covers and moves — decided 2026-11-05 (migration 18)**
+- **Deleting a hall or hostel room:** gone for users (every list, page, form and counter; it cannot
+  be booked, no undo), a hidden row in the database so past bookings, receipts, History and reports
+  keep its name. Refused while a booking is pending, coming up or going on. Its photos go.
+- **Staff per hall:** one or more halls, only inside their own office; the hostel counts as one unit.
+  Every hall always keeps a staff member: a new hall names its staff; taking a hall from, suspending
+  or moving its last staff member is refused. Covers do not count towards this.
+- Staff still see the whole office. Their booking list opens on My halls (their halls, covers going
+  on, what they made at the counter), and booking news goes to the hall's staff and the group's
+  normal admin.
+- **Covers:** an admin sets staff member + hall or office + from-to + reason, 7 days at most. It ends
+  by itself. Inside a group one admin is enough and it counts at once. Across groups the staff
+  member's office admin sets it up, the destination's admin approves or rejects (with a reason), and
+  an unanswered request expires at its start time. A group with no normal admin: the super admin
+  answers. The super admin may set up and approve alone. Either admin may end a cover early. Every
+  step is on Activity. Staff ask in person: there is no staff-side request.
+- **Permanent moves:** inside a group, one admin. Across groups, the same approval; unanswered it
+  expires after 3 days; the super admin may do it alone. A move that would empty a hall names a
+  replacement of the same office, who takes the hall at that moment; with nobody to name, it cannot
+  be sent.
+

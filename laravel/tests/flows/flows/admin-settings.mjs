@@ -13,6 +13,7 @@ const EVENT_ROOM = 'r2';          // Heritage Function Room, Bahay Alumni
 const HOSTEL_ROOM = 'h2';         // Hostel Room 2
 const TOGGLE_ROOM = 'r5';         // USeP Gymnasium — disabled and enabled again
 const GCASH_VENUE = 'USeP Venues';
+const STAFF_VENUE = 'Bahay Alumni';   // has other staff: the only staff of a hall cannot be suspended
 const CEDU_ADMIN = 'cedu.admin@gmail.com';   // GCash accounts are each office's normal admin's, never the super admin's (DB-DECISIONS 28)
 
 /* the shared venusepAlert/venusepConfirm/venusepPrompt modal (assets/js/confirm-modal.js) */
@@ -232,7 +233,7 @@ export default {
       const page = s.admin;
       s.newEmail = `flow.staff.${tag.replace(/\D/g, '')}@example.com`;
       s.newName = 'Flow Staff ' + tag.slice(-6);
-      const venue = await dbOne(`SELECT id FROM venues WHERE name = ?`, [GCASH_VENUE]);
+      const venue = await dbOne(`SELECT id FROM venues WHERE name = ?`, [STAFF_VENUE]);
 
       await page.goto(ctx.url('/admin/staff'));
       await page.getByRole('link', { name: 'Add account' }).click();
@@ -262,7 +263,7 @@ export default {
       await page.locator('#table-filter').fill(s.newEmail);
       const row = page.locator('.tabulator-row', { hasText: s.newEmail });
       await expect.visible(row, 'the new account is not in the staff table');
-      expect.match(await row.textContent(), new RegExp(`${GCASH_VENUE}.*Active`), 'venue + status in the row');
+      expect.match(await row.textContent(), new RegExp(`${STAFF_VENUE}.*Active`), 'venue + status in the row');
       return page;
     });
 

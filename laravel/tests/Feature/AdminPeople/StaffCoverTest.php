@@ -20,16 +20,19 @@ class StaffCoverTest extends TestCase
     private const SUPER = 'admin@gmail.com', BAHAY_NA = 'francishubero@gmail.com', CEDU_NA = 'cedu.admin@gmail.com';
 
     private int $before = 0;
+    private int $lastBooking = 0;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->before = (int) DB::table('notifications')->max('id');
+        $this->lastBooking = (int) DB::table('bookings')->max('id');
     }
 
     protected function tearDown(): void
     {
         DB::table('notifications')->where('id', '>', $this->before)->delete();
+        DB::table('bookings')->where('id', '>', $this->lastBooking)->delete();   // other tests count a room's upcoming bookings
         DB::table('users')->where('email', self::BAHAY_NA)->update(['is_active' => 1]);
         $this->removeAccounts();
     }

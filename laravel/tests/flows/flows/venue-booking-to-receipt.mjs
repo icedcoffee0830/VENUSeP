@@ -121,6 +121,17 @@ export default {
       expect.match(await row.getAttribute('data-status'), /Pending/i, 'booking status in the list');
     });
 
+    await step('The room cannot be deleted while this booking is pending', async () => {
+      const page = await ctx.loginAdmin('admin@gmail.com');
+      await page.goto(ctx.url('/admin/venue-management'));
+      await page.locator(`[data-delete-entity="room"][data-delete-id="${ROOM_CODE}"]`).click();
+      const box = page.locator('.vz-modal-overlay .vz-modal').last();
+      await box.locator('button[data-vz="ok"]:has-text("Delete")').click();
+      await expect.visible(page.locator('.vz-modal-overlay .vz-modal', { hasText: /has 1 booking still pending, coming up or going on/ }), 'no refusal naming the booking');
+      expect.equal((await dbOne(`SELECT deleted_at FROM rooms WHERE room_code = ?`, [ROOM_CODE])).deleted_at, null, 'rooms.deleted_at');
+      return page;
+    });
+
     await step('Staff sign in and approve the ID and reservation', async () => {
       s.staff = await ctx.loginStaff(STAFF);
       const page = s.staff;

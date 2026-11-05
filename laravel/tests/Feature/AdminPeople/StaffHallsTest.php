@@ -20,16 +20,19 @@ class StaffHallsTest extends TestCase
     private const BAHAY = 1, VENUES = 2, HOSTEL = 3;
 
     private int $before = 0;
+    private int $lastBooking = 0;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->before = (int) DB::table('notifications')->max('id');
+        $this->lastBooking = (int) DB::table('bookings')->max('id');
     }
 
     protected function tearDown(): void
     {
         DB::table('notifications')->where('id', '>', $this->before)->delete();
+        DB::table('bookings')->where('id', '>', $this->lastBooking)->delete();   // other tests count a room's upcoming bookings
         $this->removeAccounts();
     }
 

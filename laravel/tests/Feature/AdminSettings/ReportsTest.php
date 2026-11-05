@@ -231,11 +231,15 @@ class ReportsTest extends TestCase
 
     /* ---- The office choice (DB-DECISIONS 28) ---- */
 
-    private function staffAt(int $venue, bool $both = false): object
+    private function staffAt(int $venue, ?int $coverAt = null): object
     {
         $acct = $this->makeAccount('staff');
-        DB::table('staff')->where('user_id', $acct->id)->update(['venue_id' => $venue, 'both_cedu_offices' => $both]);
+        DB::table('staff')->where('user_id', $acct->id)->update(['venue_id' => $venue]);
         DB::table('users')->where('id', $acct->id)->update(['password_changed_at' => now()]);
+        if ($coverAt !== null) {   // a cover going on now brings that office into the choices
+            DB::table('staff_covers')->insert(['user_id' => $acct->id, 'venue_id' => $coverAt, 'starts_at' => now()->subHour(),
+                'ends_at' => now()->addDay(), 'reason' => 'test', 'approved_at' => now()]);
+        }
         return $acct;
     }
 
@@ -247,7 +251,7 @@ class ReportsTest extends TestCase
             'cedu_na'    => $this->actingAsAdmin('cedu.admin@gmail.com'),
             'venues'     => $this->signInAs($this->staffAt(self::VENUES), 'staff'),
             'hostel'     => $this->signInAs($this->staffAt(self::HOSTEL), 'staff'),
-            'two_office' => $this->signInAs($this->staffAt(self::VENUES, true), 'staff'),
+            'covering'   => $this->signInAs($this->staffAt(self::VENUES, self::HOSTEL), 'staff'),
             'bahay'      => $this->signInAs($this->staffAt(self::BAHAY), 'staff'),
         };
     }
@@ -262,7 +266,7 @@ class ReportsTest extends TestCase
             'USeP CEDU admin'    => ['cedu_na', $cedu, 'cedu'],
             'Venues staff'       => ['venues', ['usep-venues'], 'usep-venues'],
             'Hostel staff'       => ['hostel', ['usep-hostel'], 'usep-hostel'],
-            'two-office staff'   => ['two_office', $cedu, 'cedu'],
+            'Venues staff covering the Hostel' => ['covering', $cedu, 'cedu'],
             'Bahay Alumni staff' => ['bahay', ['bahay-alumni'], 'bahay-alumni'],
         ];
     }

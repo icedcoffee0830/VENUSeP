@@ -11,7 +11,7 @@
 <style>
   .sm-list { width: 100%; border-collapse: collapse; font-size: .84rem; min-width: 640px; }
   .sm-list th { text-align: left; font-size: .74rem; font-weight: 650; color: #606a75; padding: .55rem .7rem; border-bottom: 1px solid var(--venusep-border); }
-  .sm-list td { padding: .55rem .7rem; border-top: 1px solid #f0efec; vertical-align: top; line-height: 1.45; }
+  .sm-list td { padding: .55rem .7rem; border-top: 1px solid #f0efec; vertical-align: top; line-height: 1.45; overflow-wrap: anywhere; }
   .sm-scroll { overflow-x: auto; }
   .sm-empty { margin: 0; padding: .9rem 0; color: #606a75; font-size: .85rem; }
   .sm-note { display: block; color: #606a75; font-size: .78rem; }
@@ -24,12 +24,13 @@
   .sm-btn-main:hover { background: #7d0f1e; }
   .sm-btn:disabled { opacity: .5; cursor: not-allowed; }
   .sm-section { margin-top: 1.25rem; }
-  .sm-dlg { width: min(460px, calc(100vw - 32px)); padding: 1.25rem; border: 0; border-radius: 12px; color: #1f1e1e; }
+  .sm-dlg { width: min(460px, calc(100vw - 32px)); overscroll-behavior: contain; padding: 1.25rem; border: 0; border-radius: 12px; color: #1f1e1e; }
   .sm-dlg::backdrop { background: rgba(0, 0, 0, .45); }
   .sm-dlg h3 { margin: 0 0 .25rem; font-size: 1.05rem; font-weight: 700; }
   .sm-dlg p { margin: 0 0 .75rem; color: #606a75; font-size: .84rem; }
   .sm-field { display: block; margin-bottom: .75rem; font-size: .84rem; font-weight: 600; }
   .sm-field select, .sm-field input, .sm-field textarea { display: block; width: 100%; min-height: 36px; margin-top: .25rem; padding: .35rem .5rem; border: 1px solid var(--venusep-border); border-radius: 8px; background: #fff; font: inherit; font-weight: 400; }
+  .sm-field[hidden] { display: none; }
   .sm-check { display: flex; align-items: center; gap: .5rem; min-height: 32px; font-size: .88rem; cursor: pointer; }
   .sm-foot { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .9rem; }
   .sm-error { color: #b23a3a; font-size: .84rem; font-weight: 600; }
@@ -128,7 +129,7 @@
     <label class="sm-field" id="smCoverHall">Hall<select name="room_id"></select></label>
     <label class="sm-field">From<input type="datetime-local" name="from" required/></label>
     <label class="sm-field">To<input type="datetime-local" name="to" required/></label>
-    <label class="sm-field">Reason<textarea name="reason" rows="2" maxlength="500" required></textarea></label>
+    <label class="sm-field">Reason<textarea name="reason" rows="2" maxlength="500" autocomplete="off" required></textarea></label>
     <p id="smCoverHint" hidden>This office is in the other group, so its admin has to approve. An unanswered request expires at the start time.</p>
     <div class="sm-error" role="alert"></div>
     <div class="sm-foot">
@@ -143,7 +144,7 @@
     <h3 id="smMoveTitle">Move to the other group</h3>
     <p>A permanent move. @if (!$smCover['super'])The other group's admin has 3 days to approve it.@endif</p>
     <label class="sm-field">New office<select name="venue_id" required></select></label>
-    <label class="sm-field">Reason<textarea name="reason" rows="2" maxlength="500" required></textarea></label>
+    <label class="sm-field">Reason<textarea name="reason" rows="2" maxlength="500" autocomplete="off" required></textarea></label>
     <div id="smMoveHalls"></div>
     <div class="sm-error" role="alert"></div>
     <div class="sm-foot">
@@ -192,6 +193,7 @@
         button.disabled = false;
         if (res.ok) { window.location.reload(); return; }
         error.textContent = res.message || 'Nothing was changed.';
+        if (res.field && form.elements[res.field]) form.elements[res.field].focus();
       });
     }
     function open(dialog) {
@@ -284,6 +286,9 @@
           { title: 'Reject this request?', label: 'Reason', okLabel: 'Reject', danger: true });
         if (reason === null) return;
         fields.reason = reason;
+      } else if (act === 'move_approve') {
+        if (!(await venusepConfirm('It is permanent. They leave their office now, and any replacement takes over at the same moment.',
+          { title: 'Approve this move?', okLabel: 'Approve move' }))) return;
       } else if (act === 'cover_end') {
         if (!(await venusepConfirm('It stops now, for this staff member and for both offices.',
           { title: 'End this cover now?', okLabel: 'End cover', danger: true }))) return;

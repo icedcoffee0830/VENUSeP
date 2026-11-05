@@ -29,15 +29,19 @@ class CoverQueries
             WHEN c.starts_at > NOW() THEN 'scheduled'
             ELSE 'on' END";
 
+    /* A cover that can still be answered, and a move that can (3 days). */
+    private const COVER_WAITING = 'approved_at IS NULL AND rejected_at IS NULL AND ended_at IS NULL AND starts_at > NOW()';
+    private const MOVE_WAITING = 'approved IS NULL AND requested_at > NOW() - INTERVAL 3 DAY';
+
     private const MOVE_STATE = "CASE WHEN m.approved = 1 THEN 'moved'
             WHEN m.approved = 0 THEN 'rejected'
-            WHEN m.requested_at <= NOW() - INTERVAL 3 DAY THEN 'expired'
-            ELSE 'waiting' END";
+            WHEN m." . self::MOVE_WAITING . " THEN 'waiting'
+            ELSE 'expired' END";
 
     /* One cover with its state and both sides' groups, or null. */
     public static function findCover(int $id): ?array
     {
-        $rows = self::covers('c.id = ' . (int) $id);
+        $rows = self::covers('c.id = ?', [$id]);
         return $rows[0] ?? null;
     }
 
@@ -46,18 +50,18 @@ class CoverQueries
        cover is in it); null = the super admin, every cover. */
     public static function listCovers(?string $group): array
     {
-        return self::covers("(c.ends_at > NOW() - INTERVAL 14 DAY OR c.created_at > NOW() - INTERVAL 14 DAY)"
-            . ($group === null ? '' : ' AND ' . DB::getPdo()->quote($group) . ' IN (sv.office_group, v.office_group)'));
+        $recent = '(c.ends_at > NOW() - INTERVAL 14 DAY OR c.created_at > NOW() - INTERVAL 14 DAY)';
+        return $group === null ? self::covers($recent) : self::covers("$recent AND ? IN (sv.office_group, v.office_group)", [$group]);
     }
 
-    private static function covers(string $where): array
+    private static function covers(string $where, array $args = []): array
     {
         return array_map(fn ($r) => (array) $r, DB::select("
             SELECT c.id, c.user_id, c.venue_id, c.room_id, c.starts_at, c.ends_at, c.reason, c.reject_reason,
-                   c.created_by_user_id, " . self::COVER_STATE . " AS state,
+                   " . self::COVER_STATE . " AS state,
                    s.full_name AS staff_name, sv.name AS staff_office, sv.office_group AS staff_group,
                    v.name AS office, v.office_group AS dest_group, r.name AS hall,
-                   COALESCE(cs.full_name, cu.email) AS created_by, COALESCE(as2.full_name, au.email) AS decided_by
+                   COALESCE(cs.full_name, cu.email) AS created_by
             FROM staff_covers c
             JOIN staff s ON s.user_id = c.user_id
             LEFT JOIN venues sv ON sv.id = s.venue_id
@@ -65,11 +69,9 @@ class CoverQueries
             LEFT JOIN rooms r ON r.id = c.room_id
             LEFT JOIN users cu ON cu.id = c.created_by_user_id
             LEFT JOIN staff cs ON cs.user_id = c.created_by_user_id
-            LEFT JOIN users au ON au.id = COALESCE(c.rejected_by_user_id, c.approved_by_user_id)
-            LEFT JOIN staff as2 ON as2.user_id = au.id
             WHERE $where
             ORDER BY c.starts_at DESC, c.id DESC
-        "));
+        ", $args));
     }
 
     /* A new cover. $approved: set up by one admin of the group (or the super admin), so it
@@ -92,7 +94,7 @@ class CoverQueries
         return DB::update("
             UPDATE staff_covers
             SET approved_at = NOW(), approved_by_user_id = ?
-            WHERE id = ? AND approved_at IS NULL AND rejected_at IS NULL AND ended_at IS NULL AND starts_at > NOW()
+            WHERE id = ? AND " . self::COVER_WAITING . "
         ", [$actor, $id]) === 1;
     }
 
@@ -101,7 +103,7 @@ class CoverQueries
         return DB::update("
             UPDATE staff_covers
             SET rejected_at = NOW(), rejected_by_user_id = ?, reject_reason = ?
-            WHERE id = ? AND approved_at IS NULL AND rejected_at IS NULL AND ended_at IS NULL AND starts_at > NOW()
+            WHERE id = ? AND " . self::COVER_WAITING . "
         ", [$actor, $reason, $id]) === 1;
     }
 
@@ -120,44 +122,42 @@ class CoverQueries
 
     public static function findMove(int $id): ?array
     {
-        $rows = self::moves('m.id = ' . (int) $id);
+        $rows = self::moves('m.id = ?', [$id]);
         return $rows[0] ?? null;
     }
 
     /* The moves on Staff Management: waiting ones and those closed in the last 14 days. */
     public static function listMoves(?string $group): array
     {
-        return self::moves("(m.approved IS NULL OR m.decided_at > NOW() - INTERVAL 14 DAY)"
-            . ($group === null ? '' : ' AND ' . DB::getPdo()->quote($group) . ' IN (fv.office_group, tv.office_group)'));
+        $recent = '(m.approved IS NULL OR m.decided_at > NOW() - INTERVAL 14 DAY)';
+        return $group === null ? self::moves($recent) : self::moves("$recent AND ? IN (fv.office_group, tv.office_group)", [$group]);
     }
 
-    private static function moves(string $where): array
+    private static function moves(string $where, array $args = []): array
     {
         return array_map(fn ($r) => (array) $r, DB::select("
             SELECT m.id, m.user_id, m.from_venue_id, m.to_venue_id, m.reason, m.replacements, m.reject_reason,
                    m.requested_at, " . self::MOVE_STATE . " AS state,
                    s.full_name AS staff_name, fv.name AS from_office, fv.office_group AS from_group,
                    tv.name AS to_office, tv.office_group AS to_group,
-                   COALESCE(rs.full_name, ru.email) AS requested_by, COALESCE(ds.full_name, du.email) AS decided_by
+                   COALESCE(rs.full_name, ru.email) AS requested_by
             FROM staff_moves m
             JOIN staff s ON s.user_id = m.user_id
             JOIN venues fv ON fv.id = m.from_venue_id
             JOIN venues tv ON tv.id = m.to_venue_id
             LEFT JOIN users ru ON ru.id = m.requested_by_user_id
             LEFT JOIN staff rs ON rs.user_id = m.requested_by_user_id
-            LEFT JOIN users du ON du.id = m.decided_by_user_id
-            LEFT JOIN staff ds ON ds.user_id = m.decided_by_user_id
             WHERE $where
             ORDER BY m.requested_at DESC, m.id DESC
-        "));
+        ", $args));
     }
 
     /* Is a move of this staff member still waiting? */
     public static function hasWaitingMove(int $userId): bool
     {
         return DB::selectOne("
-            SELECT m.id FROM staff_moves m
-            WHERE m.user_id = ? AND m.approved IS NULL AND m.requested_at > NOW() - INTERVAL 3 DAY
+            SELECT id FROM staff_moves
+            WHERE user_id = ? AND " . self::MOVE_WAITING . "
         ", [$userId]) !== null;
     }
 
@@ -176,7 +176,7 @@ class CoverQueries
         return DB::update("
             UPDATE staff_moves
             SET approved = ?, decided_at = NOW(), decided_by_user_id = ?, reject_reason = ?
-            WHERE id = ? AND approved IS NULL AND requested_at > NOW() - INTERVAL 3 DAY
+            WHERE id = ? AND " . self::MOVE_WAITING . "
         ", [(int) $approved, $actor, $reason, $id]) === 1;
     }
 
@@ -194,7 +194,7 @@ class CoverQueries
     {
         $row = DB::selectOne("
             SELECT u.id, u.account_type, u.is_active, u.is_super_admin, u.handed_over_at,
-                   s.venue_id, s.full_name, v.name AS office, v.office_group
+                   s.venue_id, s.full_name, v.office_group
             FROM users u
             JOIN staff s ON s.user_id = u.id
             LEFT JOIN venues v ON v.id = s.venue_id
@@ -205,14 +205,14 @@ class CoverQueries
 
     public static function office(int $venueId): ?array
     {
-        $row = DB::selectOne('SELECT id, name, venue_type, office_group FROM venues WHERE id = ?', [$venueId]);
+        $row = DB::selectOne('SELECT id, name, office_group FROM venues WHERE id = ?', [$venueId]);
         return $row ? (array) $row : null;
     }
 
     /* Every office: a cover or move can point at any of them. */
     public static function offices(): array
     {
-        return array_map(fn ($r) => (array) $r, DB::select('SELECT id, name, venue_type, office_group FROM venues WHERE is_active = 1 ORDER BY id'));
+        return array_map(fn ($r) => (array) $r, DB::select('SELECT id, name, office_group FROM venues WHERE is_active = 1 ORDER BY id'));
     }
 
     /* ---------------------------------------------------------------- telling the admins */

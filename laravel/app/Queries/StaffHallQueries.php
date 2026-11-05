@@ -93,11 +93,11 @@ class StaffHallQueries
     }
 
     /* "Assign another staff member to <hall> first." for the halls lastStaffOf() named. */
-    public static function lastStaffMessage(array $halls): string
+    public static function lastStaffMessage(array $halls, string $verb = 'Assign'): string
     {
         $names = array_values($halls);
         $last = array_pop($names);
-        return 'Assign another staff member to ' . ($names ? implode(', ', $names) . ' and ' : '') . $last . ' first.';
+        return $verb . ' another staff member to ' . ($names ? implode(', ', $names) . ' and ' : '') . $last . ' first.';
     }
 
     /* The staff member's halls become exactly $hallIds (halls of their office; deleted

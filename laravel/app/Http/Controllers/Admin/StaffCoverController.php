@@ -229,10 +229,7 @@ class StaffCoverController extends Controller
         $others = StaffHallQueries::staffOf((int) $staff['venue_id']);
         unset($others[(int) $staff['id']]);
         if ($empty && (isset($empty[0]) || !$others)) {
-            $names = array_values($empty);
-            $last = array_pop($names);
-            $this->reply(409, ['ok' => false, 'error' => 'no_replacement',
-                'message' => 'Create or assign another staff member to ' . ($names ? implode(', ', $names) . ' and ' : '') . $last . ' first.']);
+            $this->reply(409, ['ok' => false, 'error' => 'no_replacement', 'message' => StaffHallQueries::lastStaffMessage($empty, 'Create or assign')]);
         }
         $given = json_decode((string) $request->input('replacements', ''), true);
         $out = [];

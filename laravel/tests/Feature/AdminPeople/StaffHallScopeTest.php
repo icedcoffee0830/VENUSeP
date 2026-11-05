@@ -128,9 +128,9 @@ class StaffHallScopeTest extends TestCase
     {
         return [
             'approve' => ['approve'], 'reject' => ['reject'],
-            'payment' => ['confirm_payment'], 'cash' => ['cash_received'], 'reject payment' => ['reject_payment'], 'reverse payment' => ['reverse_payment'],
+            'payment' => ['confirm_payment'], 'cash' => ['cash_received'], 'reject payment' => ['reject_payment'],
             'check-in' => ['check_in'], 'check-out' => ['check_out'], 'POS' => ['record_pos'], 'OR' => ['record_or'],
-            'refund file' => ['refund_file'], 'refund approve' => ['refund_approve'], 'refund pay out' => ['refund_complete'],
+            'refund file' => ['refund_file'], 'refund return' => ['refund_return'], 'refund pay out' => ['refund_complete'],
             'move date' => ['move_date'], 'extend' => ['extend_deadline'], 'release' => ['release_slot'],
             'cancel' => ['force_cancel'], 'write off' => ['write_off_request'],
         ];

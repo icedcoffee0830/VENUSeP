@@ -42,9 +42,11 @@ export default {
         const page = role.email === 'admin@gmail.com' ? s.admin
           : role.login === 'admin' ? await ctx.loginAdmin(role.email) : await ctx.loginStaff(role.email);
         await page.goto(ctx.url('/admin/booking-requests'));
-        if (role.login === 'staff') await page.getByRole('button', { name: 'Whole office' }).click();
+        /* staff: their halls only, and no tab to the whole office (DB-DECISIONS 28) */
+        expect.equal(await page.getByRole('button', { name: 'Whole office' }).count(), 0, 'Whole office tabs');
+        const halls = role.login === 'staff' ? `AND fn_staff_on_room((SELECT id FROM users WHERE email = '${role.email}'), r.id)` : '';
         const n = await dbOne(`SELECT COUNT(*) AS n FROM bookings b JOIN rooms r ON r.id = b.room_id
-                                WHERE r.venue_id IN (${role.offices.join(',')})
+                                WHERE r.venue_id IN (${role.offices.join(',')}) ${halls}
                                   AND NOT (b.reservation_status = 'completed' AND b.payment_status IN ('confirmed', 'paid_cash'))`);
         const total = Number(n.n);
         expect.ok(total > 0, 'nothing to list for ' + role.who);

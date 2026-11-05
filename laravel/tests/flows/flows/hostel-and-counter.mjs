@@ -201,6 +201,13 @@ export default {
       await page.goto(ctx.url('/customer/booking-history'));
       const pay = page.locator(`tr[data-booking-id="${s.ref}"] a.booking-action-pay`);
       await expect.visible(pay, 'no Pay now on the approved stay');
+      /* the details modal offers the same payment page */
+      await page.locator(`tr[data-booking-id="${s.ref}"] button`, { hasText: 'View' }).click();
+      const modalPay = page.locator('.bdm-link-pay');
+      await expect.visible(modalPay, 'no Pay now in the details modal');
+      expect.match(await modalPay.textContent(), /^Pay now · ₱[\d,]+\.\d\d$/, 'modal Pay now label');
+      expect.equal(await modalPay.getAttribute('href'), await pay.getAttribute('href'), 'modal Pay now link');
+      await page.locator('[data-bdm-close]').click();
       await pay.click();
       await expect.url(page, /\/customer\/pay\?booking=/);
       await page.getByRole('button', { name: /Cash — hostel front desk/ }).click();
@@ -365,9 +372,17 @@ export default {
     await step('Takes the cash and books the stay — paid on creation', async () => {
       const page = s.admin;
       await page.locator('#agreeNoRefund').check();
+      /* a price that changed since the page opened: refused, the page redraws at the real rate */
+      await page.evaluate(() => { getRoom().rate -= 50; render(); });
       await page.getByRole('button', { name: /Cash received — book it/ }).click();
       const ok = page.locator('.vz-modal [data-vz="ok"]');
       await expect.visible(ok, 'no "Cash received?" confirmation');
+      await ok.click();
+      await expect.text(page, 'Please check with the customer and submit again.', 20_000);
+      /* staff already hold the old amount: the second cash step says so */
+      await ok.waitFor({ state: 'hidden' });
+      await page.getByRole('button', { name: /Cash received — book it/ }).click();
+      await expect.text(page, /You already took .*collect or return the difference/);
       await ok.click();
       await expect.text(page, 'Stay booked and paid', 30_000);
       const refCell = page.locator('div', { hasText: /^Reference$/ }).locator('xpath=following-sibling::div[1]').first();

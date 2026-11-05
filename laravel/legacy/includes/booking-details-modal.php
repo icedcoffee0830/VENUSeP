@@ -49,6 +49,10 @@ $bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route(
   .bdm-links { display: flex; flex-wrap: wrap; gap: 8px; }
   .bdm-link { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #e3ddd6; border-radius: 10px; font-size: 12.5px; font-weight: 650; color: #1f1e1e; text-decoration: none; background: #fff; }
   .bdm-link:hover { background: #f6f3ef; border-color: #cfc7bd; }
+  .bdm-pay { margin-top: 12px; }
+  .bdm-pay .bdm-link { margin-top: 8px; min-height: 44px; justify-content: center; }
+  .bdm-link.bdm-link-pay { width: 100%; background: #a11626; border-color: #a11626; color: #fff; font-size: 14px; }
+  .bdm-link.bdm-link-pay:hover { background: #7d0f1e; border-color: #7d0f1e; }
   .bdm-gcash { display: flex; gap: 12px; align-items: flex-start; }
   .bdm-gcash img { width: 64px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid #e3ddd6; flex: none; background: #f4f4f4; }
   .bdm-noimg { width: 64px; height: 84px; flex: none; display: flex; align-items: center; justify-content: center; text-align: center; padding: 4px;
@@ -85,6 +89,8 @@ $bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route(
       /* same tab (2026-10-28): each page has its own Back */
       const links = d.idRemovedOn ? [] : [`<a class="bdm-link" href="<?php echo e(route('root.valid-id-view')); ?>?booking=${encodeURIComponent(d.reference)}">Valid ID</a>`];
       if (d.hasReceipt) links.push(`<a class="bdm-link" href="<?php echo e($bdmReceiptUrl); ?>?booking=${encodeURIComponent(d.reference)}">System Receipt</a>`);
+      const p = d.pay;   /* customers only: Pay now, or why not yet */
+      const pay = p ? `<div class="bdm-pay">${p.note ? `<div class="bdm-note">${e(p.note)}</div>` : ''}${p.url ? `<a class="bdm-link${p.primary ? ' bdm-link-pay' : ''}" href="${e(p.url)}">${e(p.label)}</a>` : ''}</div>` : '';
       return `
         <div class="bdm-head">
           <div>
@@ -115,6 +121,7 @@ $bdmReceiptUrl = request()->routeIs('admin.*') ? route('admin.receipt') : route(
                    onerror="this.closest('a').outerHTML='<span class=&quot;bdm-noimg&quot;>Image not on file</span>'"></a>
                 <div class="bdm-grid" style="flex:1">${kv('GCash reference', d.gcash.reference)}${kv('Amount on receipt', d.gcash.amount)}${kv('Receipt check', d.gcash.check)}</div>
               </div>` : ''}
+            ${pay}
           </div>
           <div class="bdm-sec"><h3>Documents</h3><div class="bdm-links">${links.join('')}</div></div>
           ${d.timeline.length ? `<div class="bdm-sec"><h3>History</h3><ul class="bdm-tl">${d.timeline.map(t => `<li><b>${e(t.x)}</b>${t.m ? e(t.m) + '<br>' : ''}<small>${e(t.w)}</small></li>`).join('')}</ul></div>` : ''}

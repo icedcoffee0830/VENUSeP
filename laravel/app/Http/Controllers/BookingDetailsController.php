@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Status;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 
@@ -129,9 +130,37 @@ class BookingDetailsController extends Controller
             'money'         => $money,
             'gcash'         => $gcash,
             'hasReceipt'    => $hasReceipt,
+            'pay'           => $bdIsCustomer ? $this->payStep($b, $money['total']) : null,
             /* history: staff see who did what; a customer sees the same steps */
             'timeline'      => booking_history_events($b),
         ]]);
+    }
+
+    /* The customer's next payment step: the same rule as Booking History's Pay now.
+       Null when there is nothing to say (paid, rejected, a refund under way). */
+    private function payStep(array $b, string $total): ?array
+    {
+        $code = $b['paymentCode'];
+        if (in_array($code, Status::PAY_OPEN, true)) {
+            return ['label' => 'Pay now · ' . $total, 'url' => route('customer.pay', ['booking' => $b['bookingId']]), 'primary' => true];
+        }
+        if ($code === Status::UNDER_REVIEW) {
+            return ['note' => 'Receipt sent · waiting for staff', 'label' => 'View receipt',
+                    'url' => route('root.valid-id-view', ['receipt' => (int) $b['gcashReceiptId']])];
+        }
+        if ($code === Status::AWAIT_EVENT) {
+            return ['note' => 'You can pay after your event, by ' . customer_pay_by_label($b['payment'])];
+        }
+        if ($code === Status::OVERDUE) {
+            return ['note' => 'Payment overdue. Please contact the office.'];
+        }
+        if ($code === Status::AWAIT_POS) {
+            return ['note' => 'Waiting for your POS. You can pay once it is ready.'];
+        }
+        if ($code === Status::LOCKED && $b['reservationCode'] === Status::PENDING) {
+            return ['note' => 'Waiting for approval. You can pay once the office approves this booking.'];
+        }
+        return null;
     }
 
     private function json(int $status, array $data)

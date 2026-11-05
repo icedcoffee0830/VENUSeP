@@ -29,7 +29,7 @@ use PHPMailer\PHPMailer\PHPMailer;
 
 const MAIL_KINDS = ['walkin_booking', 'walkin_receipt', 'receipt_copy', 'password_reset',
                     'booking_approved', 'booking_rejected', 'payment_due', 'payment_overdue', 'booking_cancelled',
-                    'super_admin_handover', 'booking_block_cancelled'];
+                    'super_admin_handover', 'booking_block_cancelled', 'counter_welcome'];
 
 /* The settings file's array over the defaults. A missing or broken file means
    'log' — the safe direction. Takes a path so the tests can point it anywhere. */

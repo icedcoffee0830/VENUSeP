@@ -36,6 +36,12 @@
 --      kept but no longer read) into every office, so nothing changes on day one.
 --      Existing bookings keep their own rule: they already store it (refunds_allowed,
 --      pay_to_use, set when made), so nothing is backfilled.
+--    Counter accounts (phase G): customers.counter_venue_id = the office whose counter
+--      made the account (NULL = the customer signed up themselves). Only a normal admin
+--      of that office's group may correct its email, and only while it has never been
+--      signed into (users.last_login_at NULL) and is not a Google account (google_sub
+--      NULL); each correction is kept in customer_email_fixes (old, new, reason, who,
+--      when). New email kind counter_welcome: the welcome email of such an account.
 --    Starting accounts:
 --      admin@gmail.com = super admin;
 --      francishubero@gmail.com = Bahay Alumni normal admin;
@@ -54,6 +60,8 @@
 --      DROP TRIGGER trg_bookings_block_ins; DROP FUNCTION fn_customer_blocked; DROP TABLE customer_office_blocks;
 --      then run sp_expire_due_bookings from venusep_migration_16.sql again.
 --      ALTER TABLE venues DROP COLUMN refunds_enabled; (the old site-wide row is still there)
+--      DROP TABLE customer_email_fixes;
+--      ALTER TABLE customers DROP FOREIGN KEY fk_customers_counter_venue, DROP COLUMN counter_venue_id;
 --      (The office contact text and the new email kind can stay: nothing old reads them.)
 --  The CEDU Admin account stays unless you delete it.
 -- ============================================================================
@@ -107,7 +115,7 @@ INSERT IGNORE INTO staff (user_id, venue_id, full_name)
 ALTER TABLE email_outbox
     MODIFY kind ENUM('walkin_booking','walkin_receipt','receipt_copy','password_reset',
                      'booking_approved','booking_rejected','payment_due','payment_overdue','booking_cancelled',
-                     'super_admin_handover','booking_block_cancelled') NOT NULL;
+                     'super_admin_handover','booking_block_cancelled','counter_welcome') NOT NULL;
 
 -- ---- each office's contact info: placeholders where none is set (never overwrites) ----
 UPDATE venues SET address = 'USeP Tagum–Mabini Campus, Apokon, Tagum City' WHERE address IS NULL OR address = '';
@@ -149,6 +157,28 @@ CREATE TABLE IF NOT EXISTS customer_office_blocks (
     CONSTRAINT fk_customer_office_blocks_by FOREIGN KEY (blocked_by_user_id) REFERENCES users(id)
         ON UPDATE CASCADE ON DELETE SET NULL,
     CONSTRAINT fk_customer_office_blocks_lifted_by FOREIGN KEY (lifted_by_user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- ---- accounts made at the counter, and their email corrections (DB-DECISIONS 28) ----
+ALTER TABLE customers
+    ADD COLUMN IF NOT EXISTS counter_venue_id BIGINT UNSIGNED NULL;   -- the office whose counter made it; NULL = signed up themselves
+ALTER TABLE customers
+    ADD CONSTRAINT fk_customers_counter_venue FOREIGN KEY IF NOT EXISTS (counter_venue_id) REFERENCES venues(id)
+        ON UPDATE CASCADE ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS customer_email_fixes (
+    id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    customer_id      BIGINT UNSIGNED NOT NULL,
+    old_email        VARCHAR(190) NOT NULL,
+    new_email        VARCHAR(190) NOT NULL,
+    reason           VARCHAR(500) NOT NULL,
+    fixed_by_user_id BIGINT UNSIGNED NULL,
+    fixed_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY ix_customer_email_fixes_customer (customer_id),
+    CONSTRAINT fk_customer_email_fixes_customer FOREIGN KEY (customer_id) REFERENCES customers(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_customer_email_fixes_by FOREIGN KEY (fixed_by_user_id) REFERENCES users(id)
         ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

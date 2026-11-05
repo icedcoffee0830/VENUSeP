@@ -70,7 +70,7 @@
       .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); white-space: normal; }
       .booking-overdue-help { flex-basis: 100%; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; white-space: normal; }
       /* desktop: the notice gets a fixed width and wraps there, with the buttons below it */
-      @media (min-width: 1001px) { .booking-actions:has(.booking-overdue-help) { display: flex; width: 11.5rem; } }
+      @media (min-width: 1280px) { .booking-actions:has(.booking-overdue-help) { display: flex; width: 11.5rem; } }
       .booking-overdue-help strong { color: #b23a3a; }
       /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
       .badge-expired, .badge-released { background: #eef0f2; color: #55606b; }
@@ -112,7 +112,8 @@
          shows its column name (data-label) in front, the header row is hidden,
          and the id + status sit on the first line. The sorting/filtering
          script is untouched — it still works on the same rows. ---- */
-      @media (max-width: 1000px) {
+      /* nine columns need about 1245px: below 1280 each booking is a card, phone or laptop */
+      @media (max-width: 1279.98px) {
         .booking-history-table { min-width: 0; }
         .booking-history-table thead { display: none; }
         .booking-history-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 14px 16px; border-bottom: 1px solid #ece8e1; }

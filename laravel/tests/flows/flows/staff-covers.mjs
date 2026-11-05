@@ -80,6 +80,10 @@ export default {
       const form = await fillCover(ctx, page, { staff: s.jake, office: 'USeP Venues', fromSql: 'NOW() + INTERVAL 1 DAY', toSql: 'NOW() + INTERVAL 9 DAY' });
       await form.getByRole('button', { name: 'Set up cover' }).click();
       await expect.visible(form.getByText('A cover lasts 7 days at most.'), 'the form did not say 7 days at most');
+      /* an office with halls offers them; the hostel is one unit, so the picker goes */
+      await expect.visible(form.locator('#smCoverHall'), 'no hall picker for USeP Venues');
+      await form.locator('select[name="venue_id"]').selectOption({ label: 'USeP Hostel' });
+      expect.equal(await form.locator('#smCoverHall').isVisible(), false, 'the hall picker is visible for the hostel');
       await form.getByRole('button', { name: 'Cancel' }).click();
       return page;
     });

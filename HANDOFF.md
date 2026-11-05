@@ -731,3 +731,32 @@ It ends with "OK: every staff and admin account has an employee number". Applied
   `BookingCreateTest` + `CounterAccountsTest` (phones), `BookingActionTest` (rounding), venue tests (fixed offices).
   Flows: `hostel-and-counter` (Booking Management step), `abook-staff-actions` (overdue: no Pay now until
   extended), `cacct-payment-guards` (extends first), `admina-dashboard-reports-backup` (overdue notification).
+
+### 15b. Phase M (2026-11-05): deleted rooms, staff per hall, covers, moves (migration 18 grew)
+Decisions: memory `venusep-teammate-bugs-2026-11-05` (items 12, 14, the ANSWERS); written up at the end of DB-DECISIONS 28.
+Migration 18 is still not on the real DB; the additions are in the same file, safe to re-run (loaded twice on the flows copy).
+The snapshot is again `.before-m18` + a blank line + the new migration 18.
+- **Deleted rooms** (`RoomQueries`, `CatalogDeleteController`): `rooms.deleted_at`, `deleted_by_user_id`, always with `is_active = 0`,
+  so every "active rooms" read already hides them; the two room loaders (`venue-rooms.php`, `hostel-rooms.php`) hide them from the
+  admin lists too. `fn_room_live_bookings()` is the one copy of "cannot be deleted". Triggers refuse an undo, a delete with a live
+  booking, and a new booking. Reports show "<name> (deleted)" for a room with records in the period. **The photo files are deleted**
+  (not records), as before: a test or flow must never delete a seeded room, or it wipes tracked files under `public/assets`.
+- **Staff per hall** (`StaffHallQueries`): `staff_halls`; the hostel is one unit, no rows. The DB gives a new or moved staff member
+  every hall of the office, and drops the old office's (triggers), so the app only narrows. `lastStaffOf()` is the one copy of the
+  last-staff rule (Staff Management halls, suspend, office change; venue form). A hall moved to another office goes to its staff.
+- **My halls:** `fn_staff_on_room()` (halls + covers going on) feeds booking news (`sp_notify_venue_staff`) and
+  `booking_my_hall_ids()` (auth.php, adds counter bookings made by the person). Booking Management only: the Dashboard, Calendar and
+  Transaction History still show the whole office. "About to expire" reminders follow the hall too.
+- **Covers and moves** (`StaffCoverController`, `CoverQueries`, `partials/staff-covers`): state is worked out from the times on
+  every read, so nothing runs to end or expire them. `staff_me()` adds the office of a cover going on; the sign-in card accepts it too.
+- **The tick:** nothing reads `staff.both_cedu_offices` now; the column stays as a record of who had it, and the migration lists them.
+- Tests: `AdminPeople/StaffCoverTest`, `AdminPeople/StaffHallsTest` (new), `AdminVenues/CatalogDeleteTest` (rewritten), `RoomSaveTest`,
+  `RolesTest`, `StaffManagementTest`. `AccountNotificationsTest` now removes its accounts (its own tearDown hid the trait's).
+  Flows: new `staff-covers`; `venues-catalog` (a new hall names staff, the delete keeps the row), `venue-booking-to-receipt` (delete
+  refused while pending), `roles-accounts` (tick step gone), `admin-settings` (new staff at Bahay Alumni: the only staff of a hall
+  cannot be suspended).
+- Tests: PHPUnit 753 OK (4404 assertions, run alone); `venusep:check --db=venusep_laravel_test` PASS (273 ok); `venusep:flows` PASS 168/168.
+  Run PHPUnit and the flows one at a time: run together, a flow's database reset gave two random MariaDB 1615 errors in PHPUnit.
+- Re-run of migration 18 checked on the flows copy: a hall an admin took away stays away; the tick list names who had it.
+- Not done: My halls is on Booking Management only; a cover does not notify the staff member (admins tell them in person); overlapping
+  covers are allowed; the last-staff check and the save are not one locked step, so two admins at the same second could empty a hall.

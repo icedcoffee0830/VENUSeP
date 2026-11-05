@@ -55,7 +55,7 @@ venusep_expire_due_bookings();   /* a lapsed request must not still show as take
    be a one-way trip. */
 $vrIncludeInactive = isset($vrIncludeInactive) ? (bool) $vrIncludeInactive : false;
 
-/* ---- 1. the rooms themselves ---- */
+/* ---- 1. the rooms themselves (a deleted room, migration 18, is gone for everyone) ---- */
 $vrRoomRows = $vrPdo->query(
   "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
           r.best_for, r.catering, r.accessibility,
@@ -64,7 +64,7 @@ $vrRoomRows = $vrPdo->query(
      FROM rooms r
      JOIN venues v                  ON v.id = r.venue_id
      LEFT JOIN event_room_details d ON d.room_id = r.id
-    WHERE r.room_type = 'event'" . ($vrIncludeInactive ? '' : ' AND r.is_active = 1') . "
+    WHERE r.room_type = 'event' AND r.deleted_at IS NULL" . ($vrIncludeInactive ? '' : ' AND r.is_active = 1') . "
     ORDER BY r.id"
 )->fetchAll();
 

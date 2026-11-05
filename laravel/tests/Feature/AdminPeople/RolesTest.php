@@ -17,7 +17,7 @@ class RolesTest extends TestCase
 
     private const BAHAY = 1, VENUES = 2, HOSTEL = 3;
 
-    /* Who signs in: [kind, venue, both CEDU offices] for staff, an email for the admins. */
+    /* Who signs in: a staff member of an office (covering another one now), or an admin. */
     private function signInRole(string $role): static
     {
         return match ($role) {
@@ -26,16 +26,20 @@ class RolesTest extends TestCase
             'cedu_na'    => $this->actingAsAdmin('cedu.admin@gmail.com'),
             'venues'     => $this->signInAs($this->staffAt(self::VENUES), 'staff'),
             'hostel'     => $this->signInAs($this->staffAt(self::HOSTEL), 'staff'),
-            'two_office' => $this->signInAs($this->staffAt(self::VENUES, true), 'staff'),
+            'covering'   => $this->signInAs($this->staffAt(self::VENUES, self::HOSTEL), 'staff'),
             'bahay'      => $this->signInAs($this->staffAt(self::BAHAY), 'staff'),
         };
     }
 
-    private function staffAt(int $venue, bool $both = false): object
+    private function staffAt(int $venue, ?int $coverAt = null): object
     {
         $acct = $this->makeAccount('staff');
-        DB::table('staff')->where('user_id', $acct->id)->update(['venue_id' => $venue, 'both_cedu_offices' => $both]);
+        DB::table('staff')->where('user_id', $acct->id)->update(['venue_id' => $venue]);
         DB::table('users')->where('id', $acct->id)->update(['password_changed_at' => now()]);
+        if ($coverAt !== null) {   // a cover of the whole office going on now (migration 18)
+            DB::table('staff_covers')->insert(['user_id' => $acct->id, 'venue_id' => $coverAt, 'starts_at' => now()->subHour(),
+                'ends_at' => now()->addDay(), 'reason' => 'test', 'approved_at' => now()]);
+        }
         return $acct;
     }
 
@@ -61,7 +65,7 @@ class RolesTest extends TestCase
             'USeP CEDU admin'   => ['cedu_na', [2, 3]],
             'Venues staff'      => ['venues', [2]],
             'Hostel staff'      => ['hostel', [3]],
-            'two-office staff'  => ['two_office', [2, 3]],
+            'Venues staff covering the Hostel' => ['covering', [2, 3]],
             'Bahay Alumni staff' => ['bahay', [1]],
         ];
     }
@@ -202,39 +206,12 @@ class RolesTest extends TestCase
         $this->postForm('admin.staff-save', ['action' => 'set_active', 'user_id' => $bahay->id, 'active' => 0])->assertStatus(403);
         $this->postForm('admin.staff-save', ['action' => 'set_active', 'user_id' => $francis, 'active' => 0])->assertStatus(403);
         $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $super, 'new_password' => 'Long-enough-1'])->assertStatus(403);
-        /* move: CEDU admin between Venues and Hostel only */
+        /* move: CEDU admin between Venues and Hostel only (another Venues staff member keeps its halls) */
+        $this->staffAt(self::VENUES);
         $this->postForm('admin.staff-save', ['action' => 'set_venue', 'user_id' => $venues->id, 'venue_id' => self::BAHAY])->assertStatus(403);
         $this->postForm('admin.staff-save', ['action' => 'set_venue', 'user_id' => $venues->id, 'venue_id' => self::HOSTEL])->assertOk();
-        $this->postForm('admin.staff-save', ['action' => 'set_venue', 'user_id' => $venues->id, 'venue_id' => self::HOSTEL, 'both_cedu' => 1])->assertOk();
-        $row = DB::table('staff')->where('user_id', $venues->id)->first();
-        $this->assertSame([self::HOSTEL, 1], [(int) $row->venue_id, (int) $row->both_cedu_offices]);
+        $this->assertSame(self::HOSTEL, (int) DB::table('staff')->where('user_id', $venues->id)->value('venue_id'));
         $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $venues->id, 'new_password' => 'Long-enough-1'])->assertOk();
-    }
-
-    /* The tick for both CEDU offices must not survive a move out of CEDU: moved back later,
-       the person would silently get the other office again. Every way of moving them. */
-    public function test_moving_two_office_staff_out_of_cedu_clears_the_tick(): void
-    {
-        $tick = fn ($acct) => (int) DB::table('staff')->where('user_id', $acct->id)->value('both_cedu_offices');
-        $update = fn ($acct, int $venue) => $this->postForm('admin.staff-save', ['action' => 'update', 'user_id' => $acct->id,
-            'full_name' => 'Two Offices', 'email' => $acct->email, 'venue_id' => $venue])->assertOk();
-        $this->actingAsAdmin();
-
-        $byUpdate = $this->staffAt(self::VENUES, true);
-        $update($byUpdate, self::HOSTEL);
-        $this->assertSame(1, $tick($byUpdate), 'a move inside CEDU keeps the tick');
-        $update($byUpdate, self::BAHAY);
-        $this->assertSame(0, $tick($byUpdate));
-
-        $byVenueForm = $this->staffAt(self::VENUES, true);
-        $bahay = DB::table('venues')->where('id', self::BAHAY)->first();
-        $venues = DB::table('venues')->where('id', self::HOSTEL)->first();
-        $move = fn ($v) => $this->postForm('admin.venue-save', ['venue_id' => $v->id, 'name' => $v->name, 'description' => (string) $v->description,
-            'move_staff' => json_encode([$byVenueForm->id])])->assertOk();
-        $move($venues);
-        $this->assertSame(1, $tick($byVenueForm), 'a move inside CEDU keeps the tick');
-        $move($bahay);
-        $this->assertSame(0, $tick($byVenueForm));
     }
 
     public function test_the_super_admin_manages_admins_but_nobody_resets_the_super_admin(): void
@@ -286,11 +263,11 @@ class RolesTest extends TestCase
         }
     }
 
-    /* A booking's news reaches that office's staff and the group's normal admins, never the super admin. */
+    /* A booking's news reaches that office's staff (and anyone covering it now) and the group's normal admins, never the super admin. */
     public function test_booking_notifications_go_to_the_office_and_its_group_admin(): void
     {
         $hostel = $this->staffAt(self::HOSTEL);
-        $two = $this->staffAt(self::VENUES, true);
+        $two = $this->staffAt(self::VENUES, self::HOSTEL);   // covering the Hostel now
         $venues = $this->staffAt(self::VENUES);
         $bahay = $this->staffAt(self::BAHAY);
         $b = $this->bookingAt(self::HOSTEL);
@@ -307,13 +284,13 @@ class RolesTest extends TestCase
         }
     }
 
-    /* A copy of the database made with the server default (general_ci, HANDOFF 8): migration 17's
-       procedure must still work there, or every booking's notification would fail. */
+    /* A copy of the database made with the server default (general_ci, HANDOFF 8): the latest
+       procedure (migration 18) must still work there, or every booking's notification would fail. */
     public function test_booking_notifications_work_on_a_database_with_another_default_collation(): void
     {
         preg_match('/^DROP PROCEDURE IF EXISTS sp_notify_venue_staff\$\$\R(.*?^END)\$\$/ms',
-            (string) file_get_contents(dirname(base_path()) . '/venusep_migration_17.sql'), $m);
-        $this->assertNotEmpty($m, 'the procedure is in migration 17');
+            (string) file_get_contents(dirname(base_path()) . '/venusep_migration_18.sql'), $m);
+        $this->assertNotEmpty($m, 'the procedure is in migration 18');
         $db = DB::getDatabaseName();
         $this->assertStringStartsWith('venusep_laravel_test', $db);
         $recreate = function (string $collation) use ($db, $m) {
@@ -354,11 +331,17 @@ class RolesTest extends TestCase
         $this->get(route('admin.activity'))->assertOk();
     }
 
-    public function test_two_office_staff_may_sign_in_on_either_cedu_card(): void
+    /* A cover going on now opens that office's card at sign-in too; an ended one does not. */
+    public function test_covering_staff_may_sign_in_on_the_covered_offices_card(): void
     {
-        $two = $this->staffAt(self::VENUES, true);
+        $two = $this->staffAt(self::VENUES, self::HOSTEL);
         $this->post(route('admin.admin-login'), ['email' => $two->email, 'password' => self::PASSWORD, 'department' => self::HOSTEL])
             ->assertRedirect();
         $this->assertSame($two->id, (int) session('user_id'));
+
+        $this->flushSession();
+        DB::table('staff_covers')->where('user_id', $two->id)->update(['ended_at' => now()]);
+        $this->post(route('admin.admin-login'), ['email' => $two->email, 'password' => self::PASSWORD, 'department' => self::HOSTEL])
+            ->assertOk()->assertSee('This account belongs to USeP Venues.');
     }
 }

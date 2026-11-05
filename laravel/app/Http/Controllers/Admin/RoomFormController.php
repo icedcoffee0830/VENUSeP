@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Queries\StaffHallQueries;
 use Illuminate\Http\Request;
 use PDOException;
 
@@ -62,7 +63,16 @@ class RoomFormController extends Controller
             $rfPool[] = ['group' => $rfGroup, 'items' => $rfKeys];
         }
 
+        /* a new hall names its staff (partials/room-form-staff): office name => [id => name] */
+        $rfStaff = [];
+        if (!$isHostel && $roomId === '') {
+            foreach ($venuesById as $rfVenueId => $rfVenueName) {
+                $rfStaff[$rfVenueName] = StaffHallQueries::staffOf((int) $rfVenueId);
+            }
+        }
+
         return view('admin.room-form', [
+            'rfStaff' => $rfStaff,
             'isHostel' => $isHostel,
             'roomId' => $roomId,
             'roomFormRoom' => $roomFormRoom,

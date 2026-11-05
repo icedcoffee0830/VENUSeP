@@ -61,11 +61,15 @@ class RoomPhotosApiController extends Controller
            answered by the rp_* functions below */
         $pdo = venusep_db();
         if ($pdo !== null) {
-            $venueOfRoom = $pdo->prepare('SELECT venue_id FROM rooms WHERE room_code = :c');
+            $venueOfRoom = $pdo->prepare('SELECT venue_id, deleted_at IS NOT NULL AS deleted FROM rooms WHERE room_code = :c');
             $venueOfRoom->execute([':c' => $roomId]);
-            $venueOfRoom = $venueOfRoom->fetchColumn();
-            if ($venueOfRoom !== false) {
-                $this->requireVenueScope($venueOfRoom);
+            $venueOfRoom = $venueOfRoom->fetch();
+            if ($venueOfRoom && $venueOfRoom['deleted']) {   // a deleted room has no photos to change (migration 18)
+                throw new HttpResponseException(response()->json(['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.'], 404)
+                    ->header('Cache-Control', 'no-store'));
+            }
+            if ($venueOfRoom) {
+                $this->requireVenueScope($venueOfRoom['venue_id']);
             }
         }
 

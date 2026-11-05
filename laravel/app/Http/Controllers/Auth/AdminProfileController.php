@@ -20,9 +20,7 @@ class AdminProfileController
             $vpStmt = venusep_db_or_fail()->prepare(
                 "SELECT u.email, u.username, u.account_type, u.is_super_admin, u.office_group,
                         s.full_name, s.phone, s.position_role, s.employee_no, s.photo_path,
-                        IF(s.both_cedu_offices = 1 AND v.office_group = 'cedu',
-                           (SELECT GROUP_CONCAT(o.name ORDER BY o.id SEPARATOR ' and ') FROM venues o WHERE o.office_group = 'cedu'),
-                           v.name) AS office
+                        v.name AS office
                    FROM users u LEFT JOIN staff s ON s.user_id = u.id LEFT JOIN venues v ON v.id = s.venue_id
                   WHERE u.id = :u"
             );
@@ -42,7 +40,7 @@ class AdminProfileController
         $vpRole  = (string) ($vpRow['position_role'] ?? '');
         $vpEmp   = (string) ($vpRow['employee_no'] ?? '');
         /* THE PROFILE CARD: photo or initials, name, role (DB-DECISIONS 28): "Super admin",
-           "Admin · USeP CEDU", "Staff · USeP Hostel" (both CEDU offices: both names). */
+           "Admin · USeP CEDU", "Staff · USeP Hostel". */
         $vpPhoto   = (string) ($vpRow['photo_path'] ?? '');
         $vpAccess  = match (true) {
             !empty($vpRow['is_super_admin'])                  => 'Super admin',

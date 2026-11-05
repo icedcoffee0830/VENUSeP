@@ -614,6 +614,9 @@
             </details>
           </div>
         </div>
+@if ($rfStaff)
+@include('partials.room-form-staff')
+@endif
 
         <hr class="vm-divider" />
 
@@ -1176,6 +1179,7 @@
         body.append('check_out_time', document.getElementById('roomCheckOut').value);
         @else
         body.append('room_type', 'event');
+        if (isNew && window.rfHallStaff) body.append('staff_ids', JSON.stringify(window.rfHallStaff()));
         body.append('capacity', document.getElementById('roomCap').value);
         body.append('fee', document.getElementById('roomRate').value);
         body.append('best_for', document.getElementById('roomBestFor').value);

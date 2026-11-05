@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Queries\AccountQueries;
+use App\Queries\StaffHallQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDO;
@@ -20,7 +21,9 @@ use PDOException;
        update:     full_name, email, position_role, phone[, venue_id]
                    (the employee number is the database's: given once, never edited — migration 18)
        set_venue:  venue_id (required for a staff account — no unassigned staff;
-                   the DB trigger trg_staff_venue_required says the same)[, both_cedu=0|1]
+                   the DB trigger trg_staff_venue_required says the same)
+       set_halls:  hall_ids = JSON [room ids]: the halls of their office they cover
+                   (migration 18; the hostel is one unit, no halls)
        set_active: active=0|1
        reset_password: new_password — never your own
        handover:   password, reason — the super admin to a normal admin
@@ -29,6 +32,9 @@ use PDOException;
    · The target must be a STAFF-SIDE account.
    · SELF-LOCKOUT GUARDS: no suspending yourself, no suspending the LAST
      active admin.
+   · EVERY HALL KEEPS A STAFF MEMBER (Aron 2026-11-05): taking a hall away from,
+     suspending or moving the last active staff of a hall is refused
+     (StaffHallQueries::lastStaffOf).
    · NEVER DELETES. Deactivation only.
    Suspension takes effect on the target's next click: staff_session_heal()
    re-reads users.is_active and account_type on every request.
@@ -55,15 +61,14 @@ class StaffController
                         u.is_super_admin, u.office_group, u.handed_over_at,
                         COALESCE(s.full_name, u.username) AS full_name,
                         s.employee_no, s.position_role, s.phone, s.venue_id,
-                        v.name AS venue_name, v.office_group AS venue_group,
-                        s.both_cedu_offices = 1 AND v.office_group = 'cedu' AS both_cedu,
-                        (SELECT GROUP_CONCAT(o.name ORDER BY o.id SEPARATOR ' and ') FROM venues o WHERE o.office_group = 'cedu') AS cedu_names
+                        v.name AS venue_name, v.office_group AS venue_group, v.venue_type
                    FROM users u
                    LEFT JOIN staff s ON s.user_id = u.id
                    LEFT JOIN venues v ON v.id = s.venue_id
                   WHERE u.account_type IN ('admin', 'staff')
                   ORDER BY u.account_type, COALESCE(s.full_name, u.username)"
             );
+            $hallsByStaff = StaffHallQueries::hallsByStaff();
             foreach ($smStmt as $r) {
                 $isSelf = (int) $r['id'] === (int) session('user_id');
                 $canManage = !$isSelf && staff_may_manage_account($r);
@@ -84,14 +89,14 @@ class StaffController
                     'venue'    => match (true) {   // the office label
                         $role === 'Super admin'   => 'All offices',
                         $role === 'Admin'         => OFFICE_GROUPS[$r['office_group']] ?? 'No group yet',
-                        (bool) $r['both_cedu']    => (string) $r['cedu_names'],
                         default                   => $r['venue_name'] === null ? 'Choose a venue' : (string) $r['venue_name'],
                     },
-                    'both'     => (bool) $r['both_cedu'],
+                    'halls'    => $hallsByStaff[(int) $r['id']] ?? [],
+                    'wholeHostel' => $role === 'Staff' && $r['venue_type'] === 'hostel',
                     'lastLogin'=> $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
                     'isSelf'   => $isSelf,
                     'canManage'=> $canManage,
-                    'canBoth'  => $canManage && $role === 'Staff' && $r['venue_group'] === 'cedu',
+                    'canHalls' => $canManage && $role === 'Staff' && $r['venue_type'] === 'event',
                     'canHandOver' => admin_is_super() && $role === 'Admin' && $r['is_active'] && $r['handed_over_at'] === null,
                 ];
             }
@@ -100,8 +105,10 @@ class StaffController
             $smRows = [];
             $smVenues = [];
         }
+        /* the halls of those offices, for the Halls dialog (the hostel has none: one unit) */
+        $smHalls = StaffHallQueries::hallsOf(array_column($smVenues, 'id'));
 
-        return view('admin.staff-management', ['smRows' => $smRows, 'smVenues' => $smVenues]);
+        return view('admin.staff-management', ['smRows' => $smRows, 'smVenues' => $smVenues, 'smHalls' => $smHalls]);
     }
 
     public function register()
@@ -142,6 +149,16 @@ class StaffController
         return $user['account_type'] === 'staff' ? [(int) $user['venue_id']] : null;
     }
 
+    /* Every hall keeps an active staff member (Aron 2026-11-05): a change that would leave
+       one with nobody is refused, naming it. $keep: halls they keep; $leaving: they leave
+       the office (suspended, moved), so the hostel counts too. */
+    private function requireNotLastStaff(int $userId, array $keep = [], bool $leaving = true): void
+    {
+        if ($halls = StaffHallQueries::lastStaffOf($userId, $keep, $leaving)) {
+            $this->fail(409, ['ok' => false, 'error' => 'last_staff', 'message' => StaffHallQueries::lastStaffMessage($halls)]);
+        }
+    }
+
     /* $required: a STAFF account must have a venue (decided 2026-10-27). Only
        an admin row may be left without one. */
     private function resolveVenue(PDO $pdo, $raw, $required = true): array
@@ -169,7 +186,7 @@ class StaffController
         if (!staff_may_handle_venue($venue['id'])) {
             $this->fail(403, ['ok' => false, 'field' => 'venue_id', 'message' => 'You can only assign staff to your own offices.']);
         }
-        return ['id' => (int) $venue['id'], 'name' => (string) $venue['name'], 'cedu' => $venue['office_group'] === 'cedu'];
+        return ['id' => (int) $venue['id'], 'name' => (string) $venue['name']];
     }
 
     /* The route skips Laravel's CSRF middleware so an expired page still gets
@@ -247,11 +264,12 @@ class StaffController
                 return $this->reply(409, ['ok' => false, 'message' => 'That staff account has no staff profile to update.']);
             }
             $venue = $this->resolveVenue($pdo, $request->input('venue_id', ''));
-            /* both_cedu = ticked for USeP Venues and USeP Hostel: only inside CEDU; not sent = unchanged */
-            $both = $request->has('both_cedu') ? (int) !empty($request->input('both_cedu')) : null;
+            if ((int) $user['old_venue_id'] !== $venue['id']) {
+                $this->requireNotLastStaff($target);   // the new office's halls come with the move (trg_staff_halls_follow_upd)
+            }
             try {
-                $pdo->prepare('UPDATE staff SET venue_id = :v, both_cedu_offices = IF(:c, COALESCE(:b, both_cedu_offices), 0) WHERE user_id = :u')
-                    ->execute([':v' => $venue['id'], ':c' => (int) $venue['cedu'], ':b' => $both, ':u' => $target]);
+                $pdo->prepare('UPDATE staff SET venue_id = :v WHERE user_id = :u')
+                    ->execute([':v' => $venue['id'], ':u' => $target]);
             } catch (PDOException $e) {
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the venue was not changed.']);
@@ -261,6 +279,31 @@ class StaffController
             }
             return $this->reply(200, ['ok' => true, 'venue_id' => $venue['id'], 'venue' => $venue['name'],
                 'message' => 'Venue assignment updated.']);
+        }
+
+        /* HALLS — which halls of their office a staff member covers (Aron 2026-11-05).
+           Their notifications and "My halls" list follow it; they still see the whole office. */
+        if ($action === 'set_halls') {
+            $ids = json_decode((string) $request->input('hall_ids', ''), true);
+            if ($user['account_type'] !== 'staff' || !is_array($ids)) {
+                return $this->reply(400, ['ok' => false, 'message' => 'Choose the halls of a staff member.']);
+            }
+            $own = array_column(StaffHallQueries::hallsOf([(int) $user['venue_id']]), 'id');
+            $ids = array_values(array_unique(array_map('intval', array_filter($ids, 'is_numeric'))));
+            if (!$own) {
+                return $this->reply(400, ['ok' => false, 'message' => 'The hostel is one unit: its staff cover the whole hostel.']);
+            }
+            if (array_diff($ids, $own)) {
+                return $this->reply(400, ['ok' => false, 'message' => 'A staff member covers only halls of their own office.']);
+            }
+            $this->requireNotLastStaff($target, $ids, false);
+            try {
+                StaffHallQueries::setHalls($target, $ids, $actor);
+            } catch (\Throwable $e) {
+                sql_failed($e);
+                return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the halls were not changed.']);
+            }
+            return $this->reply(200, ['ok' => true, 'halls' => $ids, 'message' => 'Halls updated.']);
         }
 
         /* UPDATE — name, contact, and the role the ORGANISATION owns. */
@@ -288,6 +331,9 @@ class StaffController
                     return $this->reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Venue assignments apply to staff accounts.']);
                 }
                 $venue = $this->resolveVenue($pdo, $venueRaw, $user['account_type'] === 'staff');
+                if ($user['account_type'] === 'staff' && (int) $user['old_venue_id'] !== (int) $venue['id']) {
+                    $this->requireNotLastStaff($target);
+                }
             }
 
             try {
@@ -300,13 +346,12 @@ class StaffController
                 ];
                 if ($venueGiven) {
                     $staffValues[':v'] = $venue['id'];
-                    $staffValues[':c'] = (int) !empty($venue['cedu']);   // the tick for both CEDU offices ends outside CEDU
                     $pdo->prepare(
                         'INSERT INTO staff (user_id, venue_id, full_name, position_role, phone)
                          VALUES (:u, :v, :n, :r, :p)
                          ON DUPLICATE KEY UPDATE venue_id = VALUES(venue_id), full_name = VALUES(full_name),
                                                  position_role = VALUES(position_role),
-                                                 phone = VALUES(phone), both_cedu_offices = both_cedu_offices AND :c'
+                                                 phone = VALUES(phone)'
                     )->execute($staffValues);
                 } else {
                     $pdo->prepare(
@@ -375,6 +420,9 @@ class StaffController
                 if ($target === $actor) {
                     return $this->reply(409, ['ok' => false,
                         'message' => 'You cannot suspend your own account. Ask another administrator to do it.']);
+                }
+                if ($user['account_type'] === 'staff') {
+                    $this->requireNotLastStaff($target);
                 }
                 /* The last active admin. Counted, not assumed. */
                 if ($user['account_type'] === 'admin') {

@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\RoomQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
-/* CATALOG DELETE (was admin/catalog-delete.php) — deletes an eligible room
-   from Venue Management (the offices are fixed, never deleted). Booking/history rows are never deleted
+/* CATALOG DELETE (was admin/catalog-delete.php) — deletes a room (hall or hostel room)
+   from Venue Management: hidden from users, its row kept for the records (RoomQueries). The
+   offices are fixed, never deleted. Booking/history rows are never deleted
    here. Admin only (re-read from the database, not the session). */
 class CatalogDeleteController extends Controller
 {
@@ -51,58 +54,39 @@ class CatalogDeleteController extends Controller
                     $this->reply(400, ['ok' => false, 'error' => 'bad_room', 'message' => 'Invalid room.']);
                 }
 
-                $pdo->beginTransaction();
-                $room = $pdo->prepare('SELECT id, name, venue_id FROM rooms WHERE room_code = :code FOR UPDATE');
-                $room->execute([':code' => $roomCode]);
-                $roomRow = $room->fetch();
-                if (!$roomRow) {
-                    $pdo->rollBack();
+                /* Deleted for users, kept as a hidden row (Aron 2026-11-05): past bookings,
+                   receipts, History and reports keep its name. No undo. Refused while any
+                   booking is pending, still to come or going on (trg_rooms_deleted_upd too). */
+                $roomRow = null;
+                $live = 0;
+                DB::transaction(function () use ($roomCode, &$roomRow, &$live) {
+                    $roomRow = RoomQueries::findLiveForUpdate($roomCode);
+                    if ($roomRow === null || !staff_may_handle_venue($roomRow['venue_id'])) {   // a normal admin: its own offices only
+                        return;
+                    }
+                    $live = RoomQueries::liveBookings((int) $roomRow['id']);
+                    if ($live === 0) {
+                        RoomQueries::delete((int) $roomRow['id'], (int) session('user_id'));
+                    }
+                });
+                if ($roomRow === null) {
                     $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
                 }
-                if (!staff_may_handle_venue($roomRow['venue_id'])) {   // a normal admin: its own offices only
-                    $pdo->rollBack();
+                if (!staff_may_handle_venue($roomRow['venue_id'])) {
                     $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'This room belongs to another office.']);
                 }
-                $roomId = (int) $roomRow['id'];
-
-                $bookingCount = $pdo->prepare('SELECT COUNT(*) FROM bookings WHERE room_id = :id');
-                $bookingCount->execute([':id' => $roomId]);
-                if ((int) $bookingCount->fetchColumn() > 0) {
-                    $pdo->rollBack();
-                    $this->reply(409, ['ok' => false, 'error' => 'booking_history',
-                        'message' => 'This room cannot be deleted because it has booking history.']);
+                if ($live > 0) {
+                    $this->reply(409, ['ok' => false, 'error' => 'live_bookings', 'count' => $live,
+                        'message' => $roomRow['name'] . ' has ' . $live . ($live === 1 ? ' booking' : ' bookings')
+                            . ' still pending, coming up or going on, so it cannot be deleted. Finish, cancel or reject '
+                            . ($live === 1 ? 'it' : 'them') . ' first.']);
                 }
-
-                /* These references should accompany a booking, but check them
-                   independently so malformed legacy data can never be erased. */
-                $slotCount = $pdo->prepare('SELECT COUNT(*) FROM venue_booking_slots WHERE room_id = :id');
-                $slotCount->execute([':id' => $roomId]);
-                $bedHistory = $pdo->prepare(
-                    'SELECT (SELECT COUNT(*) FROM bed_reservations br JOIN hostel_beds hb ON hb.id = br.bed_id WHERE hb.room_id = :room1)
-                          + (SELECT COUNT(*) FROM bed_reservation_nights bn JOIN hostel_beds hb ON hb.id = bn.bed_id WHERE hb.room_id = :room2)'
-                );
-                $bedHistory->execute([':room1' => $roomId, ':room2' => $roomId]);
-                if ((int) $slotCount->fetchColumn() > 0 || (int) $bedHistory->fetchColumn() > 0) {
-                    $pdo->rollBack();
-                    $this->reply(409, ['ok' => false, 'error' => 'booking_history',
-                        'message' => 'This room cannot be deleted because it has booking history.']);
-                }
-
-                /* Only room-owned configuration reaches this point. */
-                $pdo->prepare('DELETE FROM maintenance_windows WHERE room_id = :id')->execute([':id' => $roomId]);
-                $pdo->prepare('DELETE FROM room_media WHERE room_id = :id')->execute([':id' => $roomId]);
-                $pdo->prepare('DELETE FROM event_room_details WHERE room_id = :id')->execute([':id' => $roomId]);
-                $pdo->prepare('DELETE FROM hostel_room_details WHERE room_id = :id')->execute([':id' => $roomId]);
-                $pdo->prepare('DELETE FROM hostel_beds WHERE room_id = :id')->execute([':id' => $roomId]);
-                $deleted = $pdo->prepare('DELETE FROM rooms WHERE id = :id');
-                $deleted->execute([':id' => $roomId]);
-                $pdo->commit();
-                /* the files those room_media rows pointed at (photos + 360°); the code
-                   passed the regex above, so this stays inside the rooms folder */
+                /* the photos are not records: their files go (the code passed the regex
+                   above, so this stays inside the rooms folder) */
                 File::deleteDirectory(rp_room_dir($roomCode));
 
                 $this->reply(200, ['ok' => true, 'entity' => 'room', 'name' => $roomRow['name'],
-                    'message' => $roomRow['name'] . ' was deleted.']);
+                    'message' => $roomRow['name'] . ' was deleted. Past bookings and receipts keep its name.']);
             }
 
             /* The three offices are fixed (DB-DECISIONS 28): nobody deletes one, the super admin included. */

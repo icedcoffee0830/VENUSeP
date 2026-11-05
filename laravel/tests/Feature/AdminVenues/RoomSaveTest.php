@@ -45,13 +45,39 @@ class RoomSaveTest extends VenuesTestCase
             ->assertStatus(400)->assertJson(['error' => 'bad_maintenance']);
     }
 
+    /* Every hall keeps a staff member (Aron 2026-11-05): a new hall names them, from its own
+       office; an office with nobody cannot take a hall yet. */
+    public function test_a_new_hall_must_name_staff_of_its_own_office(): void
+    {
+        $hall = ['room_id' => '', 'name' => 'Staffed Hall', 'venue' => 'Bahay Alumni', 'room_type' => 'event', 'capacity' => '40', 'fee' => '1500'];
+        $this->actingAsAdmin();
+        $this->postForm('admin.room-save', $hall)->assertStatus(400)->assertJson(['error' => 'bad_staff']);
+        $this->postForm('admin.room-save', $hall + ['staff_ids' => json_encode([73])])->assertStatus(400)->assertJson(['error' => 'bad_staff']);   // hostel staff
+        $empty = $this->makeVenue('No Staff Office');
+        try {
+            $this->postForm('admin.room-save', ['venue' => 'No Staff Office'] + $hall + ['staff_ids' => json_encode([7])])
+                ->assertStatus(409)->assertJson(['error' => 'no_staff', 'message' => 'Create or assign a staff member to No Staff Office first: every hall needs one.']);
+        } finally {
+            $this->dropVenue($empty);
+        }
+        $this->assertSame(0, DB::table('rooms')->where('name', 'Staffed Hall')->count());
+
+        $code = $this->postForm('admin.room-save', $hall + ['staff_ids' => json_encode([7])])->assertOk()->json('room_id');
+        try {
+            $id = DB::table('rooms')->where('room_code', $code)->value('id');
+            $this->assertSame([7], DB::table('staff_halls')->where('room_id', $id)->pluck('user_id')->map(fn ($v) => (int) $v)->all());
+        } finally {
+            $this->dropRoom($code);
+        }
+    }
+
     public function test_create_then_edit_an_event_room(): void
     {
         $this->actingAsAdmin();
         $next = 'r' . ((int) DB::selectOne("SELECT COALESCE(MAX(CAST(SUBSTRING(room_code, 2) AS UNSIGNED)), 0) + 1 AS n FROM rooms WHERE room_code REGEXP '^r[0-9]+$'")->n);
         try {
             $this->postForm('admin.room-save', [
-                'room_id' => '', 'name' => 'Port Test Room', 'venue' => 'Bahay Alumni', 'room_type' => 'event',
+                'room_id' => '', 'name' => 'Port Test Room', 'venue' => 'Bahay Alumni', 'room_type' => 'event', 'staff_ids' => json_encode([7]),
                 'description' => 'Desc', 'capacity' => '40', 'fee' => '1500', 'amenities' => json_encode(['bogus']),
                 'best_for' => 'Seminars', 'catering' => '', 'accessibility' => 'Ramp',
             ])->assertOk()->assertJson(['ok' => true, 'created' => true, 'room_id' => $next,

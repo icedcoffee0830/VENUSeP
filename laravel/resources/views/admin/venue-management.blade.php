@@ -1084,8 +1084,8 @@ function vmMaint($m, $today) {
         button.addEventListener('click', async () => {
           const entity = button.dataset.deleteEntity;
           const name = button.dataset.deleteName;
-          const ok = await venusepConfirm('Delete ' + name + '? This action cannot be undone.',
-            { title: 'Delete room?', okLabel: 'Delete', danger: true });
+          const ok = await venusepConfirm(name + ' disappears from every list and can no longer be booked. Past bookings, receipts and reports keep its name. This cannot be undone.',
+            { title: 'Delete ' + name + '?', okLabel: 'Delete', danger: true });
           if (!ok) return;
 
           const body = new URLSearchParams({

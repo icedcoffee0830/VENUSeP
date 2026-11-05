@@ -178,6 +178,238 @@ END$$
 
 DELIMITER ;
 
+-- ======== phase M (2026-11-05): deleted rooms, staff per hall, covers, moves ========
+
+-- ---- a deleted hall or hostel room stays as a hidden row, so records keep its name ----
+ALTER TABLE rooms
+    ADD COLUMN IF NOT EXISTS deleted_at DATETIME NULL,
+    ADD COLUMN IF NOT EXISTS deleted_by_user_id BIGINT UNSIGNED NULL,
+    ADD COLUMN IF NOT EXISTS live_name_marker TINYINT AS (IF(deleted_at IS NULL, 1, NULL)) PERSISTENT;
+ALTER TABLE rooms
+    ADD CONSTRAINT fk_rooms_deleted_by FOREIGN KEY IF NOT EXISTS (deleted_by_user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL;
+-- a deleted room is never bookable again
+ALTER TABLE rooms DROP CONSTRAINT IF EXISTS chk_rooms_deleted_inactive;
+ALTER TABLE rooms ADD CONSTRAINT chk_rooms_deleted_inactive CHECK (deleted_at IS NULL OR is_active = 0);
+-- a deleted room's name is free for a new room of the same office
+ALTER TABLE rooms
+    DROP INDEX IF EXISTS uq_rooms_venue_name,
+    ADD UNIQUE KEY uq_rooms_venue_name (venue_id, name, live_name_marker);
+
+-- ---- staff per hall: a staff member covers one or more halls of their own office ----
+-- (the hostel is one unit: hostel staff cover the whole hostel and have no rows here)
+SET @staff_halls_first = (SELECT COUNT(*) = 0 FROM information_schema.TABLES
+                           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'staff_halls');
+CREATE TABLE IF NOT EXISTS staff_halls (
+    user_id             BIGINT UNSIGNED NOT NULL,
+    room_id             BIGINT UNSIGNED NOT NULL,
+    assigned_by_user_id BIGINT UNSIGNED NULL,
+    assigned_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, room_id),
+    KEY ix_staff_halls_room (room_id),
+    CONSTRAINT fk_staff_halls_staff FOREIGN KEY (user_id) REFERENCES staff(user_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_staff_halls_room FOREIGN KEY (room_id) REFERENCES rooms(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_staff_halls_by FOREIGN KEY (assigned_by_user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- the first run only: every staff member gets every hall of their office, so nothing
+-- narrows on day one (a re-run never gives back a hall an admin took away)
+INSERT IGNORE INTO staff_halls (user_id, room_id)
+    SELECT s.user_id, r.id
+      FROM staff s
+      JOIN users u ON u.id = s.user_id AND u.account_type = 'staff'
+      JOIN rooms r ON r.venue_id = s.venue_id AND r.room_type = 'event' AND r.deleted_at IS NULL
+     WHERE @staff_halls_first = 1;
+
+-- ---- covers: a staff member also handles another hall or office for a while (max 7 days) ----
+CREATE TABLE IF NOT EXISTS staff_covers (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id             BIGINT UNSIGNED NOT NULL,        -- the staff member covering
+    venue_id            BIGINT UNSIGNED NOT NULL,        -- the office covered
+    room_id             BIGINT UNSIGNED NULL,            -- one hall of it; NULL = the whole office (the hostel always)
+    starts_at           DATETIME NOT NULL,
+    ends_at             DATETIME NOT NULL,               -- it ends by itself: nothing runs at this time
+    reason              VARCHAR(500) NOT NULL,
+    created_by_user_id  BIGINT UNSIGNED NULL,
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    approved_at         DATETIME NULL,                   -- NULL = waiting for the other group's admin
+    approved_by_user_id BIGINT UNSIGNED NULL,            --   (expires unanswered at starts_at)
+    rejected_at         DATETIME NULL,
+    rejected_by_user_id BIGINT UNSIGNED NULL,
+    reject_reason       VARCHAR(500) NULL,
+    ended_at            DATETIME NULL,                   -- ended early by an admin
+    ended_by_user_id    BIGINT UNSIGNED NULL,
+    KEY ix_staff_covers_user (user_id, ends_at),
+    KEY ix_staff_covers_venue (venue_id, ends_at),
+    CONSTRAINT chk_staff_covers_week CHECK (ends_at > starts_at AND ends_at <= starts_at + INTERVAL 7 DAY),
+    CONSTRAINT fk_staff_covers_user FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_staff_covers_venue FOREIGN KEY (venue_id) REFERENCES venues(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_staff_covers_room FOREIGN KEY (room_id) REFERENCES rooms(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_staff_covers_created_by FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_staff_covers_approved_by FOREIGN KEY (approved_by_user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_staff_covers_rejected_by FOREIGN KEY (rejected_by_user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_staff_covers_ended_by FOREIGN KEY (ended_by_user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- a permanent move to the other group: the destination's admin approves (3 days) ----
+CREATE TABLE IF NOT EXISTS staff_moves (
+    id                   BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id              BIGINT UNSIGNED NOT NULL,
+    from_venue_id        BIGINT UNSIGNED NOT NULL,
+    to_venue_id          BIGINT UNSIGNED NOT NULL,
+    reason               VARCHAR(500) NOT NULL,
+    replacements         TEXT NULL,                      -- JSON {"hall id": replacement staff user id}
+    requested_by_user_id BIGINT UNSIGNED NULL,
+    requested_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,   -- unanswered: expires 3 days later
+    decided_at           DATETIME NULL,
+    decided_by_user_id   BIGINT UNSIGNED NULL,
+    approved             BOOLEAN NULL,                   -- NULL = waiting; 1 = moved; 0 = rejected
+    reject_reason        VARCHAR(500) NULL,
+    KEY ix_staff_moves_user (user_id),
+    CONSTRAINT fk_staff_moves_user FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_staff_moves_from FOREIGN KEY (from_venue_id) REFERENCES venues(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_staff_moves_to FOREIGN KEY (to_venue_id) REFERENCES venues(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_staff_moves_requested_by FOREIGN KEY (requested_by_user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_staff_moves_decided_by FOREIGN KEY (decided_by_user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- the tick for both CEDU offices (migration 17) is replaced by covers: no longer read.
+-- The column and its values stay as a record of who had it (listed at the end).
+ALTER TABLE staff MODIFY both_cedu_offices BOOLEAN NOT NULL DEFAULT FALSE
+    COMMENT 'No longer read (migration 18): replaced by staff_covers.';
+
+DELIMITER $$
+
+-- A booking still to come or going on: pending, approved and not over yet, or a hostel
+-- guest checked in and not out. The one copy of "this room cannot be deleted".
+DROP FUNCTION IF EXISTS fn_room_live_bookings$$
+CREATE FUNCTION fn_room_live_bookings(p_room_id BIGINT UNSIGNED)
+RETURNS INT
+NOT DETERMINISTIC READS SQL DATA
+BEGIN
+    RETURN (SELECT COUNT(*) FROM bookings b
+             WHERE b.room_id = p_room_id
+               AND (b.reservation_status = 'pending'
+                    OR (b.reservation_status = 'approved'
+                        AND (fn_booking_last_day(b.id) >= CURDATE()
+                             OR EXISTS (SELECT 1 FROM hostel_booking_details h
+                                         WHERE h.booking_id = b.id AND h.checked_in = 1 AND h.checked_out = 0)))));
+END$$
+
+-- Deleting a room: only with no live booking, and never undone.
+DROP TRIGGER IF EXISTS trg_rooms_deleted_upd$$
+CREATE TRIGGER trg_rooms_deleted_upd BEFORE UPDATE ON rooms
+FOR EACH ROW
+BEGIN
+    IF OLD.deleted_at IS NOT NULL AND NOT (NEW.deleted_at <=> OLD.deleted_at) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A deleted room stays deleted.';
+    END IF;
+    IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL AND fn_room_live_bookings(OLD.id) > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This room has bookings still to come or going on, so it cannot be deleted.';
+    END IF;
+END$$
+
+-- No new booking on a deleted room, online or at the counter.
+DROP TRIGGER IF EXISTS trg_bookings_room_deleted_ins$$
+CREATE TRIGGER trg_bookings_room_deleted_ins BEFORE INSERT ON bookings
+FOR EACH ROW
+BEGIN
+    IF EXISTS (SELECT 1 FROM rooms WHERE id = NEW.room_id AND deleted_at IS NOT NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This room was deleted, so it cannot be booked.';
+    END IF;
+END$$
+
+-- A staff member is given only halls of their own office (the hostel has none: one unit).
+DROP TRIGGER IF EXISTS trg_staff_halls_ins$$
+CREATE TRIGGER trg_staff_halls_ins BEFORE INSERT ON staff_halls
+FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM staff s JOIN rooms r ON r.venue_id = s.venue_id
+                    WHERE s.user_id = NEW.user_id AND r.id = NEW.room_id AND r.room_type = 'event') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A staff member is given only halls of their own office.';
+    END IF;
+END$$
+
+-- A new staff member starts with every hall of their office (an admin narrows it later).
+DROP TRIGGER IF EXISTS trg_staff_halls_new_ins$$
+CREATE TRIGGER trg_staff_halls_new_ins AFTER INSERT ON staff
+FOR EACH ROW
+BEGIN
+    INSERT IGNORE INTO staff_halls (user_id, room_id)
+        SELECT NEW.user_id, r.id FROM rooms r
+         WHERE r.venue_id = NEW.venue_id AND r.room_type = 'event' AND r.deleted_at IS NULL
+           AND (SELECT account_type FROM users WHERE id = NEW.user_id) = 'staff';
+END$$
+
+-- Moved to another office: the old office's halls go, and every hall of the new one comes.
+DROP TRIGGER IF EXISTS trg_staff_halls_follow_upd$$
+CREATE TRIGGER trg_staff_halls_follow_upd AFTER UPDATE ON staff
+FOR EACH ROW
+BEGIN
+    IF NOT (NEW.venue_id <=> OLD.venue_id) THEN
+        DELETE h FROM staff_halls h JOIN rooms r ON r.id = h.room_id
+         WHERE h.user_id = NEW.user_id AND NOT (r.venue_id <=> NEW.venue_id);
+        INSERT IGNORE INTO staff_halls (user_id, room_id)
+            SELECT NEW.user_id, r.id FROM rooms r
+             WHERE r.venue_id = NEW.venue_id AND r.room_type = 'event' AND r.deleted_at IS NULL
+               AND (SELECT account_type FROM users WHERE id = NEW.user_id) = 'staff';
+    END IF;
+END$$
+
+-- A hall moved to another office leaves its old office's staff and goes to the new one's.
+DROP TRIGGER IF EXISTS trg_rooms_halls_follow_upd$$
+CREATE TRIGGER trg_rooms_halls_follow_upd AFTER UPDATE ON rooms
+FOR EACH ROW
+BEGIN
+    IF NEW.venue_id <> OLD.venue_id THEN
+        DELETE h FROM staff_halls h JOIN staff s ON s.user_id = h.user_id
+         WHERE h.room_id = NEW.id AND NOT (s.venue_id <=> NEW.venue_id);
+        INSERT IGNORE INTO staff_halls (user_id, room_id)
+            SELECT s.user_id, NEW.id FROM staff s JOIN users u ON u.id = s.user_id
+             WHERE s.venue_id = NEW.venue_id AND u.account_type = 'staff' AND NEW.room_type = 'event';
+    END IF;
+END$$
+
+-- Is this staff member on this room right now: one of their halls (the whole hostel for
+-- hostel staff), or a cover going on. Booking news (below) and the "My halls" lists ask it.
+DROP FUNCTION IF EXISTS fn_staff_on_room$$
+CREATE FUNCTION fn_staff_on_room(p_user_id BIGINT UNSIGNED, p_room_id BIGINT UNSIGNED)
+RETURNS BOOLEAN
+NOT DETERMINISTIC READS SQL DATA
+BEGIN
+    RETURN EXISTS (SELECT 1 FROM staff s JOIN rooms r ON r.id = p_room_id AND r.venue_id = s.venue_id
+                    WHERE s.user_id = p_user_id
+                      AND (r.room_type = 'hostel'
+                           OR EXISTS (SELECT 1 FROM staff_halls h WHERE h.user_id = p_user_id AND h.room_id = r.id)))
+        OR EXISTS (SELECT 1 FROM staff_covers c JOIN rooms r ON r.id = p_room_id AND r.venue_id = c.venue_id
+                    WHERE c.user_id = p_user_id AND (c.room_id IS NULL OR c.room_id = r.id)
+                      AND c.approved_at IS NOT NULL AND c.ended_at IS NULL
+                      AND c.starts_at <= NOW() AND c.ends_at > NOW());
+END$$
+
+-- Migration 17's procedure, narrowed: a booking's news goes to the staff of its hall (the
+-- whole hostel for hostel staff, plus anyone covering it now) and its group's normal admins.
+DROP PROCEDURE IF EXISTS sp_notify_venue_staff$$
+CREATE PROCEDURE sp_notify_venue_staff (
+    IN p_booking_id BIGINT UNSIGNED, IN p_kind VARCHAR(40),
+    IN p_actor_user_id BIGINT UNSIGNED, IN p_detail TEXT
+)
+BEGIN
+    INSERT INTO notifications (user_id, kind, booking_id, actor_user_id, detail)
+    SELECT u.id, p_kind, p_booking_id, p_actor_user_id, p_detail
+      FROM bookings b
+      JOIN rooms r ON r.id = b.room_id
+      JOIN venues v ON v.id = r.venue_id
+      JOIN users u
+     WHERE b.id = p_booking_id AND u.is_active = 1 AND u.id <> COALESCE(p_actor_user_id, 0)
+       AND ((u.account_type = 'admin' AND u.is_super_admin = 0 AND u.office_group = v.office_group)
+            OR (u.account_type = 'staff' AND fn_staff_on_room(u.id, r.id)));
+END$$
+
+DELIMITER ;
+
 -- ---- check: every staff and admin account and its number ----
 SELECT u.email, u.account_type, s.employee_no
   FROM users u LEFT JOIN staff s ON s.user_id = u.id
@@ -188,3 +420,30 @@ SELECT IF(COUNT(*) = 0, 'OK: every staff and admin account has an employee numbe
           CONCAT('MISSING: ', COUNT(*), ' account(s) with no employee number')) AS employee_no_check
   FROM users u LEFT JOIN staff s ON s.user_id = u.id
  WHERE u.account_type IN ('admin', 'staff') AND (s.employee_no IS NULL OR s.employee_no = '');
+
+-- ---- check: who had the tick for both CEDU offices (replaced by covers) ----
+-- Each keeps their own office and all its halls; an admin sets a cover where needed.
+SELECT u.email, s.full_name, v.name AS had_both_cedu_tick_keeps_this_office
+  FROM staff s JOIN users u ON u.id = s.user_id LEFT JOIN venues v ON v.id = s.venue_id
+ WHERE s.both_cedu_offices = 1 AND u.account_type = 'staff'
+ ORDER BY s.full_name;
+
+-- ---- check: every hall (and the hostel, one unit) has at least one active staff member ----
+DROP TEMPORARY TABLE IF EXISTS m18_halls_with_no_staff;
+CREATE TEMPORARY TABLE m18_halls_with_no_staff AS
+    SELECT v.id AS vid, r.id AS rid, v.name AS office, r.name AS hall_with_no_staff
+      FROM rooms r JOIN venues v ON v.id = r.venue_id
+     WHERE r.room_type = 'event' AND r.deleted_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM staff_halls h JOIN users u ON u.id = h.user_id
+                        WHERE h.room_id = r.id AND u.is_active = 1 AND u.account_type = 'staff')
+    UNION ALL
+    SELECT v.id, 0, v.name, '(the whole hostel)'
+      FROM venues v
+     WHERE v.venue_type = 'hostel'
+       AND NOT EXISTS (SELECT 1 FROM staff s JOIN users u ON u.id = s.user_id
+                        WHERE s.venue_id = v.id AND u.is_active = 1 AND u.account_type = 'staff');
+SELECT office, hall_with_no_staff FROM m18_halls_with_no_staff ORDER BY vid, rid;
+SELECT IF(COUNT(*) = 0, 'OK: every hall has a staff member',
+          CONCAT('NO STAFF: ', COUNT(*), ' hall(s) listed above; assign a staff member to each on Staff Management')) AS hall_staff_check
+  FROM m18_halls_with_no_staff;
+DROP TEMPORARY TABLE m18_halls_with_no_staff;

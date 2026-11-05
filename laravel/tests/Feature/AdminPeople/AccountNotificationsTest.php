@@ -12,7 +12,7 @@ use Tests\TestCase;
    admin@gmail.com = super admin; francishubero@gmail.com = Bahay Alumni; cedu.admin@gmail.com = CEDU. */
 class AccountNotificationsTest extends TestCase
 {
-    use MakesAccounts;
+    use MakesAccounts { tearDown as removeAccounts; }   // this class's own tearDown would hide the trait's
 
     private int $before = 0;
 
@@ -25,7 +25,7 @@ class AccountNotificationsTest extends TestCase
     protected function tearDown(): void
     {
         DB::table('notifications')->where('id', '>', $this->before)->delete();
-        parent::tearDown();
+        $this->removeAccounts();
     }
 
     private function staffAt(int $venue): object

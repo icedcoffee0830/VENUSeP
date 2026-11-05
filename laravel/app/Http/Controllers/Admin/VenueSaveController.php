@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\StaffHallQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -95,6 +96,9 @@ class VenueSaveController extends Controller
             $this->reply(200, ['ok' => true, 'created' => false, 'name' => $name, 'description' => $description, 'moved' => $moved]);
         } catch (HttpResponseException $e) {
             throw $e;
+        } catch (RoomSaveRefusal $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            $this->reply(409, ['ok' => false, 'error' => 'last_staff', 'message' => $e->getMessage()]);
         } catch (InvalidArgumentException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $this->reply(400, ['ok' => false, 'error' => 'bad_staff', 'message' => 'One of the selected people is not a staff member you manage, so nothing was saved.']);
@@ -131,10 +135,14 @@ class VenueSaveController extends Controller
         if (count($rows) !== count($ids) || array_filter($rows, fn ($r) => !staff_may_handle_venue($r['venue_id']))) {
             throw new InvalidArgumentException('not_staff');
         }
-        /* the tick for both CEDU offices ends outside CEDU */
-        $pdo->prepare("UPDATE staff SET venue_id = :v,
-                              both_cedu_offices = both_cedu_offices AND COALESCE((SELECT o.office_group = 'cedu' FROM venues o WHERE o.id = :v2), 0)
-                        WHERE user_id IN ($in)")->execute([':v' => (int) $venueId, ':v2' => (int) $venueId]);
+        /* every hall keeps a staff member (Aron 2026-11-05): the last one of a hall stays */
+        foreach ($rows as $r) {
+            if ((int) $r['venue_id'] !== (int) $venueId && ($halls = StaffHallQueries::lastStaffOf((int) $r['user_id']))) {
+                throw new RoomSaveRefusal($r['full_name'] . ': ' . StaffHallQueries::lastStaffMessage($halls));
+            }
+        }
+        /* their new office's halls come with them (trg_staff_halls_follow_upd) */
+        $pdo->prepare("UPDATE staff SET venue_id = :v WHERE user_id IN ($in)")->execute([':v' => (int) $venueId]);
         /* who actually changed venue — for the admins' notifications */
         foreach ($rows as $r) {
             if ((int) $r['venue_id'] !== (int) $venueId) {

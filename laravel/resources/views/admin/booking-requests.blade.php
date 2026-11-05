@@ -46,6 +46,7 @@
       .br-tab .n { background: var(--vm-strip); border-radius: 999px; font-size: 0.7rem; margin-left: 0.35rem; padding: 0.05rem 0.42rem; }
       .br-tab.active { background: var(--vm-dark); border-color: var(--vm-dark); color: #ffffff; }
       .br-tab.active .n { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
+      .br-scope { display: inline-flex; gap: 0.3rem; padding-right: 0.6rem; margin-right: 0.3rem; border-right: 1px solid var(--vm-border); }
       .br-search { border: 1px solid var(--vm-border); border-radius: 9px; font-family: inherit; font-size: 0.84rem; height: 38px; margin-left: auto; padding: 0 0.8rem; width: 260px; }
       .br-search:focus { outline: 2px solid rgba(31, 30, 30, 0.25); }
 
@@ -207,13 +208,19 @@
          review / overdue — open with that tab already active */
       const TAB_PARAM = new URLSearchParams(location.search).get('tab');
       let tab = TABS.some((t) => t.k === TAB_PARAM) ? TAB_PARAM : 'all', q = '';
+      /* Staff open on their own halls (and the bookings they made at the counter); one click
+         shows the whole office. Admins have no such view: every row is theirs. */
+      const MY_HALLS = @json($brMyHalls);
+      let scope = MY_HALLS ? 'mine' : 'all';
+      function inScope() { return scope === 'mine' ? BR.filter(r => r.mine) : BR; }
+      function setScope(k) { scope = k; page = 1; draw(); }
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
       const AWAITING = ['await_gcash', 'await_cash', 'await_pos'];
       function inTab(r, k) { return k === 'all' || (k === 'awaiting' ? AWAITING.includes(r.pay) : r.cat === k); }
-      function countOf(k) { return BR.filter(r => inTab(r, k)).length; }
+      function countOf(k) { return inScope().filter(r => inTab(r, k)).length; }
       function rowsOf() {
-        const list = BR.filter(r => inTab(r, tab))
+        const list = inScope().filter(r => inTab(r, tab))
                        .filter(r => !q || (r.name + ' ' + r.room + ' ' + r.id).toLowerCase().includes(q));
         /* Newest request first (seq = the booking's id). The refunds tab keeps its
            soonest-event-first order: a near event is a date nobody can rebook. */
@@ -304,11 +311,15 @@
         drawPager(all.length);
       }
       function draw() {
-        document.getElementById('brTabs').innerHTML = TABS.map(t => `
+        const scopes = MY_HALLS ? '<span class="br-scope" role="group" aria-label="Which bookings">'
+          + [['mine', 'My halls'], ['all', 'Whole office']].map(([k, t]) => `
+          <button type="button" class="br-tab${scope === k ? ' active' : ''}" aria-pressed="${scope === k}" onclick="setScope('${k}')">${t}</button>`).join('')
+          + '</span>' : '';
+        document.getElementById('brTabs').innerHTML = scopes + TABS.map(t => `
           <button type="button" class="br-tab${tab === t.k ? ' active' : ''}" onclick="setTab('${t.k}')">${t.t}<span class="n">${countOf(t.k)}</span></button>`).join('')
           + `<input id="brSearch" class="br-search" type="text" value="${esc(q)}" placeholder="Search name, room, or request no." oninput="setQ(this.value)">`;
-        const need = BR.filter(r => ['id', 'confirm', 'review', 'overdue', 'refund', 'pos'].includes(r.cat)).length;
-        document.getElementById('brCount').textContent = BR.length + ' booking requests · ' + need + ' need action';
+        const need = inScope().filter(r => ['id', 'confirm', 'review', 'overdue', 'refund', 'pos'].includes(r.cat)).length;
+        document.getElementById('brCount').textContent = inScope().length + ' booking requests · ' + need + ' need action';
         drawRows();
       }
       /* A refund the customer filed used to reach this queue through

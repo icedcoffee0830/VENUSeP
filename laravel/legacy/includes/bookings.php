@@ -521,6 +521,7 @@ function booking_queue_class(array $b) {
 function booking_queue_rows() {
     $rows = [];
     $mixed = staff_sees_many_offices();   // several offices in one list: each row names its office (DB-DECISIONS 28)
+    $mine = booking_my_hall_ids();
     foreach (bookings_all() as $b) {
         if ($b['reservationCode'] === 'completed'
             && in_array($b['paymentCode'], ['confirmed', 'paid_cash'], true)) {
@@ -545,6 +546,7 @@ function booking_queue_rows() {
             'since'    => $b['refundFiledIso'],     // how long a refund has waited on staff
             'eventIso' => $b['eventDateIso'],
             'seq'      => $b['id'],                 // raw auto-increment id — strictly submission order, for callers that want latest-first instead of urgency-first
+            'mine'     => $mine === null || isset($mine[$b['id']]),   // the "My halls" view
         ];
     }
     return $rows;

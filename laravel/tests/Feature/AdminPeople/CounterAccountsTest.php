@@ -167,7 +167,10 @@ class CounterAccountsTest extends TestCase
             ->post(route('admin.customer-verify'), ['csrf' => 'tok', 'customer_id' => $id, 'password' => 'anything'])
             ->assertStatus(409)->assertExactJson(['ok' => false, 'noPassword' => true, 'message' => CounterCustomerController::NO_PASSWORD]);
 
-        $day = date('Y-m-d', strtotime('+' . random_int(400, 1400) . ' days'));
+        do {   /* a day r1 holds nothing on: other tests leave far-future bookings behind (a clash is a 409) */
+            $day = date('Y-m-d', strtotime('+' . random_int(400, 4000) . ' days'));
+        } while (DB::table('venue_booking_slots as s')->join('rooms as r', 'r.id', '=', 's.room_id')
+            ->where('r.room_code', 'r1')->where('s.slot_date', $day)->whereNull('s.released_at')->exists());
         $book = fn (array $extra) => $this->actingAsStaff()->post(route('admin.booking-create'), $extra + [
             'type' => 'venue', 'room' => 'r1', 'event_name' => 'ID checked test', 'date_start' => $day, 'date_end' => $day,
             'attendees' => '30', 'times' => json_encode([$day => ['start' => '08:00', 'end' => '10:00']]), 'method' => 'cash',

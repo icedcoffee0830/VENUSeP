@@ -43,18 +43,6 @@ class BookingSubmitController extends Controller
         return response()->json($data, $status, ['Cache-Control' => 'no-store'] + $headers);
     }
 
-    /* The room as it is now, in the shape the booking page keeps it: name, price, capacity. */
-    private static function roomNow(PDO $pdo, array $room, string $roomCode, float $rate): array
-    {
-        $now = ['id' => $roomCode, 'name' => $room['name']];
-        if ($room['room_type'] === 'event') {
-            return $now + ['fee' => $rate, 'capacity' => (int) $room['attendee_capacity']];
-        }
-        $beds = $pdo->prepare('SELECT COUNT(*) FROM hostel_beds WHERE room_id = :r AND is_active = 1');
-        $beds->execute([':r' => $room['id']]);
-        return $now + ['rate' => $rate, 'beds' => (int) $beds->fetchColumn()];
-    }
-
     public function __invoke(Request $request)
     {
         extract(legacy('auth', 'documents', 'bookings', 'notifications', 'offices'));
@@ -106,23 +94,16 @@ class BookingSubmitController extends Controller
         if (!$room) {
             return self::reply(404, ['ok' => false, 'message' => 'That room is not available for booking.']);
         }
-        /* Closed or deleted while the customer was booking (a deleted room is inactive too). */
         if (!$room['is_active']) {
-            return self::reply(409, ['ok' => false, 'error' => 'room_changed', 'room' => null,
-                'message' => $room['name'] . ' was closed for booking while you were booking. Please pick another room.']);
+            return self::reply(409, BookingRules::roomClosed($room));
         }
         $wantType = $type === 'venue' ? 'event' : 'hostel';
         if ($room['room_type'] !== $wantType) {
             return self::reply(409, ['ok' => false, 'message' => 'That room does not take this kind of booking.']);
         }
 
-        /* The page sends the rate it showed. A price changed while the customer was
-           booking is refused, with the room as it is now so the page can redraw it. */
-        $rate  = (float) ($type === 'venue' ? $room['fee_per_day'] : $room['rate_per_head_per_night']);
-        $shown = $request->post('shown_rate');
-        if ($shown !== null && abs((float) $shown - $rate) >= 0.005) {
-            return self::reply(409, ['ok' => false, 'error' => 'price_changed', 'room' => self::roomNow($pdo, $room, $roomCode, $rate),
-                'message' => 'The price of ' . $room['name'] . ' changed to ₱' . BookingRules::peso($rate) . '. Please check and submit again.']);
+        if ($changed = BookingRules::priceChanged($pdo, $room, $roomCode, $request->post('shown_rate'), 'Please check and submit again.')) {
+            return self::reply(409, $changed);
         }
 
         $office = office_by_id($room['venue_id']);

@@ -270,6 +270,7 @@ let state = {
   screen: 'detail',                       // detail | who (counter) | review | pending | payment | done
   booker: Object.assign({}, booker0),     // counter only: who the stay is for (includes/counter-booker.php)
   counterResult: null,                    // counter only: what booking-create.php answered
+  cashTaken: null,                        // counter only: the total staff last confirmed taking
   roomId: ROOM_OK ? ROOM_PARAM : ROOMS[0].id,
   tab: 'overview',                        // overview | availability | policies
   /* NOTE: there is no `beds` field. beds = occupants.length, always. The bed
@@ -576,8 +577,13 @@ async function submitRequest(){
      confirm it first; cancelling saves nothing. Online, no method is sent —
      the guest chooses GCash or cash when they pay. */
   if(COUNTER){
-    if(!(await venusepConfirm('Take '+peso(derive().total)+' in cash from the guest now. The stay is booked and marked paid only after you confirm.',
-          { title:'Cash received?', okLabel:'Cash received — book it' }))) return;
+    /* A refused submit (price changed) leaves the earlier cash in staff's hands. */
+    const total = derive().total, taken = state.cashTaken;
+    const ask = taken!=null && taken!==total
+      ? 'The total is now '+peso(total)+'. You already took '+peso(taken)+', so collect or return the difference. The stay is booked and marked paid only after you confirm.'
+      : 'Take '+peso(total)+' in cash from the guest now. The stay is booked and marked paid only after you confirm.';
+    if(!(await venusepConfirm(ask, { title:'Cash received?', okLabel:'Cash received — book it' }))) return;
+    state.cashTaken = total;
     fd.append('method', 'cash');
     fd.append('cash_received', '1');
     const k = state.booker;

@@ -18,6 +18,34 @@ final class BookingRules
     public const MAX_DAYS = 183;
     private const HHMM = '/^([01]\d|2[0-3]):[0-5]\d$/';   /* a real time of day, "00:00".."23:59" */
 
+    /* The reply for a room closed or deleted during booking (a deleted room is inactive too). */
+    public static function roomClosed(array $room): array
+    {
+        return ['ok' => false, 'error' => 'room_changed', 'room' => null,
+            'message' => $room['name'] . ' was closed for booking while you were booking. Please pick another room.'];
+    }
+
+    /* The page sends the rate it showed. A different rate now gets this reply, with the
+       room as it is now so the page can redraw it; null when it matches or none was sent. */
+    public static function priceChanged(PDO $pdo, array $room, string $roomCode, mixed $shown, string $advice): ?array
+    {
+        $event = $room['room_type'] === 'event';
+        $rate  = (float) ($event ? $room['fee_per_day'] : $room['rate_per_head_per_night']);
+        if ($shown === null || abs((float) $shown - $rate) < 0.005) {
+            return null;
+        }
+        $now = ['id' => $roomCode, 'name' => $room['name']];
+        if ($event) {
+            $now += ['fee' => $rate, 'capacity' => (int) $room['attendee_capacity']];
+        } else {
+            $beds = $pdo->prepare('SELECT COUNT(*) FROM hostel_beds WHERE room_id = :r AND is_active = 1');
+            $beds->execute([':r' => $room['id']]);
+            $now += ['rate' => $rate, 'beds' => (int) $beds->fetchColumn()];
+        }
+        return ['ok' => false, 'error' => 'price_changed', 'room' => $now,
+            'message' => 'The price of ' . $room['name'] . ' changed to ₱' . self::peso($rate) . '. ' . $advice];
+    }
+
     /* A real calendar date in yyyy-mm-dd: the pattern alone let "2030-02-30" through. */
     /* "1,500", or "1,500.50" with centavos: usep_peso(), which JSON replies cannot load (pricing.php prints a <script>). */
     public static function peso(float $amount): string

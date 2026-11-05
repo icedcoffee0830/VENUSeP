@@ -20,7 +20,7 @@ use Throwable;
      _token, type=venue|hostel, room=<room_code>, method=gcash|cash,
      hostel: check_in, check_out, occupants=<json [{name,gender}]>, cash_received=1
      venue:  event_name, date_start, date_end, attendees, times=<json>,
-     agree_no_refund=0|1,
+     agree_no_refund=0|1, shown_rate=<the rate the page showed>,
      booker_mode=account|walkin,
        account: customer_id[, id_identity=1: "ID checked", for an account with no password]
        walkin : walkin_name, walkin_phone, walkin_email (or walkin_no_email=1)[, walkin_address]
@@ -151,7 +151,7 @@ class BookingCreateController extends Controller
         /* ---- the room, and the rate THIS server believes in ---- */
         try {
             $roomStmt = $pdo->prepare(
-                "SELECT r.id, r.venue_id, r.room_type, r.is_active, erd.attendee_capacity, erd.fee_per_day,
+                "SELECT r.id, r.venue_id, r.name, r.room_type, r.is_active, erd.attendee_capacity, erd.fee_per_day,
                         hrd.rate_per_head_per_night, v.discount_percent
                    FROM rooms r
                    JOIN venues v ON v.id = r.venue_id
@@ -165,12 +165,19 @@ class BookingCreateController extends Controller
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
         }
-        if (!$room || !$room['is_active'] || $room['room_type'] !== ($type === 'hostel' ? 'hostel' : 'event')) {
+        if (!$room || $room['room_type'] !== ($type === 'hostel' ? 'hostel' : 'event')) {
             $this->reply(404, ['ok' => false, 'message' => 'That room is not available for booking.']);
         }
         /* Staff take counter bookings for THEIR venue only (2026-10-27); admins for any. */
         if (!staff_may_handle_venue($room['venue_id'])) {
             $this->reply(403, ['ok' => false, 'message' => 'This room belongs to another venue. Only that venue\'s staff or an administrator can book it at the counter.']);
+        }
+        if (!$room['is_active']) {
+            $this->reply(409, BookingRules::roomClosed($room));
+        }
+        /* New price wins: staff tell the customer, then collect or return the difference. */
+        if ($changed = BookingRules::priceChanged($pdo, $room, $roomCode, $request->post('shown_rate'), 'Please check with the customer and submit again.')) {
+            $this->reply(409, $changed);
         }
         /* Blocked at this office (DB-DECISIONS 28); trg_bookings_block_ins refuses it too. */
         if ($c['bookerMode'] === 'account' && BlockQueries::findActive($c['customerId'], (int) $room['venue_id']) !== null) {

@@ -216,6 +216,24 @@ export default {
       expect.ok(under >= 0, `the receipt's top buttons sit ${-under}px under the nav`);
     });
 
+    await step('On a phone the receipt has the tab bar, Bookings marked; the bar does not print', async () => {
+      const page = s.cust;
+      const size = page.viewportSize();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect.visible(page.locator('.ct-bar'), 'no tab bar on the receipt');
+      expect.equal(await page.locator('.ct-bar a[aria-current="page"]').getAttribute('data-tab'), 'bookings', 'the marked tab');
+      const m = await page.evaluate(() => {
+        window.scrollTo(0, document.documentElement.scrollHeight);
+        const kids = [...document.querySelectorAll('.app-main *')].filter((e) => e.getClientRects().length);
+        return { barTop: document.querySelector('.ct-bar').getBoundingClientRect().top, end: Math.max(...kids.map((e) => e.getBoundingClientRect().bottom)) };
+      });
+      expect.ok(m.end <= m.barTop + 1, 'the receipt ends behind the bar: ' + JSON.stringify(m));
+      await page.emulateMedia({ media: 'print' });
+      expect.ok(!(await page.locator('.ct-bar').isVisible()), 'the bar prints');
+      await page.emulateMedia({ media: 'screen' });
+      await page.setViewportSize(size);
+    });
+
     await step('The receipt PDF downloads', async () => {
       const page = s.cust;
       const link = page.getByRole('link', { name: 'Download PDF' });

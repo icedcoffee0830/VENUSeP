@@ -42,6 +42,14 @@ class ReceiptTest extends TestCase
             ->assertNotFound()->assertSeeText('Not found.');
     }
 
+    public function test_the_receipt_view_has_the_phone_tab_bar_on_bookings(): void
+    {
+        $this->actingAsCustomer('customer@gmail.com')
+            ->get(route('customer.receipt', ['booking' => $this->ref(self::BOOKING)]))
+            ->assertOk()
+            ->assertSee('data-tab="bookings" aria-current="page"', false);
+    }
+
     public function test_the_owner_sees_the_receipt_and_the_confirm_strip(): void
     {
         $ref = $this->ref(self::BOOKING);

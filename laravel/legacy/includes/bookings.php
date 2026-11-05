@@ -603,6 +603,7 @@ function transaction_rows($customerId = null) {
             /* The day money moved, falling back to the day the booking was made
                for anything not yet paid. */
             'transactionDate' => date('F j, Y', strtotime($b['paidAtIso'] ?: $b['bookingDateIso'])),
+            'paidOn'          => $b['paidAtIso'] ? date('F j, Y', strtotime($b['paidAtIso'])) : '',
             'amount'          => $b['amount'],
             'paymentMethod'   => $b['method'],
             'paymentStatus'   => $b['paymentStatus'],

@@ -9,83 +9,75 @@
 @push('styles')
     <!-- [1] PAGE CSS -->
     <style>
-      .th-page { padding: 22px 0 0; }
-      .th-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
-      .th-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
-      .th-head p { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
-      .th-back { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 15px; border: 1px solid #ddd7ce; border-radius: 10px; background: #fff; color: #1f1e1e; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: .2s; }
-      .th-back:hover { background: #f4f2ee; border-color: #c9c2b6; }
+@include('partials.list-page-css')
+      body, .app-main { background: #fff !important; }
+      .th-page { padding: 26px 0 40px; color: #1f1e1e; }
+      .th-head-acts { display: flex; gap: 8px; flex: none; }
+      .th-tool { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 15px; border: 1px solid #ddd7ce; border-radius: 10px; background: #fff; color: #1f1e1e; font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
+      .th-tool:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .th-panel { background: #fff; border: 1px solid #e5e5e5; border-radius: 14px; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); overflow: hidden; }
 
-      .th-panel { background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); overflow: hidden; }
-      .th-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 15px 18px; border-bottom: 1px solid #f0efec; }
-      .th-panel-head h3 { font-size: 14.5px; font-weight: 650; margin: 0; }
-      .th-search { display: flex; align-items: center; gap: 8px; min-width: 220px; height: 36px; padding: 0 12px; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; }
-      .th-search i { color: var(--muted); font-size: 14px; }
-      .th-search input { border: 0; outline: 0; font: inherit; font-size: 13px; width: 100%; background: transparent; color: #1f1e1e; }
-
-      .th-toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 18px 0; }
-      .th-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; color: #1f1e1e; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: .2s; }
-      .th-btn:hover { background: #f4f2ee; border-color: #c9c2b6; }
-      .th-btn i { font-size: 14px; color: var(--muted); }
-
-      .th-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 12px; align-items: end; padding: 14px 18px 4px; }
-      .th-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-      .th-field label { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
-      .th-field select, .th-field input { height: 36px; padding: 0 10px; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; font: inherit; font-size: 13px; color: #1f1e1e; }
-      .th-field select:focus, .th-field input:focus, .th-search input:focus { outline: none; }
-      .th-field-reset { display: flex; align-items: end; }
-
-      .th-table-wrap { padding: 14px 18px 18px; overflow-x: auto; }
-
-      .t-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
-      .t-green { background: #eaf6ef; color: #1c7a4f; }
-      .t-amber { background: #fbf1dd; color: #8a5a00; }
-      .t-red   { background: #fcecec; color: #b23a3a; }
-      .t-navy  { background: #e9eff8; color: #2b4a7e; }
-      .t-gray  { background: #eef0f2; color: #55606b; }
-
-      .th-actions { display: inline-flex; gap: 6px; }
-      .th-act { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: #1f1e1e; font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
+      .th-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .th-act { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: #1f1e1e; font: inherit; font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer; }
       .th-act:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .th-act.is-receipt { border-color: rgba(161, 22, 38, .35); color: #a11626; }
       .th-act.is-disabled { opacity: .5; cursor: not-allowed; }
+      .th-chips { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+      .th-chips .vz-chip { white-space: normal; }
+      .th-amount { width: 100%; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+      .th-amount .lp-sub { font-weight: 400; }
+      .th-card { display: none; }
 
-      .tabulator { border: 1px solid var(--border); border-radius: 10px; background: #fff; font-size: 13px; }
-      .tabulator .tabulator-header { background: #faf9f7; border-bottom: 1px solid var(--border); }
-      .tabulator .tabulator-header .tabulator-col { background: transparent; border-right: 1px solid #f0efec; }
-      .tabulator .tabulator-header .tabulator-col .tabulator-col-title { color: #6b6258; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 4px 2px; }
-      .tabulator .tabulator-tableholder .tabulator-table { background: #fff; }
-      .tabulator-row { background: #fff; border-bottom: 1px solid #f2efe9; }
-      .tabulator-row.tabulator-row-even { background: #fff; }
-      .tabulator-row:hover { background: #faf9f7; }
-      .tabulator-row .tabulator-cell { border-right: 1px solid #f6f4f0; padding: 10px 12px; color: #2b2928; }
-      .tabulator .tabulator-footer { background: #faf9f7; border-top: 1px solid var(--border); }
-      .tabulator .tabulator-footer .tabulator-page { border: 1px solid #d7d7d7; border-radius: 7px; background: #fff; color: #1f1e1e; }
-      .tabulator .tabulator-footer .tabulator-page.active { background: #1f1e1e; color: #fff; border-color: #1f1e1e; }
-      .tabulator .tabulator-footer .tabulator-page:hover:not(:disabled) { background: #f4f2ee; }
-
-      @media (max-width: 1100px) { .th-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .th-field-reset { grid-column: 1 / -1; } }
-      @media (max-width: 767.98px) { .th-head { flex-direction: column; } .tabulator .tabulator-tableholder, .tabulator .tabulator-header { -webkit-overflow-scrolling: touch; } .tabulator .tabulator-tableholder { overscroll-behavior-x: contain; } }
-    
-      /* on the crimson page background (painted by includes/header.php): light text, a card that floats */
-      .th-head h1 { color: #fff; }
-      .th-head p { color: #e9d0cd; }
-      .th-panel { box-shadow: 0 18px 44px rgba(10,4,5,.28), 0 2px 6px rgba(10,4,5,.18); border-color: rgba(255,255,255,.18); }
-    
-      /* current page in the table's pagination: crimson, not black */
-      .tabulator .tabulator-footer .tabulator-page.active { background: #a11626; color: #ffffff; border-color: #a11626; }
-      /* type floor (readability): nothing on the page below 12px */
-      .t-badge, .tabulator-col-title, .th-field label { font-size: 12px !important; }
-          /* ---- white page (desktop + phone): the card sits on white, no crimson wash ---- */
-      body { background: #fff !important; }
-      .app-main { background: #fff !important; }
-      .th-head h1 { color: #1f1e1e; }
-      .th-head p { color: #6e6a64; }
-      .th-field label { color: #6e6a64; }
-      .th-panel { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
-      /* phone: card edge to edge — the details get the width */
+      /* the filters: a row of boxes on a desktop, a bottom sheet on a phone (one set of controls) */
+      .th-sheet-head, .th-sheet-dl { display: none; }
+      .th-link { padding: 0; border: 0; background: none; color: #a11626; font: inherit; font-weight: 600; cursor: pointer; }
+      @media (min-width: 768px) {
+        .th-sheet, .th-sheet-foot, .th-two { display: contents; }
+        #thShow { display: none; }
+        .th-sheet .lp-field { flex: 0 1 112px; }
+        .th-two .lp-field { flex-basis: 124px; }
+        #reset-transaction-filters { padding: 0 11px; }
+        .lp-tools .lp-search { flex: 1 1 150px; }
+      }
       @media (max-width: 767.98px) {
         .container-fluid { padding-inline: 12px; }
-        .app-content-header { padding-top: 16px; }
+        .th-page { padding-top: 16px; }
+        .th-head-acts { display: none; }
+        .th-panel { border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
+        .lp-tools { flex-wrap: nowrap; padding: 0 0 10px; border-bottom: 0; }
+        .lp-table .tabulator-footer { padding: 0 0 10px; border: 0; }
+        .lp-table .tabulator-footer.tabulator-footer { border-bottom: 0; }
+        .lp-table .tabulator-footer .vz-ps { display: none; }
+        .th-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: #a11626; color: #fff; font-size: 12px; }
+        .th-count[hidden] { display: none; }
+
+        .th-sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: none; max-height: 88vh; margin: 0; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); overflow: auto; overscroll-behavior: contain; border: 0; border-radius: 18px 18px 0 0; background: #fff; color: #1f1e1e; }
+        .th-sheet::backdrop { background: rgba(10, 4, 5, .45); }
+        .th-sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .th-sheet-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+        .th-sheet-head button { width: 44px; height: 44px; border: 0; background: none; color: #6e6a64; font-size: 20px; cursor: pointer; }
+        .th-sheet .lp-field { display: flex; flex: none; margin-bottom: 14px; }
+        .th-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .th-sheet-foot { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 4px; }
+        .th-sheet-foot .th-tool { justify-content: center; height: 48px; font-size: 15px; }
+        #thShow { border-color: #a11626; background: #a11626; color: #fff; }
+        .th-sheet-dl { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; padding-top: 4px; border-top: 1px solid #f0efec; color: #6e6a64; font-size: 13.5px; }
+        .th-sheet-dl .th-link { min-height: 44px; }
+
+        /* one card per payment, like My bookings */
+        #transaction-history-table .tabulator-row { display: block; margin-bottom: 10px; padding: 0; border: 0; }
+        #transaction-history-table .tabulator-row .tabulator-cell { display: none; }
+        .th-card { display: block; padding: 14px; border: 1px solid #e5e5e5; border-radius: 14px; background: #fff; }
+        .th-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .th-card-top .vz-chip { flex: none; }
+        .th-ven { min-width: 0; color: #1f1e1e; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+        .th-ref { margin-top: 2px; color: #6e6a64; font-size: 12.5px; }
+        .th-money { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 10px; }
+        .th-money b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .th-money span { color: #6e6a64; font-size: 13px; text-align: right; }
+        .th-bk { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: #6e6a64; font-size: 13px; }
+        .th-card .th-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+        .th-card .th-act { height: 44px; padding: 0 6px; font-size: 13.5px; }
       }
     @include('partials.tabulator-pager-css')
     </style>
@@ -96,68 +88,66 @@
         <div class="app-content">
           <div class="container-fluid">
             <div class="th-page">
-              <div class="th-head">
+              <header class="lp-head">
                 <div>
                   <h1>Transaction History</h1>
-                  <p>Your booking and payment transaction records.</p>
+                  <p>What you paid, how, and the receipt for each booking.</p>
                 </div>
-                <a class="th-back" href="{{ route('customer.venues') }}"><i class="bi bi-arrow-left"></i>Back to Venues</a>
-              </div>
+                <div class="th-head-acts">
+                  <button type="button" class="th-tool" popovertarget="thDownload"><i class="bi bi-download" aria-hidden="true"></i>Download<i class="bi bi-chevron-down" aria-hidden="true"></i></button>
+                  <div id="thDownload" class="lp-menu" popover>
+                    <button id="export-csv" type="button" data-export="csv">CSV</button>
+                    <button id="export-json" type="button" data-export="json">JSON</button>
+                    <button id="print-table" type="button" data-export="print">Print</button>
+                  </div>
+                  <a class="th-tool" href="{{ route('customer.venues') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to Venues</a>
+                </div>
+              </header>
 
               <div class="th-panel">
-                <div class="th-panel-head">
-                  <h3>My Transactions</h3>
-                  <div class="th-search">
-                    <i class="bi bi-search" aria-hidden="true"></i>
-                    <input id="table-filter" type="search" placeholder="Filter rows..." aria-label="Filter rows" />
-                  </div>
+                <div class="lp-tools">
+                  <label class="lp-search"><i class="bi bi-search" aria-hidden="true"></i><input id="table-filter" type="search" placeholder="Venue or booking no.…" aria-label="Search venue or booking number" autocomplete="off" /></label>
+                  <button type="button" class="lp-filters-btn" id="thFilters"><i class="bi bi-sliders" aria-hidden="true"></i>Filters <span class="th-count" id="thCount" hidden></span></button>
+                  <dialog class="th-sheet" id="thSheet" aria-labelledby="thSheetTitle">
+                    <div class="th-sheet-head"><h2 id="thSheetTitle">Filters</h2><button type="button" data-sheet-close aria-label="Close filters"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div>
+                    <div class="lp-field">
+                      <label for="payment-status-filter">Payment</label>
+                      <select id="payment-status-filter">
+                        <option value="">All</option>
+                        @foreach ($paymentLabels as $label)
+                        <option value="{{ $label }}">{{ $label }}</option>
+                        @endforeach
+                      </select>
+                    </div>
+                    <div class="lp-field">
+                      <label for="booking-status-filter">Booking</label>
+                      <select id="booking-status-filter">
+                        <option value="">All</option>
+                        @foreach ($bookingLabels as $label)
+                        <option value="{{ $label }}">{{ $label }}</option>
+                        @endforeach
+                      </select>
+                    </div>
+                    <div class="lp-field">
+                      <label for="payment-method-filter">Method</label>
+                      <select id="payment-method-filter">
+                        <option value="">All</option>
+                        <option value="Cash">Cash</option>
+                        <option value="GCash">GCash</option>
+                      </select>
+                    </div>
+                    <div class="th-two">
+                      <div class="lp-field"><label for="date-from-filter">Paid from</label><input id="date-from-filter" type="date" /></div>
+                      <div class="lp-field"><label for="date-to-filter">to</label><input id="date-to-filter" type="date" /></div>
+                    </div>
+                    <div class="th-sheet-foot">
+                      <button id="reset-transaction-filters" type="button" class="th-tool"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>Reset</button>
+                      <button id="thShow" type="button" class="th-tool" data-sheet-close>Show payments</button>
+                    </div>
+                    <div class="th-sheet-dl">Download <button type="button" class="th-link" data-export="csv">CSV</button><button type="button" class="th-link" data-export="json">JSON</button><button type="button" class="th-link" data-export="print">Print</button></div>
+                  </dialog>
                 </div>
-
-                <div class="th-toolbar">
-                  <button id="export-csv" type="button" class="th-btn"><i class="bi bi-filetype-csv"></i>Export CSV</button>
-                  <button id="export-json" type="button" class="th-btn"><i class="bi bi-filetype-json"></i>Export JSON</button>
-                  <button id="print-table" type="button" class="th-btn"><i class="bi bi-printer"></i>Print</button>
-                </div>
-
-                <div class="th-filters" aria-label="Transaction filters">
-                  <div class="th-field">
-                    <label for="payment-status-filter">Payment Status</label>
-                    <select id="payment-status-filter">
-                      <option value="">All</option>
-                      @foreach ($paymentLabels as $label)
-                      <option value="{{ $label }}">{{ $label }}</option>
-                      @endforeach
-                    </select>
-                  </div>
-                  <div class="th-field">
-                    <label for="booking-status-filter">Booking Status</label>
-                    <select id="booking-status-filter">
-                      <option value="">All</option>
-                      @foreach ($bookingLabels as $label)
-                      <option value="{{ $label }}">{{ $label }}</option>
-                      @endforeach
-                    </select>
-                  </div>
-                  <div class="th-field">
-                    <label for="payment-method-filter">Payment Method</label>
-                    <select id="payment-method-filter">
-                      <option value="">All</option>
-                      <option value="Cash">Cash</option>
-                      <option value="GCash">GCash</option>
-                    </select>
-                  </div>
-                  <div class="th-field">
-                    <label for="date-from-filter">Date From</label>
-                    <input id="date-from-filter" type="date" />
-                  </div>
-                  <div class="th-field-reset">
-                    <button id="reset-transaction-filters" type="button" class="th-btn"><i class="bi bi-arrow-counterclockwise"></i>Reset</button>
-                  </div>
-                </div>
-
-                <div class="th-table-wrap">
-                  <div id="transaction-history-table"></div>
-                </div>
+                <div id="transaction-history-table" class="lp-table"></div>
               </div>
             </div>
           </div>
@@ -167,6 +157,7 @@
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
     <script src="{{ asset('assets/js/table-page-size.js') }}"></script>
+    <script src="{{ asset('assets/js/list-page.js') }}"></script>
 
     <!-- [6] PAGE SCRIPT -->
     <script>
@@ -174,82 +165,153 @@
         const rows = {!! $transactionRowsJson !!};
         const RECEIPT_URL = @json(route('customer.receipt'));
         const parseDate = (value) => { const p = Date.parse(value); return Number.isNaN(p) ? 0 : p; };
-        const badgeClass = (value) => ({
-          Paid: 't-green', Approved: 't-green', Pending: 't-amber',
-          'Payment pending': 't-gray', 'Payment due': 't-amber', Overdue: 't-red',   /* post-pay states */
-          Unpaid: 't-gray', Rejected: 't-red', Refunded: 't-navy', Completed: 't-navy', Cancelled: 't-gray',
-        }[value] || 't-gray');
-        const statusBadge = (cell) => `<span class="t-badge ${badgeClass(cell.getValue())}">${cell.getValue()}</span>`;
-        const actionButtons = (cell) => {
-          const row = cell.getRow().getData();
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+        const shortDate = (value, year = true) => {
+          const at = parseDate(value);
+          return at ? new Date(at).toLocaleDateString('en-US', year ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' }) : '';
+        };
+        const chipClass = (value) => ({
+          Paid: 'green', Approved: 'green', Pending: 'amber',
+          'Payment pending': 'grey', 'Payment due': 'amber', Overdue: 'red',   /* post-pay states */
+          Unpaid: 'grey', Rejected: 'red', Refunded: 'grey', Completed: 'grey', Cancelled: 'grey',
+        }[value] || 'grey');
+        const chip = (value) => `<span class="vz-chip vz-chip-${chipClass(value)}">${esc(value)}</span>`;
+        const actionButtons = (row) => {
           // View — the booking and its payment, in a modal over this page
           // (includes/booking-details-modal.php, 2026-10-27). The valid ID is
           // a link inside it.
-          const viewBtn = `<button type="button" class="th-act" onclick="openBookingDetails('${encodeURIComponent(row.bookingId)}')"><i class="bi bi-eye"></i>View</button>`;
+          const viewBtn = `<button type="button" class="th-act" onclick="openBookingDetails('${encodeURIComponent(row.bookingId)}')">View</button>`;
           const receiptBtn = row.hasReceipt
-            ? `<a class="th-act" href="${RECEIPT_URL}?booking=${encodeURIComponent(row.bookingId)}"><i class="bi bi-receipt"></i>Receipt</a>`
-            : `<span class="th-act is-disabled" title="No Transaction Receipt yet — issued once staff confirm payment"><i class="bi bi-receipt"></i>Receipt</span>`;
+            ? `<a class="th-act is-receipt" href="${RECEIPT_URL}?booking=${encodeURIComponent(row.bookingId)}">Receipt</a>`
+            : `<span class="th-act is-disabled" title="No Transaction Receipt yet — issued once staff confirm payment">Receipt</span>`;
           const rebookPage = row.type === 'hostel' ? @json(route('customer.hostel-reservation')) : @json(route('customer.room-reservation'));
           const rebookBtn = row.roomCode
-            ? `<a class="th-act" href="${rebookPage}?room=${encodeURIComponent(row.roomCode)}"><i class="bi bi-arrow-repeat"></i>Rebook</a>`
+            ? `<a class="th-act" href="${rebookPage}?room=${encodeURIComponent(row.roomCode)}">Rebook</a>`
             : '';
           return `<div class="th-actions">${viewBtn}${receiptBtn}${rebookBtn}</div>`;
         };
-
-        const table = new Tabulator('#transaction-history-table', {
-          data: rows, layout: 'fitDataStretch', placeholder: 'No transactions found.',
-          /* every column stays visible; on a phone the table scrolls sideways inside its card */
-          /* the size box is assets/js/table-page-size.js: type a number, or pick 10 / 25 / 50 / All */
-          pagination: true, paginationSize: 10, movableColumns: true,
-          initialSort: [{ column: 'transactionDate', dir: 'desc' }],
-          columns: [
-            { title: 'Transaction ID', field: 'transactionId', minWidth: 150, width: 150 },
-            { title: 'Booking ID', field: 'bookingId', minWidth: 140, width: 140 },
-            { title: 'Venue', field: 'venue', minWidth: 200, width: 200 },
-            { title: 'Event Date', field: 'eventDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 130, width: 130 },
-            { title: 'Transaction Date', field: 'transactionDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 150, width: 150 },
-            { title: 'Amount', field: 'amount', minWidth: 110, width: 110, hozAlign: 'right' },
-            { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150 },
-            { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 290, width: 290, hozAlign: 'center', print: false },   /* buttons mean nothing on paper */
-          ],
-        });
+        /* the phone's card for one payment; the page's CSS shows it instead of the cells */
+        const card = (r) => `<article class="th-card">
+            <div class="th-card-top"><span class="th-ven">${esc(r.venue)}</span>${chip(r.paymentStatus)}</div>
+            <div class="th-ref">${esc(r.bookingId)} · ${r.type === 'hostel' ? 'Stay' : 'Event'} ${esc(shortDate(r.eventDate) || r.eventDate)}</div>
+            <div class="th-money"><b>${esc(r.amount)}</b><span>${esc(r.paymentMethod)}${r.paidOn ? ' · paid ' + shortDate(r.paidOn, false) : ''}</span></div>
+            <div class="th-bk">Booking ${chip(r.bookingStatus)}</div>
+            ${actionButtons(r)}
+          </article>`;
 
         const globalFilter = document.getElementById('table-filter');
         const paymentStatusFilter = document.getElementById('payment-status-filter');
         const bookingStatusFilter = document.getElementById('booking-status-filter');
         const paymentMethodFilter = document.getElementById('payment-method-filter');
         const dateFromFilter = document.getElementById('date-from-filter');
-        const resetFilters = document.getElementById('reset-transaction-filters');
+        const dateToFilter = document.getElementById('date-to-filter');
+        const boxes = [paymentStatusFilter, bookingStatusFilter, paymentMethodFilter, dateFromFilter, dateToFilter];
 
+        /* Two kinds of empty: nothing paid yet, or nothing left after the filters. */
+        const emptyNote = () => {
+          const note = document.createElement('div');
+          note.innerHTML = [globalFilter, ...boxes].some((c) => c.value)
+            ? 'No payments match these filters. <button type="button" class="th-link" data-reset>Reset</button>'
+            : 'No payments yet. When you pay for a booking, it shows here with its receipt.';
+          return note;
+        };
+
+        const table = new Tabulator('#transaction-history-table', Object.assign({
+          data: rows, layout: 'fitColumns', placeholder: emptyNote,
+          /* the size box is assets/js/table-page-size.js: type a number, or pick 10 / 25 / 50 / All */
+          pagination: true, paginationSize: 10, movableColumns: true,
+          initialSort: [{ column: 'transactionDate', dir: 'desc' }],
+          rowFormatter: (row) => {
+            const el = row.getElement();
+            el.querySelector('.th-card')?.remove();
+            el.insertAdjacentHTML('beforeend', card(row.getData()));
+          },
+          /* A hidden column still goes to the CSV, JSON and paper: each fact keeps its own column there. */
+          columns: [
+            { title: 'Transaction ID', field: 'transactionId', visible: false, download: true, print: true },
+            {
+              title: 'Booking', titleDownload: 'Booking ID', titlePrint: 'Booking ID', field: 'bookingId', width: 132,
+              formatter: (cell) => { const r = cell.getRow().getData(); return `<div class="lp-stack"><span class="lp-name">${esc(r.bookingId)}</span><span class="lp-sub">${esc(r.transactionId)}</span></div>`; },
+              formatterPrint: (cell) => cell.getValue(),
+            },
+            { title: 'Venue', field: 'venue', minWidth: 140 },
+            { title: 'Event', titleDownload: 'Event Date', titlePrint: 'Event Date', field: 'eventDate', sorter: (a, b) => parseDate(a) - parseDate(b), width: 106, formatter: (cell) => esc(shortDate(cell.getValue()) || cell.getValue()), formatterPrint: (cell) => cell.getValue() },
+            {
+              title: 'Paid on', titleDownload: 'Transaction Date', titlePrint: 'Transaction Date', field: 'transactionDate', sorter: (a, b) => parseDate(a) - parseDate(b), width: 106,
+              formatter: (cell) => shortDate(cell.getRow().getData().paidOn) || '—',
+              formatterPrint: (cell) => cell.getValue(),
+            },
+            {
+              title: 'Amount', field: 'amount', width: 96, hozAlign: 'right',
+              formatter: (cell) => { const r = cell.getRow().getData(); return `<div class="th-amount">${esc(r.amount)}<span class="lp-sub">${esc(r.paymentMethod)}</span></div>`; },
+              formatterPrint: (cell) => cell.getValue(),
+            },
+            { title: 'Payment Method', field: 'paymentMethod', visible: false, download: true, print: true },
+            {
+              title: 'Status', titleDownload: 'Payment Status', titlePrint: 'Payment Status', field: 'paymentStatus', width: 142,
+              formatter: (cell) => { const r = cell.getRow().getData(); return `<div class="th-chips">${chip(r.paymentStatus)}${chip(r.bookingStatus)}</div>`; },
+              formatterPrint: (cell) => cell.getValue(),
+            },
+            { title: 'Booking Status', field: 'bookingStatus', visible: false, download: true, print: true },
+            { title: 'Actions', field: 'actions', formatter: (cell) => actionButtons(cell.getRow().getData()), headerSort: false, width: 226, print: false, download: false },   /* buttons mean nothing on paper */
+          ],
+        }, venusepPager('payments')));
+
+        const sheet = document.getElementById('thSheet');
+        const showBtn = document.getElementById('thShow');
+        const count = document.getElementById('thCount');
         const applyFilters = () => {
           const query = globalFilter.value.trim().toLowerCase();
           const paymentStatus = paymentStatusFilter.value;
           const bookingStatus = bookingStatusFilter.value;
           const paymentMethod = paymentMethodFilter.value;
-          const dateFrom = dateFromFilter.value ? Date.parse(dateFromFilter.value) : null;
+          const dateFrom = dateFromFilter.value ? Date.parse(dateFromFilter.value + 'T00:00') : null;
+          const dateTo = dateToFilter.value ? Date.parse(dateToFilter.value + 'T00:00') : null;
           table.setFilter((row) => {
             const rowText = [row.transactionId, row.bookingId, row.venue, row.eventDate, row.transactionDate, row.amount, row.paymentMethod, row.paymentStatus, row.bookingStatus].join(' ').toLowerCase();
             return (!query || rowText.includes(query))
               && (!paymentStatus || row.paymentStatus === paymentStatus)
               && (!bookingStatus || row.bookingStatus === bookingStatus)
               && (!paymentMethod || row.paymentMethod === paymentMethod)
-              && (!dateFrom || parseDate(row.transactionDate) >= dateFrom);
+              && (!dateFrom || parseDate(row.paidOn) >= dateFrom)
+              && (!dateTo || (row.paidOn && parseDate(row.paidOn) <= dateTo));
           });
+          const on = boxes.filter((c) => c.value).length;
+          count.textContent = on;
+          count.hidden = !on;
+          const left = table.getDataCount('active');
+          showBtn.textContent = 'Show ' + left + (left === 1 ? ' payment' : ' payments');
         };
-        [globalFilter, paymentStatusFilter, bookingStatusFilter, paymentMethodFilter, dateFromFilter].forEach((c) => c.addEventListener('input', applyFilters));
-        resetFilters.addEventListener('click', () => {
-          globalFilter.value = ''; paymentStatusFilter.value = ''; bookingStatusFilter.value = ''; paymentMethodFilter.value = ''; dateFromFilter.value = '';
-          table.clearFilter();
+        const resetFilters = () => {
+          [globalFilter, ...boxes].forEach((c) => { c.value = ''; });
+          applyFilters();
+        };
+        [globalFilter, ...boxes].forEach((c) => c.addEventListener('input', applyFilters));
+        document.getElementById('reset-transaction-filters').addEventListener('click', resetFilters);
+        document.getElementById('thFilters').addEventListener('click', () => sheet.showModal());
+        sheet.addEventListener('click', (event) => {
+          if (event.target === sheet || event.target.closest('[data-sheet-close]')) sheet.close();   /* the dim area, the X, Show */
         });
-        document.getElementById('export-csv').addEventListener('click', () => table.download('csv', 'my-transactions.csv'));
-        document.getElementById('export-json').addEventListener('click', () => table.download('json', 'my-transactions.json'));
-        /* Print exactly the rows on the current page; pick "All rows" in the page
-           size to print the whole list. */
-        document.getElementById('print-table').addEventListener('click', () => table.print('visible', true));
+        /* The Download menu and the sheet's links. Print: exactly the rows on the current
+           page; pick "All rows" in the page size to print the whole list. */
+        const exports = {
+          csv: () => table.download('csv', 'my-transactions.csv'),
+          json: () => table.download('json', 'my-transactions.json'),
+          print: () => table.print('visible', true),
+        };
+        document.addEventListener('click', (event) => {
+          if (event.target.closest('[data-reset]')) resetFilters();
+          const button = event.target.closest('[data-export]');
+          if (!button) return;
+          document.getElementById('thDownload').hidePopover();
+          if (sheet.open) sheet.close();
+          exports[button.dataset.export]();
+        });
         venusepPageSize(table, [10, 25, 50]);
-        table.on('tableBuilt', () => table.element.prepend(table.element.querySelector('.tabulator-footer')));   /* the pager goes above the rows */
+        table.on('tableBuilt', () => {
+          table.element.prepend(table.element.querySelector('.tabulator-footer'));   /* the pager goes above the rows */
+          showBtn.textContent = 'Show ' + rows.length + (rows.length === 1 ? ' payment' : ' payments');
+        });
       });
     </script>
     @php include base_path('legacy/includes/booking-details-modal.php'); /* "View" */ @endphp

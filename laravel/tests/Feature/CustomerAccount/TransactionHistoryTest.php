@@ -19,7 +19,7 @@ class TransactionHistoryTest extends TestCase
     {
         $this->actingAsCustomer('msantos@usep.edu.ph')->get(route('customer.transaction-history'))
             ->assertOk()
-            ->assertSee('My Transactions')
+            ->assertSee('Transaction History')
             ->assertSee('"bookingId":"' . $this->ref($this->firstBookingOf(3)) . '"', false)
             ->assertDontSee('"bookingId":"' . $this->ref($this->firstBookingOf(2)) . '"', false)
             ->assertSee(json_encode(route('customer.receipt')), false);

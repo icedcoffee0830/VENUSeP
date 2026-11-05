@@ -28,7 +28,7 @@
 .lp-search input { width: 100%; height: 38px; padding: 0 10px 0 34px; border: 1px solid #d7d7d7; border-radius: 10px; background: #fff; color: #1f1e1e; font: inherit; font-size: 13.5px; }
 .lp-field { display: flex; flex: 0 1 165px; flex-direction: column; gap: 5px; min-width: 0; }
 .lp-field label { color: #6e6a64; font-size: 12px; font-weight: 600; letter-spacing: .03em; }
-.lp-field select { width: 100%; height: 38px; padding: 0 10px; border: 1px solid #d7d7d7; border-radius: 10px; background: #fff; color: #1f1e1e; font: inherit; font-size: 13.5px; }
+.lp-field select, .lp-field input { width: 100%; height: 38px; padding: 0 10px; border: 1px solid #d7d7d7; border-radius: 10px; background: #fff; color: #1f1e1e; font: inherit; font-size: 13.5px; }
 .lp-filters-btn { display: none; align-items: center; gap: .4rem; flex: none; height: 44px; padding: 0 1rem; border: 1px solid #d7d7d7; border-radius: 10px; background: #fff; color: #1f1e1e; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 
 .lp-name { display: block; font-weight: 600; color: #1f1e1e; }
@@ -61,6 +61,7 @@
 .lp-table .tabulator-row, .lp-table .tabulator-row.tabulator-row-even, .lp-table .tabulator-row.tabulator-row-odd { background: #fff !important; border-bottom: 1px solid #f2efe9; }
 .lp-table .tabulator-row:hover { background: #fcfbfa !important; }
 .lp-table .tabulator-row .tabulator-cell { display: inline-flex; align-items: center; padding: 12px 10px; border-right: 0; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+.lp-table .tabulator-placeholder .tabulator-placeholder-contents { padding: 24px 16px; color: #6e6a64; font-size: 14px; font-weight: 400; white-space: normal; }
 .lp-table .tabulator-footer { padding: 8px 16px; border-top: 0; background: #fff; }
 .lp-table .tabulator-footer .tabulator-footer-contents { justify-content: space-between; }
 .lp-table .tabulator-footer .tabulator-page-counter { color: #6e6a64; font-size: 13px; font-weight: 400; }
@@ -85,7 +86,7 @@
   .lp-filters-btn { display: inline-flex; }
   .lp-field { display: none; flex: 1 1 calc(50% - 6px); }
   .lp-tools.is-open .lp-field { display: flex; }
-  .lp-field select { height: 44px; }
+  .lp-field select, .lp-field input { height: 44px; }
 
   .lp-table .tabulator-footer { padding: 8px 12px; }
   .lp-table .tabulator-footer .tabulator-page, .lp-table .tabulator-footer .tabulator-page-size { min-width: 44px; min-height: 44px; }

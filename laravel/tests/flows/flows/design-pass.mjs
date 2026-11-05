@@ -2,10 +2,13 @@
 // screen without sideways scroll, one-click actions sit on the row, and a phone gets cards with
 // 44px buttons. One step per design item; the wording and rules are in the feature tests.
 
+import { readFileSync } from 'node:fs';
+
 const DESKTOP = { width: 1280, height: 800 };
 const PHONE = { width: 390, height: 844 };
 const SUPER = 'admin@gmail.com';
 const BAHAY_ADMIN = 'francishubero@gmail.com';
+const CUSTOMER = 'customer@gmail.com';
 
 /* the page and the table itself: nothing wider than the screen */
 const sideways = (page) => page.evaluate(() => {
@@ -101,6 +104,51 @@ export default {
       expect.equal(await page.locator('#smRole').isVisible(), false, 'the filters show before Filters is tapped');
       await page.locator('.lp-filters-btn').click();
       await expect.visible(page.locator('#smRole'), 'Filters did not open them');
+      return page;
+    });
+
+    await step('Transaction History at 1280: fits, and the CSV keeps every column', async () => {
+      const page = s.customer = await ctx.loginCustomer(CUSTOMER);
+      await page.setViewportSize(DESKTOP);
+      await page.goto(ctx.url('/customer/transaction-history'));
+      await expect.visible(page.locator('.tabulator-row').first(), 'no rows');
+      expect.equal((await page.locator('h1').textContent()).trim(), 'Transaction History', 'the title');
+      expect.equal(await sideways(page), false, 'sideways scroll at 1280');
+      await page.getByRole('button', { name: 'Download' }).click();
+      const saved = page.waitForEvent('download');
+      await page.locator('#export-csv').click();
+      const file = await (await saved).path();
+      const head = readFileSync(file, 'utf8').slice(0, 300);
+      for (const col of ['Transaction ID', 'Booking ID', 'Venue', 'Event Date', 'Transaction Date', 'Amount', 'Payment Method', 'Payment Status', 'Booking Status']) {
+        expect.match(head, new RegExp(col), 'the CSV heading');
+      }
+      expect.equal(await page.locator('#thDownload').isVisible(), false, 'the Download menu stayed open');
+      return page;
+    });
+
+    await step('On a phone: one card per payment, filters in a sheet that says how many match', async () => {
+      const page = s.customer;
+      await page.setViewportSize(PHONE);
+      await page.goto(ctx.url('/customer/transaction-history'));
+      const card = page.locator('.th-card').first();
+      await expect.visible(card, 'no cards');
+      expect.equal(await page.locator('.tabulator-header').isVisible(), false, 'the table heading on a phone');
+      expect.equal(await sideways(page), false, 'sideways scroll on a phone');
+      expect.equal((await shortButtons(page, '.th-card .th-act')).join() || 'none', 'none', 'card buttons under 44px');
+      expect.equal(await page.getByRole('link', { name: 'Back to Venues' }).isVisible(), false, 'Back to Venues on a phone');
+      const all = await page.locator('.th-card:visible').count();
+      await page.locator('#thFilters').click();
+      const sheet = page.locator('#thSheet');
+      await expect.visible(sheet, 'the sheet did not open');
+      expect.equal((await sheet.evaluate((d) => d.getBoundingClientRect().bottom)), PHONE.height, 'the sheet is not at the bottom');
+      await page.locator('#date-from-filter').fill('2000-01-01');
+      await page.locator('#date-to-filter').fill('2000-01-02');
+      await expect.visible(sheet.getByRole('button', { name: 'Show 0 payments' }), 'the sheet does not count');
+      await sheet.getByRole('button', { name: 'Show 0 payments' }).click();
+      await expect.text(page, 'No payments match these filters.');
+      expect.equal((await page.locator('#thCount').textContent()).trim(), '2', 'the count on Filters');
+      await page.locator('[data-reset]').click();
+      await page.waitForFunction((n) => document.querySelectorAll('.th-card').length >= n, all);
       return page;
     });
   },

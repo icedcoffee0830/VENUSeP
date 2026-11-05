@@ -642,3 +642,41 @@ test/flows snapshot is again `.before-m17` + the new migration 17).
 - Note: the Payment Settings text still says closures by USeP are "offered ... or their money back"
   (unchanged wording); memory venusep-refund-policy says with the switch off nothing is refundable,
   a closure included. Left as is: not part of this phase.
+
+### 14f. Phase G (2026-11-05): the counter's customer handling (migration 17 grew)
+Migration 17 is still not on the real DB; the additions are in the same file, safe to re-run
+(checked by loading it twice on the test DB; the test/flows snapshot is again `.before-m17` + the
+new migration 17).
+- **Schema:** `customers.counter_venue_id` (the office whose counter made the account, FK venues,
+  NULL = signed up themselves); `customer_email_fixes` (old, new, reason, who, when); email kind
+  `counter_welcome`. "Never signed into" = `users.last_login_at IS NULL`, "Google" =
+  `users.google_sub` set: both already stored, nothing added for them.
+- **Search** (`CounterCustomerController::search`, SQL in `app/Queries/CustomerQueries.php`):
+  every office's active customer accounts, by exact email (any case), exact mobile (any spacing,
+  +63 too), or a name with 3+ letters; 10 at most; email and phone masked (`ms•••@usep.edu.ph`,
+  `0917•••0188`); `usep` = a usep.edu.ph address; `noPassword`. Nothing about bookings. Not logged.
+  Part of an email or a number now finds nothing (it used to match part of an email).
+- **New account at the counter:** who-step mode "New account" (name, email, mobile) ->
+  `admin/customer-create` with `check=1` (a taken email of ANY account: 409 "This person already
+  has an account. Search for them instead."; a mobile another account uses: a warning) -> the
+  confirm step shows the email large, "Read this email address back to the customer" -> made with
+  no password and the office of the page's room; the welcome email (`queue_counter_welcome`,
+  receipt-emails.php) says to choose a password through Forgot password. Domain typo suggestion:
+  `emailSuggestion()` (edit distance <= 2 to gmail.com, yahoo.com, outlook.com, hotmail.com,
+  usep.edu.ph), a click-to-fix link.
+- **"ID checked":** an account with no password (Google, or just made at the counter) shows an
+  "ID checked: I looked at a valid ID and it is this person" box instead of the password;
+  booking-create accepts `id_identity=1` only for an account whose password is really NULL (a
+  password account still needs the password proof) and writes History `counter_identity_id_checked`
+  (who, when). `customer-verify` answers such an account 409 `noPassword`.
+- **Fixing a wrong email** (`CustomerController` action `fix_email`, Customers page "Fix email"):
+  a normal admin of the group whose counter made it (CEDU: either counter), never signed into, not
+  Google, reason required; the super admin and staff cannot. It also clears any password chosen
+  from the old address and spends its unused reset links, records the fix, and sends the welcome
+  email to the new address. The Customers page now also lists the group's counter-made accounts
+  that never booked.
+- Tests: `AdminPeople/CounterAccountsTest` (new), updated `CounterCustomerTest`,
+  `CustomerBooking/CounterBookerTest` (suggestion, confirm step, ID checked). Flows: new
+  `counter-new-account`; `adminb-people` step 6 (part of an email finds nothing; masked email).
+- Not done: email fixes are not on the Activity page (they are in `customer_email_fixes`); a
+  counter account has no "resend welcome email" button; walk-in email entry has no typo suggestion.

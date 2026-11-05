@@ -990,6 +990,18 @@ if (!function_exists('cb_normalise_mobile')) {
     }
 }
 
+/* The counter's phone rule (Aron 2026-11-05): a Philippine mobile typed as 09XXXXXXXXX or
+   +639XXXXXXXXX, spaces allowed, and nothing else (a letter, a dash, 639... are refused).
+   Normalised to 09XXXXXXXXX. cleanPhone() in counter-booker.php is its twin. */
+if (!function_exists('ph_mobile_strict')) {
+    function ph_mobile_strict($raw) {
+        return preg_match('/^(?:0|\+63)(9\d{9})$/', str_replace(' ', '', trim((string) $raw)), $m) ? '0' . $m[1] : null;
+    }
+}
+if (!defined('PH_MOBILE_MESSAGE')) {
+    define('PH_MOBILE_MESSAGE', 'Enter a mobile number as 09XX XXX XXXX or +63 9XX XXX XXXX.');
+}
+
 /* EVERY status code the database defines, with the badge label and colour a
    staff page should show for it. The booking detail page kept its own JS map of
    three reservation codes and a handful of payment ones, so opening a

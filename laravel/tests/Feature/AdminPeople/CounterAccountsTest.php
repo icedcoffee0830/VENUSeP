@@ -185,4 +185,26 @@ class CounterAccountsTest extends TestCase
         $this->assertNotNull($line->occurred_at);
         $this->assertSame(0, DB::table('booking_timeline')->where('booking_id', $res->json('bookingId'))->where('action_code', 'counter_identity_confirmed')->count());
     }
+
+    /* A new account at the counter: the same phone rule as a walk-in (Aron 2026-11-05). */
+    public function test_a_new_counter_account_takes_only_09_or_plus_63_mobiles(): void
+    {
+        $this->actingAsStaff();
+        foreach (['O917 000 2222', '0917-000-2222', '63 917 000 2222'] as $bad) {
+            $this->createAccount(['check' => '1', 'phone' => $bad])->assertStatus(400)
+                ->assertExactJson(['ok' => false, 'field' => 'phone', 'message' => 'Enter a mobile number as 09XX XXX XXXX or +63 9XX XXX XXXX.']);
+        }
+        $this->createAccount(['check' => '1', 'phone' => '+63 917 000 2222'])->assertOk();
+        $this->assertFalse(DB::table('users')->where('email', 'lorna.counter@gmail.com')->exists());   // check=1 makes nothing
+    }
+
+    /* The page's own check matches: inputmode, pattern and message on both counter phone inputs. */
+    public function test_the_counter_phone_inputs_say_the_rule_on_screen(): void
+    {
+        $this->actingAsStaff()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk()
+            ->assertSee("const PH_MOBILE_PATTERN = '[ ]*(0|[+]63)[ ]*9([ ]*[0-9]){9}[ ]*';", false)
+            ->assertSee('<input id="bkPhone" type="tel" inputmode="tel" pattern="${PH_MOBILE_PATTERN}"', false)
+            ->assertSee('<input id="bkNewPhone" type="tel" inputmode="tel" pattern="${PH_MOBILE_PATTERN}"', false)
+            ->assertSee('Enter a mobile number as 09XX XXX XXXX or +63 9XX XXX XXXX.', false);
+    }
 }

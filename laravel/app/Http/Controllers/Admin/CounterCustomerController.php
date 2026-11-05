@@ -127,7 +127,7 @@ class CounterCustomerController
         $office = office_of_room($request->input('room'));
         $name   = trim((string) $request->input('full_name', ''));
         $email  = mb_strtolower(trim((string) $request->input('email', '')));
-        $mobile = cb_normalise_mobile($request->input('phone', ''));
+        $mobile = ph_mobile_strict($request->input('phone', ''));
         if ($office === null || !staff_may_handle_venue($office['id'])) {
             return $this->reply(403, ['ok' => false, 'message' => 'This room belongs to another office. Only that office\'s counter can make the account here.']);
         }
@@ -138,7 +138,7 @@ class CounterCustomerController
             return $this->reply(400, ['ok' => false, 'field' => 'email', 'message' => 'That email address doesn’t look right. Check it with the customer.']);
         }
         if ($mobile === null) {
-            return $this->reply(400, ['ok' => false, 'field' => 'phone', 'message' => 'Enter an 11-digit mobile number starting 09.']);
+            return $this->reply(400, ['ok' => false, 'field' => 'phone', 'message' => PH_MOBILE_MESSAGE]);
         }
         if (CustomerQueries::emailTaken($email)) {
             return $this->reply(409, ['ok' => false, 'field' => 'email', 'error' => 'email_taken', 'message' => self::ALREADY_HAS_ACCOUNT]);

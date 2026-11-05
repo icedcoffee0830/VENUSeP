@@ -180,7 +180,7 @@ export default {
       const page = s.staff;
       await page.goto(ctx.url('/customer/room-reservation?room=r1&counter=1'));
       const stamp = Number(ctx.uniq.replace(/\D/g, '').slice(-3));
-      const day = String((await dbOne(`SELECT DATE_ADD(CURDATE(), INTERVAL ? DAY) AS d`, [40 + stamp % 200])).d).slice(0, 10);
+      const day = String((await dbOne(`SELECT DATE_ADD(CURDATE(), INTERVAL ? DAY) AS d`, [40 + stamp % 140])).d).slice(0, 10);
       const post = (url, data) => page.evaluate(async ([u, d]) => {
         const r = await fetch(u, { method: 'POST', credentials: 'same-origin', body: new URLSearchParams({ _token: CSRF, ...d }) });
         return r.json();

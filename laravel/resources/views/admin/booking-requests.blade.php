@@ -190,6 +190,9 @@
         { k: 'id',      t: 'Pending ID review' },
         { k: 'confirm', t: 'Receipts to confirm' },
         { k: 'review',  t: 'Manual review' },
+        /* Payment still awaited and not yet late (overdue has its own tab). Matched on the
+           payment status, not the row's one category, so a POS-to-fetch stay shows in both. */
+        { k: 'awaiting', t: 'Awaiting payment' },
         { k: 'overdue', t: 'Overdue' },
         /* Refunds wait on STAFF, not on the customer — same argument as POS below.
            Without a tab a refund request only ever appears under "All", mixed in
@@ -206,17 +209,17 @@
       let tab = TABS.some((t) => t.k === TAB_PARAM) ? TAB_PARAM : 'all', q = '';
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-      function countOf(k) { return k === 'all' ? BR.length : BR.filter(r => r.cat === k).length; }
+      const AWAITING = ['await_gcash', 'await_cash', 'await_pos'];
+      function inTab(r, k) { return k === 'all' || (k === 'awaiting' ? AWAITING.includes(r.pay) : r.cat === k); }
+      function countOf(k) { return BR.filter(r => inTab(r, k)).length; }
       function rowsOf() {
-        const list = BR.filter(r => (tab === 'all' || r.cat === tab))
+        const list = BR.filter(r => inTab(r, tab))
                        .filter(r => !q || (r.name + ' ' + r.room + ' ' + r.id).toLowerCase().includes(q));
-        /* Rows carrying an event date (refunds) are ordered soonest-event-first.
-           Array.sort is stable and this returns 0 for anything without one, so
-           the rest of the queue keeps its existing order. */
-        return list.sort((a, b) => {
-          if (!a.eventIso || !b.eventIso) return 0;
-          return a.eventIso < b.eventIso ? -1 : (a.eventIso > b.eventIso ? 1 : 0);
-        });
+        /* Newest request first (seq = the booking's id). The refunds tab keeps its
+           soonest-event-first order: a near event is a date nobody can rebook. */
+        return list.sort((a, b) => (tab === 'refund' && a.eventIso && b.eventIso && a.eventIso !== b.eventIso)
+          ? (a.eventIso < b.eventIso ? -1 : 1)
+          : b.seq - a.seq);
       }
       /* Paging state. Changing the tab or the search changes WHICH rows exist,
          so both send you back to page 1 — staying on page 4 of a list that now

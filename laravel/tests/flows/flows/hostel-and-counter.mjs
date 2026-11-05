@@ -180,6 +180,21 @@ export default {
       expect.equal(h.payment_status, 'await_gcash', 'payment_status after the POS');
     });
 
+    await step('Booking Management: newest request first, and the stay is under "Awaiting payment", not "Overdue"', async () => {
+      const page = s.admin;
+      await page.goto(ctx.url('/admin/booking-requests'));
+      const top = await page.locator('a.br-row .r-id').first().textContent();
+      const newest = await dbOne(`SELECT MAX(id) AS id FROM bookings`);
+      expect.equal(newest.id, s.bookingId, 'this stay is the newest booking');
+      expect.equal(top.trim(), s.ref, 'the first row of the list');
+      await page.locator('.br-tab', { hasText: 'Awaiting payment' }).click();
+      await expect.visible(page.locator('a.br-row', { hasText: s.ref }), `${s.ref} (await_gcash) is not under Awaiting payment`);
+      const late = await page.locator('a.br-row .br-badge', { hasText: 'Payment overdue' }).count();
+      expect.equal(late, 0, 'overdue rows under Awaiting payment');
+      await page.locator('.br-tab', { hasText: 'Overdue' }).click();
+      expect.equal(await page.locator('a.br-row', { hasText: s.ref }).count(), 0, `${s.ref} under Overdue`);
+    });
+
     await step('The customer chooses to pay cash at the front desk', async () => {
       const page = s.cust;
       await page.goto(ctx.url('/customer/booking-history'));

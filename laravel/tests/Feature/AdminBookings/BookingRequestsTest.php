@@ -30,4 +30,20 @@ class BookingRequestsTest extends TestCase
     {
         $this->actingAsAdmin()->get(route('admin.booking-requests'))->assertOk()->assertSee('Receipts to confirm');
     }
+
+    /* "Awaiting payment" = payment still awaited, never overdue (its own tab); every row
+       carries its booking id so the list can put the newest request first (the flow
+       hostel-and-counter checks both in the browser). */
+    public function test_the_awaiting_payment_tab_and_newest_first_order(): void
+    {
+        $res = $this->actingAsAdmin()->get(route('admin.booking-requests'))->assertOk()
+            ->assertSee("{ k: 'awaiting', t: 'Awaiting payment' }", false)
+            ->assertSee("const AWAITING = ['await_gcash', 'await_cash', 'await_pos'];", false)
+            ->assertSee(': b.seq - a.seq);', false);
+        $rows = $res->viewData('brRows');
+        $this->assertNotEmpty($rows);
+        foreach ($rows as $r) {
+            $this->assertIsInt($r['seq']);
+        }
+    }
 }

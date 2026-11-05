@@ -395,6 +395,22 @@
         customerAction(body, function () { window.location.reload(); });
       };
 
+      /* Correct the email of an account made at the counter: the new address, then the reason. */
+      const fixEmailAction = async function (row) {
+        const email = await venusepPrompt('Made at the counter and never signed into, so the email can still be corrected. The account’s password and any reset link stop working, and the welcome email goes to the new address. Now: ' + row.email,
+          { title: 'Fix the email of ' + row.name + '?', label: 'Correct email', placeholder: 'name@example.com', okLabel: 'Next' });
+        if (email === null) return;
+        const reason = await venusepPrompt('Changing ' + row.email + ' to ' + email.trim() + '. The reason is kept with the correction.',
+          { title: 'Why is it being corrected?', label: 'Reason', okLabel: 'Fix email' });
+        if (reason === null) return;
+        const body = new FormData();
+        body.append('action', 'fix_email');
+        body.append('customer_id', row.id);
+        body.append('email', email);
+        body.append('reason', reason);
+        customerAction(body, function (res) { venusepAlert(res.message).then(function () { window.location.reload(); }); });
+      };
+
       const table = new Tabulator('#customers-table', {
         data: data,
         layout: 'fitColumns',
@@ -405,7 +421,18 @@
         columns: [
           { title: '#', field: 'id', width: 60, headerSort: true },
           { title: 'Name', field: 'name', headerFilter: 'input', minWidth: 160 },
-          { title: 'Email', field: 'email', headerFilter: 'input', minWidth: 200 },
+          {
+            title: 'Email', field: 'email', headerFilter: 'input', minWidth: 200,
+            /* a counter account never signed into: its group's admin may correct a wrong email */
+            formatter: function (cell) {
+              const row = cell.getRow().getData();
+              return esc(row.email) + (row.fixEmail
+                ? '<div style="margin-top:.25rem"><button type="button" class="btn-cust-fix-email" style="' + PILL + '#d9d4cc;color:#4a4440">Fix email</button></div>' : '');
+            },
+            cellClick: function (e, cell) {
+              if (e.target.closest('.btn-cust-fix-email')) fixEmailAction(cell.getRow().getData());
+            },
+          },
           { title: 'Phone', field: 'phone', width: 140 },
           { title: 'USeP', field: 'usep', width: 80, hozAlign: 'center' },
           { title: 'Bookings', field: 'bookings', width: 100, hozAlign: 'center' },

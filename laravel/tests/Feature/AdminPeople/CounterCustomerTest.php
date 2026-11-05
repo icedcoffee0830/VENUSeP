@@ -15,14 +15,14 @@ class CounterCustomerTest extends TestCase
         $this->actingAsCustomer()->getJson(route('admin.customer-search', ['q' => 'Maria']))->assertStatus(403);
     }
 
-    public function test_search_needs_three_characters_and_masks_the_phone(): void
+    public function test_search_needs_three_letters_and_masks_the_email_and_phone(): void
     {
         $this->actingAsStaff();
         $this->get(route('admin.customer-search', ['q' => 'Ma']))->assertOk()->assertExactJson(['ok' => true, 'results' => []]);
         $res = $this->get(route('admin.customer-search', ['q' => 'Maria Santos']));
         $res->assertOk()->assertHeader('Cache-Control', 'no-store, private')
             ->assertExactJson(['ok' => true, 'results' => [
-                ['id' => 3, 'name' => 'Maria Santos', 'email' => 'msantos@usep.edu.ph', 'phone' => '0917•••0188'],
+                ['id' => 3, 'name' => 'Maria Santos', 'email' => 'ms•••@usep.edu.ph', 'phone' => '0917•••0188', 'usep' => true, 'noPassword' => false],
             ]]);
         // walk-ins (no user account) never come back
         $this->get(route('admin.customer-search', ['q' => 'Carmen']))->assertExactJson(['ok' => true, 'results' => []]);
@@ -37,7 +37,7 @@ class CounterCustomerTest extends TestCase
             $this->get(route('admin.customer-search', ['q' => $q]))->assertOk()
                 ->assertExactJson(['ok' => true, 'results' => []]);
         }
-        $this->get(route('admin.customer-search', ['q' => 'msantos@usep']))->assertOk()
+        $this->get(route('admin.customer-search', ['q' => 'msantos@usep.edu.ph']))->assertOk()
             ->assertJsonPath('results.0.name', 'Maria Santos');
     }
 

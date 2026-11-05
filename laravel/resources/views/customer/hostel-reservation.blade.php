@@ -574,7 +574,7 @@ async function submitRequest(){
     fd.append('cash_received', '1');
     const k = state.booker;
     fd.append('booker_mode', k.mode);
-    if(k.mode==='account') fd.append('customer_id', k.customerId);
+    if(k.mode==='account'){ fd.append('customer_id', k.customerId); fd.append('id_identity', k.idIdentity ? '1' : '0'); }
     else { fd.append('walkin_name', k.name.trim()); fd.append('walkin_phone', cleanPhone(k.phone) || ''); fd.append('walkin_address', k.address.trim()); fd.append('walkin_email', k.noEmail ? '' : k.email.trim()); fd.append('walkin_no_email', k.noEmail ? '1' : '0'); }
     fd.append('id_checked', k.idChecked ? '1' : '0');
     fd.append('usep_id', k.usepId ? '1' : '0');
@@ -1036,7 +1036,7 @@ function reviewScreen(){
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px;font-size:13px;line-height:1.7;color:#1c1b19">
       &check; Valid ID checked in person by <strong>${esc(COUNTER_STAFF)}</strong>${state.booker.usepId?' &middot; <strong>USeP ID</strong>, discount applied':''}<br>
       ${state.booker.mode==='account'
-        ? '&check; Account confirmed by the guest&rsquo;s password &mdash; <strong>'+esc(state.booker.name)+'</strong>'
+        ? counterAccountLine()
         : '&middot; Walk-in with no account &mdash; <strong>'+esc(state.booker.name)+'</strong> &middot; '+esc(state.booker.phone)+' &middot; pays at the counter'}
     </div>` : `
     <!-- USeP AFFILIATION — same rule as the venue page: a CLAIM the customer

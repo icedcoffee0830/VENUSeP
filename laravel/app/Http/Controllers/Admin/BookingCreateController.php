@@ -22,7 +22,7 @@ use Throwable;
      venue:  event_name, date_start, date_end, attendees, times=<json>,
      agree_no_refund=0|1,
      booker_mode=account|walkin,
-       account: customer_id
+       account: customer_id[, id_identity=1: "ID checked", for an account with no password]
        walkin : walkin_name, walkin_phone, walkin_email (or walkin_no_email=1)[, walkin_address]
      id_checked=1, usep_id=0|1
    Replies with JSON: { ok, reference, bookingId, payBy, overdueAfter (post-pay venue only) }
@@ -91,21 +91,16 @@ class BookingCreateController extends Controller
             'contactEmail' => '',      /* walk-ins only, required unless the guest has none */
             'walkinNoEmail' => false,  /* staff ticked "Guest has no email" */
             'phone' => null, 'address' => '',
+            'identityByIdCheck' => false,   /* an account with no password: staff ticked "ID checked" */
         ];
         if ($c['bookerMode'] === 'account') {
             $c['customerId'] = (int) ($request->post('customer_id') ?? 0);
             if ($c['customerId'] <= 0) {
                 $this->reply(400, ['ok' => false, 'message' => 'Pick the customer&rsquo;s account.']);
             }
-            /* The identity proof, re-checked server-side. */
-            $proofs = session('counter_proof');
-            $proof = is_array($proofs) && isset($proofs[$c['customerId']]) ? (int) $proofs[$c['customerId']] : 0;
-            if ($proof <= 0 || (time() - $proof) > self::COUNTER_PROOF_TTL) {
-                $this->reply(403, ['ok' => false, 'message' => 'Ask the customer to confirm their password again before booking.']);
-            }
             try {
                 $stmt = $pdo->prepare(
-                    'SELECT c.id, c.full_name FROM customers c JOIN users u ON u.id = c.user_id
+                    'SELECT c.id, c.full_name, u.password_hash IS NULL AS no_password FROM customers c JOIN users u ON u.id = c.user_id
                       WHERE c.id = :c AND u.is_active = 1 LIMIT 1'
                 );
                 $stmt->execute([':c' => $c['customerId']]);
@@ -116,6 +111,17 @@ class BookingCreateController extends Controller
             }
             if (!$row) {
                 $this->reply(404, ['ok' => false, 'message' => 'That account no longer exists.']);
+            }
+            /* The identity proof, re-checked server-side: the password checked in this staff
+               session, or, for an account with no password, staff ticked "ID checked". */
+            $proofs = session('counter_proof');
+            $proof = is_array($proofs) && isset($proofs[$c['customerId']]) ? (int) $proofs[$c['customerId']] : 0;
+            $c['identityByIdCheck'] = (bool) $row['no_password'];
+            if ($c['identityByIdCheck'] && empty($request->post('id_identity'))) {
+                $this->reply(403, ['ok' => false, 'message' => 'This account has no password. Look at a valid ID and tick “ID checked” before booking.']);
+            }
+            if (!$c['identityByIdCheck'] && ($proof <= 0 || (time() - $proof) > self::COUNTER_PROOF_TTL)) {
+                $this->reply(403, ['ok' => false, 'message' => 'Ask the customer to confirm their password again before booking.']);
             }
             $c['bookerName'] = (string) $row['full_name'];
         } else {
@@ -214,8 +220,11 @@ class BookingCreateController extends Controller
             $tl->execute([':b' => $bookingId, ':a' => 'counter_overdue_booked', ':u' => $c['actor'], ':n' => 'The customer has an unpaid booking: ' . $owes . '.']);
         }
         if ($c['bookerMode'] === 'account') {
-            $tl->execute([':b' => $bookingId, ':a' => 'counter_identity_confirmed', ':u' => $c['actor'],
-                ':n' => 'Customer confirmed the account by entering their password at the counter.']);
+            $tl->execute($c['identityByIdCheck']
+                ? [':b' => $bookingId, ':a' => 'counter_identity_id_checked', ':u' => $c['actor'],
+                   ':n' => 'ID checked: the account has no password, so staff confirmed who the customer is from a valid ID seen in person.']
+                : [':b' => $bookingId, ':a' => 'counter_identity_confirmed', ':u' => $c['actor'],
+                   ':n' => 'Customer confirmed the account by entering their password at the counter.']);
         }
         if ($c['walkinNoEmail']) {
             $tl->execute([':b' => $bookingId, ':a' => 'counter_no_email', ':u' => $c['actor'],

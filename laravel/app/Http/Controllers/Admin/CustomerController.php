@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Queries\BlockQueries;
+use App\Queries\CustomerQueries;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use PDOException;
 
 /* =====================================================================
@@ -27,6 +29,8 @@ use PDOException;
        re-reads users.is_active on every request.
      block | lift, customer_id, venue_id, reason: no new bookings at THAT office (BlockQueries).
        That office's group admin or the super admin; a reason is required and kept.
+     fix_email, customer_id, email, reason: correct a counter account's wrong email
+       (mayFixEmail(); kept in customer_email_fixes; the welcome email goes to the new address).
    ===================================================================== */
 class CustomerController
 {
@@ -41,8 +45,8 @@ class CustomerController
             $cmPdo = venusep_db_or_fail();
             $blocks = BlockQueries::activeByCustomer($scope);
             $cmStmt = $cmPdo->query(
-                "SELECT u.id AS user_id, u.email, u.is_active, u.last_login_at,
-                        c.id AS customer_id, c.full_name, c.phone, c.university_id_no, c.created_at,
+                "SELECT u.id AS user_id, u.email, u.is_active, u.last_login_at, u.google_sub IS NULL AS not_google,
+                        c.id AS customer_id, c.full_name, c.phone, c.university_id_no, c.created_at, c.counter_venue_id,
                         (SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.customer_id = c.id $mine) AS booking_count,
                         (SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id
                           WHERE b.customer_id = c.id $mine AND b.reservation_status IN ('pending', 'approved')
@@ -50,7 +54,8 @@ class CustomerController
                    FROM customers c
                    JOIN users u ON u.id = c.user_id
                   WHERE u.account_type = 'customer'"
-                  . ($scope === null ? '' : " AND EXISTS (SELECT 1 FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.customer_id = c.id $mine)") . '
+                  . ($scope === null ? '' : " AND (EXISTS (SELECT 1 FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.customer_id = c.id $mine)
+                                                   OR c.counter_venue_id IN (" . implode(',', array_map('intval', $scope) ?: [0]) . '))') . '
                   ORDER BY c.full_name'
             );
             foreach ($cmStmt as $r) {
@@ -67,6 +72,7 @@ class CustomerController
                     'open'      => (int) $r['open_count'],
                     'joined'    => $r['created_at'] ? date('M j, Y', strtotime($r['created_at'])) : '—',
                     'lastLogin' => $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
+                    'fixEmail'  => self::mayFixEmail($r['counter_venue_id'], $r['last_login_at'] === null, (bool) $r['not_google']),
                     /* one entry per office this admin may block at: on or off, and by whom */
                     'blocks'    => array_map(fn ($o) => ['venueId' => $o['id'], 'office' => $o['name'], 'on' => isset($on[$o['id']])]
                         + (isset($on[$o['id']]) ? ['reason' => $on[$o['id']]['reason'], 'by' => $on[$o['id']]['blocked_by'],
@@ -106,6 +112,9 @@ class CustomerController
         $action = (string) $request->input('action', '');
         if ($action === 'block' || $action === 'lift') {
             return $this->blockOrLift($request, $action);
+        }
+        if ($action === 'fix_email') {
+            return $this->fixEmail($request);
         }
         if (!admin_is_super()) {
             return $this->reply(403, ['ok' => false, 'message' => 'Only the super admin can suspend a customer account. To stop bookings at your office, block the customer there.']);
@@ -147,6 +156,65 @@ class CustomerController
         }
 
         return $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
+    }
+
+    /* THE ONE EDIT OF A CUSTOMER'S DETAILS (DB-DECISIONS 28): a normal admin of the group
+       whose counter made the account (USeP CEDU: either counter) may correct its email, while
+       it has never been signed into and is not a Google account. Nobody else, the super admin
+       included: only the customer edits their own details. */
+    private static function mayFixEmail($counterVenueId, bool $neverSignedIn, bool $notGoogle): bool
+    {
+        return $counterVenueId !== null && $neverSignedIn && $notGoogle
+            && !admin_is_super() && staff_may_handle_venue($counterVenueId);
+    }
+
+    /* Correct a counter account's wrong email: check, then save. The welcome email goes to the new address. */
+    private function fixEmail(Request $request)
+    {
+        legacy('receipt-emails');
+        // Check
+        $account = CustomerQueries::account((int) $request->input('customer_id', 0));
+        $email = mb_strtolower(trim((string) $request->input('email', '')));
+        $reason = mb_substr(trim((string) $request->input('reason', '')), 0, 500);
+        if ($account === null) {
+            return $this->reply(404, ['ok' => false, 'message' => 'That customer account no longer exists.']);
+        }
+        if (!self::mayFixEmail($account['counter_venue_id'], $account['last_login_at'] === null, $account['google_sub'] === null)) {
+            return $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only the customer can change this email. An admin of the group whose counter made the account may correct it, and only before anyone has signed into it and when it is not a Google account.']);
+        }
+        if (mb_strlen($email) > 190 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->reply(400, ['ok' => false, 'message' => 'That email address doesn’t look right.']);
+        }
+        if ($email === $account['email']) {
+            return $this->reply(400, ['ok' => false, 'message' => 'That is the email the account already has.']);
+        }
+        if (CustomerQueries::emailTaken($email)) {
+            return $this->reply(409, ['ok' => false, 'message' => 'Another account already has that email.']);
+        }
+        if ($reason === '') {
+            return $this->reply(400, ['ok' => false, 'message' => 'Write the reason. It is kept with the correction.']);
+        }
+
+        // Save
+        $pdo = venusep_db_or_fail();
+        try {
+            $outboxId = DB::transaction(function () use ($pdo, $account, $email, $reason) {
+                if (!CustomerQueries::fixEmail($account, $email, $reason, (int) session('user_id'))) {
+                    return null;
+                }
+                return queue_counter_welcome($pdo, $account['full_name'], $email, office_by_id($account['counter_venue_id']), (int) session('user_id'));
+            });
+        } catch (QueryException $e) {
+            if (($e->errorInfo[1] ?? null) !== 1062) {
+                throw $e;
+            }
+            return $this->reply(409, ['ok' => false, 'message' => 'Another account already has that email.']);
+        }
+        if ($outboxId === null) {
+            return $this->reply(409, ['ok' => false, 'message' => 'The account changed a moment ago (signed into, or its email changed), so the email was not corrected.']);
+        }
+        mail_send($pdo, $outboxId);   // never throws
+        return $this->reply(200, ['ok' => true, 'message' => 'Email corrected. A welcome email went to ' . $email . '.']);
     }
 
     /* Block or lift a customer at one office: check, then save. */

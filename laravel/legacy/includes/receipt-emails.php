@@ -185,6 +185,30 @@ function queue_handover_emails(PDO $pdo, array $old, array $new, string $reason,
     return $ids;
 }
 
+/* The welcome email of an account made at an office's counter (DB-DECISIONS 28), sent
+   again to the corrected address after an email fix. The account has no password yet:
+   it says how to choose one. Returns the outbox id. */
+function queue_counter_welcome(PDO $pdo, string $name, string $email, array $office, int $actorUserId): int
+{
+    $first = re_first_name($name);
+    $forgot = mail_base_url() . '/customer/forgot-password';   // route customer.forgot-password
+    $intro = 'Staff at the ' . bh_e($office['name']) . ' counter made a VENUSeP account for you with this email address.';
+    $how = 'To book or pay online, choose a password: open <a href="' . bh_e($forgot) . '" style="color:#a11626;">' . bh_e($forgot)
+         . '</a>, enter this email address, and follow the link we send you.';
+    $contact = 'Contact ' . office_contact_line($office);
+    return mail_enqueue($pdo, [
+        'kind' => 'counter_welcome', 'requested_by_user_id' => $actorUserId, 'to_email' => $email,
+        'subject' => 'Your VENUSeP account is ready',
+        'body_html' => re_frame('Your VENUSeP account is ready. Choose a password to use it online.', 'Your account is ready', $first, $intro,
+            re_paragraph($how) . re_paragraph('Not you? Ignore this email.', '18px 32px 28px 32px', '13px', '#6e6a64'),
+            'You&rsquo;re getting this because ' . bh_e($email) . ' was given at the VENUSeP counter.' . re_office_footer($contact)),
+        'body_text' => "Your account is ready\n\nGood day, " . $first . "!\n"
+            . 'Staff at the ' . $office['name'] . " counter made a VENUSeP account for you with this email address.\n\n"
+            . "To book or pay online, choose a password: open " . $forgot . ", enter this email address, and follow the link we send you.\n\n"
+            . "Not you? Ignore this email.\n\n" . $contact . "\n\n" . RE_NO_REPLY,
+    ]);
+}
+
 /* Payment due / overdue happen in sp_expire_due_bookings, with nobody at a keyboard, so
    the first request after them sends the emails. Recent changes only; a few at a time. */
 function mail_status_sweep(PDO $pdo): void

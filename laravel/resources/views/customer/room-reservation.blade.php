@@ -865,7 +865,7 @@ async function submitRequest(){
   if(COUNTER){
     const b = state.booker;
     fd.append('booker_mode', b.mode);
-    if(b.mode==='account') fd.append('customer_id', b.customerId);
+    if(b.mode==='account'){ fd.append('customer_id', b.customerId); fd.append('id_identity', b.idIdentity ? '1' : '0'); }
     else { fd.append('walkin_name', b.name.trim()); fd.append('walkin_phone', cleanPhone(b.phone) || ''); fd.append('walkin_address', b.address.trim()); fd.append('walkin_email', b.noEmail ? '' : b.email.trim()); fd.append('walkin_no_email', b.noEmail ? '1' : '0'); }
     fd.append('id_checked', b.idChecked ? '1' : '0');
     fd.append('usep_id', b.usepId ? '1' : '0');
@@ -1461,7 +1461,7 @@ function reviewScreen(){
       <div style="font-size:13px;color:#1c7a4f;line-height:1.6">
         &check; Valid ID checked in person by <strong>${esc(COUNTER_STAFF)}</strong>${state.booker.usepId?' &middot; <strong>USeP ID</strong>, discount applied':''}<br>
         ${state.booker.mode==='account'
-          ? '&check; Account confirmed by the customer&rsquo;s password &mdash; <strong>'+esc(state.booker.name)+'</strong>'
+          ? counterAccountLine()
           : '&middot; Walk-in with no account &mdash; <strong>'+esc(state.booker.name)+'</strong> &middot; '+esc(state.booker.phone)}
       </div>
     </div>`:`

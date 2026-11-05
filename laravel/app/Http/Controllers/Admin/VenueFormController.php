@@ -20,9 +20,9 @@ class VenueFormController extends Controller
         $venueFormRow = $venueId ? vp_venue_row($venueId) : null;
         if ($venueFormRow === null) $venueId = 0;   // unknown id — behaves like Add
 
-        /* Adding a venue (an office) is the super admin's only (DB-DECISIONS 28; venue-save
-           refuses it too), so others are sent back to the list instead of a form they can't save. */
-        if ($venueId === 0 && !admin_is_super()) {
+        /* The offices are fixed (DB-DECISIONS 28; venue-save refuses an add too): no id, or an
+           unknown one, goes back to the list instead of a form nobody can save. */
+        if ($venueId === 0) {
             return redirect()->route('admin.venue-management');
         }
         if (!staff_sees_venue($venueId)) {   // another department's venue: not theirs to see (Aron 2026-10-31)

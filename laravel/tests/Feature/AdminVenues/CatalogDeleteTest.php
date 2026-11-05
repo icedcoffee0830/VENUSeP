@@ -21,14 +21,27 @@ class CatalogDeleteTest extends VenuesTestCase
             ->assertStatus(400)->assertJson(['error' => 'confirmation']);
         $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'room', 'room_id' => 'r1'])
             ->assertStatus(409)->assertJson(['error' => 'booking_history']);
-        $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'venue', 'venue_id' => '1'])
-            ->assertStatus(409)->assertJson(['error' => 'has_rooms']);
         $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'thing'])
             ->assertStatus(400)->assertJson(['error' => 'bad_entity']);
         $this->assertTrue(DB::table('rooms')->where('room_code', 'r1')->exists());
     }
 
-    public function test_admin_deletes_an_unused_room_and_an_empty_venue(): void
+    /* The offices are fixed (DB-DECISIONS 28): the super admin cannot delete one either, empty or not. */
+    public function test_nobody_deletes_an_office(): void
+    {
+        $venueId = $this->makeVenue('Delete Test Venue');
+        try {
+            $this->actingAsAdmin();
+            $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'venue', 'venue_id' => (string) $venueId])
+                ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden', 'message' => 'The offices are fixed: an office cannot be deleted.']);
+            $this->assertTrue(DB::table('venues')->where('id', $venueId)->exists());
+            $this->get(route('admin.venue-management'))->assertOk()->assertDontSee('Delete Venue')->assertDontSee('+ Add Venue');
+        } finally {
+            $this->dropVenue($venueId);
+        }
+    }
+
+    public function test_admin_deletes_an_unused_room(): void
     {
         $venueId = $this->makeVenue('Delete Test Venue');
         $roomId = DB::table('rooms')->insertGetId([
@@ -41,10 +54,6 @@ class CatalogDeleteTest extends VenuesTestCase
                 ->assertOk()->assertJson(['ok' => true, 'entity' => 'room', 'message' => 'Delete Test Room was deleted.']);
             $this->assertFalse(DB::table('rooms')->where('id', $roomId)->exists());
             $this->assertFalse(DB::table('event_room_details')->where('room_id', $roomId)->exists());
-
-            $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'venue', 'venue_id' => (string) $venueId])
-                ->assertOk()->assertJson(['ok' => true, 'entity' => 'venue', 'message' => 'Delete Test Venue was deleted.']);
-            $this->assertFalse(DB::table('venues')->where('id', $venueId)->exists());
         } finally {
             $this->dropRoom('r901');
             $this->dropVenue($venueId);
@@ -52,8 +61,8 @@ class CatalogDeleteTest extends VenuesTestCase
     }
 
     /* The rows go, and so do the files they pointed at: a deleted room's photo
-       folder and a deleted venue's cover used to stay on disk for good. */
-    public function test_deleting_a_room_or_venue_removes_its_photo_files(): void
+       folder used to stay on disk for good. */
+    public function test_deleting_a_room_removes_its_photo_files(): void
     {
         $venueId = $this->makeVenue('Delete Files Venue');
         $roomId = DB::table('rooms')->insertGetId([
@@ -66,16 +75,10 @@ class CatalogDeleteTest extends VenuesTestCase
             $this->withCsrf()->post(route('admin.room-photos-api'), [
                 '_token' => self::TOKEN, 'action' => 'upload', 'room_id' => 'r902', 'files' => [$this->pngUpload('a.png')],
             ])->assertOk();
-            $this->withCsrf()->post(route('admin.venue-photo-api'), [
-                '_token' => self::TOKEN, 'action' => 'upload', 'venue_id' => (string) $venueId, 'file' => $this->pngUpload('c.png'),
-            ])->assertOk();
             $this->assertCount(1, glob($roomDir . '/photos/*.png'));
-            $this->assertFileExists(public_path('assets/img/venues/covers/' . $venueId . '.png'));
 
             $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'room', 'room_id' => 'r902'])->assertOk();
             $this->assertDirectoryDoesNotExist($roomDir);
-            $this->postForm('admin.catalog-delete', ['confirm' => 'delete', 'entity' => 'venue', 'venue_id' => (string) $venueId])->assertOk();
-            $this->assertFileDoesNotExist(public_path('assets/img/venues/covers/' . $venueId . '.png'));
         } finally {
             $this->dropRoom('r902');
             $this->dropVenue($venueId);

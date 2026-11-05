@@ -353,8 +353,8 @@ if (!function_exists('vf_initials')) {
           <div class="container-fluid">
             <div class="vm-page">
       <a class="vm-back" href="{{ route('admin.venue-management') }}">&larr; Back to Venue Management</a>
-      <h1 class="vm-title">{{ $venueId ? 'Edit Venue (Location)' : 'Add Venue' }}</h1>
-      <p class="vm-subtitle">A venue is a location that holds rooms. It is not bookable.@if (!$venueId) Photos can be added once the venue is saved and has an id.@endif</p>
+      <h1 class="vm-title">Edit Venue (Location)</h1>
+      <p class="vm-subtitle">A venue is a location that holds rooms. It is not bookable.</p>
 
       <form class="vm-panel" onsubmit="return false">
         <input type="hidden" id="vpVenueId" value="{{ (int) $venueId }}" />
@@ -532,9 +532,7 @@ if (!function_exists('vf_initials')) {
                not block, and navigating at once wiped it off the screen */
             var movedLine = (res.moved && res.moved.length) ? '\n\n' + res.moved.join(', ') + (res.moved.length === 1 ? ' now handles ' : ' now handle ') + name + '.' : '';
             venusepAlert('Venue saved.' + movedLine, { tone: 'ok', title: 'Saved' }).then(function () {
-              location.href = (res.created && res.venue_id)
-                ? {!! json_encode(route('admin.venue-form')) !!} + '?id=' + encodeURIComponent(res.venue_id)
-                : {!! json_encode(route('admin.venue-management')) !!};
+              location.href = {!! json_encode(route('admin.venue-management')) !!};
             });
           })
           .catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });

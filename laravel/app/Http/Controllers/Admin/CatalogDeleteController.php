@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 
 /* CATALOG DELETE (was admin/catalog-delete.php) — deletes an eligible room
-   or venue from Venue Management. Booking/history rows are never deleted
+   from Venue Management (the offices are fixed, never deleted). Booking/history rows are never deleted
    here. Admin only (re-read from the database, not the session). */
 class CatalogDeleteController extends Controller
 {
@@ -22,7 +22,7 @@ class CatalogDeleteController extends Controller
             $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
         }
 
-        legacy('db', 'auth', 'venue-photos');   /* + room-photos: rp_room_dir(), vp_delete_cover_file() */
+        legacy('db', 'auth', 'venue-photos');   /* + room-photos: rp_room_dir() */
         $pdo = venusep_db();
         if ($pdo === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so nothing was deleted.']);
@@ -105,52 +105,9 @@ class CatalogDeleteController extends Controller
                     'message' => $roomRow['name'] . ' was deleted.']);
             }
 
+            /* The three offices are fixed (DB-DECISIONS 28): nobody deletes one, the super admin included. */
             if ($entity === 'venue') {
-                $rawVenueId = (string) $post->get('venue_id', '');
-                if (!ctype_digit($rawVenueId) || (int) $rawVenueId < 1) {
-                    $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Invalid venue.']);
-                }
-                $venueId = (int) $rawVenueId;
-                /* The offices are fixed (DB-DECISIONS 28): only the super admin adds or deletes one. */
-                if (!admin_is_super()) {
-                    $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only the super admin can delete an office.']);
-                }
-
-                $pdo->beginTransaction();
-                $venue = $pdo->prepare('SELECT id, name FROM venues WHERE id = :id FOR UPDATE');
-                $venue->execute([':id' => $venueId]);
-                $venueRow = $venue->fetch();
-                if (!$venueRow) {
-                    $pdo->rollBack();
-                    $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Venue not found.']);
-                }
-
-                $roomCount = $pdo->prepare('SELECT COUNT(*) FROM rooms WHERE venue_id = :id');
-                $roomCount->execute([':id' => $venueId]);
-                if ((int) $roomCount->fetchColumn() > 0) {
-                    $pdo->rollBack();
-                    $this->reply(409, ['ok' => false, 'error' => 'has_rooms',
-                        'message' => 'This venue cannot be deleted while it still contains rooms.']);
-                }
-
-                $businessCount = $pdo->prepare(
-                    'SELECT (SELECT COUNT(*) FROM gcash_accounts WHERE venue_id = :venue1)
-                          + (SELECT COUNT(*) FROM staff WHERE venue_id = :venue2)'
-                );
-                $businessCount->execute([':venue1' => $venueId, ':venue2' => $venueId]);
-                if ((int) $businessCount->fetchColumn() > 0) {
-                    $pdo->rollBack();
-                    $this->reply(409, ['ok' => false, 'error' => 'business_dependencies',
-                        'message' => 'This venue cannot be deleted because it has dependent business records.']);
-                }
-
-                $deleted = $pdo->prepare('DELETE FROM venues WHERE id = :id');
-                $deleted->execute([':id' => $venueId]);
-                $pdo->commit();
-                vp_delete_cover_file($venueId);   /* venues.cover_photo's file */
-
-                $this->reply(200, ['ok' => true, 'entity' => 'venue', 'name' => $venueRow['name'],
-                    'message' => $venueRow['name'] . ' was deleted.']);
+                $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'The offices are fixed: an office cannot be deleted.']);
             }
 
             $this->reply(400, ['ok' => false, 'error' => 'bad_entity', 'message' => 'Choose a room or venue to delete.']);

@@ -764,9 +764,6 @@ function vmMaint($m, $today) {
           <p>Manage locations and the rooms available under them.</p>
         </div>
         <div class="vm-actions">
-@if (admin_is_super()) {{-- adding a venue (an office) is the super admin's only (venue-save refuses others too) --}}
-          <a class="vm-btn vm-btn-primary" href="{{ route('admin.venue-form') }}">+ Add Venue</a>
-@endif
           <a class="vm-btn vm-btn-outline" href="{{ route('admin.room-form') }}">+ Add Room</a>
         </div>
       </div>
@@ -852,9 +849,6 @@ function vmMaint($m, $today) {
             <div class="vm-card-actions">
 @if ($vmMyVenue === null || in_array($venueName, $vmMyVenue, true)) {{-- staff: own venue only --}}
               <a class="vm-edit-link" href="{{ route('admin.venue-form', ['id' => $venueId]) }}"><span class="plus">✎</span> Edit Details</a>
-@endif
-@if (admin_is_super())
-              <button type="button" class="vm-delete-link" data-delete-entity="venue" data-delete-id="{{ $venueId }}" data-delete-name="{{ $venueName }}">Delete Venue</button>
 @endif
             </div>
           </div>
@@ -1091,7 +1085,7 @@ function vmMaint($m, $today) {
           const entity = button.dataset.deleteEntity;
           const name = button.dataset.deleteName;
           const ok = await venusepConfirm('Delete ' + name + '? This action cannot be undone.',
-            { title: 'Delete ' + (entity === 'room' ? 'room' : 'venue') + '?', okLabel: 'Delete', danger: true });
+            { title: 'Delete room?', okLabel: 'Delete', danger: true });
           if (!ok) return;
 
           const body = new URLSearchParams({
@@ -1099,7 +1093,7 @@ function vmMaint($m, $today) {
             confirm: 'delete',
             entity: entity,
           });
-          body.set(entity === 'room' ? 'room_id' : 'venue_id', button.dataset.deleteId);
+          body.set('room_id', button.dataset.deleteId);
           button.disabled = true;
           fetch({!! json_encode(route('admin.catalog-delete')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
             .then((response) => response.json().catch(() => ({ ok: false, message: 'The server sent an unreadable reply.' })))

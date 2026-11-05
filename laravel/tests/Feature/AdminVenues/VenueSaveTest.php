@@ -21,60 +21,28 @@ class VenueSaveTest extends VenuesTestCase
             ->assertStatus(404)->assertJson(['error' => 'not_found']);
     }
 
-    public function test_admin_creates_a_venue_then_edits_it(): void
+    /* The offices are fixed (DB-DECISIONS 28): nobody adds one, the super admin included;
+       staff and admins still edit their own. */
+    public function test_nobody_adds_an_office_and_the_buttons_are_gone(): void
     {
-        $this->actingAsAdmin();
-        $res = $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Port Test Hall', 'description' => 'A hall'])
-            ->assertOk()->assertJson(['ok' => true, 'created' => true, 'code' => 'PORT-TEST-HALL',
-                'message' => 'Venue created. You can add its photo and rooms now.']);
-        $id = (int) $res->json('venue_id');
-        try {
-            $row = DB::table('venues')->where('id', $id)->first();
-            $this->assertSame('event', $row->venue_type);
-            $this->assertSame('A hall', $row->description);
-
-            $this->postForm('admin.venue-save', ['venue_id' => (string) $id, 'name' => 'Port Test Hall 2', 'description' => 'Renamed'])
-                ->assertOk()->assertJson(['ok' => true, 'created' => false, 'name' => 'Port Test Hall 2', 'moved' => []]);
-            $this->assertSame('Port Test Hall 2', DB::table('venues')->where('id', $id)->value('name'));
-
-            /* a duplicate name is the old 409 */
-            $this->postForm('admin.venue-save', ['venue_id' => (string) $id, 'name' => 'Bahay Alumni'])
-                ->assertStatus(409)->assertJson(['error' => 'duplicate']);
-        } finally {
-            $this->dropVenue($id);
+        $before = DB::table('venues')->count();
+        foreach (['actingAsAdmin', 'actingAsStaff'] as $as) {
+            $this->flushSession();
+            $this->{$as}();
+            $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Port Test Hall'])
+                ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden', 'message' => 'The offices are fixed: no office can be added.']);
+            $this->postForm('admin.venue-save', ['name' => 'Port Test Hall', 'venue_type' => 'hostel'])->assertStatus(403);
+            $this->get(route('admin.venue-management'))->assertOk()->assertDontSee('+ Add Venue')->assertSee('+ Add Room');
         }
-    }
-
-    /* Aron 2026-10-30: the hostel is one venue — a second hostel venue is refused
-       (the form never sends venue_type; this is the tampered post). */
-    public function test_a_second_hostel_venue_is_refused(): void
-    {
-        $before = DB::table('venues')->count();
-        $this->actingAsAdmin();
-        $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Second Hostel', 'venue_type' => 'hostel'])
-            ->assertStatus(409)->assertJson(['ok' => false, 'error' => 'hostel_exists',
-                'message' => 'There is already a hostel venue (USeP Hostel). Add Venue is for event venues; add hostel rooms to the hostel instead.']);
         $this->assertSame($before, DB::table('venues')->count());
-    }
-
-    /* Aron 2026-10-30: adding a venue is admin-only — no button for staff, and
-       venue-save refuses a staff create. Staff still edit their own venue. */
-    public function test_only_an_admin_adds_a_venue(): void
-    {
-        $before = DB::table('venues')->count();
-        $this->actingAsStaff();
-        $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Staff Made Hall'])
-            ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden', 'message' => 'Only the super admin can add a venue.']);
-        $this->postForm('admin.venue-save', ['name' => 'Staff Made Hall'])->assertStatus(403);
-        $this->assertSame($before, DB::table('venues')->count());
-        $this->get(route('admin.venue-management'))->assertOk()
-            ->assertDontSee('+ Add Venue')->assertSee('+ Add Room');
         $v1 = DB::table('venues')->where('id', 1)->first();
-        $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => $v1->name, 'description' => (string) $v1->description])->assertOk()->assertJson(['ok' => true, 'created' => false]);
+        $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => $v1->name, 'description' => (string) $v1->description])
+            ->assertOk()->assertJson(['ok' => true, 'created' => false]);
+        /* a duplicate name is the old 409 */
         $this->flushSession();
-
-        $this->actingAsAdmin()->get(route('admin.venue-management'))->assertOk()
-            ->assertSee('+ Add Venue')->assertSee(route('admin.venue-form'), false);
+        $this->actingAsAdmin();
+        $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => 'USeP Venues'])
+            ->assertStatus(409)->assertJson(['error' => 'duplicate']);
     }
 
     public function test_only_an_admin_moves_staff_and_only_staff_accounts_move(): void

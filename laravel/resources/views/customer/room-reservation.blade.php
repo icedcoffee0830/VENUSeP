@@ -1020,8 +1020,8 @@ const PHOTO_TILE = 'background:#e9e7e2;background-image:repeating-linear-gradien
 function heroTile(R,i,extraStyle,inner){
   const url=(R.photoUrls||[])[i];
   extraStyle=extraStyle||''; inner=inner||'';
-  if(url) return `<div onclick="openGallery()" style="cursor:pointer;background-size:cover;background-position:center;background-image:url('${url}');${extraStyle}">${inner}</div>`;
-  return `<div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE};${extraStyle}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>${inner}</div>`;
+  if(url) return `<button type="button" onclick="openGallery(${i})" aria-label="Open ${esc(R.name)} photos" style="border:0;padding:0;cursor:pointer;background-size:cover;background-position:center;background-image:url('${url}');${extraStyle}">${inner}</button>`;
+  return `<div style="${PHOTO_TILE};${extraStyle}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>${inner}</div>`;
 }
 
 /* The maintenance chip — DERIVED from the window, never stored, and shown only
@@ -1234,7 +1234,7 @@ function detailScreen(){
   const tour=`<button type="button" class="bk-gal-slide bk-gal-360s${solo}" onclick="openRoomPano()" aria-label="Open the 360° tour of ${esc(R.name)}" style="background-image:url('${esc(R.panorama||SAMPLE_PANO)}')">
       <span class="bk-360-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>
       <strong>360° tour</strong><small>Tap to look around</small></button>`;
-  const slides = tour + photos.map((u,i)=>`<div class="bk-gal-slide" role="img" aria-label="${esc(R.name)} — photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></div>`).join('');
+  const slides = tour + photos.map((u,i)=>`<button type="button" class="bk-gal-slide bk-gal-photo" onclick="openGallery(${i})" aria-label="Open ${esc(R.name)} photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></button>`).join('');
   const gallery = `
       <div class="bk-gal">
         <div class="bk-gal-track" tabindex="0" aria-label="${esc(R.name)} — 360° tour and photos, swipe to browse">${slides}</div>

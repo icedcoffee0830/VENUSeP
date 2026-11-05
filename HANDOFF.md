@@ -723,3 +723,11 @@ It ends with "OK: every staff and admin account has an employee number". Applied
   your ID is verified" (booking history, pay page, details modal). Amounts show centavos when they have any.
 - Not done: the note is not in the narrow Transaction History tables; emails (payment_overdue still says
   "until it is paid") are the later email phase.
+- Side effect: the seeded super admin now has a staff row (full name = its username `admin`), so History lines
+  name it "admin" instead of its email (the header and profile already said "admin").
+- Tests: PHPUnit 714 OK; `venusep:check --db=venusep_laravel_test` PASS (273 ok); `venusep:flows` PASS 161/161.
+  New/changed: `SkeletonTest` (proxy), `AccountNotificationsTest` (super admin fallback), `HeaderPhotoTest`,
+  `AdminProfileTest` (role, employee numbers), `BookingRequestsTest`, `PayTest`, `PaymentSubmitTest`,
+  `BookingCreateTest` + `CounterAccountsTest` (phones), `BookingActionTest` (rounding), venue tests (fixed offices).
+  Flows: `hostel-and-counter` (Booking Management step), `abook-staff-actions` (overdue: no Pay now until
+  extended), `cacct-payment-guards` (extends first), `admina-dashboard-reports-backup` (overdue notification).

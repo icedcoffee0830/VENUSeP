@@ -62,14 +62,15 @@
                   <div class="os-grid">
                     <div class="os-field"><label for="phone{{ $o['id'] }}">Phone</label><input id="phone{{ $o['id'] }}" name="phone" type="tel" maxlength="30" autocomplete="off" value="{{ $o['phone'] }}"></div>
                     <div class="os-field"><label for="email{{ $o['id'] }}">Email</label><input id="email{{ $o['id'] }}" name="email" type="email" maxlength="190" autocomplete="off" spellcheck="false" value="{{ $o['email'] }}"></div>
-                    <div class="os-field" style="grid-column:1 / -1"><label for="location{{ $o['id'] }}">Location</label><input id="location{{ $o['id'] }}" name="location" type="text" maxlength="500" autocomplete="off" value="{{ $o['location'] }}"><small>Hours: {{ office_hours_label($o) }} (from the opening times and closed days above).</small></div>
+                    <div class="os-field" style="grid-column:1 / -1"><label for="location{{ $o['id'] }}">Location</label><input id="location{{ $o['id'] }}" name="location" type="text" maxlength="500" autocomplete="off" value="{{ $o['location'] }}">@fragment('os-hours-' . $o['id'])<small data-live="os-hours-{{ $o['id'] }}">Hours: {{ office_hours_label($o) }} (from the opening times and closed days above).</small>@endfragment</div>
                   </div>
                   <div class="os-field" style="margin-top:.9rem"><label for="reason{{ $o['id'] }}">Reason for this change</label><input id="reason{{ $o['id'] }}" name="reason" type="text" maxlength="500"><small>Required when the discount or grace days change. It goes in the history.</small></div>
                   <div class="os-row"><button class="os-btn" type="submit">Save {{ $o['name'] }}</button><span class="os-msg" role="status"></span></div>
                 </form>
 
                 <h3>Closures with dates</h3>
-                <ul class="os-list">
+                @fragment('os-closures-' . $o['id'])
+                <ul class="os-list" data-live="os-closures-{{ $o['id'] }}">
 @forelse ($o['closures'] as $c)
                   <li><span><strong>{{ date('M j, Y', strtotime($c['from'])) }}@if ($c['until'] !== $c['from']) &ndash; {{ date('M j, Y', strtotime($c['until'])) }}@endif</strong> &middot; {{ $c['reason'] }}</span>
                     <button class="os-btn os-btn-line" type="button" onclick="osRemove({{ $o['id'] }}, {{ $c['id'] }}, this)">Remove</button></li>
@@ -77,6 +78,7 @@
                   <li class="os-muted">No closures planned.</li>
 @endforelse
                 </ul>
+                @endfragment
                 <form class="os-closure" onsubmit="return osClose(event, this)">
                   <div class="os-grid" style="margin-top:.6rem">
                     <div class="os-field"><label for="from{{ $o['id'] }}">From</label><input id="from{{ $o['id'] }}" name="from" type="date" min="{{ date('Y-m-d') }}"></div>
@@ -86,6 +88,8 @@
                   <div class="os-row"><button class="os-btn os-btn-line" type="submit">Close this office</button><span class="os-msg" role="status"></span></div>
                 </form>
 
+                @fragment('os-history-' . $o['id'])
+                <div data-live="os-history-{{ $o['id'] }}">
 @if (!empty($historyByOffice[$o['id']]))
                 <h3>Change history</h3>
                 <ul class="os-list">
@@ -95,6 +99,8 @@
 @endforeach
                 </ul>
 @endif
+                </div>
+                @endfragment
               </section>
 @endforeach
             </div>
@@ -106,25 +112,21 @@
 @push('scripts')
     <script>
       const OS_URL = {!! json_encode(route('admin.office-save')) !!};
-      const OS_CSRF = {!! json_encode(csrf_token()) !!};
-      async function osPost(body) {
-        body.append('_token', OS_CSRF);
-        return fetch(OS_URL, { method: 'POST', body: body, credentials: 'same-origin' })
-          .then(function (r) { return r.json(); })
-          .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was changed.' }; });
-      }
-      async function osSend(form, action, keepOpen) {
+      async function osSend(form, action) {
         const msg = form.querySelector('.os-msg');
         const btn = form.querySelector('button[type=submit]');
         const body = new FormData(form);
         body.append('venue_id', form.closest('[data-office]').dataset.office);
         body.append('action', action);
         btn.disabled = true;
-        const out = await osPost(body);
+        const out = await Live.post(OS_URL, body);
         btn.disabled = false;
         msg.className = 'os-msg ' + (out.ok ? 'ok' : 'bad');
         msg.textContent = out.message || 'Nothing was changed.';
-        if (out.ok && !(out.affected && out.affected.length)) setTimeout(function () { location.reload(); }, 700);
+        if (!out.ok) return;
+        /* the form keeps what was just saved; a closure is added, so that form starts over */
+        if (action === 'save') form.elements.reason.value = ''; else form.reset();
+        Live.refresh();
       }
       function osSave(e, form) { e.preventDefault(); osSend(form, 'save'); return false; }
       function osClose(e, form) { e.preventDefault(); osSend(form, 'closure_add'); return false; }
@@ -133,8 +135,8 @@
         const body = new FormData();
         body.append('venue_id', venue); body.append('action', 'closure_remove'); body.append('closure_id', id);
         btn.disabled = true;
-        const out = await osPost(body);
-        if (out.ok) { location.reload(); return; }
+        const out = await Live.post(OS_URL, body);
+        if (out.ok) { Live.say(out.message || 'Saved.'); Live.refresh(); return; }
         btn.disabled = false;
         venusepAlert(out.message || 'Nothing was changed.');
       }

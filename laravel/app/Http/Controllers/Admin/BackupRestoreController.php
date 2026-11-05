@@ -11,7 +11,7 @@ class BackupRestoreController
     {
         legacy('backup');
 
-        return view('admin.backup-restore', [
+        return live_view('admin.backup-restore', [
             'brIsAdmin' => admin_is_super(),   // the super admin only (DB-DECISIONS 28)
             'brBackups' => backup_list(),
             'brVersion' => backup_schema_version(),

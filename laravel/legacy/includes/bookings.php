@@ -241,7 +241,10 @@ function booking_shape(array $row) {
         'discountPercent' => (float) $row['discount_percent'],
         'discountAmount'  => (float) $row['discount_amount'],
         'amountValue'   => (float) $row['total_amount'],
-        'amount'        => '₱' . number_format((float) $row['total_amount']),
+        /* centavos only when there are any: an older discounted total (1,234.20) must not read as 1,234 */
+        'amount'        => '₱' . number_format((float) $row['total_amount'], fmod((float) $row['total_amount'], 1.0) == 0.0 ? 0 : 2),
+        /* still a request with a USeP claim: the discount is decided at approval (Aron 2026-11-05) */
+        'discountPending' => $row['reservation_status'] === 'pending' && (bool) $row['is_usep_affiliated'] && (float) $row['discount_amount'] <= 0,
 
         /* Customers read the softened label, staff the full taxonomy. Both come
            from the lookup tables — neither side writes its own wording. */
@@ -518,6 +521,7 @@ function booking_queue_class(array $b) {
 function booking_queue_rows() {
     $rows = [];
     $mixed = staff_sees_many_offices();   // several offices in one list: each row names its office (DB-DECISIONS 28)
+    $mine = booking_my_hall_ids();
     foreach (bookings_all() as $b) {
         if ($b['reservationCode'] === 'completed'
             && in_array($b['paymentCode'], ['confirmed', 'paid_cash'], true)) {
@@ -542,6 +546,7 @@ function booking_queue_rows() {
             'since'    => $b['refundFiledIso'],     // how long a refund has waited on staff
             'eventIso' => $b['eventDateIso'],
             'seq'      => $b['id'],                 // raw auto-increment id — strictly submission order, for callers that want latest-first instead of urgency-first
+            'mine'     => $mine === null || isset($mine[$b['id']]),   // the "My halls" view
         ];
     }
     return $rows;
@@ -988,6 +993,18 @@ if (!function_exists('cb_normalise_mobile')) {
         if (strlen($d) === 10 && substr($d, 0, 1) === '9')  $d = '0' . $d;
         return (strlen($d) === 11 && substr($d, 0, 2) === '09') ? $d : null;
     }
+}
+
+/* The counter's phone rule (Aron 2026-11-05): a Philippine mobile typed as 09XXXXXXXXX or
+   +639XXXXXXXXX, spaces allowed, and nothing else (a letter, a dash, 639... are refused).
+   Normalised to 09XXXXXXXXX. cleanPhone() in counter-booker.php is its twin. */
+if (!function_exists('ph_mobile_strict')) {
+    function ph_mobile_strict($raw) {
+        return preg_match('/^(?:0|\+63)(9\d{9})$/', str_replace(' ', '', trim((string) $raw)), $m) ? '0' . $m[1] : null;
+    }
+}
+if (!defined('PH_MOBILE_MESSAGE')) {
+    define('PH_MOBILE_MESSAGE', 'Enter a mobile number as 09XX XXX XXXX or +63 9XX XXX XXXX.');
 }
 
 /* EVERY status code the database defines, with the badge label and colour a

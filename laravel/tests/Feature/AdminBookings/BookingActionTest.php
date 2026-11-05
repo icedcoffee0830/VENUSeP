@@ -60,6 +60,55 @@ class BookingActionTest extends TestCase
             ->where('performed_by_user_id', $adminId)->where('note', 'Approved; pay before the event.')->count());
     }
 
+    /* The discounted final price rounds UP to the whole peso and the discount is the rest
+       (Aron 2026-11-05, migration 18's sp_approve_booking): 1,542.75 less 20% = 1,234.20 -> 1,235.00.
+       Before approval the customer sees the full price and a note; after it, the discounted one. */
+    public function test_the_discounted_price_rounds_up_to_the_peso_at_approval_and_is_shown(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', true, true);
+        DB::table('bookings')->where('id', $id)->update(['room_price' => 1542.75, 'total_amount' => 1542.75]);
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'approve', 'discount' => '1'])->assertOk();
+        $b = $this->booking($id);
+        $this->assertSame(['1542.75', '307.75', '1235.00'], [$b->room_price, $b->discount_amount, $b->total_amount]);
+        $this->assertEquals(20, $b->discount_percent);
+        $this->flushSession();
+
+        $this->actingAsCustomer()->get(route('customer.booking-history'))->assertOk()
+            ->assertSee('<td class="booking-amount" data-label="Amount">₱1,235</td>', false);
+        $this->getJson(route('root.booking-details', ['booking' => $ref]))->assertOk()
+            ->assertJsonPath('details.money.total', '₱1,235.00')->assertJsonPath('details.money.discount', '−₱307.75')
+            ->assertJsonPath('details.money.discountNote', '');
+    }
+
+    /* (legacy customer-bookings.php reads the list once per process, so this is its own test) */
+    public function test_before_approval_the_customer_sees_the_full_price_and_the_discount_note(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', true, true);
+        DB::table('bookings')->where('id', $id)->update(['room_price' => 1542.75, 'total_amount' => 1542.75]);
+        $this->actingAsCustomer()->get(route('customer.booking-history'))->assertOk()
+            ->assertSee('₱1,542.75<span class="booking-amount-note">USeP discount applied once your ID is verified</span>', false);
+        $this->getJson(route('root.booking-details', ['booking' => $ref]))->assertOk()
+            ->assertJsonPath('details.money.total', '₱1,542.75')
+            ->assertJsonPath('details.money.discountNote', 'USeP discount applied once your ID is verified');
+    }
+
+    /* No discount: nothing is rounded, the price stays as it is. Every approval, the
+       counter's included, goes through sp_approve_booking. */
+    public function test_an_approval_without_the_discount_rounds_nothing_and_the_procedure_rounds_a_counter_total(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', true, true);
+        DB::table('bookings')->where('id', $id)->update(['room_price' => 1542.75, 'total_amount' => 1542.75]);
+        $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'approve'])->assertOk();
+        $b = $this->booking($id);
+        $this->assertSame(['1542.75', '0.00', '1542.75'], [$b->room_price, $b->discount_amount, $b->total_amount]);
+
+        [$id2] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', true, true);
+        DB::table('bookings')->where('id', $id2)->update(['room_price' => 1542.75, 'discount_percent' => 20, 'discount_amount' => 308.55, 'total_amount' => 1234.20]);
+        DB::statement('CALL sp_approve_booking(?, ?)', [$id2, (int) DB::table('users')->where('email', 'staff@gmail.com')->value('id')]);
+        $b2 = $this->booking($id2);
+        $this->assertSame(['307.75', '1235.00', 'approved'], [$b2->discount_amount, $b2->total_amount, $b2->reservation_status]);
+    }
+
     public function test_staff_approves_their_own_venues_booking_post_pay(): void
     {
         [, $ref] = $this->seedVenueBooking('r1', 'pending', 'locked', 'gcash', false, false);

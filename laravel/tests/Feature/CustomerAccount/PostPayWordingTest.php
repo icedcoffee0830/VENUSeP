@@ -38,7 +38,7 @@ class PostPayWordingTest extends TestCase
         $this->actingAsCustomer('customer@gmail.com')->get(route('customer.pay', ['booking' => $this->ref(20)]))
             ->assertOk()
             ->assertSeeInOrder(['Was due', 'Oct 12, 2026'])
-            ->assertSee('It was due Oct 12, 2026. Please pay it now', false)
+            ->assertSee('Payment overdue. Please contact the office.')   // closed until extended (Aron 2026-11-05)
             ->assertDontSee('Oct 14, 2026')
             ->assertDontSee('staff may release the slot');
     }

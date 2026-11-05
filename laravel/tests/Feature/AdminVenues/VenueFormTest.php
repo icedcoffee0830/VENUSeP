@@ -47,11 +47,10 @@ class VenueFormTest extends VenuesTestCase
         $this->actingAsStaff()->get(route('admin.venue-form', ['id' => 999]))->assertRedirect(route('admin.venue-management'));
     }
 
-    public function test_for_an_admin_an_unknown_id_is_add(): void
+    /* The offices are fixed (DB-DECISIONS 28): the super admin has no Add page either. */
+    public function test_the_super_admin_opening_add_venue_is_sent_back_too(): void
     {
-        $this->actingAsAdmin()->get(route('admin.venue-form'))->assertOk()->assertSee('Add Venue');
-        $this->actingAsAdmin()->get(route('admin.venue-form', ['id' => 999]))->assertOk()
-            ->assertSee('Add Venue')
-            ->assertSee('Photos can be added once the venue is saved and has an id.');
+        $this->actingAsAdmin()->get(route('admin.venue-form'))->assertRedirect(route('admin.venue-management'));
+        $this->actingAsAdmin()->get(route('admin.venue-form', ['id' => 999]))->assertRedirect(route('admin.venue-management'));
     }
 }

@@ -13,6 +13,7 @@
    CSRF, COUNTER_STAFF, DISCOUNT_PERCENT, COUNTER_OVERDUE — and expects a 'detail' screen to
    go back to and a 'review' screen to go on to.
    ===================================================================== */
+require_once __DIR__ . '/bookings.php';   /* PH_MOBILE_MESSAGE, the counter's phone rule */
 ?>
 <script>
 /* COUNTER MODE: who the booking is FOR. In the customer flow this is simply
@@ -154,13 +155,16 @@ function counterBookerReady(){
 function walkinEmailOk(v){
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
-/* 11 digits starting 09 — the same shape cb_normalise_mobile() accepts server
-   side, so the counter cannot store a number the rest of the system rejects. */
+/* 09XXXXXXXXX or +639XXXXXXXXX, spaces allowed — the same rule as ph_mobile_strict()
+   server side (bookings.php), normalised to 09XXXXXXXXX. */
 function cleanPhone(raw){
-  let d = String(raw||'').replace(/\D+/g,'');
-  if(d.length===12 && d.slice(0,2)==='63') d = '0'+d.slice(2);
-  if(d.length===10 && d[0]==='9') d = '0'+d;
-  return (d.length===11 && d.slice(0,2)==='09') ? d : null;
+  const m = String(raw||'').replace(/ /g,'').match(/^(?:0|\+63)(9\d{9})$/);
+  return m ? '0'+m[1] : null;
+}
+const PH_MOBILE_PATTERN = '[ ]*(0|[+]63)[ ]*9([ ]*[0-9]){9}[ ]*';   /* the same rule for the input's own check */
+function phoneHint(b){
+  return (b.phone.trim()!=='' && cleanPhone(b.phone)===null)
+    ? `<div role="alert" style="font-size:12.5px;color:#b23a3a;margin-top:8px"><?php echo PH_MOBILE_MESSAGE; ?></div>` : '';
 }
 function goFromWho(){
   if(!counterBookerReady()) return;
@@ -271,7 +275,8 @@ function whoScreen(){
       <input id="bkNewEmail" type="email" inputmode="email" spellcheck="false" autocapitalize="off" value="${esc(b.email)}" oninput="setBookerField('email', this.value)" placeholder="Email address" aria-label="Email address" style="${inputStyle}" autocomplete="off">
       ${suggestion ? `<button type="button" id="bkEmailFix" onclick="setBookerField('email', ${esc(JSON.stringify(suggestion))})" style="display:block;margin-top:6px;border:none;background:none;padding:0;color:#a11626;font-size:12.5px;cursor:pointer;font-family:inherit;text-align:left">Did you mean <strong>${esc(suggestion)}</strong>? Use it</button>` : ''}
       <div style="height:10px"></div>
-      <input id="bkNewPhone" type="tel" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Mobile number (09XXXXXXXXX)" aria-label="Mobile number" style="${inputStyle}" autocomplete="off">
+      <input id="bkNewPhone" type="tel" inputmode="tel" pattern="${PH_MOBILE_PATTERN}" title="09XX XXX XXXX or +63 9XX XXX XXXX" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Mobile number (09XX XXX XXXX)" aria-label="Mobile number" style="${inputStyle}" autocomplete="off">
+      ${phoneHint(b)}
       ${b.error ? `<div role="alert" style="font-size:12.5px;color:#b23a3a;margin-top:8px">${esc(b.error)}</div>` : ''}
       <div style="font-size:12px;color:#77736c;margin-top:8px;line-height:1.5">Search first: an email that already has an account is refused. The account has no password until the customer chooses one from the welcome email.</div>
       <button type="button" onclick="createCounterAccount(true)" style="margin-top:10px;height:40px;padding:0 16px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer;font-family:inherit">Check the details</button>
@@ -286,8 +291,8 @@ function whoScreen(){
       ${label('Guest details')}
       <input id="bkName" type="text" value="${esc(b.name)}" oninput="setBookerField('name', this.value)" placeholder="Full name" style="${inputStyle}" autocomplete="off">
       <div style="height:10px"></div>
-      <input id="bkPhone" type="tel" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Contact number (09XXXXXXXXX)" style="${inputStyle}" autocomplete="off">
-      ${(b.phone.trim()!=='' && cleanPhone(b.phone)===null) ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">That is not an 11-digit mobile number starting 09.</div>` : ''}
+      <input id="bkPhone" type="tel" inputmode="tel" pattern="${PH_MOBILE_PATTERN}" title="09XX XXX XXXX or +63 9XX XXX XXXX" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Contact number (09XX XXX XXXX)" aria-label="Contact number" style="${inputStyle}" autocomplete="off">
+      ${phoneHint(b)}
       <div style="height:10px"></div>
       ${b.noEmail ? '' : `
       <input id="bkEmail" type="text" inputmode="email" spellcheck="false" autocapitalize="off" aria-label="Guest email" value="${esc(b.email)}" oninput="setBookerField('email', this.value)" placeholder="Email — for their confirmation and receipt" style="${inputStyle}" autocomplete="off" aria-describedby="bkEmailHint">

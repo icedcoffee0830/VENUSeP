@@ -87,6 +87,23 @@ class BookingCreateTest extends TestCase
         @unlink(getenv('VENUSEP_DOC_ROOT') . '/mail-log/' . $mail->id . '.eml');
     }
 
+    /* The counter's phone rule (Aron 2026-11-05): 09XXXXXXXXX or +639XXXXXXXXX, spaces allowed. */
+    public function test_the_walk_in_phone_takes_only_09_or_plus_63_mobiles(): void
+    {
+        legacy('bookings');
+        foreach (['09171234567' => '09171234567', ' 0917 123 4567 ' => '09171234567', '+63 917 123 4567' => '09171234567',
+                  '+639171234567' => '09171234567', '0917-123-4567' => null, '639171234567' => null, '9171234567' => null,
+                  '0917123456a' => null, '09l7l234567' => null, '0817 123 4567' => null, '091712345678' => null, '' => null] as $in => $out) {
+            $this->assertSame($out, ph_mobile_strict($in), 'input ' . json_encode($in));
+        }
+        foreach (['0917abc4567', '0917-123-4567', '639171234567'] as $bad) {
+            $this->actingAsStaff()->create(['walkin_phone' => $bad] + $this->walkInVenue())
+                ->assertStatus(400)->assertExactJson(['ok' => false, 'message' => 'Enter a mobile number as 09XX XXX XXXX or +63 9XX XXX XXXX.']);
+        }
+        $res = $this->actingAsStaff()->create(['walkin_phone' => '+63 917 123 4567'] + $this->walkInVenue())->assertOk();
+        $this->assertSame('09171234567', DB::table('customers')->where('id', $this->booking($res->json('bookingId'))->customer_id)->value('phone'));
+    }
+
     public function test_walk_in_without_email_must_say_so(): void
     {
         $this->actingAsStaff()->create(['walkin_email' => ''] + $this->walkInVenue())->assertStatus(400)

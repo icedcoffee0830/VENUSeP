@@ -13,6 +13,7 @@ const EVENT_ROOM = 'r2';          // Heritage Function Room, Bahay Alumni
 const HOSTEL_ROOM = 'h2';         // Hostel Room 2
 const TOGGLE_ROOM = 'r5';         // USeP Gymnasium — disabled and enabled again
 const GCASH_VENUE = 'USeP Venues';
+const STAFF_VENUE = 'Bahay Alumni';   // has other staff: the only staff of a hall cannot be suspended
 const CEDU_ADMIN = 'cedu.admin@gmail.com';   // GCash accounts are each office's normal admin's, never the super admin's (DB-DECISIONS 28)
 
 /* the shared venusepAlert/venusepConfirm/venusepPrompt modal (assets/js/confirm-modal.js) */
@@ -62,7 +63,8 @@ export default {
       await page.locator('#roomCap').fill(String(s.eventCap));
       await page.getByRole('button', { name: 'Save Changes' }).click();
       await modal(ctx, page, { expect: /Saved/ });
-      await expect.url(page, /\/admin\/venue-management/);
+      await expect.url(page, /room-form.id=/);   // an edit stays on the form
+      await page.goto(ctx.url('/admin/venue-management'));
 
       const after = await dbOne(`SELECT r.description, e.attendee_capacity FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = ?`, [EVENT_ROOM]);
       expect.equal(after.description, s.eventDesc, 'rooms.description');
@@ -88,7 +90,8 @@ export default {
       await page.locator('#roomCheckIn').fill('15:00');
       await page.getByRole('button', { name: 'Save Changes' }).click();
       await modal(ctx, page, { expect: /Saved/ });
-      await expect.url(page, /\/admin\/venue-management/);
+      await expect.url(page, /room-form.id=/);   // an edit stays on the form
+      await page.goto(ctx.url('/admin/venue-management'));
 
       const after = await dbOne(`SELECT r.description, h.check_in_time FROM rooms r JOIN hostel_room_details h ON h.room_id = r.id WHERE r.room_code = ?`, [HOSTEL_ROOM]);
       expect.equal(after.description, s.hostelDesc, 'rooms.description');
@@ -138,7 +141,7 @@ export default {
       const card = page.locator('[data-office="1"]');
       await card.locator('input[name="discount"]').fill(String(s.rate));
       await card.locator('.os-form input[name="reason"]').fill(s.reason);
-      const reloaded = page.waitForEvent('load').then(() => true, () => false);
+      const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);
       await card.getByRole('button', { name: /^Save / }).click();
       expect.ok(await reloaded, 'the page did not reload after Save');
       await expect.visible(page.locator('[data-office="1"]').getByText(s.reason), 'the change is not in the history');
@@ -211,7 +214,7 @@ export default {
       await page.keyboard.type(s.faqA);
       await Promise.all([page.waitForLoadState('load'), page.getByRole('button', { name: 'Add question' }).click()]);
       await page.waitForLoadState('load');
-      await expect.visible(page.locator('.fq-flash.ok'), 'no success message after adding the question');
+      await expect.text(page, /Question added/);
       await expect.visible(page.locator('#booking .fq-row', { hasText: s.faqQ }), 'the question is not listed under "Booking a venue"');
 
       const f = await dbOne(`SELECT section_key, answer, policy, is_active, is_builtin FROM faqs WHERE question = ?`, [s.faqQ]);
@@ -232,7 +235,7 @@ export default {
       const page = s.admin;
       s.newEmail = `flow.staff.${tag.replace(/\D/g, '')}@example.com`;
       s.newName = 'Flow Staff ' + tag.slice(-6);
-      const venue = await dbOne(`SELECT id FROM venues WHERE name = ?`, [GCASH_VENUE]);
+      const venue = await dbOne(`SELECT id FROM venues WHERE name = ?`, [STAFF_VENUE]);
 
       await page.goto(ctx.url('/admin/staff'));
       await page.getByRole('link', { name: 'Add account' }).click();
@@ -247,8 +250,6 @@ export default {
       await page.locator('#adminTerms').check();
       await page.getByRole('button', { name: 'Create Account' }).click();
       await expect.text(page, 'Staff account created');
-      // the page goes back to the dashboard by itself ~1s later; going elsewhere first gets cancelled by it
-      await page.waitForURL(/\/admin\/dashboard/);
 
       const u = await dbOne(`SELECT u.id, u.account_type, u.is_active, s.venue_id, s.full_name FROM users u JOIN staff s ON s.user_id = u.id WHERE u.email = ?`, [s.newEmail]);
       expect.ok(u, 'no users/staff row for the new account');
@@ -262,7 +263,7 @@ export default {
       await page.locator('#table-filter').fill(s.newEmail);
       const row = page.locator('.tabulator-row', { hasText: s.newEmail });
       await expect.visible(row, 'the new account is not in the staff table');
-      expect.match(await row.textContent(), new RegExp(`${GCASH_VENUE}.*Active`), 'venue + status in the row');
+      expect.match(await row.textContent(), new RegExp(`${STAFF_VENUE}.*Active`), 'venue + status in the row');
       return page;
     });
 
@@ -340,7 +341,7 @@ export default {
       const row = page.locator('.tabulator-row', { hasText: s.newEmail });
       await row.getByRole('button', { name: 'Suspend' }).click();
       const answer = page.waitForResponse((r) => r.url().includes('/admin/staff-save') && r.request().method() === 'POST').catch(() => null);
-      const reloaded = page.waitForEvent('load').then(() => true, () => false);   // the table reloads after a change
+      const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);   // the table reloads after a change
       await modal(ctx, page, { expect: /Suspend /, ok: 'Suspend' });
       const res = await answer;
       if (!res) ctx.fail('Suspend sent no request to /admin/staff-save');

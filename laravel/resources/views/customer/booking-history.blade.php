@@ -65,6 +65,9 @@
       .badge-overdue { background: #fcecec; color: #b23a3a; }
       .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
       .booking-pay-note.is-overdue { color: #b23a3a; }
+      .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); }
+      .booking-overdue-help { flex-basis: 100%; max-width: 26rem; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; }
+      .booking-overdue-help strong { color: #b23a3a; }
       /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
       .badge-expired, .badge-released { background: #eef0f2; color: #55606b; }
       .booking-status-note { display: block; margin-top: 4px; max-width: 220px; font-size: 11px; line-height: 1.4; color: var(--muted); }
@@ -208,10 +211,12 @@
                         <th>Actions</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    @fragment('bh-rows')
+                    <tbody data-live="bh-rows">
                       @foreach ($bookingHistory as $booking)
                         <tr
                           data-booking-row
+                          data-refund-status="{{ $booking['refundStatus'] }}"
                           data-booking-id="{{ $booking['bookingId'] }}"
                           data-venue="{{ $booking['venue'] }}"
                           data-event-name="{{ $booking['eventName'] }}"
@@ -226,7 +231,7 @@
                           <td data-label="Event">{{ $booking['eventName'] }}</td>
                           <td data-label="Event date">{{ $booking['eventDate'] }}</td>
                           <td data-label="Booked on">{{ $booking['bookingDate'] }}</td>
-                          <td class="booking-amount" data-label="Amount">{{ $booking['amount'] }}</td>
+                          <td class="booking-amount" data-label="Amount">{{ $booking['amount'] }}@if ($booking['discountPending'])<span class="booking-amount-note">USeP discount applied once your ID is verified</span>@endif</td>
                           <td data-label="Payment">
                             <span class="booking-badge {{ bh_badge($booking['paymentStatus']) }}">{{ $booking['paymentStatus'] }}</span>
                             {{-- post-pay bookings say WHEN — the date comes from the shared rule (legacy refund-policy.php) --}}
@@ -235,7 +240,7 @@
                             @elseif ($booking['paymentStatus'] === 'Payment due')
                               <span class="booking-pay-note">pay by {{ customer_pay_by_label($booking['payment']) }}</span>
                             @elseif ($booking['paymentStatus'] === 'Overdue')
-                              <span class="booking-pay-note is-overdue">was due {{ customer_pay_by_label($booking['payment']) }} &middot; can still be paid</span>
+                              <span class="booking-pay-note is-overdue">was due {{ customer_pay_by_label($booking['payment']) }}</span>
                             @endif
                           </td>
                           <td data-label="Status"><span class="booking-badge {{ bh_badge($booking['bookingStatus']) }}">{{ $booking['bookingStatus'] }}</span>
@@ -243,8 +248,9 @@
                           <td data-label="Actions" class="booking-actions-cell">
                             <div class="booking-actions">
                               {{-- Payment is open (or a receipt is with staff): the way back to
-                                   the payment step, customer.pay. --}}
-                              @if (in_array($booking['paymentCode'], ['await_gcash', 'await_cash', 'overdue'], true))
+                                   the payment step, customer.pay. Overdue: closed until staff extend
+                                   the deadline (that puts it back to await_*). --}}
+                              @if (in_array($booking['paymentCode'], \App\Support\Status::PAY_OPEN, true))
                                 <a class="booking-action booking-action-pay" href="{{ route('customer.pay', ['booking' => $booking['bookingId']]) }}">
                                   <i class="bi bi-wallet2" aria-hidden="true"></i>Pay now
                                 </a>
@@ -252,6 +258,8 @@
                                 <a class="booking-action" href="{{ route('customer.pay', ['booking' => $booking['bookingId']]) }}">
                                   <i class="bi bi-hourglass-split" aria-hidden="true"></i>Payment
                                 </a>
+                              @elseif ($booking['paymentCode'] === 'overdue')
+                                <p class="booking-overdue-help"><strong>Payment overdue. Please contact the office.</strong>@isset($bhOverdue[$booking['id']])<br>{{ $bhOverdue[$booking['id']] }}@endisset</p>
                               @endif
                               <!-- the booking and its payment, in a modal over this page — same as
                                    Transaction History's View (includes/booking-details-modal.php) -->
@@ -281,6 +289,7 @@
                         <td colspan="9">{{ $emptyBookingMessage }}</td>
                       </tr>
                     </tbody>
+                    @endfragment
                   </table>
                 </div>
                 <div class="booking-table-footer">
@@ -305,14 +314,9 @@
 @push('scripts')
     <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
     <script>
-      async function bookingChange(url, body) {
-        body.append('_token', {!! json_encode(csrf_token()) !!});
-        const out = await fetch(url, { method: 'POST', body: body, credentials: 'same-origin' })
-          .then(function (r) { return r.json(); })
-          .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was changed.' }; });
-        if (out.ok) { location.reload(); return; }
-        venusepAlert(out.message || 'Nothing was changed.');
-      }
+      /* filled in below, when the table is set up */
+      let bhRedraw = function () {};
+      function bookingChange(url, body) { return Live.send(url, body, bhRedraw); }
       async function bookingCancel(ref) {
         if (!(await venusepConfirm('Your request is cancelled and the date is freed. You owe nothing.', { title: 'Cancel this request?', okLabel: 'Cancel request', cancelLabel: 'Keep it' }))) return;
         const body = new FormData(); body.append('booking', ref);
@@ -320,6 +324,7 @@
       }
       function bookingFix(ref, input) {
         const body = new FormData(); body.append('booking', ref); body.append('id_document', input.files[0]);
+        input.value = '';   /* a refused file must not count as a field in use */
         bookingChange({!! json_encode(route('customer.booking-fix')) !!}, body);
       }
     </script>
@@ -328,8 +333,9 @@
       document.addEventListener('DOMContentLoaded', function () {
         const table = document.getElementById('bookingHistoryTable');
         if (!table) return;
-        const tbody = table.querySelector('tbody');
-        const rows = Array.from(tbody.querySelectorAll('tr[data-booking-row]'));
+        /* all three are read again after a refresh: the rows are new elements then */
+        let tbody = table.querySelector('tbody');
+        let rows = Array.from(tbody.querySelectorAll('tr[data-booking-row]'));
         const searchInput = document.getElementById('booking-history-search');
         const venueFilter = document.getElementById('booking-history-venue');
         const dateFromFilter = document.getElementById('booking-history-date-from');
@@ -339,7 +345,7 @@
         const statusTabs = Array.from(document.querySelectorAll('[data-booking-status]'));
         const pagination = document.getElementById('booking-history-pagination');
         const info = document.getElementById('booking-history-info');
-        const emptyRow = document.getElementById('booking-history-empty');
+        let emptyRow = document.getElementById('booking-history-empty');
         let activeStatus = '', currentPage = 1, pageSize = Number(entriesSelect.value), sortKey = 'event-date', sortDirection = 'desc', filteredRows = [];
 
         const comparableValue = function (row, key) {
@@ -437,6 +443,17 @@
 
         updateSortIndicators();
         render();
+
+        /* Fresh rows under the same filters, sort and page. */
+        bhRedraw = function () {
+          tbody = table.querySelector('tbody');
+          rows = Array.from(tbody.querySelectorAll('tr[data-booking-row]'));
+          emptyRow = document.getElementById('booking-history-empty');
+          bhRefundActions();
+          render();
+        };
+        /* the 30-second check */
+        Live.watch('mine', function () { return Live.refresh().then(bhRedraw); });
       });
     </script>
     <!-- [6b] REFUND ACTIONS — which button a row with a refund on it should
@@ -449,27 +466,14 @@
          reservation badge is left alone for every state EXCEPT 'refunded', which
          is the one moment the booking closes. -->
     <script>
-      document.addEventListener('DOMContentLoaded', function () {
-        const CSRF = @json(csrf_token());
-        const REFUNDS = {!! json_encode($bhRefunds, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-        const refs = Object.keys(REFUNDS);
-        if (!refs.length) return;
-
+      /* the row's refund state is on the row (data-refund-status); a fresh row runs through this again */
+      function bhRefundActions() {
         const withdraw = async function (ref) {
           const ok = await venusepConfirm(
             'Your booking is not affected either way — it stays yours. You can request a refund again later if you change your mind.',
             { title: 'Withdraw your refund request for ' + ref + '?', okLabel: 'Withdraw', danger: true });
           if (!ok) return;
-          fetch(@json(route('customer.refund-submit')), {
-            method: 'POST', credentials: 'same-origin',
-            body: new URLSearchParams({ _token: CSRF, booking: ref, action: 'withdraw' })
-          })
-            .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
-            .then(function (out) {
-              if (!out.ok) { venusepAlert(out.message || 'The request was not withdrawn.'); return; }
-              window.location.reload();
-            })
-            .catch(function () { venusepAlert('Could not reach the server, so nothing was changed.'); });
+          Live.send(@json(route('customer.refund-submit')), { booking: ref, action: 'withdraw' }, bhRedraw);
         };
 
         const action = function (row, cls, icon, text, onClick, href) {
@@ -483,10 +487,8 @@
           link.replaceWith(el);
         };
 
-        refs.forEach(function (ref) {
-          const rec = REFUNDS[ref];
-          const row = document.querySelector('[data-booking-id="' + String(ref).replace(/[^A-Za-z0-9-]/g, '') + '"]');
-          if (!row || !rec) return;
+        document.querySelectorAll('[data-refund-status]:not([data-refund-status=""])').forEach(function (row) {
+          const ref = row.dataset.bookingId, rec = { status: row.dataset.refundStatus };
           const link = row.querySelector('.booking-action-refund');
 
           /* Open on staff, not yet decided -> the customer can pull it back (the
@@ -504,9 +506,8 @@
             link.remove();
           }
         });
-        const search = document.getElementById('booking-history-search');
-        if (search) search.dispatchEvent(new Event('input'));
-      });
+      }
+      document.addEventListener('DOMContentLoaded', bhRefundActions);
     </script>
     @php include base_path('legacy/includes/booking-details-modal.php'); /* "View" */ @endphp
 @endpush

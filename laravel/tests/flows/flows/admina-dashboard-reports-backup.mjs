@@ -182,8 +182,15 @@ export default {
       const item = page.locator('.nb-panel .nb-item.is-unread', { hasText: ref }).first();
       await expect.visible(item, `no unread notification about ${ref}`);
       await item.click();
-      const open = ['await_gcash', 'await_cash', 'overdue'].includes(b.payment_status);
-      await expect.url(page, open ? new RegExp(`/customer/pay\\?booking=${ref}$`) : new RegExp(`/customer/booking-history\\?view=${ref}$`));
+      /* overdue is closed until staff extend it (Aron 2026-11-05): its notification opens the booking */
+      const open = ['await_gcash', 'await_cash'].includes(b.payment_status);
+      if (open) {
+        await expect.url(page, new RegExp(`/customer/pay\\?booking=${ref}$`));
+      } else {
+        await expect.url(page, /\/customer\/booking-history/);   // ?view= opens the details, then leaves the address
+        await expect.visible(page.locator('.bdm-sub', { hasText: ref }), `the notification did not open ${ref}`);
+        await page.locator('[data-bdm-close]').first().click();   // the details cover the bell
+      }
       const r = await dbOne(`SELECT read_at FROM notifications WHERE id = ?`, [unread[0].id]);
       expect.ok(r.read_at, 'the clicked notification is still unread in the database');
 

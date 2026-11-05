@@ -62,9 +62,12 @@ function usep_is_account($email) {
     $d = $parts[1];
     return $d === $USEP_MAIL_DOMAIN || substr($d, -strlen('.' . $USEP_MAIL_DOMAIN)) === '.' . $USEP_MAIL_DOMAIN;
 }
+/* The discounted price rounds UP to the whole peso, as approval stores it
+   (sp_approve_booking, migration 18); cents first, so 800.0000001 stays 800. */
 function usep_discounted($price, $pct = null) {
     global $DISCOUNT_PERCENT;
-    return $price - round($price * ($pct ?? $DISCOUNT_PERCENT)) / 100;
+    $pct = $pct ?? $DISCOUNT_PERCENT;
+    return $pct > 0 ? ceil(round($price - round($price * $pct) / 100, 2)) : $price;
 }
 /* "~~₱5,000~~ ₱4,000 per day · 20% off" for a USeP account, plain "₱5,000"
    otherwise. A preview — staff still confirm the discount from the ID at
@@ -101,10 +104,11 @@ function usep_price_html($price, $isUsep, $unit = '', $pct = null) {
 
   /* Pricing for one booking. `affiliated` is the customer's CLAIM; staff
      confirm it later, which is why the UI calls the discount provisional
-     until then. Returns whole centavo-safe pesos. */
+     until then. The discounted total rounds UP to the whole peso and the discount
+     is the rest, as approval stores it (sp_approve_booking, migration 18). */
   function priceWithDiscount(roomPrice, affiliated) {
     const pct = affiliated === true ? DISCOUNT_PERCENT : 0;
-    const discount = Math.round(roomPrice * pct) / 100;
-    return { roomPrice: roomPrice, discountPercent: pct, discountAmount: discount, total: roomPrice - discount };
+    const total = pct > 0 ? Math.ceil(Math.round((roomPrice - Math.round(roomPrice * pct) / 100) * 100) / 100) : roomPrice;
+    return { roomPrice: roomPrice, discountPercent: pct, discountAmount: roomPrice - total, total: total };
   }
 </script>

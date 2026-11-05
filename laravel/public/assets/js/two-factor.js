@@ -231,7 +231,7 @@
         say('');
         if (pending === 'begin' || pending === 'move') openSetup(res);
         else if (pending === 'codes') { say(res.message, true); openCodes(res.codes); }
-        else window.location.reload();
+        else redrawPanel();
       });
     });
 
@@ -248,9 +248,15 @@
     panel.querySelectorAll('[data-tfa-back]').forEach(function (btn) {
       btn.addEventListener('click', function () { say(''); show(null); });
     });
-    codesBlock.querySelector('[data-tfa-saved-submit]').addEventListener('click', function () { window.location.reload(); });
+    codesBlock.querySelector('[data-tfa-saved-submit]').addEventListener('click', redrawPanel);
     bindSaved(codesBlock);
   }
+
+  /* the panel's state changed: it comes back from the server (public/assets/js/live.js) */
+  function redrawPanel() {
+    window.Live.refresh(null, ['tfa-panel']).then(function () { document.querySelectorAll('[data-tfa-panel]').forEach(initPanel); });
+  }
+  window.tfaRedraw = redrawPanel;
 
   function init() {
     document.querySelectorAll('[data-tfa-countdown]').forEach(function (el) {

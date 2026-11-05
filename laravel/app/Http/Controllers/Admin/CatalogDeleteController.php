@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\RoomQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
-/* CATALOG DELETE (was admin/catalog-delete.php) — deletes an eligible room
-   or venue from Venue Management. Booking/history rows are never deleted
+/* CATALOG DELETE (was admin/catalog-delete.php) — deletes a room (hall or hostel room)
+   from Venue Management: hidden from users, its row kept for the records (RoomQueries). The
+   offices are fixed, never deleted. Booking/history rows are never deleted
    here. Admin only (re-read from the database, not the session). */
 class CatalogDeleteController extends Controller
 {
@@ -22,7 +25,7 @@ class CatalogDeleteController extends Controller
             $this->reply(401, ['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.']);
         }
 
-        legacy('db', 'auth', 'venue-photos');   /* + room-photos: rp_room_dir(), vp_delete_cover_file() */
+        legacy('db', 'auth', 'venue-photos');   /* + room-photos: rp_room_dir() */
         $pdo = venusep_db();
         if ($pdo === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so nothing was deleted.']);
@@ -51,106 +54,38 @@ class CatalogDeleteController extends Controller
                     $this->reply(400, ['ok' => false, 'error' => 'bad_room', 'message' => 'Invalid room.']);
                 }
 
-                $pdo->beginTransaction();
-                $room = $pdo->prepare('SELECT id, name, venue_id FROM rooms WHERE room_code = :code FOR UPDATE');
-                $room->execute([':code' => $roomCode]);
-                $roomRow = $room->fetch();
-                if (!$roomRow) {
-                    $pdo->rollBack();
-                    $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
-                }
-                if (!staff_may_handle_venue($roomRow['venue_id'])) {   // a normal admin: its own offices only
-                    $pdo->rollBack();
-                    $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'This room belongs to another office.']);
-                }
-                $roomId = (int) $roomRow['id'];
-
-                $bookingCount = $pdo->prepare('SELECT COUNT(*) FROM bookings WHERE room_id = :id');
-                $bookingCount->execute([':id' => $roomId]);
-                if ((int) $bookingCount->fetchColumn() > 0) {
-                    $pdo->rollBack();
-                    $this->reply(409, ['ok' => false, 'error' => 'booking_history',
-                        'message' => 'This room cannot be deleted because it has booking history.']);
-                }
-
-                /* These references should accompany a booking, but check them
-                   independently so malformed legacy data can never be erased. */
-                $slotCount = $pdo->prepare('SELECT COUNT(*) FROM venue_booking_slots WHERE room_id = :id');
-                $slotCount->execute([':id' => $roomId]);
-                $bedHistory = $pdo->prepare(
-                    'SELECT (SELECT COUNT(*) FROM bed_reservations br JOIN hostel_beds hb ON hb.id = br.bed_id WHERE hb.room_id = :room1)
-                          + (SELECT COUNT(*) FROM bed_reservation_nights bn JOIN hostel_beds hb ON hb.id = bn.bed_id WHERE hb.room_id = :room2)'
-                );
-                $bedHistory->execute([':room1' => $roomId, ':room2' => $roomId]);
-                if ((int) $slotCount->fetchColumn() > 0 || (int) $bedHistory->fetchColumn() > 0) {
-                    $pdo->rollBack();
-                    $this->reply(409, ['ok' => false, 'error' => 'booking_history',
-                        'message' => 'This room cannot be deleted because it has booking history.']);
-                }
-
-                /* Only room-owned configuration reaches this point. */
-                $pdo->prepare('DELETE FROM maintenance_windows WHERE room_id = :id')->execute([':id' => $roomId]);
-                $pdo->prepare('DELETE FROM room_media WHERE room_id = :id')->execute([':id' => $roomId]);
-                $pdo->prepare('DELETE FROM event_room_details WHERE room_id = :id')->execute([':id' => $roomId]);
-                $pdo->prepare('DELETE FROM hostel_room_details WHERE room_id = :id')->execute([':id' => $roomId]);
-                $pdo->prepare('DELETE FROM hostel_beds WHERE room_id = :id')->execute([':id' => $roomId]);
-                $deleted = $pdo->prepare('DELETE FROM rooms WHERE id = :id');
-                $deleted->execute([':id' => $roomId]);
-                $pdo->commit();
-                /* the files those room_media rows pointed at (photos + 360°); the code
-                   passed the regex above, so this stays inside the rooms folder */
+                /* Deleted for users, kept as a hidden row (Aron 2026-11-05): past bookings,
+                   receipts, History and reports keep its name. No undo. Refused while any
+                   booking is pending, still to come or going on (trg_rooms_deleted_upd too). */
+                $roomRow = DB::transaction(function () use ($roomCode) {
+                    $room = RoomQueries::findLiveForUpdate($roomCode);
+                    if ($room === null) {
+                        $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
+                    }
+                    if (!staff_may_handle_venue($room['venue_id'])) {   // a normal admin: its own offices only
+                        $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'This room belongs to another office.']);
+                    }
+                    $live = RoomQueries::liveBookings((int) $room['id']);
+                    if ($live > 0) {
+                        $this->reply(409, ['ok' => false, 'error' => 'live_bookings', 'count' => $live,
+                            'message' => $room['name'] . ' has ' . $live . ($live === 1 ? ' booking' : ' bookings')
+                                . ' still pending, coming up or going on, so it cannot be deleted. Finish, cancel or reject '
+                                . ($live === 1 ? 'it' : 'them') . ' first.']);
+                    }
+                    RoomQueries::delete((int) $room['id'], (int) session('user_id'));
+                    return $room;
+                });
+                /* the photos are not records: their files go (the code passed the regex
+                   above, so this stays inside the rooms folder) */
                 File::deleteDirectory(rp_room_dir($roomCode));
 
                 $this->reply(200, ['ok' => true, 'entity' => 'room', 'name' => $roomRow['name'],
-                    'message' => $roomRow['name'] . ' was deleted.']);
+                    'message' => $roomRow['name'] . ' was deleted. Past bookings and receipts keep its name.']);
             }
 
+            /* The three offices are fixed (DB-DECISIONS 28): nobody deletes one, the super admin included. */
             if ($entity === 'venue') {
-                $rawVenueId = (string) $post->get('venue_id', '');
-                if (!ctype_digit($rawVenueId) || (int) $rawVenueId < 1) {
-                    $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Invalid venue.']);
-                }
-                $venueId = (int) $rawVenueId;
-                /* The offices are fixed (DB-DECISIONS 28): only the super admin adds or deletes one. */
-                if (!admin_is_super()) {
-                    $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only the super admin can delete an office.']);
-                }
-
-                $pdo->beginTransaction();
-                $venue = $pdo->prepare('SELECT id, name FROM venues WHERE id = :id FOR UPDATE');
-                $venue->execute([':id' => $venueId]);
-                $venueRow = $venue->fetch();
-                if (!$venueRow) {
-                    $pdo->rollBack();
-                    $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Venue not found.']);
-                }
-
-                $roomCount = $pdo->prepare('SELECT COUNT(*) FROM rooms WHERE venue_id = :id');
-                $roomCount->execute([':id' => $venueId]);
-                if ((int) $roomCount->fetchColumn() > 0) {
-                    $pdo->rollBack();
-                    $this->reply(409, ['ok' => false, 'error' => 'has_rooms',
-                        'message' => 'This venue cannot be deleted while it still contains rooms.']);
-                }
-
-                $businessCount = $pdo->prepare(
-                    'SELECT (SELECT COUNT(*) FROM gcash_accounts WHERE venue_id = :venue1)
-                          + (SELECT COUNT(*) FROM staff WHERE venue_id = :venue2)'
-                );
-                $businessCount->execute([':venue1' => $venueId, ':venue2' => $venueId]);
-                if ((int) $businessCount->fetchColumn() > 0) {
-                    $pdo->rollBack();
-                    $this->reply(409, ['ok' => false, 'error' => 'business_dependencies',
-                        'message' => 'This venue cannot be deleted because it has dependent business records.']);
-                }
-
-                $deleted = $pdo->prepare('DELETE FROM venues WHERE id = :id');
-                $deleted->execute([':id' => $venueId]);
-                $pdo->commit();
-                vp_delete_cover_file($venueId);   /* venues.cover_photo's file */
-
-                $this->reply(200, ['ok' => true, 'entity' => 'venue', 'name' => $venueRow['name'],
-                    'message' => $venueRow['name'] . ' was deleted.']);
+                $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'The offices are fixed: an office cannot be deleted.']);
             }
 
             $this->reply(400, ['ok' => false, 'error' => 'bad_entity', 'message' => 'Choose a room or venue to delete.']);

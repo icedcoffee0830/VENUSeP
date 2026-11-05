@@ -99,19 +99,24 @@ class StaffManagementTest extends TestCase
             ->assertStatus(403)->assertJson(['message' => 'That account is not a staff account.']);
     }
 
+    /* 74 shares every Bahay Alumni hall with 7; 73 is the hostel's only staff member, so
+       suspending them would leave it with nobody (Aron 2026-11-05). */
     public function test_suspend_then_reactivate_notifies_admins(): void
     {
         $this->actingAsAdmin()->withSession(['_token' => 'tok']);
         $before = DB::table('notifications')->count();
         try {
-            $this->post_(['action' => 'set_active', 'user_id' => 73, 'active' => '0'])
+            $this->post_(['action' => 'set_active', 'user_id' => 74, 'active' => '0'])
                 ->assertOk()->assertExactJson(['ok' => true, 'active' => 0, 'message' => 'Account suspended. They can no longer sign in.']);
-            $this->assertSame(0, (int) DB::table('users')->where('id', 73)->value('is_active'));
+            $this->assertSame(0, (int) DB::table('users')->where('id', 74)->value('is_active'));
             $this->assertGreaterThan($before, DB::table('notifications')->count());
-            $this->post_(['action' => 'set_active', 'user_id' => 73, 'active' => '1'])
+            $this->post_(['action' => 'set_active', 'user_id' => 74, 'active' => '1'])
                 ->assertOk()->assertJson(['active' => 1, 'message' => 'Account reactivated.']);
+            $this->post_(['action' => 'set_active', 'user_id' => 73, 'active' => '0'])
+                ->assertStatus(409)->assertJson(['error' => 'last_staff', 'message' => 'Assign another staff member to USeP Hostel first.']);
+            $this->assertSame(1, (int) DB::table('users')->where('id', 73)->value('is_active'));
         } finally {
-            DB::table('users')->where('id', 73)->update(['is_active' => 1]);
+            DB::table('users')->whereIn('id', [73, 74])->update(['is_active' => 1]);
         }
     }
 
@@ -150,9 +155,14 @@ class StaffManagementTest extends TestCase
             $this->post_(['action' => 'set_venue', 'user_id' => 73, 'venue_id' => '99'])
                 ->assertStatus(400)->assertJson(['message' => 'That venue does not exist.']);
             $this->post_(['action' => 'set_venue', 'user_id' => 73, 'venue_id' => '2'])
+                ->assertStatus(409)->assertJson(['error' => 'last_staff', 'message' => 'Assign another staff member to USeP Hostel first.']);
+            $this->post_(['action' => 'set_venue', 'user_id' => 74, 'venue_id' => '2'])
                 ->assertOk()->assertExactJson(['ok' => true, 'venue_id' => 2, 'venue' => 'USeP Venues', 'message' => 'Venue assignment updated.']);
-            $this->assertSame(2, (int) DB::table('staff')->where('user_id', 73)->value('venue_id'));
+            $this->assertSame(2, (int) DB::table('staff')->where('user_id', 74)->value('venue_id'));
+            /* the move takes the old office's halls away and gives every hall of the new one */
+            $this->assertSame([5, 6, 7, 8], DB::table('staff_halls')->where('user_id', 74)->orderBy('room_id')->pluck('room_id')->map(fn ($v) => (int) $v)->all());
         } finally {
+            DB::table('staff')->where('user_id', 74)->update(['venue_id' => 1]);
             DB::table('staff')->where('user_id', 73)->update(['venue_id' => 3]);
         }
     }
@@ -190,7 +200,8 @@ class StaffManagementTest extends TestCase
                           'phone' => '+63 917 555 0100', 'employee_no' => 'EMP-T-1', 'position_role' => 'Clerk'])
                 ->assertOk()->assertExactJson(['ok' => true, 'message' => 'Account updated.']);
             $s = DB::table('staff')->where('user_id', 74)->first();
-            $this->assertSame(['Maco Case', '09175550100', 'EMP-T-1', 'Clerk', 1],
+            /* the employee number is the database's, never typed (migration 18): a posted one is ignored */
+            $this->assertSame(['Maco Case', '09175550100', $orig->employee_no, 'Clerk', 1],
                 [$s->full_name, $s->phone, $s->employee_no, $s->position_role, (int) $s->venue_id]);
             $this->assertSame('macocase@gmail.com', DB::table('users')->where('id', 74)->value('email'));
         } finally {

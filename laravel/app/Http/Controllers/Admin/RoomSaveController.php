@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Customer\BookingRules;
+use App\Queries\StaffHallQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDO;
@@ -18,8 +19,9 @@ use Symfony\Component\HttpFoundation\InputBag;
    POST  _token, room_id (room_code, e.g. "r1"; EMPTY = create), name,
          venue (venue name), room_type ('event' | 'hostel')
    creating also: description, and per type —
-         event:  capacity, fee
-         hostel: beds, rate, cr_type
+         event:  capacity, fee, staff_ids = JSON [user ids]: the office's staff who cover
+                 the new hall; at least one (every hall keeps a staff member, Aron 2026-11-05)
+         hostel: beds, rate, cr_type (the hostel is one unit: its staff cover every room)
    Replies with JSON.
 
    ROOM CODES ARE GENERATED, NEVER TYPED. room_code is the photo folder
@@ -289,6 +291,21 @@ class RoomSaveController extends Controller
                             : 'Event rooms can only be added to an event venue.']);
                 }
 
+                /* A new hall names its staff: active staff of that office, at least one. */
+                $hallStaff = [];
+                if ($roomType === 'event') {
+                    $officeStaff = StaffHallQueries::staffOf((int) $venueRow['id']);
+                    $hallStaff = array_values(array_unique(array_map('intval', (array) json_decode((string) ($post->get('staff_ids') ?? '[]'), true))));
+                    if (!$officeStaff) {
+                        $this->reply(409, ['ok' => false, 'error' => 'no_staff',
+                            'message' => 'Create or assign a staff member to ' . $venueName . ' first: every hall needs one.']);
+                    }
+                    if (!$hallStaff || array_diff($hallStaff, array_keys($officeStaff))) {
+                        $this->reply(400, ['ok' => false, 'error' => 'bad_staff',
+                            'message' => 'Choose the staff member (or members) of ' . $venueName . ' who look after this hall.']);
+                    }
+                }
+
                 /* room_code is GENERATED, never typed — "r9", "h6" — continuing the
                    existing series. The prefix follows the TYPE, not the venue. */
                 $prefix = $roomType === 'hostel' ? 'h' : 'r';
@@ -339,6 +356,9 @@ class RoomSaveController extends Controller
                         ':c' => max(1, (int) ($post->get('capacity') ?? 1)),
                         ':f' => max(0, (float) ($post->get('fee') ?? 0)),
                     ]);
+                    foreach ($hallStaff as $staffId) {
+                        StaffHallQueries::assign($newId, $staffId, $actor);
+                    }
                 }
                 if ($glanceGiven) {
                     $pdo->prepare('UPDATE rooms SET best_for = :b, catering = :c, accessibility = :a WHERE id = :id')
@@ -359,7 +379,7 @@ class RoomSaveController extends Controller
                     'message' => 'Room created as ' . $newCode . '. You can add its photos now.']);
             }
 
-            $room = $pdo->prepare('SELECT id, room_type, venue_id FROM rooms WHERE room_code = :code');
+            $room = $pdo->prepare('SELECT id, room_type, venue_id FROM rooms WHERE room_code = :code AND deleted_at IS NULL');
             $room->execute([':code' => $roomCode]);
             $roomRow = $room->fetch();
             if (!$roomRow) {
@@ -385,6 +405,10 @@ class RoomSaveController extends Controller
             if ((int) $cur->fetchColumn() !== $venueId) {
                 if ($venueRow['venue_type'] !== ($roomType === 'hostel' ? 'hostel' : 'event')) {
                     throw new RoomSaveRefusal($roomType === 'hostel' ? 'A hostel room can only belong to a hostel venue.' : 'An event room can only belong to an event venue.');
+                }
+                /* the hall goes to the new office's staff (trg_rooms_halls_follow_upd): it needs one */
+                if ($roomType === 'event' && !StaffHallQueries::staffOf($venueId)) {
+                    throw new RoomSaveRefusal('Create or assign a staff member to ' . $venueName . ' first: every hall needs one.');
                 }
                 $up = $pdo->prepare(
                     "SELECT b.id, b.submitted_at FROM bookings b

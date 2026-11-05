@@ -353,8 +353,8 @@ if (!function_exists('vf_initials')) {
           <div class="container-fluid">
             <div class="vm-page">
       <a class="vm-back" href="{{ route('admin.venue-management') }}">&larr; Back to Venue Management</a>
-      <h1 class="vm-title">{{ $venueId ? 'Edit Venue (Location)' : 'Add Venue' }}</h1>
-      <p class="vm-subtitle">A venue is a location that holds rooms. It is not bookable.@if (!$venueId) Photos can be added once the venue is saved and has an id.@endif</p>
+      <h1 class="vm-title">Edit Venue (Location)</h1>
+      <p class="vm-subtitle">A venue is a location that holds rooms. It is not bookable.</p>
 
       <form class="vm-panel" onsubmit="return false">
         <input type="hidden" id="vpVenueId" value="{{ (int) $venueId }}" />
@@ -393,6 +393,8 @@ if (!function_exists('vf_initials')) {
         <!-- Assigned staff -->
         <p class="vm-staff-title">Assigned Staff</p>
         <p class="vm-staff-hint">Staff handle only their own venue's bookings, and each staff member belongs to exactly one venue. Adding someone here moves them from the venue they handle now.</p>
+        @fragment('vf-staff')
+        <div data-live="vf-staff">
         <div class="vm-staff-list" id="staffList">
           @if (!$vfHere)
             <div class="vm-staff-empty" id="staffEmpty">No staff handle this venue yet{{ $vfCanAssign ? ' — add someone below.' : '.' }}</div>
@@ -427,6 +429,8 @@ if (!function_exists('vf_initials')) {
           <button type="button" class="vm-picker-done" onclick="togglePicker()">Done</button>
         </div>
         @endif
+        </div>
+        @endfragment
 
         <div class="vm-form-foot">
           <a class="vm-btn vm-btn-outline" href="{{ route('admin.venue-management') }}">Cancel</a>
@@ -528,14 +532,11 @@ if (!function_exists('vf_initials')) {
           .then(vpParseApiResponse)
           .then(function (res) {
             if (!res.ok) { venusepAlert(res.message || 'Could not save the venue.'); return; }
-            /* move on only once OK is clicked — unlike alert(), the modal does
-               not block, and navigating at once wiped it off the screen */
             var movedLine = (res.moved && res.moved.length) ? '\n\n' + res.moved.join(', ') + (res.moved.length === 1 ? ' now handles ' : ' now handle ') + name + '.' : '';
-            venusepAlert('Venue saved.' + movedLine, { tone: 'ok', title: 'Saved' }).then(function () {
-              location.href = (res.created && res.venue_id)
-                ? {!! json_encode(route('admin.venue-form')) !!} + '?id=' + encodeURIComponent(res.venue_id)
-                : {!! json_encode(route('admin.venue-management')) !!};
-            });
+            /* the form stays: the queued moves are done, the staff lists come back from the server */
+            moves.forEach(function (id) { delete VP_MOVES[id]; });
+            Live.refresh();
+            venusepAlert('Venue saved.' + movedLine, { tone: 'ok', title: 'Saved' });
           })
           .catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }

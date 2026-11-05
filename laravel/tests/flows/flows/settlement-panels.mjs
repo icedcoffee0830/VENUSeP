@@ -20,7 +20,7 @@ export default {
       await page.getByRole('button', { name }).click();
       await expect.visible(page.locator('#xSend'), 'the panel did not open');
     };
-    const send = (page) => Promise.all([page.waitForEvent('load'), page.locator('#xSend').click()]);
+    const send = (page) => Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#xSend').click()]);
     const booking = (id) => dbOne(`SELECT reservation_status, payment_status, write_off_reason FROM bookings WHERE id = ?`, [id]);
     /* the customer's first booking page: the Overdue block says so up front */
     const blocked = async (page) => {
@@ -70,7 +70,7 @@ export default {
     await step('The right password reverses it: back to unpaid, the receipt void, the button gone', async () => {
       const page = s.admin;
       await page.locator('#xPass').fill(ctx.password);
-      await Promise.all([page.waitForEvent('load'), page.locator('#xSend').click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#xSend').click()]);
       const b = await booking(s.paid.id);
       expect.equal(b.payment_status, s.paid.payment_method === 'cash' ? 'await_cash' : 'await_gcash', 'payment_status');
       const r = await dbOne(`SELECT voided_at, void_reason FROM system_receipts WHERE booking_id = ?`, [s.paid.id]);
@@ -133,7 +133,7 @@ export default {
     await step('The admin approves: Completed and written off, and the customer\'s block ends', async () => {
       const page = s.admin;
       await open(page, refOf(s.a));
-      await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Approve write-off' }).click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.getByRole('button', { name: 'Approve write-off' }).click()]);
       const b = await booking(s.a.id);
       expect.equal(b.reservation_status, 'completed', 'reservation_status');
       expect.equal(b.payment_status, 'written_off', 'payment_status');
@@ -142,13 +142,29 @@ export default {
       expect.equal(await blocked(s.customer), 0, 'the Overdue block after the write-off');
     });
 
+    /* A written-off status once had no badge on the list, and drawing that one row blanked
+       the whole All tab. Search for it so its row is on the page being drawn. */
+    await step('Booking Management\'s All tab still draws, with the written-off row', async () => {
+      const page = s.admin;
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto(ctx.url('/admin/booking-requests'));
+      await page.locator('#brSearch').fill(refOf(s.a));
+      const row = page.locator('#brRows .br-row').filter({ hasText: refOf(s.a) });
+      await expect.visible(row, 'the written-off row on the All tab');
+      expect.equal(await row.locator('.br-badge', { hasText: 'Written off' }).count(), 1, 'its Written off badge');
+      await page.locator('#brSearch').fill('');
+      expect.ok(await page.locator('#brRows .br-row').count() > 0, 'the All tab drew rows');
+      expect.equal(errors.length, 0, 'page errors: ' + errors.join(' | '));
+    });
+
     await step('The admin declines another: still Overdue, the request is cleared, staff may ask again', async () => {
       await open(s.staff, refOf(s.b));
       await panel(s.staff, 'Request write-off');
       await s.staff.locator('#xNote').fill('They changed their number');
       await send(s.staff);
       await open(s.admin, refOf(s.b));
-      await Promise.all([s.admin.waitForEvent('load'), s.admin.getByRole('button', { name: 'Decline write-off' }).click()]);
+      await Promise.all([s.admin.waitForResponse((r) => r.url().includes('part=1')), s.admin.getByRole('button', { name: 'Decline write-off' }).click()]);
       const b = await booking(s.b.id);
       expect.equal(b.payment_status, 'overdue', 'payment_status');
       expect.equal(b.write_off_reason, null, 'write_off_reason');

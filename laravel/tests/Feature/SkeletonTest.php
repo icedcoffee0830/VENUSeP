@@ -112,4 +112,17 @@ class SkeletonTest extends TestCase
         $this->post('/_t/expired', [], ['Accept' => '*/*'])->assertStatus(401)->assertJson(['ok' => false, 'error' => 'not_logged_in']);
         $this->post('/_t/expired', [], ['Accept' => 'text/html'])->assertStatus(419);   // a form post: Laravel's page
     }
+
+    /* The tunnel on this machine says "this was https" and nothing else is believed:
+       a forged host or port from it must not change the links the app builds. */
+    public function test_only_the_local_proxys_https_header_is_trusted(): void
+    {
+        Route::middleware('web')->get('/_t/self', fn () => url('/x'));
+        $h = ['X-Forwarded-Proto' => 'https', 'X-Forwarded-Host' => 'evil.example', 'X-Forwarded-Port' => '9999'];
+        $local = $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])->get('http://127.0.0.1:8100/_t/self', $h)->getContent();
+        $this->assertStringStartsWith('https://', $local);
+        $this->assertStringNotContainsString('evil.example', $local);
+        $this->assertStringNotContainsString('9999', $local);
+        $this->assertStringStartsWith('http://', $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.5'])->get('http://127.0.0.1:8100/_t/self', $h)->getContent());
+    }
 }

@@ -84,7 +84,7 @@ class CustomerController
             $cmRows = [];
         }
 
-        return view('admin.customer-management', ['cmRows' => $cmRows, 'cmMaySuspend' => admin_is_super()]);
+        return live_view('admin.customer-management', ['cmRows' => $cmRows, 'cmMaySuspend' => admin_is_super()]);
     }
 
     private function reply(int $status, array $data)

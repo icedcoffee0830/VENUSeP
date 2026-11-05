@@ -105,7 +105,9 @@ class ReportQueries
             : '';
         $rows = DB::select("
             SELECT r.is_active = 1 AND v.is_active = 1 AS active,
-                   IF(r.is_active = 1 AND v.is_active = 1, r.name, CONCAT(r.name, ' (inactive)')) AS name,
+                   CASE WHEN r.deleted_at IS NOT NULL THEN CONCAT(r.name, ' (deleted)')
+                        WHEN r.is_active = 1 AND v.is_active = 1 THEN r.name
+                        ELSE CONCAT(r.name, ' (inactive)') END AS name,
                    v.name AS office, r.room_type AS kind, h.cr_type AS bathroom,
                    (SELECT COUNT(*) FROM hostel_beds hb WHERE hb.room_id = r.id AND hb.is_active = 1) AS beds,
                    COALESCE(SUM(x.held), 0) AS events,
@@ -120,7 +122,7 @@ class ReportQueries
             LEFT JOIN hostel_room_details h ON h.room_id = r.id
             LEFT JOIN (" . self::base($offices) . ") x ON x.room_id = r.id $period
             WHERE r.venue_id IN (" . self::idList($offices) . ")
-            GROUP BY r.id, r.name, r.is_active, v.id, v.name, v.is_active, r.room_type, h.cr_type
+            GROUP BY r.id, r.name, r.is_active, r.deleted_at, v.id, v.name, v.is_active, r.room_type, h.cr_type
             HAVING active = 1 OR COUNT(x.id) > 0
             ORDER BY v.id, r.id
         ");

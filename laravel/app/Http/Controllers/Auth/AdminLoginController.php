@@ -79,14 +79,14 @@ class AdminLoginController
                 } elseif (($lock = SignInThrottle::enter($email)) > 0) {
                     $loginError = SignInThrottle::message($lock);   // the password is not even checked
                 } else {
-                    /* The department is a venue: staff.venue_id for a staff account, or
-                       either CEDU card for staff ticked for both (DB-DECISIONS 28).
+                    /* The department is a venue: staff.venue_id for a staff account, or the
+                       office of a cover going on now (staff_covers, migration 18).
                        Authorization itself stays account_type (+ staff_venue_scope()). */
                     $stmt = $pdo->prepare(
                         "SELECT u.id, u.email, u.username, u.password_hash, u.account_type, u.is_active,
                                 s.venue_id AS staff_venue_id, v.name AS staff_venue_name,
-                                (s.both_cedu_offices = 1 AND v.office_group = 'cedu'
-                                 AND (SELECT office_group FROM venues WHERE id = :dept) = 'cedu') AS other_cedu_card
+                                EXISTS (SELECT 1 FROM staff_covers c WHERE c.user_id = u.id AND c.venue_id = :dept
+                                           AND " . STAFF_COVER_ON_SQL . ") AS cover_card
                          FROM users u
                          LEFT JOIN staff s ON s.user_id = u.id
                          LEFT JOIN venues v ON v.id = s.venue_id
@@ -110,7 +110,7 @@ class AdminLoginController
                     } elseif ($asAdmin && $user['account_type'] !== 'admin') {
                         /* Only AFTER the password checked out, like the department check below. */
                         $loginError = 'This account is not an administrator. Clear the checkbox and select your department.';
-                    } elseif ($user['account_type'] === 'staff' && (int) $user['staff_venue_id'] !== $selectedDepartment && !$user['other_cedu_card']) {
+                    } elseif ($user['account_type'] === 'staff' && (int) $user['staff_venue_id'] !== $selectedDepartment && !$user['cover_card']) {
                         /* Only AFTER the password checked out, so it hints nothing to a stranger.
                            (A staff row always has a venue: the database trigger insists.) */
                         $loginError = 'This account belongs to ' . $user['staff_venue_name'] . '.';

@@ -56,7 +56,7 @@ class CustomerProfileController
             $cpTfa = null;
         }
 
-        return view('auth.customer-profile', compact(
+        return live_view('auth.customer-profile', compact(
             'customerContact', 'customerProfile', 'cpCsrf', 'cpHasPassword', 'cpHasGoogle',
             'cpGoogleOn', 'cpReauthOk', 'cpNotice', 'cpTfa'
         ));

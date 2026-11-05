@@ -3,8 +3,8 @@
 // one → a cleared rate is refused (not saved as P0) → a new rate leaves existing
 // bookings' prices alone → customers see the room, then not once it is disabled
 // (a direct link sends them back to the list) → staff of another venue cannot
-// disable or rename USeP Venues' things → the admin deletes the room, and its
-// photo files go with it.
+// disable or rename USeP Venues' things → the admin deletes the room: gone from every
+// list, its row kept hidden, its photo files gone.
 //
 // Every change is checked in the database, not just on the page.
 
@@ -54,6 +54,10 @@ export default {
       await page.locator('#roomLoc .vm-dd-option', { hasText: VENUE }).click();
       await page.locator('#roomCap').fill('40');
       await page.locator('#roomRate').fill('2500');
+      /* a new hall names its staff: refused without one */
+      await page.getByRole('button', { name: 'Save Changes' }).click();
+      await modal(ctx, page, { expect: /who look after this hall/ });
+      await page.locator('#rfStaff .rf-staff-office:not([hidden]) .rf-staff-pick').first().check();
       await page.getByRole('button', { name: 'Save Changes' }).click();
       await modal(ctx, page, { expect: /Room created as r\d+/ });
       await expect.url(page, /\/admin\/room-form\?id=r\d+$/);
@@ -178,15 +182,19 @@ export default {
       return page;
     });
 
-    await step('The admin deletes the room; its row and photo files are gone', async () => {
+    await step('The admin deletes the room: gone from the lists, its row hidden, its photo files gone', async () => {
       const page = s.admin;
       await page.goto(ctx.url('/admin/venue-management'));
       await roomCard(page, s.code).locator('[data-delete-entity="room"]').click();
-      await modal(ctx, page, { ok: 'Delete' });
+      await modal(ctx, page, { expect: /Past bookings, receipts and reports keep its name/, ok: 'Delete' });
       /* a delete reloads the page; the card is gone once the reload lands */
       await roomCard(page, s.code).waitFor({ state: 'detached', timeout: 15_000 })
         .catch(() => ctx.fail('the deleted room\'s card is still on Venue Management'));
-      expect.equal(await dbOne(`SELECT id FROM rooms WHERE room_code = ?`, [s.code]), null, 'rooms row');
+      const row = await dbOne(`SELECT is_active, deleted_at FROM rooms WHERE room_code = ?`, [s.code]);
+      expect.ok(row && row.deleted_at, 'the rooms row should stay, with deleted_at set');
+      expect.equal(row.is_active, 0, 'rooms.is_active');
+      await s.cust.goto(ctx.url('/customer/venues'));
+      expect.equal(await s.cust.locator(`a.lp-card[href*="room=${s.code}"]`).count(), 0, 'deleted room cards on the customer list');
       const gone = await page.request.get(ctx.url('/' + s.second.replace(/^\.\.\//, '')));
       expect.equal(gone.status(), 404, 'the room\'s photo file should be gone from disk');
       return page;

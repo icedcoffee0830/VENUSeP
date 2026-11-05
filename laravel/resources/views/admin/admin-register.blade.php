@@ -371,8 +371,9 @@
                   else { setMessage(form.dataset.successTarget, out.message || 'The account was not created.'); }
                   return;
                 }
-                setMessage(form.dataset.successTarget, (isAdmin ? 'Administrator account created — they set up two-step verification at their first sign-in.' : 'Staff account created.') + ' Returning to the dashboard…');
-                window.setTimeout(function () { window.location.href = @json(route('admin.dashboard')); }, 900);
+                setMessage(form.dataset.successTarget, isAdmin ? 'Administrator account created — they set up two-step verification at their first sign-in.' : 'Staff account created.');
+                form.reset();
+                document.querySelector('[name="account_role"]:checked')?.dispatchEvent(new Event('change'));
               })
               .catch(function () {
                 if (submitBtn) submitBtn.disabled = false;

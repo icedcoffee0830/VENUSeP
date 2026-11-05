@@ -151,11 +151,14 @@ function admin_is_admin()
      super admin (users.is_super_admin): every office;
      normal admin: its group's offices (users.office_group = venues.office_group),
        none while it has no group;
-     staff: staff.venue_id, plus the other USeP CEDU office when ticked for both
-       (staff.both_cedu_offices).
+     staff: staff.venue_id, plus the office of any cover going on now (staff_covers,
+       migration 18: it ends by itself, so it is read here on every request).
    Customers and guests are never narrowed: staff_list_venue() is null for them.
    ===================================================================== */
 const OFFICE_GROUPS = ['bahay_alumni' => 'Bahay Alumni', 'cedu' => 'USeP CEDU'];   // users/venues.office_group
+
+/* A cover going on right now, on staff_covers c (fn_staff_on_room() says the same in the DB). */
+const STAFF_COVER_ON_SQL = 'c.approved_at IS NOT NULL AND c.ended_at IS NULL AND c.starts_at <= NOW() AND c.ends_at > NOW()';
 
 function staff_me(): array
 {
@@ -174,11 +177,11 @@ function staff_me(): array
             $st = $pdo->prepare(
                 "SELECT v.id FROM users u
                    LEFT JOIN staff s ON s.user_id = u.id
-                   LEFT JOIN venues mine ON mine.id = s.venue_id
                    JOIN venues v ON (u.account_type = 'admin' AND v.office_group = u.office_group)
                                  OR (u.account_type = 'staff'
                                      AND (v.id = s.venue_id
-                                          OR (s.both_cedu_offices = 1 AND mine.office_group = 'cedu' AND v.office_group = 'cedu')))
+                                          OR EXISTS (SELECT 1 FROM staff_covers c WHERE c.user_id = u.id AND c.venue_id = v.id
+                                                        AND " . STAFF_COVER_ON_SQL . ")))
                   WHERE u.id = :u ORDER BY v.id"
             );
             $st->execute([':u' => $uid]);
@@ -237,6 +240,29 @@ function staff_venue_sql($sql, $glue = 'WHERE')
 {
     $offices = staff_list_venue();
     return $offices === null ? '' : " $glue " . sprintf($sql, implode(',', $offices ?: [0]));
+}
+
+/* A staff member's "My halls" bookings (Aron 2026-11-05): booking id => true for each
+   booking on one of their halls or a cover going on (fn_staff_on_room, migration 18), and
+   each one they made at the counter. null = not a staff member: no such view. */
+function booking_my_hall_ids() {
+    $pdo = venusep_db();
+    if ($pdo === null || session('account_type') !== 'staff') {
+        return null;
+    }
+    try {
+        $st = $pdo->prepare(
+            "SELECT b.id FROM bookings b
+              WHERE fn_staff_on_room(:u, b.room_id)
+                 OR EXISTS (SELECT 1 FROM booking_timeline t WHERE t.booking_id = b.id
+                               AND t.action_code = 'counter_created' AND t.performed_by_user_id = :u2)"
+        );
+        $st->execute([':u' => (int) session('user_id'), ':u2' => (int) session('user_id')]);
+        return array_fill_keys(array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)), true);
+    } catch (PDOException $e) {
+        sql_failed($e);
+        return null;
+    }
 }
 
 /* May this session see / handle the booking? Customers: yes (their own checks

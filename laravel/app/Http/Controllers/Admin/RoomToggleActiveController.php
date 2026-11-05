@@ -45,7 +45,7 @@ class RoomToggleActiveController extends Controller
 
         try {
             $pdo->beginTransaction();
-            $room = $pdo->prepare('SELECT id, name, is_active, venue_id FROM rooms WHERE room_code = :code FOR UPDATE');
+            $room = $pdo->prepare('SELECT id, name, is_active, venue_id FROM rooms WHERE room_code = :code AND deleted_at IS NULL FOR UPDATE');
             $room->execute([':code' => $roomCode]);
             $roomRow = $room->fetch();
             if (!$roomRow) {

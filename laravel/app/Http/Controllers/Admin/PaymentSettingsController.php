@@ -84,7 +84,7 @@ class PaymentSettingsController
             $psHostelVenues = venusep_db()->query("SELECT name FROM venues WHERE venue_type = 'hostel'")->fetchAll(PDO::FETCH_COLUMN);
         } catch (PDOException $e) { sql_failed($e); /* every card reads as a business account */ }
 
-        return view('admin.payment-settings', compact(
+        return live_view('admin.payment-settings', compact(
             'psCards', 'psHostelVenues', 'psCanEdit','rsOffices', 'rsDbOk', 'rsIsAdmin', 'rsCsrf', 'rsLockSeconds', 'rsJustSaved'
         ));
     }

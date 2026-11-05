@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\StaffHallQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -15,7 +16,7 @@ use PDOException;
    venues.description, called by "Save Changes" on venue-form. Same shape
    as room-save.
 
-   POST  _token, venue_id, name, description[, venue_type][, move_staff = JSON [user ids]]
+   POST  _token, venue_id, name, description[, move_staff = JSON [user ids]]
    Replies with JSON.
 
    Assigned Staff (2026-10-27): move_staff moves those staff accounts to
@@ -37,16 +38,12 @@ class VenueSaveController extends Controller
         $name = trim((string) ($post->get('name') ?? ''));
         $description = trim((string) ($post->get('description') ?? ''));
 
-        /* venue_id 0 (or absent) means CREATE. The Add Venue screen has always
-           existed — it even told the admin "photos can be added once the venue is
-           saved and has an id" — but nothing behind it ever inserted a row, so the
-           screen was a facade. */
-        $isNew = ($venueId === '' || $venueId === '0');
-        /* Adding a venue (an office) is the super admin's only (DB-DECISIONS 28); others edit their own. */
-        if ($isNew && !admin_is_super()) {
-            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only the super admin can add a venue.']);
+        /* venue_id 0 (or absent) used to mean create. The three offices are fixed
+           (DB-DECISIONS 28): nobody adds one, the super admin included. */
+        if ($venueId === '' || $venueId === '0') {
+            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'The offices are fixed: no office can be added.']);
         }
-        if (!$isNew && !ctype_digit($venueId)) {
+        if (!ctype_digit($venueId)) {
             $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Invalid venue.']);
         }
         $venueId = (int) $venueId;
@@ -81,54 +78,6 @@ class VenueSaveController extends Controller
         }
 
         try {
-            if ($isNew) {
-                /* venue_type decides what rooms this venue can hold: an 'event' venue
-                   takes event rooms, a 'hostel' venue hostel rooms. It is fixed at
-                   creation because changing it later would orphan every room already
-                   filed under it. */
-                $venueType = ($post->get('venue_type') ?? '') === 'hostel' ? 'hostel' : 'event';
-                /* The hostel is ONE venue (Aron 2026-10-30): Add Venue is for event
-                   venues, so a second hostel venue is refused. */
-                if ($venueType === 'hostel') {
-                    $hostel = $pdo->query("SELECT name FROM venues WHERE venue_type = 'hostel' ORDER BY id LIMIT 1")->fetchColumn();
-                    if ($hostel !== false) {
-                        $this->reply(409, ['ok' => false, 'error' => 'hostel_exists',
-                            'message' => 'There is already a hostel venue (' . $hostel . '). Add Venue is for event venues; add hostel rooms to the hostel instead.']);
-                    }
-                }
-
-                /* venue_code is UNIQUE and is what a human reads in a URL or an export,
-                   so it is derived from the name rather than being a bare number:
-                   "Bahay Alumni" -> BAHAY-ALUMNI. A collision gets a numeric suffix
-                   instead of failing — the admin never chose this value and should not
-                   have to resolve a clash in it. */
-                $base = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '-', $name));
-                $base = trim(preg_replace('/-+/', '-', $base), '-');
-                if ($base === '') { $base = 'VENUE'; }
-                $base = substr($base, 0, 26);
-                $code = $base;
-                $exists = $pdo->prepare('SELECT 1 FROM venues WHERE venue_code = :c LIMIT 1');
-                for ($i = 2; $i < 100; $i++) {
-                    $exists->execute([':c' => $code]);
-                    if ($exists->fetchColumn() === false) { break; }
-                    $code = $base . '-' . $i;
-                }
-
-                $pdo->beginTransaction();
-                $pdo->prepare(
-                    'INSERT INTO venues (venue_code, name, venue_type, description) VALUES (:c, :n, :t, :d)'
-                )->execute([':c' => $code, ':n' => $name, ':t' => $venueType, ':d' => $description]);
-                $newId = (int) $pdo->lastInsertId();
-                $movedEmails = [];
-                $moved = $this->moveStaff($pdo, $newId, $moveIds, $movedEmails);
-                $pdo->commit();
-                $this->notifyMoves($pdo, $movedEmails, $name, $newId);
-
-                $this->reply(200, ['ok' => true, 'created' => true, 'venue_id' => $newId,
-                    'code' => $code, 'name' => $name, 'description' => $description, 'moved' => $moved,
-                    'message' => 'Venue created. You can add its photo and rooms now.']);
-            }
-
             $venue = $pdo->prepare('SELECT id FROM venues WHERE id = :id');
             $venue->execute([':id' => $venueId]);
             if (!$venue->fetch()) {
@@ -147,6 +96,9 @@ class VenueSaveController extends Controller
             $this->reply(200, ['ok' => true, 'created' => false, 'name' => $name, 'description' => $description, 'moved' => $moved]);
         } catch (HttpResponseException $e) {
             throw $e;
+        } catch (RoomSaveRefusal $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            $this->reply(409, ['ok' => false, 'error' => 'last_staff', 'message' => $e->getMessage()]);
         } catch (InvalidArgumentException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $this->reply(400, ['ok' => false, 'error' => 'bad_staff', 'message' => 'One of the selected people is not a staff member you manage, so nothing was saved.']);
@@ -183,10 +135,14 @@ class VenueSaveController extends Controller
         if (count($rows) !== count($ids) || array_filter($rows, fn ($r) => !staff_may_handle_venue($r['venue_id']))) {
             throw new InvalidArgumentException('not_staff');
         }
-        /* the tick for both CEDU offices ends outside CEDU */
-        $pdo->prepare("UPDATE staff SET venue_id = :v,
-                              both_cedu_offices = both_cedu_offices AND COALESCE((SELECT o.office_group = 'cedu' FROM venues o WHERE o.id = :v2), 0)
-                        WHERE user_id IN ($in)")->execute([':v' => (int) $venueId, ':v2' => (int) $venueId]);
+        /* every hall keeps a staff member (Aron 2026-11-05): the last one of a hall stays */
+        foreach ($rows as $r) {
+            if ((int) $r['venue_id'] !== (int) $venueId && ($halls = StaffHallQueries::lastStaffOf((int) $r['user_id']))) {
+                throw new RoomSaveRefusal($r['full_name'] . ': ' . StaffHallQueries::lastStaffMessage($halls));
+            }
+        }
+        /* their new office's halls come with them (trg_staff_halls_follow_upd) */
+        $pdo->prepare("UPDATE staff SET venue_id = :v WHERE user_id IN ($in)")->execute([':v' => (int) $venueId]);
         /* who actually changed venue — for the admins' notifications */
         foreach ($rows as $r) {
             if ((int) $r['venue_id'] !== (int) $venueId) {

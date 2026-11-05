@@ -31,6 +31,10 @@ final class Status
     public const REFUND_PROCESSING = 'refund_processing';
     public const REFUND_DENIED = 'refund_denied';
 
+    /* The customer can pay now. Not OVERDUE: that stays closed until staff extend the
+       deadline, which puts it back here (Aron 2026-11-05). */
+    public const PAY_OPEN = [self::AWAIT_GCASH, self::AWAIT_CASH];
+
     /* A booking that owes nothing yet. */
     public const UNPAID = [self::LOCKED, self::AWAIT_EVENT, self::AWAIT_GCASH, self::AWAIT_CASH, self::AWAIT_POS];
 

@@ -57,6 +57,6 @@ class DashboardController
             $adManaging = 'No venue assigned';
         }
 
-        return view('admin.dashboard', compact('adRows', 'adToday', 'adRevenue', 'adVenues', 'adWho', 'adManaging'));
+        return live_view('admin.dashboard', compact('adRows', 'adToday', 'adRevenue', 'adVenues', 'adWho', 'adManaging'));
     }
 }

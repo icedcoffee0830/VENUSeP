@@ -26,10 +26,11 @@ class BookingRequestController extends Controller
 
         $brqData = [];
         foreach (bookings_all() as $b) {
+            if (request()->has('part') && $b['bookingId'] !== request('id')) { continue; }   /* live.js wants this one again */
             $brqData[$b['bookingId']] = $this->row($b);
         }
 
-        return view('admin.booking-request', compact('brqData', 'pricingJs', 'gcashCheckerJs'));
+        return live_view('admin.booking-request', compact('brqData', 'pricingJs', 'gcashCheckerJs'));
     }
 
     /* Which ID document was attached, and whether staff have accepted it. The

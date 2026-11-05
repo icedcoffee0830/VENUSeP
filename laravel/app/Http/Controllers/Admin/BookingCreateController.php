@@ -126,13 +126,13 @@ class BookingCreateController extends Controller
             $c['bookerName'] = (string) $row['full_name'];
         } else {
             $c['bookerName'] = trim((string) ($request->post('walkin_name') ?? ''));
-            $c['phone']      = cb_normalise_mobile($request->post('walkin_phone') ?? '');
+            $c['phone']      = ph_mobile_strict($request->post('walkin_phone') ?? '');
             $c['address']    = trim((string) ($request->post('walkin_address') ?? ''));
             if ($c['bookerName'] === '' || mb_strlen($c['bookerName']) > 190) {
                 $this->reply(400, ['ok' => false, 'message' => 'Enter the guest&rsquo;s full name.']);
             }
             if ($c['phone'] === null) {
-                $this->reply(400, ['ok' => false, 'message' => 'Enter an 11-digit mobile number starting 09.']);
+                $this->reply(400, ['ok' => false, 'message' => PH_MOBILE_MESSAGE]);
             }
             /* REQUIRED (2026-10-04) unless staff tick "Guest has no email" (DB-DECISIONS #22). */
             $c['walkinNoEmail'] = ($request->post('walkin_no_email') ?? '') === '1';

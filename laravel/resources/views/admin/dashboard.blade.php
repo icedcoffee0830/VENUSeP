@@ -904,7 +904,8 @@ tr:hover {
                  the queue pre-filtered to that bucket, so dashboard numbers and
                  queue tabs can never disagree.
                  Counts come from booking_queue_rows() — the same rows the queue shows. -->
-            <div class="stats-grid">
+            @fragment('ad-stats')
+            <div class="stats-grid" data-live="ad-stats">
                 <a class="stat-card" href="{{ route('admin.booking-requests', ['tab' => 'id']) }}">
                     <span class="stat-icon"><i class="bi bi-person-vcard"></i></span>
                     <h3>Pending ID Review</h3>
@@ -942,6 +943,7 @@ tr:hover {
                     <div class="info">Current quarter</div>
                 </div>
             </div>
+            @endfragment
 
             <div class="content-grid">
                 <div class="panel">
@@ -984,6 +986,7 @@ tr:hover {
 @endsection
 
 @push('scripts')
+@fragment('ad-rows')<script type="application/json" data-live="ad-rows">{!! json_encode($adRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
 <script>
 /* ============================================================
    DASHBOARD SCRIPT (demo only, no backend):
@@ -1006,6 +1009,7 @@ const RES = {
 };
 const PAY = {
   locked:      { t: 'Payment locked',              c: 'b-gray'  },
+  written_off: { t: 'Written off',                 c: 'b-gray'  },
   await_gcash: { t: 'Awaiting payment · GCash',    c: 'b-amber' },
   await_cash:  { t: 'Awaiting payment · Cash',     c: 'b-amber' },
   auto_pass:   { t: 'Receipt passed auto-check',   c: 'b-navy'  },
@@ -1030,13 +1034,14 @@ const PAY = {
   refund_denied:    { t: 'Refund denied',                    c: 'b-red'   },
 };
 /* Every booking that needs someone — one builder, shared with the queue. */
-const BR = @json($adRows);
+let BR = Live.data('ad-rows');
 const BR_DETAIL = @json(route('admin.booking-request'));   /* Laravel: the detail page's URL */
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
 /* the four needs-action counts = the queue's tab definitions */
 const countOf = (k) => BR.filter((r) => r.cat === k).length;
+function adDraw() {
 document.getElementById('statId').textContent = countOf('id');
 document.getElementById('statConfirm').textContent = countOf('confirm');
 document.getElementById('statReview').textContent = countOf('review');
@@ -1067,6 +1072,10 @@ document.getElementById('adRows').innerHTML = BR.slice()
       <span class="r-chev">&rsaquo;</span>
     </a>`;
   }).join('');
+}
+adDraw();
+/* the 30-second check: the tiles and the preview rows, no reload */
+Live.watch('queue', () => Live.refresh().then(() => { BR = Live.data('ad-rows'); adDraw(); }));
 
 /* The "+ New Booking" modal that used to sit here is gone. It was a flat form
    that booked nothing — searchAccounts(), fetchRooms() and submitWalkin() were

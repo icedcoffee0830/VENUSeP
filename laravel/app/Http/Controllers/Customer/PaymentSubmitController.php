@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Support\Status;
 use Illuminate\Http\Request;
 use PDO;
 use PDOException;
@@ -107,10 +108,12 @@ class PaymentSubmitController
         }
 
         /* Payment has to be OPEN. */
-        if (!in_array($booking['payment_status'], ['await_gcash', 'await_cash', 'overdue'], true)) {
-            $why = $booking['payment_status'] === 'await_event'
-                ? 'This booking cannot be paid until after your event has finished.'
-                : 'This booking is not currently awaiting a payment.';
+        if (!in_array($booking['payment_status'], Status::PAY_OPEN, true)) {
+            $why = match ($booking['payment_status']) {
+                'await_event' => 'This booking cannot be paid until after your event has finished.',
+                'overdue'     => 'Payment overdue. Please contact the office.',
+                default       => 'This booking is not currently awaiting a payment.',
+            };
             return self::reply(409, ['ok' => false, 'message' => $why]);
         }
 
@@ -130,7 +133,7 @@ class PaymentSubmitController
             $pdo->prepare('SET @venusep_actor_user_id = :a, @venusep_action_note = :n')
                 ->execute([':a' => (int) session('user_id'),
                            ':n' => $booking['pay_to_use'] ? 'Guest will pay cash at the front desk.' : 'Customer will pay in cash.']);
-            $pdo->prepare("UPDATE bookings SET payment_status = 'await_cash' WHERE id = :b AND payment_status <> 'overdue'")
+            $pdo->prepare("UPDATE bookings SET payment_status = 'await_cash' WHERE id = :b")
                 ->execute([':b' => $id]);
             $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
             return self::reply(200, ['ok' => true, 'status' => 'await_cash',
@@ -204,7 +207,7 @@ class PaymentSubmitController
             $lk = $pdo->prepare('SELECT payment_status, receipt_attempts_allowed FROM bookings WHERE id = :b FOR UPDATE');
             $lk->execute([':b' => $id]);
             $locked = $lk->fetch();
-            if (!$locked || !in_array($locked['payment_status'], ['await_gcash', 'await_cash', 'overdue'], true)) {
+            if (!$locked || !in_array($locked['payment_status'], Status::PAY_OPEN, true)) {
                 $pdo->rollBack();
                 @unlink(doc_path($path));
                 return self::reply(409, ['ok' => false, 'message' => 'This booking is not currently awaiting a payment.']);

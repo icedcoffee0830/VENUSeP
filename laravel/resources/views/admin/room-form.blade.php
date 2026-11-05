@@ -614,6 +614,9 @@
             </details>
           </div>
         </div>
+@if ($rfStaff)
+@include('partials.room-form-staff')
+@endif
 
         <hr class="vm-divider" />
 
@@ -1176,6 +1179,7 @@
         body.append('check_out_time', document.getElementById('roomCheckOut').value);
         @else
         body.append('room_type', 'event');
+        if (isNew && window.rfHallStaff) body.append('staff_ids', JSON.stringify(window.rfHallStaff()));
         body.append('capacity', document.getElementById('roomCap').value);
         body.append('fee', document.getElementById('roomRate').value);
         body.append('best_for', document.getElementById('roomBestFor').value);
@@ -1193,10 +1197,12 @@
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.ok) { venusepAlert(res.message || 'Could not save the room.'); return; }
-            /* move on only once OK is clicked — unlike alert(), the modal does
-               not block, and navigating at once wiped it off the screen */
+            /* An edit stays here. A new room has no form of its own yet (its photos need the
+               room), so that one still moves on, once OK is clicked: the modal does not block,
+               and navigating at once wiped it off the screen. */
             venusepAlert(res.message || 'Room saved.', { tone: 'ok', title: 'Saved' }).then(function () {
-              location.href = (res.created && res.room_id && !@json($isHostel))
+              if (!res.created) return;
+              location.href = (res.room_id && !@json($isHostel))
                 ? {!! json_encode(route('admin.room-form')) !!} + '?id=' + encodeURIComponent(res.room_id)
                 : {!! json_encode(route('admin.venue-management')) !!};
             });

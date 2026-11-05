@@ -56,7 +56,7 @@ $HOSTEL_VENUE = (string) $hrPdo->query(
   "SELECT name FROM venues WHERE venue_type = 'hostel' ORDER BY id LIMIT 1"
 )->fetchColumn();
 
-/* ---- 1. the rooms ---- */
+/* ---- 1. the rooms (a deleted room, migration 18, is gone for everyone) ---- */
 $hrRoomRows = $hrPdo->query(
   "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
           r.venue_id, v.name AS venue_name,
@@ -65,7 +65,7 @@ $hrRoomRows = $hrPdo->query(
      FROM rooms r
      JOIN venues v                   ON v.id = r.venue_id
      LEFT JOIN hostel_room_details d  ON d.room_id = r.id
-    WHERE r.room_type = 'hostel'" . ($hrIncludeInactive ? '' : ' AND r.is_active = 1') . "
+    WHERE r.room_type = 'hostel' AND r.deleted_at IS NULL" . ($hrIncludeInactive ? '' : ' AND r.is_active = 1') . "
     ORDER BY r.id"
 )->fetchAll();
 

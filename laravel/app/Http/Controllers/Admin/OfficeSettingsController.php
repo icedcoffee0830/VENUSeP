@@ -48,7 +48,7 @@ class OfficeSettingsController extends Controller
             $byOffice[(int) $h['venue_id']][] = $h + ['label' => self::FIELDS[$h['field']][0] ?? $h['field']];
         }
 
-        return view('admin.office-settings', ['offices' => $offices, 'historyByOffice' => $byOffice]);
+        return live_view('admin.office-settings', ['offices' => $offices, 'historyByOffice' => $byOffice]);
     }
 
     public function save(Request $request)

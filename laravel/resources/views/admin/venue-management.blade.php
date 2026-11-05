@@ -764,9 +764,6 @@ function vmMaint($m, $today) {
           <p>Manage locations and the rooms available under them.</p>
         </div>
         <div class="vm-actions">
-@if (admin_is_super()) {{-- adding a venue (an office) is the super admin's only (venue-save refuses others too) --}}
-          <a class="vm-btn vm-btn-primary" href="{{ route('admin.venue-form') }}">+ Add Venue</a>
-@endif
           <a class="vm-btn vm-btn-outline" href="{{ route('admin.room-form') }}">+ Add Room</a>
         </div>
       </div>
@@ -796,6 +793,8 @@ function vmMaint($m, $today) {
       </div>
 
 
+      @fragment('vm-cards')
+      <div data-live="vm-cards">
       <!-- VENUES -->
       <div class="vm-section-title">Venues <span>&mdash; locations that hold rooms</span></div>
       <div class="vm-grid">
@@ -852,9 +851,6 @@ function vmMaint($m, $today) {
             <div class="vm-card-actions">
 @if ($vmMyVenue === null || in_array($venueName, $vmMyVenue, true)) {{-- staff: own venue only --}}
               <a class="vm-edit-link" href="{{ route('admin.venue-form', ['id' => $venueId]) }}"><span class="plus">✎</span> Edit Details</a>
-@endif
-@if (admin_is_super())
-              <button type="button" class="vm-delete-link" data-delete-entity="venue" data-delete-id="{{ $venueId }}" data-delete-name="{{ $venueName }}">Delete Venue</button>
 @endif
             </div>
           </div>
@@ -1007,6 +1003,8 @@ function vmMaint($m, $today) {
         </div>
 @endforeach
       </div>
+      </div>
+      @endfragment
           </div>
         </div>
       </main>
@@ -1024,31 +1022,34 @@ function vmMaint($m, $today) {
     <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
     <script>
       // UI-only: carousel dots + simple search filter. No backend.
-      document.querySelectorAll('.vm-dots').forEach((group) => {
-        const dots = group.querySelectorAll('.vm-dot-nav');
-        const thumb = group.closest('.vm-thumb');
-        const shades = [
-          'linear-gradient(135deg,#eef1f5,#dfe4ea)',
-          'linear-gradient(135deg,#f3eee9,#e6ddd3)',
-          'linear-gradient(135deg,#e9eef3,#d5e0ea)',
-          'linear-gradient(135deg,#eef3ee,#d9e6da)',
-          'linear-gradient(135deg,#f3eef1,#e6d5de)',
-        ];
-        dots.forEach((dot, i) => {
-          dot.addEventListener('click', () => {
-            dots.forEach((d) => d.classList.remove('active'));
-            dot.classList.add('active');
-            thumb.style.background = shades[i] || shades[0];
-          });
-        });
+      // The cards are redrawn after a change, so their clicks are read on the document.
+      const shades = [
+        'linear-gradient(135deg,#eef1f5,#dfe4ea)',
+        'linear-gradient(135deg,#f3eee9,#e6ddd3)',
+        'linear-gradient(135deg,#e9eef3,#d5e0ea)',
+        'linear-gradient(135deg,#eef3ee,#d9e6da)',
+        'linear-gradient(135deg,#f3eef1,#e6d5de)',
+      ];
+      document.addEventListener('click', (e) => {
+        const dot = e.target.closest('.vm-dot-nav');
+        if (!dot) return;
+        const dots = Array.from(dot.closest('.vm-dots').querySelectorAll('.vm-dot-nav'));
+        dots.forEach((d) => d.classList.remove('active'));
+        dot.classList.add('active');
+        dot.closest('.vm-thumb').style.background = shades[dots.indexOf(dot)] || shades[0];
       });
 
+      /* the filter last used, run again over redrawn cards */
+      let vmFilter = () => {};
       const search = document.querySelector('.vm-search');
       search.addEventListener('keyup', () => {
-        const q = search.value.toLowerCase();
-        document.querySelectorAll('.vm-card').forEach((card) => {
-          card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
-        });
+        vmFilter = () => {
+          const q = search.value.toLowerCase();
+          document.querySelectorAll('.vm-card').forEach((card) => {
+            card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
+          });
+        };
+        vmFilter();
       });
 
       // Sort / filter by venue (UI-only, same dropdown behavior as the calendar).
@@ -1059,7 +1060,7 @@ function vmMaint($m, $today) {
             const venue = opt.dataset.venue;
             venueSort.querySelector('.vm-dd-trigger').textContent = opt.textContent;
             venueSort.removeAttribute('open');
-            document.querySelectorAll('.vm-grid .vm-card').forEach((card) => {
+            vmFilter = () => document.querySelectorAll('.vm-grid .vm-card').forEach((card) => {
               if (venue === 'all') {
                 card.style.display = '';
                 return;
@@ -1075,6 +1076,7 @@ function vmMaint($m, $today) {
                   : '';
               card.style.display = name === venue ? '' : 'none';
             });
+            vmFilter();
           });
         });
       }
@@ -1086,64 +1088,38 @@ function vmMaint($m, $today) {
         });
       });
 
-      document.querySelectorAll('[data-delete-entity]').forEach((button) => {
-        button.addEventListener('click', async () => {
-          const entity = button.dataset.deleteEntity;
-          const name = button.dataset.deleteName;
-          const ok = await venusepConfirm('Delete ' + name + '? This action cannot be undone.',
-            { title: 'Delete ' + (entity === 'room' ? 'room' : 'venue') + '?', okLabel: 'Delete', danger: true });
-          if (!ok) return;
+      document.addEventListener('click', async (e) => {
+        const button = e.target.closest('[data-delete-entity]');
+        if (!button) return;
+        const name = button.dataset.deleteName;
+        const ok = await venusepConfirm(name + ' disappears from every list and can no longer be booked. Past bookings, receipts and reports keep its name. This cannot be undone.',
+          { title: 'Delete ' + name + '?', okLabel: 'Delete', danger: true });
+        if (!ok) return;
 
-          const body = new URLSearchParams({
-            _token: {!! json_encode($dcCsrf) !!},
-            confirm: 'delete',
-            entity: entity,
-          });
-          body.set(entity === 'room' ? 'room_id' : 'venue_id', button.dataset.deleteId);
-          button.disabled = true;
-          fetch({!! json_encode(route('admin.catalog-delete')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
-            .then((response) => response.json().catch(() => ({ ok: false, message: 'The server sent an unreadable reply.' })))
-            .then((result) => {
-              if (!result.ok) {
-                venusepAlert(result.message || 'Nothing was deleted.');
-                return;
-              }
-              location.reload();
-            })
-            .catch(() => venusepAlert('Could not reach the server, so nothing was deleted.'))
-            .finally(() => { button.disabled = false; });
-        });
+        button.disabled = true;
+        await Live.send({!! json_encode(route('admin.catalog-delete')) !!},
+          { confirm: 'delete', entity: button.dataset.deleteEntity, room_id: button.dataset.deleteId }, vmFilter);
+        button.disabled = false;
       });
 
       // Disable hides the room from customers, so it asks first (Aron 2026-11-01);
-      // Enable just flips it. Then it reloads so the card, its "Hidden" line and every count on
-      // this page come back from the database rather than being patched by hand.
-      document.querySelectorAll('[data-toggle-id]').forEach((button) => {
-        button.addEventListener('click', async () => {
-          if (!button.classList.contains('is-off') && !(await venusepConfirm(
-                '"' + button.dataset.toggleName + '" will be hidden from customers until you enable it again.',
-                { title: 'Disable this room?', okLabel: 'Disable' }))) return;
-          const body = new URLSearchParams({
-            _token: {!! json_encode($dcCsrf) !!},
-            room_id: button.dataset.toggleId,
-          });
-          button.disabled = true;
-          fetch({!! json_encode(route('admin.room-toggle-active')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
-            .then((response) => response.json().catch(() => ({ ok: false, message: 'The server sent an unreadable reply.' })))
-            .then((result) => {
-              if (!result.ok) {
-                venusepAlert(result.message || 'Nothing changed.');
-                return;
-              }
-              // disabled with upcoming bookings: the reply names them — show it first
-              if (result.notes && result.notes.length) {
-                return venusepAlert(result.message, { title: 'Room disabled' }).then(() => location.reload());
-              }
-              location.reload();
-            })
-            .catch(() => venusepAlert('Could not reach the server, so nothing changed.'))
-            .finally(() => { button.disabled = false; });
-        });
+      // Enable just flips it. Then the cards are redrawn, so the card, its "Hidden" line and every
+      // count on this page come back from the database rather than being patched by hand.
+      document.addEventListener('click', async (e) => {
+        const button = e.target.closest('[data-toggle-id]');
+        if (!button) return;
+        if (!button.classList.contains('is-off') && !(await venusepConfirm(
+              '"' + button.dataset.toggleName + '" will be hidden from customers until you enable it again.',
+              { title: 'Disable this room?', okLabel: 'Disable' }))) return;
+        button.disabled = true;
+        const result = await Live.post({!! json_encode(route('admin.room-toggle-active')) !!}, { room_id: button.dataset.toggleId });
+        button.disabled = false;
+        if (!result.ok) { venusepAlert(result.message || 'Nothing changed.'); return; }
+        // disabled with upcoming bookings: the reply names them — show it first
+        if (result.notes && result.notes.length) await venusepAlert(result.message, { title: 'Room disabled' });
+        else Live.say(result.message || 'Saved.');
+        await Live.refresh();
+        vmFilter();
       });
     </script>
   

@@ -167,7 +167,10 @@ class CounterAccountsTest extends TestCase
             ->post(route('admin.customer-verify'), ['csrf' => 'tok', 'customer_id' => $id, 'password' => 'anything'])
             ->assertStatus(409)->assertExactJson(['ok' => false, 'noPassword' => true, 'message' => CounterCustomerController::NO_PASSWORD]);
 
-        $day = date('Y-m-d', strtotime('+' . random_int(400, 1400) . ' days'));
+        do {   /* a day r1 holds nothing on: other tests leave far-future bookings behind (a clash is a 409) */
+            $day = date('Y-m-d', strtotime('+' . random_int(400, 4000) . ' days'));
+        } while (DB::table('venue_booking_slots as s')->join('rooms as r', 'r.id', '=', 's.room_id')
+            ->where('r.room_code', 'r1')->where('s.slot_date', $day)->whereNull('s.released_at')->exists());
         $book = fn (array $extra) => $this->actingAsStaff()->post(route('admin.booking-create'), $extra + [
             'type' => 'venue', 'room' => 'r1', 'event_name' => 'ID checked test', 'date_start' => $day, 'date_end' => $day,
             'attendees' => '30', 'times' => json_encode([$day => ['start' => '08:00', 'end' => '10:00']]), 'method' => 'cash',
@@ -184,5 +187,27 @@ class CounterAccountsTest extends TestCase
         $this->assertEquals(DB::table('users')->where('email', 'staff@gmail.com')->value('id'), $line->performed_by_user_id);
         $this->assertNotNull($line->occurred_at);
         $this->assertSame(0, DB::table('booking_timeline')->where('booking_id', $res->json('bookingId'))->where('action_code', 'counter_identity_confirmed')->count());
+    }
+
+    /* A new account at the counter: the same phone rule as a walk-in (Aron 2026-11-05). */
+    public function test_a_new_counter_account_takes_only_09_or_plus_63_mobiles(): void
+    {
+        $this->actingAsStaff();
+        foreach (['O917 000 2222', '0917-000-2222', '63 917 000 2222'] as $bad) {
+            $this->createAccount(['check' => '1', 'phone' => $bad])->assertStatus(400)
+                ->assertExactJson(['ok' => false, 'field' => 'phone', 'message' => 'Enter a mobile number as 09XX XXX XXXX or +63 9XX XXX XXXX.']);
+        }
+        $this->createAccount(['check' => '1', 'phone' => '+63 917 000 2222'])->assertOk();
+        $this->assertFalse(DB::table('users')->where('email', 'lorna.counter@gmail.com')->exists());   // check=1 makes nothing
+    }
+
+    /* The page's own check matches: inputmode, pattern and message on both counter phone inputs. */
+    public function test_the_counter_phone_inputs_say_the_rule_on_screen(): void
+    {
+        $this->actingAsStaff()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk()
+            ->assertSee("const PH_MOBILE_PATTERN = '[ ]*(0|[+]63)[ ]*9([ ]*[0-9]){9}[ ]*';", false)
+            ->assertSee('<input id="bkPhone" type="tel" inputmode="tel" pattern="${PH_MOBILE_PATTERN}"', false)
+            ->assertSee('<input id="bkNewPhone" type="tel" inputmode="tel" pattern="${PH_MOBILE_PATTERN}"', false)
+            ->assertSee('Enter a mobile number as 09XX XXX XXXX or +63 9XX XXX XXXX.', false);
     }
 }

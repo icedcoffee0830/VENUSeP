@@ -150,7 +150,7 @@
 
             <!-- ADD -->
             <section class="fq-card" aria-labelledby="fqAddTitle">
-              <div class="fq-card-head"><h2 id="fqAddTitle">Add a question <small>{!! $fqTotal !!} in total · {!! $fqAdded !!} added{!! $fqChanged ? ' · ' . $fqChanged . ' built-in edited' : '' !!}{!! $fqHidden ? ' · ' . $fqHidden . ' hidden' : '' !!}</small></h2></div>
+              <div class="fq-card-head"><h2 id="fqAddTitle">Add a question @fragment('fq-counts')<small data-live="fq-counts">{!! $fqTotal !!} in total · {!! $fqAdded !!} added{!! $fqChanged ? ' · ' . $fqChanged . ' built-in edited' : '' !!}{!! $fqHidden ? ' · ' . $fqHidden . ' hidden' : '' !!}</small>@endfragment</h2></div>
               <form class="fq-form" method="post" action="{{ route('admin.faq-save') }}">
                 @csrf
                 <input type="hidden" name="action" value="add" />
@@ -207,6 +207,8 @@
             </section>
 
             <!-- ONE CARD PER SECTION -->
+            @fragment('fq-list')
+            <div data-live="fq-list">
             @php $n = 0; @endphp
             @foreach ($fqSections as $key => $label) @php $n++; $rows = isset($fqRows[$key]) ? $fqRows[$key] : []; @endphp
             <section class="fq-card" id="{{ $key }}" aria-labelledby="fqSec{!! $n !!}">
@@ -295,6 +297,8 @@
               @endforeach
             </section>
             @endforeach
+            </div>
+            @endfragment
 
             @endif
           </div>
@@ -328,8 +332,9 @@
     <script>
       (function () {
         /* preview switch: show only the rows customers get under that policy */
-        var seg = document.querySelectorAll('[data-preview]');
+        var seg = document.querySelectorAll('[data-preview]'), previewing = null;
         function preview(mode) {
+          previewing = mode;
           seg.forEach(function (b) { b.classList.toggle('active', b.dataset.preview === mode); });
           document.querySelectorAll('.fq-row').forEach(function (row) {
             var p = row.dataset.policy;
@@ -381,6 +386,23 @@
           var form = e.target; if (!form.querySelector('.fq-editor')) return;
           var text = syncEditor(form);
           if (!text) { e.preventDefault(); form.classList.add('is-invalid'); form.querySelector('.fq-editor').focus(); }
+        });
+        /* Every form here still works as a plain post. With this script it answers in place:
+           the same rules run, the list comes back, and the page stays where it is. */
+        document.addEventListener('submit', async function (e) {
+          var form = e.target, url = form.getAttribute('action');   /* form.action is the input of that name */
+          if (e.defaultPrevented || url !== @json(route('admin.faq-save'))) return;
+          e.preventDefault();
+          var res = await Live.post(url, new FormData(form));
+          closeModal();
+          if (!res.ok) { Live.say(res.message || 'Nothing was saved.', 'bad'); return; }
+          await Live.refresh();
+          if (form.querySelector('[name=action]').value === 'add') {
+            form.reset();
+            form.querySelector('.fq-editor').innerHTML = '';
+          }
+          preview(res.show === 'refunds_on' || res.show === 'refunds_off' ? res.show : previewing);
+          Live.say(res.message);
         });
         document.addEventListener('input', function (e) { var f = e.target.closest && e.target.closest('.fq-form'); if (f) f.classList.remove('is-invalid'); });
         /* paste as plain text so nothing odd comes in from Word or a web page */

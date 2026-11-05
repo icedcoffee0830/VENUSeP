@@ -104,13 +104,13 @@ class VenueManagementTest extends VenuesTestCase
         }
     }
 
-    public function test_admins_get_the_delete_buttons(): void
+    public function test_admins_get_the_room_delete_buttons_but_no_office_one(): void
     {
         $this->actingAsAdmin()->get(route('admin.venue-management'))->assertOk()
             ->assertSee('data-toggle-id="r5"', false)
             ->assertSee('data-toggle-id="h1"', false)
             ->assertSee(route('admin.hostel-room-form', ['id' => 'h1']), false)
-            ->assertSee('data-delete-entity="venue"', false)
+            ->assertDontSee('data-delete-entity="venue"', false)   // the offices are fixed
             ->assertSee('data-delete-entity="room"', false)
             ->assertSee('admin\\/catalog-delete', false);
     }

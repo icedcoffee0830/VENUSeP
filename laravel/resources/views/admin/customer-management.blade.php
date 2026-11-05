@@ -333,6 +333,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
   <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
+  @fragment('cm-rows')<script type="application/json" data-live="cm-rows">{!! json_encode($cmRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
   <script>
     const statusBadge = (cell) => {
       const value = cell.getValue();
@@ -342,22 +343,13 @@
     document.addEventListener('DOMContentLoaded', () => {
       /* The real customer accounts, from `users` + `customers`. Walk-ins
          (no user_id) never appear here — see admin/customer-management.php. */
-      const data = {!! json_encode($cmRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-      const CSRF = {!! json_encode(csrf_token()) !!};
+      const data = Live.data('cm-rows');
 
       /* Every write goes to admin/customer-save.php, which re-checks that the
          caller is admin or staff. That check lives there, not here — this is
          a convenience, not a boundary. */
-      const customerAction = function (body, onOk) {
-        body.append('_token', CSRF);   /* Laravel's CSRF check reads _token (the old field was csrf) */
-        return fetch(@json(route('admin.customer-save')), { method: 'POST', body: body, credentials: 'same-origin' })
-          .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
-          .then(function (res) {
-            if (!res.ok) { venusepAlert(res.message || 'Nothing was changed.'); return false; }
-            if (typeof onOk === 'function') onOk(res);
-            return true;
-          })
-          .catch(function () { venusepAlert('Could not reach the server, so nothing was changed.'); return false; });
+      const customerAction = function (body) {
+        return Live.send(@json(route('admin.customer-save')), body, function () { table.replaceData(Live.data('cm-rows')); });   /* same page, sort and filters */
       };
 
       const toggleActive = async function (row) {
@@ -372,7 +364,7 @@
         body.append('action', 'set_active');
         body.append('user_id', row.userId);
         body.append('active', disable ? '0' : '1');
-        customerAction(body, function () { window.location.reload(); });
+        customerAction(body);
       };
 
       const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -392,7 +384,7 @@
         body.append('customer_id', row.id);
         body.append('venue_id', venueId);
         body.append('reason', reason);
-        customerAction(body, function () { window.location.reload(); });
+        customerAction(body);
       };
 
       /* Correct the email of an account made at the counter: the new address, then the reason. */
@@ -408,7 +400,7 @@
         body.append('customer_id', row.id);
         body.append('email', email);
         body.append('reason', reason);
-        customerAction(body, function (res) { venusepAlert(res.message).then(function () { window.location.reload(); }); });
+        customerAction(body);
       };
 
       const table = new Tabulator('#customers-table', {

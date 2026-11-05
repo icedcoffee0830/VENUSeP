@@ -46,6 +46,7 @@
       .br-tab .n { background: var(--vm-strip); border-radius: 999px; font-size: 0.7rem; margin-left: 0.35rem; padding: 0.05rem 0.42rem; }
       .br-tab.active { background: var(--vm-dark); border-color: var(--vm-dark); color: #ffffff; }
       .br-tab.active .n { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
+      .br-scope { display: inline-flex; gap: 0.3rem; padding-right: 0.6rem; margin-right: 0.3rem; border-right: 1px solid var(--vm-border); }
       .br-search { border: 1px solid var(--vm-border); border-radius: 9px; font-family: inherit; font-size: 0.84rem; height: 38px; margin-left: auto; padding: 0 0.8rem; width: 260px; }
       .br-search:focus { outline: 2px solid rgba(31, 30, 30, 0.25); }
 
@@ -99,7 +100,10 @@
               <h1 class="br-title">Booking Requests</h1>
               <p class="br-subtitle" id="brCount"></p>
 
-              <div class="br-toolbar" id="brTabs"></div>
+              <div class="br-toolbar" id="brTabs">
+                <span id="brTabBtns" style="display:contents"></span>
+                <input id="brSearch" class="br-search" type="text" placeholder="Search name, room, or request no.…" aria-label="Search bookings" autocomplete="off" oninput="setQ(this.value)">
+              </div>
 
               <div class="br-card br-list">
                 <div class="br-hd">
@@ -131,13 +135,16 @@
       </main>
 @endsection
 @push('scripts')
+    @fragment('br-rows')<script type="application/json" data-live="br-rows">{!! json_encode($brRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
     <script>
       /* Booking Requests queue — static mockup data + client-side filtering.
          Statuses follow the agreed payment-status taxonomy:
          reservation status and payment status are SEPARATE badges. */
       /* Every reservation_statuses code, because the queue now renders whatever
          the database holds — an unmapped code used to crash the row builder. */
-      const RES = {
+      /* Every status the database knows comes first (status_badge_maps), so a new
+         status can never blank the list; the hand-written labels below win. */
+      const RES = Object.assign({!! json_encode(status_badge_maps()['res'], JSON_UNESCAPED_UNICODE) !!}, {
         pending:   { t: 'Pending review', c: 'b-amber' },
         approved:  { t: 'Approved',       c: 'b-green' },
         completed: { t: 'Completed',      c: 'b-navy'  },
@@ -147,9 +154,10 @@
         /* USeP closed the room while this booking was inside the closure. The
            customer is owed a replacement, a new date, or a non-deniable refund. */
         disrupted: { t: 'Room closed · action needed', c: 'b-red' },
-      };
-      const PAY = {
+      });
+      const PAY = Object.assign({!! json_encode(status_badge_maps()['pay'], JSON_UNESCAPED_UNICODE) !!}, {
         locked:      { t: 'Payment locked',              c: 'b-gray'  },
+        written_off: { t: 'Written off',                 c: 'b-gray'  },
         await_gcash: { t: 'Awaiting payment · GCash',    c: 'b-amber' },
         await_cash:  { t: 'Awaiting payment · Cash',     c: 'b-amber' },
         auto_pass:   { t: 'Receipt passed auto-check',   c: 'b-navy'  },
@@ -179,17 +187,23 @@
         refund_processing:{ t: 'Refund · processing',           c: 'b-navy'  },
         refunded:         { t: 'Refunded',                      c: 'b-gray'  },
         refund_denied:    { t: 'Refund denied',                 c: 'b-red'   },
-      };
+      });
+      /* A code neither list knows shows its own name: one odd row must never blank the page. */
+      function resBadge(code) { return RES[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
+      function payBadge(code) { return PAY[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
       /* THE QUEUE — real `bookings` rows, shaped in PHP above. This was a
          hand-written array of 15 invented requests; it is now whatever the
          database actually holds, so the customer side and this page can never
          again disagree about which bookings exist. */
-      const BR = {!! json_encode($brRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+      let BR = Live.data('br-rows');
       const TABS = [
         { k: 'all',     t: 'All' },
         { k: 'id',      t: 'Pending ID review' },
         { k: 'confirm', t: 'Receipts to confirm' },
         { k: 'review',  t: 'Manual review' },
+        /* Payment still awaited and not yet late (overdue has its own tab). Matched on the
+           payment status, not the row's one category, so a POS-to-fetch stay shows in both. */
+        { k: 'awaiting', t: 'Awaiting payment' },
         { k: 'overdue', t: 'Overdue' },
         /* Refunds wait on STAFF, not on the customer — same argument as POS below.
            Without a tab a refund request only ever appears under "All", mixed in
@@ -204,19 +218,25 @@
          review / overdue — open with that tab already active */
       const TAB_PARAM = new URLSearchParams(location.search).get('tab');
       let tab = TABS.some((t) => t.k === TAB_PARAM) ? TAB_PARAM : 'all', q = '';
+      /* Staff open on their own halls (and the bookings they made at the counter); one click
+         shows the whole office. Admins have no such view: every row is theirs. */
+      const MY_HALLS = @json($brMyHalls);
+      let scope = MY_HALLS ? 'mine' : 'all';
+      function inScope() { return scope === 'mine' ? BR.filter(r => r.mine) : BR; }
+      function setScope(k) { scope = k; page = 1; draw(); }
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-      function countOf(k) { return k === 'all' ? BR.length : BR.filter(r => r.cat === k).length; }
+      const AWAITING = ['await_gcash', 'await_cash', 'await_pos'];
+      function inTab(r, k) { return k === 'all' || (k === 'awaiting' ? AWAITING.includes(r.pay) : r.cat === k); }
+      function countOf(k) { return inScope().filter(r => inTab(r, k)).length; }
       function rowsOf() {
-        const list = BR.filter(r => (tab === 'all' || r.cat === tab))
+        const list = inScope().filter(r => inTab(r, tab))
                        .filter(r => !q || (r.name + ' ' + r.room + ' ' + r.id).toLowerCase().includes(q));
-        /* Rows carrying an event date (refunds) are ordered soonest-event-first.
-           Array.sort is stable and this returns 0 for anything without one, so
-           the rest of the queue keeps its existing order. */
-        return list.sort((a, b) => {
-          if (!a.eventIso || !b.eventIso) return 0;
-          return a.eventIso < b.eventIso ? -1 : (a.eventIso > b.eventIso ? 1 : 0);
-        });
+        /* Newest request first (seq = the booking's id). The refunds tab keeps its
+           soonest-event-first order: a near event is a date nobody can rebook. */
+        return list.sort((a, b) => (tab === 'refund' && a.eventIso && b.eventIso && a.eventIso !== b.eventIso)
+          ? (a.eventIso < b.eventIso ? -1 : 1)
+          : b.seq - a.seq);
       }
       /* Paging state. Changing the tab or the search changes WHICH rows exist,
          so both send you back to page 1 — staying on page 4 of a list that now
@@ -293,19 +313,22 @@
             <span><div class="r-id">${r.id}</div><div class="r-name">${esc(r.name)}${r.blocked ? ' <span class="br-badge b-red">Blocked</span>' : ''}</div><div class="r-sub">${esc(r.type)}${r.office ? ' · ' + esc(r.office) : ''}</div></span>
             <span class="hide-md"><div class="r-main">${esc(r.room)}</div><div class="r-sub">${esc(r.venue)}</div></span>
             <span class="hide-md r-main">${esc(r.dates)}</span>
-            <span class="hide-md"><span class="br-badge ${RES[r.res].c}">${RES[r.res].t}</span></span>
-            <span><span class="br-badge ${PAY[r.pay].c}">${r.pay === 'paid_cash' ? esc(r.payLabel) : PAY[r.pay].t}</span></span>
+            <span class="hide-md"><span class="br-badge ${resBadge(r.res).c}">${esc(resBadge(r.res).t)}</span></span>
+            <span><span class="br-badge ${payBadge(r.pay).c}">${r.pay === 'paid_cash' ? esc(r.payLabel) : esc(payBadge(r.pay).t)}</span></span>
             <span class="hide-md r-act ${r.cls}">${esc(actLabel(r))}</span>
             <span class="r-chev">&rsaquo;</span>
           </a>`).join('') || '<div style="padding:1.2rem;color:#8a857d;font-size:.85rem">No requests match.</div>';
         drawPager(all.length);
       }
       function draw() {
-        document.getElementById('brTabs').innerHTML = TABS.map(t => `
-          <button type="button" class="br-tab${tab === t.k ? ' active' : ''}" onclick="setTab('${t.k}')">${t.t}<span class="n">${countOf(t.k)}</span></button>`).join('')
-          + `<input id="brSearch" class="br-search" type="text" value="${esc(q)}" placeholder="Search name, room, or request no." oninput="setQ(this.value)">`;
-        const need = BR.filter(r => ['id', 'confirm', 'review', 'overdue', 'refund', 'pos'].includes(r.cat)).length;
-        document.getElementById('brCount').textContent = BR.length + ' booking requests · ' + need + ' need action';
+        const scopes = MY_HALLS ? '<span class="br-scope" role="group" aria-label="Which bookings">'
+          + [['mine', 'My halls'], ['all', 'Whole office']].map(([k, t]) => `
+          <button type="button" class="br-tab${scope === k ? ' active' : ''}" aria-pressed="${scope === k}" onclick="setScope('${k}')">${t}</button>`).join('')
+          + '</span>' : '';
+        document.getElementById('brTabBtns').innerHTML = scopes + TABS.map(t => `
+          <button type="button" class="br-tab${tab === t.k ? ' active' : ''}" onclick="setTab('${t.k}')">${t.t}<span class="n">${countOf(t.k)}</span></button>`).join('');
+        const need = inScope().filter(r => ['id', 'confirm', 'review', 'overdue', 'refund', 'pos'].includes(r.cat)).length;
+        document.getElementById('brCount').textContent = inScope().length + ' booking requests · ' + need + ' need action';
         drawRows();
       }
       /* A refund the customer filed used to reach this queue through
@@ -315,5 +338,7 @@
          simply in BR above. The injection that used to live here is gone. */
       document.getElementById('brPageSize').addEventListener('change', function () { setPageSize(this.value); });
       draw();
+      /* the 30-second check: fresh rows under the same tab, search and page */
+      Live.watch('queue', () => Live.refresh().then(() => { BR = Live.data('br-rows'); draw(); }));
     </script>
 @endpush

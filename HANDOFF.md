@@ -689,3 +689,85 @@ new migration 17).
 - Staff moves: the tick for both CEDU offices now ends on every move out of CEDU (Staff Management edit, venue form). Office Settings: the history keeps the first 100 characters, so a long location no longer fails on a strict MySQL (XAMPP's is not strict).
 - Tests: `RolesTest` (collation x2, the tick), `OfficeSettingsTest` (long location). `OfficeSettingsTest` counts history rows, so it needs a reset test DB: two of its tests fail on a second run without one.
 - The snapshot in `_tools` is again `.before-m17` + the new migration 17.
+
+## 15. 2026-11-05 — phase L fixes (branch `fixes-2`, migration 18)
+
+Decisions: memory `venusep-teammate-bugs-2026-11-05` (ANSWERS). **Migration 18 is NOT on the real DB**: Aron runs
+`C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_18.sql` in cmd, after the backup in its header.
+It ends with "OK: every staff and admin account has an employee number". Applied to the test/flows snapshot
+(`_tools\venusep_snapshot.sql`, appended; the copy before it is `.before-m18`).
+
+- **Offices are fixed:** nobody adds or deletes an office, the super admin included (venue-save / catalog-delete
+  refuse with 403, venue-form without an id goes back to the list; the buttons are gone).
+- **Proxies:** `trustProxies` believes only `X-Forwarded-Proto` from 127.0.0.1/::1, never a forwarded host or port.
+- **Admin-only requests** (lost-receipt refund, write-off, outside refund recorded): `notify_refund_needs_admin()`
+  tells the group's active normal admins; with none active, the super admin.
+- **Top-right chip:** the profile photo (`asset(photo_path)`), else the initials — admin/staff header, the customer
+  header and the customer browse bar.
+- **Profile:** Role = "Super admin" / "Admin · USeP CEDU" / "Staff · USeP Hostel" (both CEDU offices: both names);
+  Position (if set) and the employee number, all read-only. **Employee numbers** (migration 18): `EMP-<year>-NNNN`
+  (the format of Marites Robles's EMP-2021-0043), given by `trg_staff_employee_no_ins` from `employee_no_counters`
+  (per year; its row lock keeps two accounts made at once apart), required, never changed
+  (`trg_staff_employee_no_upd` refuses). Old rows backfilled (year of the staff row); the seeded super admin got a
+  staff row. Staff Management's update no longer takes `employee_no`.
+- **Booking Management:** "Awaiting payment" tab (await_gcash, await_cash, await_pos; never overdue) and the newest
+  request first (the Refunds tab keeps soonest-event-first).
+- **Overdue:** no Pay now, the pay page and payment-submit refuse ("Payment overdue. Please contact the office." +
+  the office's contact line) until staff extend the deadline (that sets await_* again). `Status::PAY_OPEN`.
+- **Counter phones:** walk-in and new-account mobiles take only 09XXXXXXXXX or +639XXXXXXXXX, spaces allowed
+  (`ph_mobile_strict()`, bookings.php; `cleanPhone()` its JS twin; inputmode/pattern/message on screen). The other
+  phone fields (profile, registration) keep the looser `cb_normalise_mobile()`.
+- **Discount:** sp_approve_booking (migration 18) rounds a discounted total UP to the whole peso and stores
+  discount = room price − total (every approval, counter included). Previews (`priceWithDiscount`,
+  `usep_discounted`) use the same rule. A pending USeP claim shows the full price with "USeP discount applied once
+  your ID is verified" (booking history, pay page, details modal). Amounts show centavos when they have any.
+- Not done: the note is not in the narrow Transaction History tables; emails (payment_overdue still says
+  "until it is paid") are the later email phase.
+- Side effect: the seeded super admin now has a staff row (full name = its username `admin`), so History lines
+  name it "admin" instead of its email (the header and profile already said "admin").
+- Tests: PHPUnit 714 OK; `venusep:check --db=venusep_laravel_test` PASS (273 ok); `venusep:flows` PASS 161/161.
+  New/changed: `SkeletonTest` (proxy), `AccountNotificationsTest` (super admin fallback), `HeaderPhotoTest`,
+  `AdminProfileTest` (role, employee numbers), `BookingRequestsTest`, `PayTest`, `PaymentSubmitTest`,
+  `BookingCreateTest` + `CounterAccountsTest` (phones), `BookingActionTest` (rounding), venue tests (fixed offices).
+  Flows: `hostel-and-counter` (Booking Management step), `abook-staff-actions` (overdue: no Pay now until
+  extended), `cacct-payment-guards` (extends first), `admina-dashboard-reports-backup` (overdue notification).
+
+### 15b. Phase M (2026-11-05): deleted rooms, staff per hall, covers, moves (migration 18 grew)
+Decisions: memory `venusep-teammate-bugs-2026-11-05` (items 12, 14, the ANSWERS); written up at the end of DB-DECISIONS 28.
+Migration 18 is still not on the real DB; the additions are in the same file, safe to re-run (loaded twice on the flows copy).
+The snapshot is again `.before-m18` + a blank line + the new migration 18.
+- **Deleted rooms** (`RoomQueries`, `CatalogDeleteController`): `rooms.deleted_at`, `deleted_by_user_id`, always with `is_active = 0`,
+  so every "active rooms" read already hides them; the two room loaders (`venue-rooms.php`, `hostel-rooms.php`) hide them from the
+  admin lists too. `fn_room_live_bookings()` is the one copy of "cannot be deleted". Triggers refuse an undo, a delete with a live
+  booking, and a new booking. Reports show "<name> (deleted)" for a room with records in the period. **The photo files are deleted**
+  (not records), as before: a test or flow must never delete a seeded room, or it wipes tracked files under `public/assets`.
+- **Staff per hall** (`StaffHallQueries`): `staff_halls`; the hostel is one unit, no rows. The DB gives a new or moved staff member
+  every hall of the office, and drops the old office's (triggers), so the app only narrows. `lastStaffOf()` is the one copy of the
+  last-staff rule (Staff Management halls, suspend, office change; venue form). A hall moved to another office goes to its staff.
+- **My halls:** `fn_staff_on_room()` (halls + covers going on) feeds booking news (`sp_notify_venue_staff`) and
+  `booking_my_hall_ids()` (auth.php, adds counter bookings made by the person). Booking Management only: the Dashboard, Calendar and
+  Transaction History still show the whole office. "About to expire" reminders follow the hall too.
+- **Covers and moves** (`StaffCoverController`, `CoverQueries`, `partials/staff-covers`): state is worked out from the times on
+  every read, so nothing runs to end or expire them. `staff_me()` adds the office of a cover going on; the sign-in card accepts it too.
+- **The tick:** nothing reads `staff.both_cedu_offices` now; the column stays as a record of who had it, and the migration lists them.
+- Tests: `AdminPeople/StaffCoverTest`, `AdminPeople/StaffHallsTest` (new), `AdminVenues/CatalogDeleteTest` (rewritten), `RoomSaveTest`,
+  `RolesTest`, `StaffManagementTest`. `AccountNotificationsTest` now removes its accounts (its own tearDown hid the trait's).
+  Flows: new `staff-covers`; `venues-catalog` (a new hall names staff, the delete keeps the row), `venue-booking-to-receipt` (delete
+  refused while pending), `roles-accounts` (tick step gone), `admin-settings` (new staff at Bahay Alumni: the only staff of a hall
+  cannot be suspended).
+- Tests: PHPUnit 753 OK (4404 assertions, run alone); `venusep:check --db=venusep_laravel_test` PASS (273 ok); `venusep:flows` PASS 168/168.
+  Run PHPUnit and the flows one at a time: run together, a flow's database reset gave two random MariaDB 1615 errors in PHPUnit.
+- Re-run of migration 18 checked on the flows copy: a hall an admin took away stays away; the tick list names who had it.
+- Not done: My halls is on Booking Management only; a cover does not notify the staff member (admins tell them in person); overlapping
+  covers are allowed; the last-staff check and the save are not one locked step, so two admins at the same second could empty a hall.
+
+### 15c. Phase N (2026-11-05): pages update without a reload (no migration)
+Decision: memory `venusep-teammate-bugs-2026-11-05`, item 11. **All of it is in `public/assets/js/live.js`**: start there when debugging. The file's head explains how a page uses it.
+- **Parts:** a view marks a part with `@fragment('x')` + `data-live="x"`, its controller returns `live_view()` (helpers.php) instead of `view()`; the same URL with `?part=1` answers the parts alone. Data a script draws from is a `<script type="application/json" data-live>` part, read with `Live.data()`. `Live.refresh(url, only)` swaps them; `only` matters on the profile pages, where forms are wired up inside other parts.
+- **Actions:** `Live.post` (token, JSON reply, never rejects), `Live.send` (post, show a refusal, say the message, refresh), `Live.say` (the corner message). Server replies and refusals did not change. FAQ Management keeps its plain form posts and redirects; with the script, `FaqController::back()` answers the same notes as JSON.
+- **The check:** `GET /live-check?page=queue|mine` (`LiveCheckController`, `LiveQueries`): two version strings, one request per tick, scope from `staff_venue_sql()` or the session's customer. Every 30 s, never overlapping, paused while the tab is hidden, at once when it comes back. A changed version waits while a dialog is open or a field inside a part has focus or was changed, and is tried again next time. Watched: Booking Management and the Dashboard (`queue`), Booking History and the pay page (`mine`); the bell on every signed-in page (it reloads only when `LiveQueries::bell()` moves; its reminders reload each time the panel opens).
+- **Still leave the page, on purpose:** a new room (to its own form, or the list for the hostel: its photos need the room); sign-in, sign-out, register, password reset, Google; the forced password change (on to the Dashboard); a restore and a handover (sign-in page); the customer's "Email me this receipt" (plain post, no email changes in this phase). The pay page loads again when the check finds the booking opened or closed for paying, as the receipt checker comes with the page.
+- **Changed behaviour:** the venue form and room edits stay on the form after Save; Add account stays, with the form cleared, instead of going to the Dashboard; Fix email says its message in the corner.
+- Not watched by the check (not on Aron's list): the booking detail page, Transaction History (both sides), Calendar.
+- Not run in a browser: setting a first password and Google disconnect on the customer profile (they need a Google account); they use the same redraw as the rest of that section.
+- Tests: `LiveCheckTest` (new), `FaqManagementTest` (JSON answers), flow `live-updates` (new). Every flow that waited for a page load now waits for the `part=1` reply. No full PHPUnit, `venusep:check` or full flows run in this phase, by Aron's rule; that is the round at the end of all phases.

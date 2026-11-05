@@ -42,6 +42,7 @@ $navName  = $navAuthed && session('customer_name') ? session('customer_name') : 
 $navFirst = explode(' ', trim($navName))[0];
 $navParts = preg_split('/\s+/', trim($navName));
 $navInit  = strtoupper(substr($navParts[0], 0, 1) . substr(end($navParts), 0, 1));
+$navPhoto = $navAuthed ? ($customerContact['photo'] ?? '') : '';   /* the profile photo, else the initials */
 /* anchors stay in-page on the landing. In counter mode every link carries
    counter=1, or one click drops staff into the customer pages (2026-10-27). */
 $navCounterQ = $navCounter ? '?counter=1' : '';
@@ -85,6 +86,7 @@ if (!$navAuthed) {                                                      /* a gue
   .cn-user:hover { color: #fff; background: rgba(255,255,255,.18); }
   .cn-avatar { width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #1d1214;
     display: grid; place-items: center; font-size: 12.5px; font-weight: 700; }
+  img.cn-avatar { object-fit: cover; }
   .cn-name { font-size: 13.5px; font-weight: 700; }
   /* guest: Log in (text) + Sign up (pill) where the chip would be; customer: chip + Log out */
   .cn-auth { display: inline-flex; align-items: center; gap: 14px; }
@@ -149,7 +151,11 @@ if (!$navAuthed) {                                                      /* a gue
 <?php endif; ?>
 <?php elseif ($navAuthed): ?>
       <a class="cn-user" href="<?php echo route('customer.customer-profile'); ?>" title="Your profile">
+<?php if ($navPhoto !== ''): ?>
+        <img class="cn-avatar" src="<?php echo htmlspecialchars(asset($navPhoto)); ?>" alt="" width="34" height="34">
+<?php else: ?>
         <span class="cn-avatar"><?php echo htmlspecialchars($navInit); ?></span>
+<?php endif; ?>
         <span class="cn-name"><?php echo htmlspecialchars($navFirst); ?></span>
       </a>
       <a class="cn-logout" href="<?php echo route('customer.logout'); ?>">Log out</a>

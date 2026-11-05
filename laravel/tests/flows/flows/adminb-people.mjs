@@ -32,7 +32,7 @@ async function toggleCustomer(ctx, page, row, label, okLabel = label) {
   await row.locator('.btn-cust-toggle', { hasText: label }).click();
   /* .catch: a dangling wait must not crash the runner when the step fails first */
   const answer = page.waitForResponse((r) => r.url().includes('/admin/customer-save') && r.request().method() === 'POST').catch(() => null);
-  const reloaded = page.waitForEvent('load').then(() => true, () => false);
+  const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);
   await modal(ctx, page, { expect: new RegExp(okLabel), ok: okLabel });
   const res = await answer;
   if (!res) ctx.fail(`${label} sent no request to /admin/customer-save`);
@@ -136,7 +136,7 @@ export default {
       await page.keyboard.type('Bring <b>exact</b> change.');
       await Promise.all([page.waitForLoadState('load'), page.getByRole('button', { name: 'Add question' }).click()]);
       await page.waitForLoadState('load');
-      await expect.visible(page.locator('.fq-flash.ok'), 'no success message after adding the question');
+      await expect.text(page, /Question added/);
       const f = await dbOne(`SELECT id, answer FROM faqs WHERE question = ?`, [s.faqQ]);
       expect.ok(f, 'no faqs row for the new question');
       expect.equal(f.answer, 'Bring <b>exact</b> change.', 'faqs.answer (stored as typed)');
@@ -159,7 +159,7 @@ export default {
       await row.locator('form.fq-edit select[name="section"]').selectOption('after');
       await Promise.all([page.waitForLoadState('load'), row.getByRole('button', { name: 'Save changes' }).click()]);
       await page.waitForLoadState('load');
-      await expect.visible(page.locator('.fq-flash.ok'), 'no success message after saving');
+      await expect.text(page, /Changes saved/);
 
       const f = await dbOne(`SELECT section_key, sort_order,
           (SELECT MAX(sort_order) FROM faqs WHERE section_key = 'after' AND id <> ?) AS others_max FROM faqs WHERE id = ?`, [s.faqId, s.faqId]);

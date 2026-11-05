@@ -60,6 +60,8 @@
           <div class="container-fluid">
             <div class="pay-wrap">
               <a class="pay-back" href="{{ route('customer.booking-history') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to Booking History</a>
+              @fragment('pay-body')
+              <div data-live="pay-body" data-pay-code="{{ $payCode }}" data-pay-open="{{ $payOpen ? 1 : 0 }}">
               <h1 class="pay-title">{{ $payOpen ? 'Pay for your booking' : 'Payment' }}</h1>
               <p class="pay-sub">{{ $payB['bookingId'] }} &middot; {{ $payB['roomName'] }}, {{ $payB['venueName'] }}</p>
 
@@ -81,9 +83,9 @@
                   <div><div class="pay-k">Reference</div><div class="pay-v">{{ $payB['bookingId'] }}</div></div>
                   <div><div class="pay-k">{{ $payIsHostel ? 'Stay' : 'Event' }}</div><div class="pay-v">{{ $payB['eventName'] }}</div></div>
                   <div><div class="pay-k">{{ $payIsHostel ? 'Check-in' : 'Date' }}</div><div class="pay-v">{{ $payB['eventDate'] }}</div></div>
-                  <div><div class="pay-k">Amount due</div><div class="pay-v">{{ $payB['amount'] }}</div></div>
+                  <div><div class="pay-k">Amount due</div><div class="pay-v">{{ $payB['amount'] }}</div>@if ($payB['discountPending'])<div style="font-size:12px;color:#6b675f;margin-top:3px">USeP discount applied once your ID is verified</div>@endif</div>
                   <div><div class="pay-k">Payment</div><div class="pay-v">{{ $payB['paymentStatus'] }}</div></div>
-                  @if ($payOpen || $payCode === 'await_event')
+                  @if ($payOpen || in_array($payCode, ['await_event', 'overdue'], true))
                     <div><div class="pay-k">{{ $payCode === 'overdue' ? 'Was due' : 'Pay by' }}</div><div class="pay-v">{{ customer_pay_by_label($payB['payment']) }}</div></div>
                   @endif
                 </div>
@@ -104,27 +106,41 @@
 
               @elseif (!$payOpen)
                 @php [$payNoteHead, $payNoteText] = $payStateNote; @endphp
-                <div class="pay-note {{ in_array($payCode, ['confirmed', 'paid_cash'], true) ? 'is-ok' : ($payCode === 'expired' ? 'is-bad' : 'is-info') }}">
+                <div class="pay-note {{ in_array($payCode, ['confirmed', 'paid_cash'], true) ? 'is-ok' : (in_array($payCode, ['expired', 'overdue'], true) ? 'is-bad' : 'is-info') }}">
                   <i class="bi {{ in_array($payCode, ['confirmed', 'paid_cash'], true) ? 'bi-check-circle' : 'bi-info-circle' }}" aria-hidden="true"></i>
                   <div><strong>{{ $payNoteHead }}</strong>{{ $payNoteText }}</div>
                 </div>
 
               @else
-                @if ($payCode === 'overdue')
-                  <div class="pay-note is-bad"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><div><strong>This payment is overdue</strong>It was due {{ customer_pay_by_label($payB['payment']) }}.{{ $payB['payment']['policy'] === 'postpay' ? ' Please pay it now — it can still be paid here.' : ' It can still be paid, but staff may release the slot.' }}</div></div>
-                @elseif (!empty($payB['payToUse']))
+                @if (!empty($payB['payToUse']))
                   <!-- the hostel is pay to use (2026-10-27, DB-DECISIONS #26) -->
                   <div class="pay-note is-info"><i class="bi bi-info-circle" aria-hidden="true"></i><div><strong>Pay before you check in</strong>Pay here by GCash, or in cash at the front desk when you arrive. If it is not paid by the end of {{ $payB['payment']['payByLabel'] }}, the beds are released. You get your bed once the stay is paid.</div></div>
                 @endif
                 <!-- [4b] the payment itself — drawn by the script below -->
                 <div id="payApp"></div>
               @endif
+              </div>
+              @endfragment
             </div>
           </div>
         </div>
       </main>
 @endsection
 @push('scripts')
+    <script>
+      /* The 30-second check. Not while someone is paying: a chosen receipt or the ticked box
+         must stay. The payment script (and its receipt checker) comes with the page, so a
+         booking that opens or closes for paying is the one change that loads the page again. */
+      Live.watch('mine', async function () {
+        if (typeof state !== 'undefined' && (state.ocr || state.sending || state.agreeExact)) return false;
+        const before = document.querySelector('[data-pay-code]').dataset;
+        const was = { code: before.payCode, open: before.payOpen };
+        await Live.refresh();
+        const now = document.querySelector('[data-pay-code]').dataset;
+        if (now.payCode !== was.code && (now.payOpen === '1' || was.open === '1')) { location.reload(); return; }
+        if (typeof render === 'function') render();
+      });
+    </script>
     @if ($payOpen)
     <!-- [5] GCASH CHECKER — the shared engine (OCR + verdict). It calls back into
          gcAccount(), gcExpectedCentavos(), gcBookingRef(), state and render(). -->
@@ -325,12 +341,24 @@
           const res = await fetch(SUBMIT_URL, { method: 'POST', body: fd, credentials: 'same-origin' });
           const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });
           if (!out.ok) { state.sending = false; state.error = out.message || 'Nothing was changed.'; render(); return; }
-          location.href = PAY_URL + '?booking=' + encodeURIComponent(PAY.ref) + '&sent=cash_cancelled';
+          PAY.cashChosen = PAY.cashLocked = false;
+          state.method = PAY.account ? 'gcash' : 'cash';
+          await paySent('cash_cancelled');
         } catch (e) {
           state.sending = false;
           state.error = 'Could not reach the server, so nothing was changed.';
           render();
         }
+      }
+
+      /* The server took it: the note and the booking's new state, in place. The address
+         carries the note, as it did when this was a page load. */
+      async function paySent(sent) {
+        const url = PAY_URL + '?booking=' + encodeURIComponent(PAY.ref) + '&sent=' + sent;
+        history.replaceState(null, '', url);
+        await Live.refresh(url);
+        state.sending = false; state.ocr = null; state.agreeExact = false; state.error = null;
+        render();
       }
 
       /* Send it FOR REAL. The server recomputes the verdict against the database
@@ -371,7 +399,8 @@
           }
           /* ok + rejected = the LAST attempt was refused but went to staff anyway. */
           const sent = cash ? 'cash' : (out.verdict === 'rejected' ? 'limit' : (out.verdict === 'accepted' ? 'accepted' : 'manual_review'));
-          location.href = PAY_URL + '?booking=' + encodeURIComponent(PAY.ref) + '&sent=' + sent;
+          if (cash) { PAY.cashChosen = PAY.cashLocked = true; }
+          await paySent(sent);
         } catch (e) {
           state.sending = false;
           state.error = 'Could not reach the server, so your payment was not recorded.';

@@ -28,7 +28,7 @@ const NOTIF_GROUP_ADMINS_SQL = "u.account_type = 'admin' AND u.is_super_admin = 
     AND u.office_group = (SELECT v.office_group FROM bookings b JOIN rooms r ON r.id = b.room_id
                            JOIN venues v ON v.id = r.venue_id WHERE b.id = %d)";
 
-/* A new online request: staff of that office + its group's normal admins. Counter bookings
+/* A new online request: staff of that hall + its group's normal admins. Counter bookings
    do not call this — staff made those themselves. */
 function notify_new_request(PDO $pdo, int $bookingId, ?int $actorUserId): void
 {
@@ -37,12 +37,17 @@ function notify_new_request(PDO $pdo, int $bookingId, ?int $actorUserId): void
     $s->closeCursor();
 }
 
-/* A refund with a missing receipt waits for the group's normal admin to approve it. */
+/* Something only an admin decides (a refund with a missing receipt, a write-off) waits for
+   the group's normal admin; a group with no active normal admin is covered by the super
+   admin (DB-DECISIONS 28). The NOT EXISTS reads its own users u, not the outer one. */
 function notify_refund_needs_admin(PDO $pdo, int $bookingId, int $actorUserId, string $kind = 'refund_needs_admin'): void
 {
+    $group = sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId);
     $pdo->prepare(
         "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id)
-         SELECT u.id, :k, :b, :a FROM users u WHERE u.is_active = 1 AND u.id <> :a2 AND " . sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId)
+         SELECT u.id, :k, :b, :a FROM users u
+          WHERE u.is_active = 1 AND u.id <> :a2
+            AND (($group) OR (u.is_super_admin = 1 AND NOT EXISTS (SELECT 1 FROM users u WHERE u.is_active = 1 AND $group)))"
     )->execute([':k' => $kind, ':b' => $bookingId, ':a' => $actorUserId, ':a2' => $actorUserId]);
 }
 
@@ -152,7 +157,7 @@ function notif_words(array $r, string $accountType): array
     $staffLink = 'admin/booking-request.php?id=' . rawurlencode($ref);
     $viewLink  = 'customer/booking-history.php?view=' . rawurlencode($ref);
     $payLink   = 'customer/pay.php?booking=' . rawurlencode($ref);
-    $payOpen   = in_array($r['payment_status'] ?? '', ['await_gcash', 'await_cash', 'overdue'], true);
+    $payOpen   = in_array($r['payment_status'] ?? '', \App\Support\Status::PAY_OPEN, true);
 
     switch ($r['kind']) {
         /* ---- the customer's own bookings ---- */
@@ -219,17 +224,43 @@ function notif_words(array $r, string $accountType): array
         case 'staff_moved':
             return [($r['actor_name'] ?: 'An administrator') . ' moved ' . ($d['email'] ?? 'a staff member') . ' to ' . ($d['venue'] ?? 'another venue') . '.',
                     'admin/venusep_staffManagement.php'];
+        /* ---- admins: covers and moves between groups (StaffCoverController) ---- */
+        case 'cover_request':
+            return [($r['actor_name'] ?: 'An administrator') . ' asks for ' . ($d['staff'] ?? 'a staff member') . ' to cover ' . ($d['place'] ?? 'your office')
+                    . ', ' . notif_span($d) . '. Approve or reject it.', 'admin/venusep_staffManagement.php'];
+        case 'cover_set':
+        case 'cover_approved':
+        case 'cover_rejected':
+        case 'cover_ended':
+            $did = ['cover_set' => ' set a cover: ', 'cover_approved' => ' approved the cover: ', 'cover_rejected' => ' rejected the cover: ', 'cover_ended' => ' ended the cover early: '];
+            return [($r['actor_name'] ?: 'An administrator') . $did[$r['kind']] . ($d['staff'] ?? 'a staff member') . ' at ' . ($d['place'] ?? 'an office') . ', ' . notif_span($d) . '.'
+                    . (!empty($d['reason']) ? ' Reason: ' . $d['reason'] : ''), 'admin/venusep_staffManagement.php'];
+        case 'move_request':
+            return [($r['actor_name'] ?: 'An administrator') . ' asks to move ' . ($d['staff'] ?? 'a staff member') . ' from ' . ($d['from'] ?? 'another office')
+                    . ' to ' . ($d['to'] ?? 'your office') . '. Approve or reject it.', 'admin/venusep_staffManagement.php'];
+        case 'move_approved':
+        case 'move_rejected':
+            return [($r['actor_name'] ?: 'An administrator') . ($r['kind'] === 'move_approved' ? ' moved ' : ' rejected the move of ') . ($d['staff'] ?? 'a staff member')
+                    . ' to ' . ($d['to'] ?? 'another office') . '.' . (!empty($d['reason']) ? ' Reason: ' . $d['reason'] : ''), 'admin/venusep_staffManagement.php'];
         case 'super_admin_handover':
             return [($r['actor_name'] ?: 'The previous super admin') . ' handed the super admin over to you.', 'admin/venusep_staffManagement.php'];
     }
     return ['Something changed' . ($ref !== '' ? ' on ' . $ref : '') . '.', $accountType === 'customer' ? $viewLink : $staffLink];
 }
 
+/* "Nov 6, 8:00 AM to Nov 8, 5:00 PM" for a cover's detail. */
+function notif_span(array $d): string
+{
+    $at = fn (string $k) => date('M j, g:i A', strtotime((string) ($d[$k] ?? 'now')));
+    return $at('from') . ' to ' . $at('to');
+}
+
 /* Unapproved requests within 24 hours of their date — worked out live, for staff
    and normal admins, in the offices they handle; a normal admin also hears of
    requests waiting 3 days. $offices: null = the super admin, who gets no booking
-   reminders (DB-DECISIONS 28). */
-function notif_reminders(PDO $pdo, ?array $offices, bool $isAdmin): array
+   reminders (DB-DECISIONS 28). $staffId: a staff member hears only of their own halls
+   and covers, like the stored news (sp_notify_venue_staff). */
+function notif_reminders(PDO $pdo, ?array $offices, bool $isAdmin, ?int $staffId = null): array
 {
     if ($offices === null) {
         return [];
@@ -251,7 +282,7 @@ function notif_reminders(PDO $pdo, ?array $offices, bool $isAdmin): array
               FROM bookings b JOIN rooms r ON r.id = b.room_id
              WHERE b.reservation_status = 'pending'
                AND fn_request_expiry(b.id, b.booking_type) BETWEEN NOW() AND NOW() + INTERVAL 24 HOUR"
-         . " AND r.venue_id IN ($officeIds) ORDER BY expires_at LIMIT 10";
+         . " AND r.venue_id IN ($officeIds)" . ($staffId === null ? '' : ' AND fn_staff_on_room(' . $staffId . ', r.id)') . ' ORDER BY expires_at LIMIT 10';
     $s = $pdo->prepare($sql);
     $s->execute();
     $out = $waiting;

@@ -211,6 +211,32 @@ class RolesTest extends TestCase
         $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $venues->id, 'new_password' => 'Long-enough-1'])->assertOk();
     }
 
+    /* The tick for both CEDU offices must not survive a move out of CEDU: moved back later,
+       the person would silently get the other office again. Every way of moving them. */
+    public function test_moving_two_office_staff_out_of_cedu_clears_the_tick(): void
+    {
+        $tick = fn ($acct) => (int) DB::table('staff')->where('user_id', $acct->id)->value('both_cedu_offices');
+        $update = fn ($acct, int $venue) => $this->postForm('admin.staff-save', ['action' => 'update', 'user_id' => $acct->id,
+            'full_name' => 'Two Offices', 'email' => $acct->email, 'venue_id' => $venue])->assertOk();
+        $this->actingAsAdmin();
+
+        $byUpdate = $this->staffAt(self::VENUES, true);
+        $update($byUpdate, self::HOSTEL);
+        $this->assertSame(1, $tick($byUpdate), 'a move inside CEDU keeps the tick');
+        $update($byUpdate, self::BAHAY);
+        $this->assertSame(0, $tick($byUpdate));
+
+        $byVenueForm = $this->staffAt(self::VENUES, true);
+        $bahay = DB::table('venues')->where('id', self::BAHAY)->first();
+        $venues = DB::table('venues')->where('id', self::HOSTEL)->first();
+        $move = fn ($v) => $this->postForm('admin.venue-save', ['venue_id' => $v->id, 'name' => $v->name, 'description' => (string) $v->description,
+            'move_staff' => json_encode([$byVenueForm->id])])->assertOk();
+        $move($venues);
+        $this->assertSame(1, $tick($byVenueForm), 'a move inside CEDU keeps the tick');
+        $move($bahay);
+        $this->assertSame(0, $tick($byVenueForm));
+    }
+
     public function test_the_super_admin_manages_admins_but_nobody_resets_the_super_admin(): void
     {
         $na = $this->makeAccount('admin');

@@ -183,7 +183,10 @@ class VenueSaveController extends Controller
         if (count($rows) !== count($ids) || array_filter($rows, fn ($r) => !staff_may_handle_venue($r['venue_id']))) {
             throw new InvalidArgumentException('not_staff');
         }
-        $pdo->prepare("UPDATE staff SET venue_id = :v WHERE user_id IN ($in)")->execute([':v' => (int) $venueId]);
+        /* the tick for both CEDU offices ends outside CEDU */
+        $pdo->prepare("UPDATE staff SET venue_id = :v,
+                              both_cedu_offices = both_cedu_offices AND COALESCE((SELECT o.office_group = 'cedu' FROM venues o WHERE o.id = :v2), 0)
+                        WHERE user_id IN ($in)")->execute([':v' => (int) $venueId, ':v2' => (int) $venueId]);
         /* who actually changed venue — for the admins' notifications */
         foreach ($rows as $r) {
             if ((int) $r['venue_id'] !== (int) $venueId) {

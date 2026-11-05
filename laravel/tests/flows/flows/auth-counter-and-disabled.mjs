@@ -144,11 +144,11 @@ export default {
       const row = page.locator('.tabulator-row', { hasText: CUSTOMER });
       await expect.visible(row, `no row for ${CUSTOMER}`);
       const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);
-      await row.locator('.btn-cust-toggle', { hasText: 'Disable' }).click();
+      await row.locator('.btn-cust-toggle', { hasText: 'Suspend' }).click();
       const box = modalBox(page);
       await expect.visible(box, 'no confirm dialog');
       await box.locator('button[data-vz="ok"]').click();
-      expect.ok(await reloaded, 'the page did not reload after Disable');
+      expect.ok(await reloaded, 'the page did not reload after Suspend');
       const u = await dbOne('SELECT is_active FROM users WHERE email = ?', [CUSTOMER]);
       expect.equal(u.is_active, 0, 'users.is_active');
       return page;

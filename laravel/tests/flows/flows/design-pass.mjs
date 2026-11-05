@@ -193,5 +193,50 @@ export default {
       expect.equal(await page.locator('.vm-dot-nav').count(), 0, 'photo dots');
       return page;
     });
+
+    await step('Customer Management at 1280: fits, Suspend is one click, the Blocks menu is not cut off and Esc closes it', async () => {
+      const page = s.admin;
+      await page.setViewportSize(DESKTOP);
+      await page.goto(ctx.url('/admin/customer-management'));
+      const row = page.locator('.tabulator-row', { hasText: CUSTOMER });
+      await expect.visible(row, 'no customer row');
+      expect.equal(await sideways(page), false, 'sideways scroll at 1280');
+      await expect.visible(row.getByRole('button', { name: 'Suspend', exact: true }), 'Suspend is not on the row');
+      expect.equal(await page.getByRole('button', { name: 'Manage' }).count(), 0, 'a Manage menu');
+      const blocks = row.getByRole('button', { name: 'Blocks' });
+      await blocks.click();
+      const menu = page.locator('.lp-menu:popover-open');
+      await expect.visible(menu, 'the menu did not open');
+      const inView = await menu.evaluate((m) => { const r = m.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.top >= 0; });
+      expect.equal(inView, true, 'the menu runs off the screen');
+      await page.keyboard.press('Escape');
+      expect.equal(await page.locator('.lp-menu:popover-open').count(), 0, 'Esc did not close it');
+      await page.locator('#cmBlocks').selectOption('yes');
+      await expect.visible(page.getByText('0 customers'), 'an unblocked customer stays under Blocked somewhere');
+      await page.locator('#cmBlocks').selectOption('');
+      return page;
+    });
+
+    await step('The bookings link opens that customer in Booking Management', async () => {
+      const page = s.admin;
+      const link = page.locator('.tabulator-row', { hasText: CUSTOMER }).locator('.cm-bookings');
+      await link.click();
+      await page.waitForURL(/booking-requests\?q=/);
+      const who = await dbOne('SELECT c.full_name FROM customers c JOIN users u ON u.id = c.user_id WHERE u.email = ?', [CUSTOMER]);
+      expect.equal(await page.locator('#brSearch').inputValue(), who.full_name, 'the search box');
+      await expect.visible(page.locator('#brRows a.br-row').first(), 'none of their bookings listed');
+      expect.equal(await page.locator('#brRows a.br-row').filter({ hasNotText: who.full_name }).count(), 0, 'other customers listed');
+      return page;
+    });
+
+    await step('Customer Management on a phone: cards and 44px buttons', async () => {
+      const page = s.admin;
+      await page.setViewportSize(PHONE);
+      await page.goto(ctx.url('/admin/customer-management'));
+      await expect.visible(page.locator('.tabulator-row', { hasText: CUSTOMER }), 'no customer card');
+      expect.equal(await sideways(page), false, 'sideways scroll on a phone');
+      expect.equal((await shortButtons(page, '.tabulator-row .lp-btn')).join() || 'none', 'none', 'row buttons under 44px');
+      return page;
+    });
   },
 };

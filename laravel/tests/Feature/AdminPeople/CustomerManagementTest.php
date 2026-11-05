@@ -17,7 +17,7 @@ class CustomerManagementTest extends TestCase
     public function test_the_admin_sees_the_roster_without_walk_ins(): void
     {
         $this->actingAsAdmin()->get(route('admin.customer-management'))->assertOk()
-            ->assertSee('Customer accounts')
+            ->assertSee('Customers who booked with your offices.')
             ->assertSee('"email":"msantos@usep.edu.ph"', false)
             ->assertDontSee('Carmen Uy')                                        // walk-in: no account
             ->assertSee(json_encode(route('admin.customer-save')), false)
@@ -50,10 +50,10 @@ class CustomerManagementTest extends TestCase
         try {
             $this->post(route('admin.customer-save'), ['csrf' => 'tok', 'action' => 'set_active', 'user_id' => 4, 'active' => '0'])
                 ->assertOk()->assertExactJson(['ok' => true, 'active' => 0,
-                    'message' => 'Account disabled. They have been signed out and can no longer sign in.']);
+                    'message' => 'Account suspended. They have been signed out and can no longer sign in.']);
             $this->assertSame(0, (int) DB::table('users')->where('id', 4)->value('is_active'));
             $this->post(route('admin.customer-save'), ['csrf' => 'tok', 'action' => 'set_active', 'user_id' => 4, 'active' => '1'])
-                ->assertOk()->assertJson(['ok' => true, 'active' => 1, 'message' => 'Account re-enabled.']);
+                ->assertOk()->assertJson(['ok' => true, 'active' => 1, 'message' => 'Account reactivated.']);
             $this->assertSame(1, (int) DB::table('users')->where('id', 4)->value('is_active'));
         } finally {
             DB::table('users')->where('id', 4)->update(['is_active' => 1]);

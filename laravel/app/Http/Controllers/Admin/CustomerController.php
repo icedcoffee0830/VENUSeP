@@ -67,10 +67,11 @@ class CustomerController
                     'email'     => (string) $r['email'],
                     'phone'     => (string) ($r['phone'] ?? ''),
                     'usep'      => $r['university_id_no'] !== null && $r['university_id_no'] !== '' ? 'USeP' : '—',
-                    'status'    => $r['is_active'] ? 'Active' : 'Disabled',
+                    'status'    => $r['is_active'] ? 'Active' : 'Suspended',
                     'bookings'  => (int) $r['booking_count'],
                     'open'      => (int) $r['open_count'],
                     'joined'    => $r['created_at'] ? date('M j, Y', strtotime($r['created_at'])) : '—',
+                    'counter'   => $r['counter_venue_id'] !== null,
                     'lastLogin' => $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
                     'fixEmail'  => self::mayFixEmail($r['counter_venue_id'], $r['last_login_at'] === null, (bool) $r['not_google']),
                     /* one entry per office this admin may block at: on or off, and by whom */
@@ -152,7 +153,7 @@ class CustomerController
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,
-                'message' => $active ? 'Account re-enabled.' : 'Account disabled. They have been signed out and can no longer sign in.']);
+                'message' => $active ? 'Account reactivated.' : 'Account suspended. They have been signed out and can no longer sign in.']);
         }
 
         return $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);

@@ -46,7 +46,7 @@ export default {
       expect.equal(await row.locator('button', { hasText: 'Block at USeP Venues' }).count(), 0, 'another group\'s office offered');
       await row.locator('button', { hasText: 'Block at Bahay Alumni' }).click();
       await modal(ctx, page, { expect: /cannot make new bookings at Bahay Alumni/, fill: REASON, ok: 'Block' });
-      await afterSave(ctx, page, page.locator('.tabulator-row', { hasText: CUSTOMER }).locator('.badge', { hasText: 'Blocked · Bahay Alumni' }), 'no Blocked badge after the reload');
+      await afterSave(ctx, page, page.locator('.tabulator-row', { hasText: CUSTOMER }).locator('.vz-chip', { hasText: 'Blocked at Bahay Alumni' }), 'no Blocked badge after the reload');
       const b = await dbOne(`SELECT k.reason, k.lifted_at FROM customer_office_blocks k JOIN customers c ON c.id = k.customer_id
                                JOIN users u ON u.id = c.user_id WHERE u.email = ? AND k.venue_id = 1`, [CUSTOMER]);
       expect.ok(b && b.reason === REASON && b.lifted_at === null, 'the block row (reason, still on): ' + JSON.stringify(b));

@@ -216,8 +216,10 @@
       ];
       /* deep-link support: the dashboard cards link here as ?tab=id / confirm /
          review / overdue — open with that tab already active */
-      const TAB_PARAM = new URLSearchParams(location.search).get('tab');
-      let tab = TABS.some((t) => t.k === TAB_PARAM) ? TAB_PARAM : 'all', q = '';
+      const PARAMS = new URLSearchParams(location.search);
+      const TAB_PARAM = PARAMS.get('tab');
+      let tab = TABS.some((t) => t.k === TAB_PARAM) ? TAB_PARAM : 'all', q = (PARAMS.get('q') || '').trim().toLowerCase();
+      document.getElementById('brSearch').value = PARAMS.get('q') || '';
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
       const AWAITING = ['await_gcash', 'await_cash', 'await_pos'];

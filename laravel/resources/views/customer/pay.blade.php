@@ -60,6 +60,8 @@
           <div class="container-fluid">
             <div class="pay-wrap">
               <a class="pay-back" href="{{ route('customer.booking-history') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to Booking History</a>
+              @fragment('pay-body')
+              <div data-live="pay-body" data-pay-code="{{ $payCode }}" data-pay-open="{{ $payOpen ? 1 : 0 }}">
               <h1 class="pay-title">{{ $payOpen ? 'Pay for your booking' : 'Payment' }}</h1>
               <p class="pay-sub">{{ $payB['bookingId'] }} &middot; {{ $payB['roomName'] }}, {{ $payB['venueName'] }}</p>
 
@@ -117,12 +119,28 @@
                 <!-- [4b] the payment itself — drawn by the script below -->
                 <div id="payApp"></div>
               @endif
+              </div>
+              @endfragment
             </div>
           </div>
         </div>
       </main>
 @endsection
 @push('scripts')
+    <script>
+      /* The 30-second check. Not while someone is paying: a chosen receipt or the ticked box
+         must stay. The payment script (and its receipt checker) comes with the page, so a
+         booking that opens or closes for paying is the one change that loads the page again. */
+      Live.watch('mine', async function () {
+        if (typeof state !== 'undefined' && (state.ocr || state.sending || state.agreeExact)) return false;
+        const before = document.querySelector('[data-pay-code]').dataset;
+        const was = { code: before.payCode, open: before.payOpen };
+        await Live.refresh();
+        const now = document.querySelector('[data-pay-code]').dataset;
+        if (now.payCode !== was.code && (now.payOpen === '1' || was.open === '1')) { location.reload(); return; }
+        if (typeof render === 'function') render();
+      });
+    </script>
     @if ($payOpen)
     <!-- [5] GCASH CHECKER — the shared engine (OCR + verdict). It calls back into
          gcAccount(), gcExpectedCentavos(), gcBookingRef(), state and render(). -->
@@ -323,12 +341,24 @@
           const res = await fetch(SUBMIT_URL, { method: 'POST', body: fd, credentials: 'same-origin' });
           const out = await res.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; });
           if (!out.ok) { state.sending = false; state.error = out.message || 'Nothing was changed.'; render(); return; }
-          location.href = PAY_URL + '?booking=' + encodeURIComponent(PAY.ref) + '&sent=cash_cancelled';
+          PAY.cashChosen = PAY.cashLocked = false;
+          state.method = PAY.account ? 'gcash' : 'cash';
+          await paySent('cash_cancelled');
         } catch (e) {
           state.sending = false;
           state.error = 'Could not reach the server, so nothing was changed.';
           render();
         }
+      }
+
+      /* The server took it: the note and the booking's new state, in place. The address
+         carries the note, as it did when this was a page load. */
+      async function paySent(sent) {
+        const url = PAY_URL + '?booking=' + encodeURIComponent(PAY.ref) + '&sent=' + sent;
+        history.replaceState(null, '', url);
+        await Live.refresh(url);
+        state.sending = false; state.ocr = null; state.agreeExact = false; state.error = null;
+        render();
       }
 
       /* Send it FOR REAL. The server recomputes the verdict against the database
@@ -369,7 +399,8 @@
           }
           /* ok + rejected = the LAST attempt was refused but went to staff anyway. */
           const sent = cash ? 'cash' : (out.verdict === 'rejected' ? 'limit' : (out.verdict === 'accepted' ? 'accepted' : 'manual_review'));
-          location.href = PAY_URL + '?booking=' + encodeURIComponent(PAY.ref) + '&sent=' + sent;
+          if (cash) { PAY.cashChosen = PAY.cashLocked = true; }
+          await paySent(sent);
         } catch (e) {
           state.sending = false;
           state.error = 'Could not reach the server, so your payment was not recorded.';

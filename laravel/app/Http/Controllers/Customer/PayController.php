@@ -64,7 +64,7 @@ class PayController
         $payStateNote = self::stateNote($payB, $payCode);
 
         /* (old header('Cache-Control: private, no-store') — the customer middleware sends no-store) */
-        return view('customer.pay', compact(
+        return live_view('customer.pay', compact(
             'customerContact', 'payB', 'payCode', 'payOpen', 'payIsHostel', 'payAccount',
             'payReceipt', 'paySent', 'payCashLocked', 'payUsed', 'payAllowed', 'payPrior', 'payCash', 'payStateNote'
         ));

@@ -22,3 +22,5 @@ Route::get('/admin/transaction-history', Admin\TransactionHistoryController::cla
 Route::get('/booking-details', Controllers\BookingDetailsController::class)->name('root.booking-details');
 Route::get('/document-view', Controllers\DocumentViewController::class)->name('root.document-view');
 Route::get('/valid-id-view', Controllers\ValidIdViewController::class)->name('root.valid-id-view');
+/* The 30-second check of every signed-in page (public/assets/js/live.js). Guards itself (JSON 401). */
+Route::get('/live-check', Controllers\LiveCheckController::class)->name('root.live-check');

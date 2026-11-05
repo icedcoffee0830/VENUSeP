@@ -72,7 +72,7 @@
       <li><a class="hd-quick{{ request()->routeIs('customer.faq') ? ' is-here' : '' }}" href="{{ route('customer.faq', ['in' => 'app']) }}"><i class="bi bi-question-circle"></i><span>FAQ</span></a></li>
       <li>@include('partials.notification-bell', ['nbLook' => 'admin'])</li>
       <li><span class="hd-sep" aria-hidden="true"></span></li>
-      <li><a class="hd-user" href="{{ route('customer.customer-profile') }}" title="Your profile">@if ($hdPhoto !== '')<img class="hd-avatar" src="{{ asset($hdPhoto) }}" alt="" width="30" height="30">@else<span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span>@endif<span class="hd-username">{{ $hdName }}</span></a></li>
+      <li>@fragment('hd-user')<a class="hd-user" data-live="hd-user" href="{{ route('customer.customer-profile') }}" title="Your profile">@if ($hdPhoto !== '')<img class="hd-avatar" src="{{ asset($hdPhoto) }}" alt="" width="30" height="30">@else<span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span>@endif<span class="hd-username">{{ $hdName }}</span></a>@endfragment</li>
     </ul>
   </div>
 </nav>
@@ -84,7 +84,7 @@
     </ul>
     <ul class="hd-nav">
       <li>@include('partials.notification-bell', ['nbLook' => 'admin'])</li>
-      <li><a class="hd-user" href="{{ route('admin.profile') }}" title="Your account · {{ $hdRole }}">@if ($hdPhoto !== '')<img class="hd-avatar" src="{{ asset($hdPhoto) }}" alt="" width="30" height="30">@else<span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span>@endif<span class="hd-username">{{ $hdName }}</span></a></li>
+      <li>@fragment('hd-user')<a class="hd-user" data-live="hd-user" href="{{ route('admin.profile') }}" title="Your account · {{ $hdRole }}">@if ($hdPhoto !== '')<img class="hd-avatar" src="{{ asset($hdPhoto) }}" alt="" width="30" height="30">@else<span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span>@endif<span class="hd-username">{{ $hdName }}</span></a>@endfragment</li>
     </ul>
   </div>
 </nav>

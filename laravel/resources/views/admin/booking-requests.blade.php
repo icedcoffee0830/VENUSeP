@@ -100,7 +100,10 @@
               <h1 class="br-title">Booking Requests</h1>
               <p class="br-subtitle" id="brCount"></p>
 
-              <div class="br-toolbar" id="brTabs"></div>
+              <div class="br-toolbar" id="brTabs">
+                <span id="brTabBtns" style="display:contents"></span>
+                <input id="brSearch" class="br-search" type="text" placeholder="Search name, room, or request no." aria-label="Search bookings" oninput="setQ(this.value)">
+              </div>
 
               <div class="br-card br-list">
                 <div class="br-hd">
@@ -132,6 +135,7 @@
       </main>
 @endsection
 @push('scripts')
+    @fragment('br-rows')<script type="application/json" data-live="br-rows">{!! json_encode($brRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
     <script>
       /* Booking Requests queue — static mockup data + client-side filtering.
          Statuses follow the agreed payment-status taxonomy:
@@ -185,7 +189,7 @@
          hand-written array of 15 invented requests; it is now whatever the
          database actually holds, so the customer side and this page can never
          again disagree about which bookings exist. */
-      const BR = {!! json_encode($brRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+      let BR = Live.data('br-rows');
       const TABS = [
         { k: 'all',     t: 'All' },
         { k: 'id',      t: 'Pending ID review' },
@@ -315,9 +319,8 @@
           + [['mine', 'My halls'], ['all', 'Whole office']].map(([k, t]) => `
           <button type="button" class="br-tab${scope === k ? ' active' : ''}" aria-pressed="${scope === k}" onclick="setScope('${k}')">${t}</button>`).join('')
           + '</span>' : '';
-        document.getElementById('brTabs').innerHTML = scopes + TABS.map(t => `
-          <button type="button" class="br-tab${tab === t.k ? ' active' : ''}" onclick="setTab('${t.k}')">${t.t}<span class="n">${countOf(t.k)}</span></button>`).join('')
-          + `<input id="brSearch" class="br-search" type="text" value="${esc(q)}" placeholder="Search name, room, or request no." oninput="setQ(this.value)">`;
+        document.getElementById('brTabBtns').innerHTML = scopes + TABS.map(t => `
+          <button type="button" class="br-tab${tab === t.k ? ' active' : ''}" onclick="setTab('${t.k}')">${t.t}<span class="n">${countOf(t.k)}</span></button>`).join('');
         const need = inScope().filter(r => ['id', 'confirm', 'review', 'overdue', 'refund', 'pos'].includes(r.cat)).length;
         document.getElementById('brCount').textContent = inScope().length + ' booking requests · ' + need + ' need action';
         drawRows();
@@ -329,5 +332,7 @@
          simply in BR above. The injection that used to live here is gone. */
       document.getElementById('brPageSize').addEventListener('change', function () { setPageSize(this.value); });
       draw();
+      /* the 30-second check: fresh rows under the same tab, search and page */
+      Live.watch('queue', () => Live.refresh().then(() => { BR = Live.data('br-rows'); draw(); }));
     </script>
 @endpush

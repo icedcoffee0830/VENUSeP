@@ -51,3 +51,12 @@ if (!function_exists('legacy')) {
         return $vars;
     }
 }
+
+/* A page view; with ?part=1 only its @fragment parts, for public/assets/js/live.js. */
+if (!function_exists('live_view')) {
+    function live_view(string $name, array $data = [])
+    {
+        $view = view($name, $data);
+        return request()->has('part') ? $view->fragments() : $view;
+    }
+}

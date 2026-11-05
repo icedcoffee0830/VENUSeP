@@ -28,7 +28,7 @@ class DashboardTest extends TestCase
             ->assertSee('Bahay Alumni')                                             // a venue row from the DB
             ->assertSee(route('admin.booking-requests', ['tab' => 'confirm']), false)
             ->assertSee(route('customer.venues', ['counter' => 1]), false)
-            ->assertSee('const BR = [', false);
+            ->assertSee('data-live="ad-rows">[', false);
     }
 
     /* "Today's Bookings · Rooms in use today": every booking that has today among

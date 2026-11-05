@@ -21,7 +21,7 @@ class BookingRequestsTest extends TestCase
     {
         $this->actingAsStaff()->get(route('admin.booking-requests'))->assertOk()
             ->assertSee('Booking Requests')
-            ->assertSee('const BR = [{', false)
+            ->assertSee('data-live="br-rows">[{', false)
             ->assertSee(route('admin.booking-request') . '?id=${r.id}', false)
             ->assertSee('class="active"', false);
     }

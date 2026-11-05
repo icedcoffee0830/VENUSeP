@@ -10,7 +10,8 @@
    Unread count on the bell; the panel lists the newest 30, unread ones bold
    with a dot. A notification stays unread until it is CLICKED — that marks
    it read and opens what it is about. "Mark all as read" clears the lot.
-   Checks notifications.php about once a minute, paused while the tab is in
+   Reloads when public/assets/js/live.js (loaded here, so it is on every signed-in
+   page) says the notifications changed: checked every 30 seconds, paused while the tab is in
    the background. Staff and admins also see live "about to expire"
    reminders at the top; those have no read state and vanish once handled.
    Every page that includes this is one folder below the app root, so the
@@ -56,6 +57,7 @@ $GLOBALS['nbRendered'] = true;
   @media (max-width:767.98px){.nb-panel{position:fixed;top:62px;right:8px}}
   @media print{.nb-wrap{display:none!important}}
 </style>
+<script src="<?php echo asset('assets/js/live.js'); ?>" data-check="<?php echo route('root.live-check'); ?>" data-csrf="<?php echo csrf_token(); ?>"></script>
 <script>
   /* The bell — one script for however many bells the page has (normally one). */
   (function () {
@@ -85,7 +87,9 @@ $GLOBALS['nbRendered'] = true;
           html += '<button type="button" class="nb-item' + (n.unread ? ' is-unread' : '') + '" onclick="nbGo(' + n.id + ', \'' + esc(n.link) + '\')"><span class="nb-dot"></span><span><span class="nb-text">' + esc(n.text) + '</span><span class="nb-ago">' + esc(n.ago) + '</span></span></button>';
         });
         if (!data.items.length && !data.reminders.length) html += '<div class="nb-empty">You are all caught up.</div>';
+        var top = p.scrollTop;   /* a reload under an open panel keeps its place */
         p.innerHTML = html;
+        p.scrollTop = top;
       });
     }
     function load() {
@@ -127,9 +131,9 @@ $GLOBALS['nbRendered'] = true;
     document.addEventListener('keydown', function (e) {
       if (open && e.key === 'Escape') { open = false; paint(); }
     });
-    /* About once a minute while the page is in view; at once when it comes back. */
-    setInterval(function () { if (!document.hidden) load(); }, 60000);
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+    /* Once now; after that only when the 30-second check says something changed. The
+       reminders (no read state) reload with every opening of the panel. */
+    Live.onBell(load);
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load); else load();
   })();
 </script>

@@ -32,17 +32,6 @@ class BookingHistoryController
         $bookingHistoryVenues = array_values(array_unique(array_column($bookingHistory, 'venue')));
         sort($bookingHistoryVenues, SORT_NATURAL | SORT_FLAG_CASE);
 
-        /* The refund state of this customer's bookings, from the `refunds` table —
-           all the browser needs to swap the row's refund ACTION. */
-        $bhRefunds = [];
-        foreach ($customerBookings as $bhB) {
-            if ($bhB['refundStatus'] === null) { continue; }
-            $bhRefunds[$bhB['bookingId']] = [
-                'status' => $bhB['refundStatus'],
-                'note'   => '',
-            ];
-        }
-
         /* An overdue booking is not paid here unless staff extend its deadline (Aron
            2026-11-05): the row says to contact its office instead. booking id => contact line. */
         $bhOverdue = [];
@@ -52,13 +41,12 @@ class BookingHistoryController
             }
         }
 
-        return view('customer.booking-history', [
+        return live_view('customer.booking-history', [
             'customerContact' => $customerContact,
             'bookingHistory' => $bookingHistory,
             'bhReceipts' => $bhReceipts,
             'bookingHistoryVenues' => $bookingHistoryVenues,
             'emptyBookingMessage' => 'No booking history found.',
-            'bhRefunds' => $bhRefunds,
             'bhOverdue' => $bhOverdue,
         ]);
     }

@@ -41,7 +41,7 @@ $stmt = venusep_db_or_fail()->query(
   'SELECT id, name, venue_type FROM venues WHERE is_active = 1 ORDER BY id'
 );
 foreach ($stmt as $row) {
-  if (!staff_sees_venue($row['id'])) continue;
+  if (!staff_sees_venue($row['id']) || !staff_has_hall_in($row['id'])) continue;
   $venuesById[(int) $row['id']] = $row['name'];
   $venues[] = $row['name'];
   $venuesByType[$row['venue_type']][(int) $row['id']] = $row['name'];

@@ -13,7 +13,6 @@ class BookingRequestsController extends Controller
     {
         legacy('bookings');
 
-        /* staff open on "My halls" (Aron 2026-11-05); one click shows the whole office */
-        return live_view('admin.booking-requests', ['brRows' => booking_queue_rows(), 'brMyHalls' => session('account_type') === 'staff']);
+        return live_view('admin.booking-requests', ['brRows' => booking_queue_rows()]);
     }
 }

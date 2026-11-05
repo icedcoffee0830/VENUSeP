@@ -49,7 +49,7 @@ class BookingCreateTest extends TestCase
     public function test_staff_cannot_book_another_venues_room(): void
     {
         $this->actingAsStaff()->create($this->walkInVenue('r5'))->assertStatus(403)
-            ->assertJson(['message' => 'This room belongs to another venue. Only that venue\'s staff or an administrator can book it at the counter.']);
+            ->assertJson(['message' => 'This room is not one you handle. Only its staff or an administrator can book it at the counter.']);
     }
 
     public function test_an_account_booking_needs_the_password_proof(): void

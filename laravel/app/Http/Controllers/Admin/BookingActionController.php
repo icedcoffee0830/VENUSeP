@@ -65,11 +65,10 @@ class BookingActionController extends Controller
         $ref    = (string) ($request->post('booking') ?? '');
         $note   = trim((string) ($request->post('note') ?? ''));
 
-        /* STAFF ACT ONLY ON THEIR OWN VENUE'S BOOKINGS (decided 2026-10-27).
-           Admins handle every venue. */
+        /* STAFF ACT ONLY ON THEIR OWN HALLS' BOOKINGS (DB-DECISIONS 28). Admins: their offices. */
         $scopeId = booking_id_from_reference($ref);
         if ($scopeId !== null && !staff_may_handle_booking($scopeId)) {
-            $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can act on it.']);
+            $this->reply(403, ['ok' => false, 'message' => 'This booking is on a hall you do not handle. Only that hall\'s staff or an administrator can act on it.']);
         }
 
         $bookingId = booking_id_from_reference($ref);

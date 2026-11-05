@@ -290,7 +290,7 @@ class StaffController
         }
 
         /* HALLS — which halls of their office a staff member covers (Aron 2026-11-05).
-           Their notifications and "My halls" list follow it; they still see the whole office. */
+           It is all they see and act on, with any hall they cover right now (DB-DECISIONS 28). */
         if ($action === 'set_halls') {
             $ids = json_decode((string) $request->input('hall_ids', ''), true);
             if ($user['account_type'] !== 'staff' || !is_array($ids)) {

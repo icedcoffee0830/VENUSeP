@@ -120,7 +120,7 @@ foreach ($vrSlotRows as $s) {
 /* ---- 4. assemble the exact shape every page has always consumed ---- */
 $venueRooms = [];
 foreach ($vrRoomRows as $r) {
-  if (!staff_sees_venue($r['venue_id'])) continue;
+  if (!staff_sees_room($r['id'], $r['venue_id'])) continue;
   /* "At a glance": what the room form saved (2026-10-27), else the text that
      used to be hard-coded in includes/amenities.php */
   $glance = room_glance($r['room_code']);

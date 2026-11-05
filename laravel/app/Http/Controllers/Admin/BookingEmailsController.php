@@ -43,9 +43,9 @@ class BookingEmailsController extends Controller
         if ($pdo === null) {
             $this->reply(503, ['ok' => false, 'message' => 'The database is unreachable.']);
         }
-        /* Own venue only for staff — reading the emails as well as resending them (2026-10-31). */
+        /* Own halls only for staff — reading the emails as well as resending them (DB-DECISIONS 28). */
         if (!staff_may_handle_booking($beBookingId)) {
-            $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can see its emails.']);
+            $this->reply(403, ['ok' => false, 'message' => 'This booking is on a hall you do not handle. Only that hall\'s staff or an administrator can see its emails.']);
         }
 
         if ($beIsPost) {

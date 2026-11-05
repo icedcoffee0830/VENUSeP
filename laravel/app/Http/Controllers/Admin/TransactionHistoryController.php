@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 
 /* TRANSACTION HISTORY — admin view (was admin/transaction-history.php).
-   transaction_rows() is the same builder the CUSTOMER ledger uses, unscoped
-   so staff see every customer. */
+   transaction_rows() is the same builder the CUSTOMER ledger uses, for every
+   customer of the bookings this person handles (bookings_all()). */
 class TransactionHistoryController extends Controller
 {
     public function __invoke()

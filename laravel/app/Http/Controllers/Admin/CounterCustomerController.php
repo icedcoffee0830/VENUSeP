@@ -67,6 +67,9 @@ class CounterCustomerController
         if (!venusep_is_staff_session() || !self::staffStillActive()) {
             return $this->reply(403, ['ok' => false, 'results' => [], 'message' => 'Staff only.']);
         }
+        if (staff_has_no_halls()) {   // no hall, no counter: nothing to book a customer on
+            return $this->reply(403, ['ok' => false, 'results' => [], 'message' => STAFF_NO_HALLS_NOTE]);
+        }
 
         /* Exact email, exact mobile, or a name of three letters or more; anything else finds nothing. */
         $q = trim((string) $request->query('q', ''));
@@ -128,8 +131,8 @@ class CounterCustomerController
         $name   = trim((string) $request->input('full_name', ''));
         $email  = mb_strtolower(trim((string) $request->input('email', '')));
         $mobile = ph_mobile_strict($request->input('phone', ''));
-        if ($office === null || !staff_may_handle_venue($office['id'])) {
-            return $this->reply(403, ['ok' => false, 'message' => 'This room belongs to another office. Only that office\'s counter can make the account here.']);
+        if ($office === null || !staff_may_handle_room_code($request->input('room'))) {
+            return $this->reply(403, ['ok' => false, 'message' => 'This room is not one you handle. Only its staff can make the account here.']);
         }
         if ($name === '' || mb_strlen($name) > 190) {
             return $this->reply(400, ['ok' => false, 'field' => 'name', 'message' => 'Enter the customer’s full name.']);
@@ -203,6 +206,9 @@ class CounterCustomerController
         }
         if (!venusep_is_staff_session() || !self::staffStillActive()) {
             return $this->reply(403, ['ok' => false, 'message' => 'Staff only.']);
+        }
+        if (staff_has_no_halls()) {
+            return $this->reply(403, ['ok' => false, 'message' => STAFF_NO_HALLS_NOTE]);
         }
         $token = $request->input('csrf', $request->input('_token', $request->header('X-CSRF-TOKEN')));
         if (!csrf_valid($token)) {

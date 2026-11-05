@@ -25,7 +25,7 @@ class VenueFormController extends Controller
         if ($venueId === 0) {
             return redirect()->route('admin.venue-management');
         }
-        if (!staff_sees_venue($venueId)) {   // another department's venue: not theirs to see (Aron 2026-10-31)
+        if (!staff_may_handle_whole_venue($venueId)) {   // another department's venue, or staff with only some of its halls
             return redirect()->route('admin.venue-management');
         }
 

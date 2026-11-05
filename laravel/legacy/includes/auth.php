@@ -154,6 +154,11 @@ function admin_is_admin()
      staff: staff.venue_id, plus the office of any cover going on now (staff_covers,
        migration 18: it ends by itself, so it is read here on every request).
    Customers and guests are never narrowed: staff_list_venue() is null for them.
+
+   INSIDE an office staff see and act on their HALLS only (Aron 2026-11-05, option B):
+   their own halls and the halls they cover right now, the hostel being one unit. That is
+   staff_me()['halls'] (fn_staff_on_room), and staff_may_handle_room() is the one check.
+   The office list above stays for Reports (whole office) and the calendar's "Busy" days.
    ===================================================================== */
 const OFFICE_GROUPS = ['bahay_alumni' => 'Bahay Alumni', 'cedu' => 'USeP CEDU'];   // users/venues.office_group
 
@@ -167,7 +172,9 @@ function staff_me(): array
     if (request()->attributes->has($key)) {
         return request()->attributes->get($key);
     }
-    $me = ['super' => false, 'offices' => []];   // unknown = no office: refuse rather than allow
+    /* unknown = no office, no hall: refuse rather than allow. halls: room id => office id;
+       null = not narrowed below the office (admins, customers, guests). */
+    $me = ['super' => false, 'offices' => [], 'halls' => session('account_type') === 'staff' ? [] : null];
     $pdo = venusep_db();
     if ($uid > 0 && $pdo !== null && venusep_is_staff_session()) {
         try {
@@ -186,6 +193,11 @@ function staff_me(): array
             );
             $st->execute([':u' => $uid]);
             $me['offices'] = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+            if ($me['halls'] !== null) {
+                $st = $pdo->prepare('SELECT r.id, r.venue_id FROM rooms r WHERE fn_staff_on_room(:u, r.id)');
+                $st->execute([':u' => $uid]);
+                $me['halls'] = array_map('intval', $st->fetchAll(PDO::FETCH_KEY_PAIR));
+            }
         } catch (PDOException $e) {
             sql_failed($e);
         }
@@ -242,27 +254,89 @@ function staff_venue_sql($sql, $glue = 'WHERE')
     return $offices === null ? '' : " $glue " . sprintf($sql, implode(',', $offices ?: [0]));
 }
 
-/* A staff member's "My halls" bookings (Aron 2026-11-05): booking id => true for each
-   booking on one of their halls or a cover going on (fn_staff_on_room, migration 18), and
-   each one they made at the counter. null = not a staff member: no such view. */
-function booking_my_hall_ids() {
+/* THE ONE CHECK: may this session see / act on this room, and so on its bookings? Staff:
+   one of their halls, the hostel, or a cover going on now. Admins: the room's office. */
+function staff_may_handle_room($roomId, $venueId)
+{
+    $halls = staff_me()['halls'];
+    return $halls === null ? staff_may_handle_venue($venueId) : isset($halls[(int) $roomId]);
+}
+
+/* The same check from a room code (the counter's pages). An unknown room is refused. */
+function staff_may_handle_room_code($roomCode)
+{
     $pdo = venusep_db();
-    if ($pdo === null || session('account_type') !== 'staff') {
-        return null;
+    if ($pdo === null || !is_string($roomCode)) {
+        return false;
     }
-    try {
-        $st = $pdo->prepare(
-            "SELECT b.id FROM bookings b
-              WHERE fn_staff_on_room(:u, b.room_id)
-                 OR EXISTS (SELECT 1 FROM booking_timeline t WHERE t.booking_id = b.id
-                               AND t.action_code = 'counter_created' AND t.performed_by_user_id = :u2)"
-        );
-        $st->execute([':u' => (int) session('user_id'), ':u2' => (int) session('user_id')]);
-        return array_fill_keys(array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)), true);
-    } catch (PDOException $e) {
-        sql_failed($e);
-        return null;
+    $st = $pdo->prepare('SELECT id, venue_id FROM rooms WHERE room_code = :c');
+    $st->execute([':c' => $roomCode]);
+    $room = $st->fetch();
+    return $room !== false && staff_may_handle_room($room['id'], $room['venue_id']);
+}
+
+/* Does a list shown to this session include the room? Customers and guests: always. */
+function staff_sees_room($roomId, $venueId)
+{
+    return !venusep_is_staff_session() || staff_may_handle_room($roomId, $venueId);
+}
+
+/* An office's own details (name, description, photo) touch all its halls, so staff need
+   every one of them: a staff member with some of the halls changes those halls only. */
+function staff_may_handle_whole_venue($venueId)
+{
+    $halls = staff_me()['halls'];
+    if ($halls === null) {
+        return staff_may_handle_venue($venueId);
     }
+    $st = venusep_db()->prepare('SELECT id FROM rooms WHERE venue_id = :v AND deleted_at IS NULL');
+    $st->execute([':v' => (int) $venueId]);
+    $rooms = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    return $rooms !== [] && !array_diff($rooms, array_keys($halls));
+}
+
+/* The staff member's room ids; null = not narrowed below the office. */
+function staff_hall_ids()
+{
+    $halls = staff_me()['halls'];
+    return $halls === null ? null : array_keys($halls);
+}
+
+/* Does this office hold a hall of this session? Everyone else's lists: yes. */
+function staff_has_hall_in($venueId)
+{
+    $halls = staff_me()['halls'];
+    return $halls === null || in_array((int) $venueId, $halls, true);
+}
+
+const STAFF_NO_HALLS_NOTE = 'You have no halls yet. Ask your admin to assign you one.';
+
+function staff_has_no_halls(): bool
+{
+    return staff_me()['halls'] === [];
+}
+
+/* The hall rule inside SQL, added after staff_venue_sql(): " AND $column IN (...)" for
+   staff, '' for anyone else. */
+function staff_hall_sql($column)
+{
+    $ids = staff_hall_ids();
+    return $ids === null ? '' : " AND $column IN (" . (implode(',', $ids) ?: '0') . ')';
+}
+
+/* The same for an office column: only offices holding one of the staff member's halls. */
+function staff_hall_office_sql($column)
+{
+    $halls = staff_me()['halls'];
+    return $halls === null ? '' : " AND $column IN (" . (implode(',', array_unique($halls)) ?: '0') . ')';
+}
+
+/* The bell (notifications n): staff keep news of their halls only, so a hall taken away or a
+   cover that ended takes its news with it. News about no booking stays. */
+function staff_news_sql()
+{
+    return staff_me()['halls'] === null ? ''
+        : ' AND (n.booking_id IS NULL OR n.booking_id IN (SELECT b2.id FROM bookings b2 WHERE 1' . staff_hall_sql('b2.room_id') . '))';
 }
 
 /* May this session see / handle the booking? Customers: yes (their own checks
@@ -276,10 +350,10 @@ function staff_may_handle_booking($bookingId)
     if ($pdo === null) {
         return false;
     }
-    $st = $pdo->prepare('SELECT r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b');
+    $st = $pdo->prepare('SELECT r.id, r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b');
     $st->execute([':b' => (int) $bookingId]);
-    $venue = $st->fetchColumn();
-    return $venue === false || staff_may_handle_venue($venue);
+    $room = $st->fetch();
+    return $room === false || staff_may_handle_room($room['id'], $room['venue_id']);
 }
 
 /* May this admin manage (edit, move, reset the password of, suspend) that

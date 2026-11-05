@@ -2,6 +2,7 @@
 
 namespace App\Queries;
 
+use App\Support\Status;
 use Illuminate\Support\Facades\DB;
 
 /* The SQL that reads and changes a booking for the staff actions (BookingActionController).
@@ -384,5 +385,24 @@ class BookingQueries
         self::writeHistory($id, 'date_moved', $actor, $note);
         legacy('notifications');
         notify_booking_parties(DB::connection()->getPdo(), $id, 'booking_moved', $actor, ['note' => $note]);
+    }
+
+    /* The days the other halls of these offices are taken, for a staff member's calendar:
+       dates only, so nothing else can reach the page. end_date is exclusive, as the calendar
+       wants it: a venue's last day + 1, a hostel's check-out morning. */
+    public static function busyDates(array $offices, array $halls): array
+    {
+        $ids = fn (array $list) => implode(',', array_map('intval', $list) ?: [0]);
+        return DB::select("
+            SELECT DISTINCT COALESCE(vd.start_date, hd.check_in_date) AS start_date,
+                   COALESCE(vd.end_date + INTERVAL 1 DAY, hd.check_out_date) AS end_date
+            FROM bookings b
+            JOIN rooms r ON r.id = b.room_id
+            LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
+            LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
+            WHERE b.reservation_status IN (?, ?, ?)
+              AND r.venue_id IN (" . $ids($offices) . ") AND r.id NOT IN (" . $ids($halls) . ")
+              AND COALESCE(vd.start_date, hd.check_in_date) IS NOT NULL
+        ", [Status::PENDING, Status::APPROVED, Status::COMPLETED]);
     }
 }

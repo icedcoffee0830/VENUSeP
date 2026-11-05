@@ -52,7 +52,7 @@ class RoomToggleActiveController extends Controller
                 $pdo->rollBack();
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
             }
-            $this->requireVenueScope($roomRow['venue_id']);
+            $this->requireRoomScope($roomRow['id'], $roomRow['venue_id']);
 
             $newActive = $roomRow['is_active'] ? 0 : 1;
             $pdo->prepare('UPDATE rooms SET is_active = :a WHERE id = :id')

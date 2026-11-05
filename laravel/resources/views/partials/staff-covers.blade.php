@@ -114,7 +114,7 @@
 <dialog class="sm-dlg" id="smHallsDlg" aria-labelledby="smHallsTitle">
   <form method="dialog">
     <h3 id="smHallsTitle">Halls</h3>
-    <p>They still see the whole office. Their notifications and My halls list follow these halls.</p>
+    <p>They see and act on these halls only, and any hall they cover right now.</p>
     <div id="smHallsList"></div>
     <div class="sm-error" role="alert"></div>
     <div class="sm-foot">

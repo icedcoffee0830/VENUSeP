@@ -32,14 +32,16 @@ class DashboardController
                          OR (hd.check_in_date <= CURDATE() AND hd.check_out_date > CURDATE()))
                     AND b.reservation_status IN ('approved', 'completed')"
                  . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id IN (%s))', 'AND')
+                 . staff_hall_sql('b.room_id')
             )->fetchColumn();
-            /* Money COLLECTED this quarter in this person's offices: the Quarterly Reports'
-               own figure (ReportQueries::quarters()), so the tile and the report agree. */
-            $adRevenue = (float) ReportQueries::quarters(array_column(ReportQueries::offices(staff_venue_scope()), 'id'), 1)[0]['revenue'];
+            /* Money COLLECTED this quarter in this person's offices (staff: their halls): the
+               Quarterly Reports' own figure (ReportQueries::quarters()), so an admin's tile and
+               report agree. */
+            $adRevenue = (float) ReportQueries::quarters(array_column(ReportQueries::offices(staff_venue_scope()), 'id'), 1, null, staff_hall_ids())[0]['revenue'];
             $adVenues = $adPdo->query(
                 "SELECT v.name, v.description, COUNT(r.id) AS rooms
-                   FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
-                  WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . " GROUP BY v.id ORDER BY v.id"
+                   FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1" . staff_hall_sql('r.id') . "
+                  WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . staff_hall_office_sql('v.id') . " GROUP BY v.id ORDER BY v.id"
             )->fetchAll();
 
             /* "Welcome, <who> | Managing: <what>" — the header's name rule (staff

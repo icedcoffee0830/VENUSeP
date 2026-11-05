@@ -77,7 +77,8 @@ class VenueBookingController extends Controller
             'lpWhat'       => $lpWhat,
             'lpShowHostel' => $lpShowHostel,
             /* counter mode: no office yet, or another office's booking page was refused (BookingAccess) */
-            'lpCounterNotice' => $lpNoOffice ? 'You have no office yet. Ask an admin to assign one.' : ($lpCounter ? session('counter_refused') : null),
+            'lpCounterNotice' => $lpNoOffice ? 'You have no office yet. Ask an admin to assign one.'
+                : ($lpCounter ? (staff_has_no_halls() ? STAFF_NO_HALLS_NOTE : session('counter_refused')) : null),
             'lpSpaceCount' => count($venueRooms) + count($hostelRooms),
             'lpBedCount'   => array_sum(array_column($hostelRooms, 'beds')),
             /* Footer: each office's own contact info and hours (Office Settings, DB-DECISIONS 28) */

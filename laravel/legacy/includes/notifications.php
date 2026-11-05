@@ -84,7 +84,7 @@ function notify_account_event(PDO $pdo, string $kind, int $actorUserId, array $d
 
 function notif_unread_count(PDO $pdo, int $userId): int
 {
-    $s = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = :u AND read_at IS NULL');
+    $s = $pdo->prepare('SELECT COUNT(*) FROM notifications n WHERE n.user_id = :u AND n.read_at IS NULL' . staff_news_sql());
     $s->execute([':u' => $userId]);
     return (int) $s->fetchColumn();
 }
@@ -151,7 +151,7 @@ function notif_items(PDO $pdo, int $userId, string $accountType): array
            LEFT JOIN customers c ON c.id = b.customer_id
            LEFT JOIN users ua    ON ua.id = n.actor_user_id
            LEFT JOIN staff sa    ON sa.user_id = n.actor_user_id
-          WHERE n.user_id = :u
+          WHERE n.user_id = :u" . staff_news_sql() . "
           ORDER BY n.id DESC LIMIT " . NOTIF_LIST_SIZE
     );
     $s->execute([':u' => $userId]);

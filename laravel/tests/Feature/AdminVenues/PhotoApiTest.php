@@ -34,6 +34,7 @@ class PhotoApiTest extends VenuesTestCase
         $venueId = 1;
         $roomId = DB::table('rooms')->insertGetId(['venue_id' => $venueId, 'room_code' => 'r902', 'name' => 'Photo Test Room', 'room_type' => 'event']);
         try {
+            DB::table('staff_halls')->insert(['user_id' => DB::table('users')->where('email', 'staff@gmail.com')->value('id'), 'room_id' => $roomId]);   // a hall of theirs
             $this->actingAsStaff();
             $res = $this->withCsrf()->post(route('admin.room-photos-api'), [
                 '_token' => self::TOKEN, 'action' => 'upload', 'room_id' => 'r902',
@@ -66,6 +67,7 @@ class PhotoApiTest extends VenuesTestCase
                 '_token' => self::TOKEN, 'action' => 'upload', 'room_id' => 'r902', 'files' => [UploadedFile::fake()->createWithContent('x.pdf', '%PDF-1.4 not an image')],
             ])->assertStatus(400)->assertJson(['error' => 'upload_failed', 'message' => 'Only JPG, PNG, and WEBP photos are allowed.']);
         } finally {
+            DB::table('staff_halls')->where('room_id', $roomId)->delete();
             $this->dropRoom('r902');
         }
         $this->assertDirectoryDoesNotExist(public_path('assets/img/venues/rooms/r902'));

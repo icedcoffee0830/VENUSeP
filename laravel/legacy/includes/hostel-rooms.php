@@ -139,7 +139,7 @@ foreach ($hrNightRows as $n) {
 /* ---- 4. assemble the shape every page has always consumed ---- */
 $hostelRooms = [];
 foreach ($hrRoomRows as $r) {
-  if (!staff_sees_venue($r['venue_id'])) continue;   // after $HOSTEL_RATES: the FAQ's rates stay whole
+  if (!staff_sees_room($r['id'], $r['venue_id'])) continue;   // after $HOSTEL_RATES: the FAQ's rates stay whole
   $hostelRooms[] = [
     'office'      => office_by_id($r['venue_id']),
     'id'          => $r['room_code'],

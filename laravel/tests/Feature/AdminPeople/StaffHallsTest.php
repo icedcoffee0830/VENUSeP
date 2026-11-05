@@ -10,7 +10,7 @@ use Tests\Feature\Auth\MakesAccounts;
 use Tests\TestCase;
 
 /* Staff per hall (Aron 2026-11-05, migration 18): one or more halls of their own office,
-   the hostel as one unit, every hall keeps a staff member; "My halls" lists and booking
+   the hostel as one unit, every hall keeps a staff member; booking lists and booking
    news follow it. Halls: ids 1-4 at Bahay Alumni (1), 5-8 at USeP Venues (2). */
 class StaffHallsTest extends TestCase
 {
@@ -191,40 +191,35 @@ class StaffHallsTest extends TestCase
         }
     }
 
-    /* The list has My halls for staff: their halls, covers and their own counter bookings;
-       every booking of the office stays in it for the one click to the whole office. */
-    public function test_my_halls_marks_a_staff_members_own_bookings(): void
+    /* The list holds a staff member's halls and covers, nothing else of the office: not even
+       a booking they made at the counter on a hall that is no longer theirs (DB-DECISIONS 28). */
+    public function test_the_list_holds_a_staff_members_halls_only(): void
     {
         $staff = $this->staffAt(self::BAHAY);
         DB::table('staff_halls')->where('user_id', $staff->id)->where('room_id', '<>', 1)->delete();
-        [$hall] = $this->seedVenueBooking('r1');
-        [$other] = $this->seedVenueBooking('r2');
-        [$counter] = $this->seedVenueBooking('r2');
+        [, $hall] = $this->seedVenueBooking('r1');
+        [, $other] = $this->seedVenueBooking('r2');
+        [$counter, $counterRef] = $this->seedVenueBooking('r3');
         DB::table('booking_timeline')->insert(['booking_id' => $counter, 'action_code' => 'counter_created', 'performed_by_user_id' => $staff->id]);
 
         $page = $this->signInAs($staff, 'staff')->get(route('admin.booking-requests'))->assertOk();
-        $page->assertSee('const MY_HALLS = true', false);
-        legacy('auth');
-        $mine = booking_my_hall_ids();
-        $this->assertArrayHasKey($hall, $mine);
-        $this->assertArrayHasKey($counter, $mine);
-        $this->assertArrayNotHasKey($other, $mine);
-        $page->assertSee('"id":"' . $this->bookingRef($other)[1] . '"', false);   // still in the list
+        $page->assertSee('"id":"' . $hall . '"', false)
+             ->assertDontSee('"id":"' . $other . '"', false)
+             ->assertDontSee('"id":"' . $counterRef . '"', false)
+             ->assertDontSee('Whole office')->assertDontSee('My halls');
 
-        /* a cover going on brings that hall into My halls */
+        /* a cover going on brings that hall in */
         DB::table('staff_covers')->insert(['user_id' => $staff->id, 'venue_id' => self::BAHAY, 'room_id' => 2, 'starts_at' => now()->subHour(),
             'ends_at' => now()->addHour(), 'reason' => 'test', 'approved_at' => now()]);
-        $this->assertArrayHasKey($other, booking_my_hall_ids());
+        $this->signInAs($staff, 'staff')->get(route('admin.booking-requests'))->assertOk()->assertSee('"id":"' . $other . '"', false);
     }
 
-    public function test_hostel_staff_have_the_whole_hostel_and_admins_have_no_such_view(): void
+    public function test_hostel_staff_have_the_whole_hostel_and_admins_their_whole_office(): void
     {
-        [$stay] = $this->seedHostelBooking();
-        $this->signInAs($this->staffAt(self::HOSTEL), 'staff')->get(route('admin.booking-requests'))->assertOk();
-        legacy('auth');
-        $this->assertArrayHasKey($stay, booking_my_hall_ids());
+        [, $stay] = $this->seedHostelBooking();
+        $this->signInAs($this->staffAt(self::HOSTEL), 'staff')->get(route('admin.booking-requests'))->assertOk()->assertSee('"id":"' . $stay . '"', false);
 
-        $this->actingAsAdmin('cedu.admin@gmail.com')->get(route('admin.booking-requests'))->assertOk()->assertSee('const MY_HALLS = false', false);
-        $this->assertNull(booking_my_hall_ids());
+        [, $other] = $this->seedVenueBooking('r6');
+        $this->actingAsAdmin('cedu.admin@gmail.com')->get(route('admin.booking-requests'))->assertOk()->assertSee('"id":"' . $other . '"', false);
     }
 }

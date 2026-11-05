@@ -934,9 +934,15 @@ Agreed with Aron on 2026-11-03 and 2026-11-04.
 - **Staff per hall:** one or more halls, only inside their own office; the hostel counts as one unit.
   Every hall always keeps a staff member: a new hall names its staff; taking a hall from, suspending
   or moving its last staff member is refused. Covers do not count towards this.
-- Staff still see the whole office. Their booking list opens on My halls (their halls, covers going
-  on, what they made at the counter), and booking news goes to the hall's staff and the group's
-  normal admin.
+- **Staff see and act on their own halls only** (Aron 2026-11-05, option B; replaces "staff still
+  see the whole office"): their halls plus the halls they cover right now, the hostel being one unit,
+  all or nothing. The server refuses the rest: booking list, booking page and every action on it,
+  counter, Venue Management, notifications, Dashboard and Transaction History follow it. A booking
+  they made at the counter on a hall that is no longer theirs goes too. An office's own details
+  (name, description, photo) need every hall of it. On the calendar the other halls of the office are
+  plain "Busy": dates only. Reports stay whole office, money included. A cover that ends removes the
+  access at once. Staff with no halls can sign in and are told to ask their admin for one. Booking
+  news goes to the hall's staff and the group's normal admin. Admins and the super admin: unchanged.
 - **Covers:** an admin sets staff member + hall or office + from-to + reason, 7 days at most. It ends
   by itself. Inside a group one admin is enough and it counts at once. Across groups the staff
   member's office admin sets it up, the destination's admin approves or rejects (with a reason), and

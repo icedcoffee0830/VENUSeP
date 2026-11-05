@@ -39,7 +39,7 @@ class BookingActionTest extends TestCase
         [$id, $ref] = $this->seedVenueBooking('r5');   // venue 2
         $this->actingAsStaff()->act(['booking' => $ref, 'action' => 'approve'])
             ->assertStatus(403)->assertJson(['ok' => false,
-                'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can act on it.']);
+                'message' => 'This booking is on a hall you do not handle. Only that hall\'s staff or an administrator can act on it.']);
         $this->assertSame('pending', $this->booking($id)->reservation_status);
     }
 

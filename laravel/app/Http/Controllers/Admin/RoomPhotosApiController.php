@@ -57,11 +57,11 @@ class RoomPhotosApiController extends Controller
                 ->header('Cache-Control', 'no-store')->header('Allow', 'GET, POST'));
         }
 
-        /* every change is scoped to the room's venue (#24); an unknown room is
+        /* every change is scoped to the room (DB-DECISIONS 28); an unknown room is
            answered by the rp_* functions below */
         $pdo = venusep_db();
         if ($pdo !== null) {
-            $venueOfRoom = $pdo->prepare('SELECT venue_id, deleted_at IS NOT NULL AS deleted FROM rooms WHERE room_code = :c');
+            $venueOfRoom = $pdo->prepare('SELECT id, venue_id, deleted_at IS NOT NULL AS deleted FROM rooms WHERE room_code = :c');
             $venueOfRoom->execute([':c' => $roomId]);
             $venueOfRoom = $venueOfRoom->fetch();
             if ($venueOfRoom && $venueOfRoom['deleted']) {   // a deleted room has no photos to change (migration 18)
@@ -69,7 +69,7 @@ class RoomPhotosApiController extends Controller
                     ->header('Cache-Control', 'no-store'));
             }
             if ($venueOfRoom) {
-                $this->requireVenueScope($venueOfRoom['venue_id']);
+                $this->requireRoomScope($venueOfRoom['id'], $venueOfRoom['venue_id']);
             }
         }
 

@@ -168,9 +168,9 @@ class BookingCreateController extends Controller
         if (!$room || $room['room_type'] !== ($type === 'hostel' ? 'hostel' : 'event')) {
             $this->reply(404, ['ok' => false, 'message' => 'That room is not available for booking.']);
         }
-        /* Staff take counter bookings for THEIR venue only (2026-10-27); admins for any. */
-        if (!staff_may_handle_venue($room['venue_id'])) {
-            $this->reply(403, ['ok' => false, 'message' => 'This room belongs to another venue. Only that venue\'s staff or an administrator can book it at the counter.']);
+        /* Staff take counter bookings for THEIR halls only (DB-DECISIONS 28); admins for their offices. */
+        if (!staff_may_handle_room($room['id'], $room['venue_id'])) {
+            $this->reply(403, ['ok' => false, 'message' => 'This room is not one you handle. Only its staff or an administrator can book it at the counter.']);
         }
         if (!$room['is_active']) {
             $this->reply(409, BookingRules::roomClosed($room));

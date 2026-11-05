@@ -390,7 +390,7 @@ class RoomSaveController extends Controller
             if (!$roomRow) {
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
             }
-            $this->requireVenueScope($roomRow['venue_id']);
+            $this->requireRoomScope($roomRow['id'], $roomRow['venue_id']);
             if ($roomRow['room_type'] !== $roomType) {
                 $this->reply(409, ['ok' => false, 'error' => 'wrong_type', 'message' => 'This room does not match the form that submitted it.']);
             }

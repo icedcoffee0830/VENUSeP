@@ -63,8 +63,8 @@ class BookingListRolesTest extends TestCase
         $this->assertSame($this->expected([self::BAHAY]), $this->ids($rows));
     }
 
-    /* Hostel staff cover the whole hostel, so My halls leaves nothing out either. */
-    public function test_hostel_staff_list_the_whole_hostel_and_every_row_is_theirs(): void
+    /* Hostel staff cover the whole hostel: one unit, nothing left out. */
+    public function test_hostel_staff_list_the_whole_hostel(): void
     {
         $this->assertSame(self::HOSTEL, (int) DB::table('staff as s')->join('users as u', 'u.id', '=', 's.user_id')
             ->where('u.email', 'jakemerson@gmail.com')->value('s.venue_id'));
@@ -72,7 +72,6 @@ class BookingListRolesTest extends TestCase
         $rows = $this->listed();
         $this->assertNotEmpty($rows);
         $this->assertSame($this->expected([self::HOSTEL]), $this->ids($rows));
-        $this->assertSame([], array_values(array_filter($rows, fn ($r) => !$r['mine'])));
     }
 
     public function test_an_admin_with_no_group_lists_nothing(): void

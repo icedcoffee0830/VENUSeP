@@ -762,6 +762,7 @@ function vmMaint($m, $today) {
            database, so the hard-coded ones get deleted then.
            ========================================================== -->
       <main class="app-main">
+        @include('partials.no-halls-note')
         <div class="app-content-header">
           <div class="container-fluid">
       <!-- Header -->
@@ -858,7 +859,7 @@ function vmMaint($m, $today) {
           </div>
           <div class="vm-card-foot">
             <div class="vm-card-actions">
-@if ($vmMyVenue === null || in_array($venueName, $vmMyVenue, true)) {{-- staff: own venue only --}}
+@if ($venue['may_edit']) {{-- staff: only an office whose halls are all theirs --}}
               <a class="vm-edit-link" href="{{ route('admin.venue-form', ['id' => $venueId]) }}"><span class="plus">✎</span> Edit Details</a>
 @endif
             </div>

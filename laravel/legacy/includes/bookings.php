@@ -86,6 +86,9 @@ function bookings_query(array $opts = []) {
         $where[] = 'b.id = :bid';
         $args[':bid'] = (int) $opts['booking_id'];
     }
+    if (isset($opts['room_id'])) {
+        $where[] = 'r.id IN (' . implode(',', array_map('intval', (array) $opts['room_id']) ?: [0]) . ')';
+    }
     if (isset($opts['venue_id'])) {
         $where[] = 'v.id IN (' . implode(',', array_map('intval', (array) $opts['venue_id']) ?: [0]) . ')';
     }
@@ -365,11 +368,11 @@ function bookings_for_customer($customerId) {
     return bookings_query(['customer_id' => (int) $customerId]);
 }
 
-/* Every booking — the staff queue, the admin calendar, the reports. Narrowed to
-   the offices the session handles (staff_list_venue()). */
+/* Every booking — the staff queue, the admin calendar, the ledger. Narrowed to the
+   offices the session handles (staff_list_venue()), and for staff to their halls. */
 function bookings_all(array $opts = []) {
     $venue = staff_list_venue();
-    return bookings_query($venue === null ? $opts : $opts + ['venue_id' => $venue]);
+    return bookings_query($venue === null ? $opts : $opts + ['venue_id' => $venue, 'room_id' => staff_hall_ids()]);
 }
 
 /* One booking by its reference, or null. Used by the refund form and the
@@ -521,7 +524,6 @@ function booking_queue_class(array $b) {
 function booking_queue_rows() {
     $rows = [];
     $mixed = staff_sees_many_offices();   // several offices in one list: each row names its office (DB-DECISIONS 28)
-    $mine = booking_my_hall_ids();
     foreach (bookings_all() as $b) {
         if ($b['reservationCode'] === 'completed'
             && in_array($b['paymentCode'], ['confirmed', 'paid_cash'], true)) {
@@ -546,7 +548,6 @@ function booking_queue_rows() {
             'since'    => $b['refundFiledIso'],     // how long a refund has waited on staff
             'eventIso' => $b['eventDateIso'],
             'seq'      => $b['id'],                 // raw auto-increment id — strictly submission order, for callers that want latest-first instead of urgency-first
-            'mine'     => $mine === null || isset($mine[$b['id']]),   // the "My halls" view
         ];
     }
     return $rows;
@@ -704,6 +705,19 @@ function calendar_events($customerId = null) {
         $events[] = $event;
     }
     return $events;
+}
+
+/* The other halls of a staff member's offices on their calendar: plain "Busy" days. Dates
+   are all that is read, so no customer, room or status can reach the page. Nobody else
+   gets these: admins see their offices' bookings in full. */
+function calendar_busy_events() {
+    $halls = staff_hall_ids();
+    if ($halls === null) {
+        return [];
+    }
+    return array_map(fn ($d) => ['title' => 'Busy', 'start' => $d->start_date, 'end' => $d->end_date,
+                                 'backgroundColor' => '#efefef', 'borderColor' => '#efefef', 'textColor' => '#6b675f'],
+                     \App\Queries\BookingQueries::busyDates(staff_list_venue(), $halls));
 }
 
 /* "Oct 18 – Oct 20, 2026", or a single date, or a stay with its bed count. */

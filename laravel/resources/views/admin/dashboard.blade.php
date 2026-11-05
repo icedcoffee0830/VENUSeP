@@ -886,6 +886,7 @@ tr:hover {
 @section('content')
       <div class="app-container">
         <main class="main">
+          @include('partials.no-halls-note')
             <div class="header">
                 <div>
                     <h1>Admin Dashboard</h1>

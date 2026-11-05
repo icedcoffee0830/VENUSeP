@@ -62,14 +62,13 @@ export default {
       return page;
     });
 
-    await step('The staff member opens a USeP Venues booking during the cover; the list opens on My halls', async () => {
+    await step('The staff member opens a USeP Venues booking during the cover; the list has no office tabs', async () => {
       const b = await dbOne(`SELECT b.id, YEAR(b.submitted_at) AS y FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE r.venue_id = 2 ORDER BY b.id DESC LIMIT 1`);
       s.ref = `VB-${b.y}-${String(b.id).padStart(3, '0')}`;
       const page = s.jakePage = await ctx.loginStaff(HOSTEL_STAFF);
       await page.goto(ctx.url('/admin/booking-requests'));
-      await expect.visible(page.locator('.br-scope button[aria-pressed="true"]', { hasText: 'My halls' }), 'the list did not open on My halls');
-      await page.locator('.br-scope button', { hasText: 'Whole office' }).click();
-      await expect.visible(page.locator('.br-scope button[aria-pressed="true"]', { hasText: 'Whole office' }), 'one click did not show the whole office');
+      await expect.visible(page.locator('#brTabBtns .br-tab').first(), 'the list has no tabs');
+      if (await page.getByRole('button', { name: 'Whole office' }).count()) throw new Error('staff still have a Whole office tab');
       await page.goto(ctx.url('/admin/booking-request?id=' + s.ref));
       await expect.text(page, s.ref);
       return page;

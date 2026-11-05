@@ -677,6 +677,7 @@ new migration 17).
   that never booked.
 - Tests: `AdminPeople/CounterAccountsTest` (new), updated `CounterCustomerTest`,
   `CustomerBooking/CounterBookerTest` (suggestion, confirm step, ID checked). Flows: new
-  `counter-new-account`; `adminb-people` step 6 (part of an email finds nothing; masked email).
+  `counter-new-account`; `adminb-people` step 6 (part of an email finds nothing; masked email);
+  `hostel-and-counter` and `abook-staff-actions` now search the counter customer by exact email.
 - Not done: email fixes are not on the Activity page (they are in `customer_email_fixes`); a
   counter account has no "resend welcome email" button; walk-in email entry has no typo suggestion.

@@ -18,9 +18,13 @@ class AdminProfileController
         $vpRow = [];
         try {
             $vpStmt = venusep_db_or_fail()->prepare(
-                'SELECT u.email, u.username, s.full_name, s.phone, s.position_role, s.employee_no, s.photo_path
-                   FROM users u LEFT JOIN staff s ON s.user_id = u.id
-                  WHERE u.id = :u'
+                "SELECT u.email, u.username, u.account_type, u.is_super_admin, u.office_group,
+                        s.full_name, s.phone, s.position_role, s.employee_no, s.photo_path,
+                        IF(s.both_cedu_offices = 1 AND v.office_group = 'cedu',
+                           (SELECT GROUP_CONCAT(o.name ORDER BY o.id SEPARATOR ' and ') FROM venues o WHERE o.office_group = 'cedu'),
+                           v.name) AS office
+                   FROM users u LEFT JOIN staff s ON s.user_id = u.id LEFT JOIN venues v ON v.id = s.venue_id
+                  WHERE u.id = :u"
             );
             $vpStmt->execute([':u' => $uid]);
             $vpRow = $vpStmt->fetch() ?: [];
@@ -37,23 +41,15 @@ class AdminProfileController
         $vpPhone = (string) ($vpRow['phone'] ?? '');
         $vpRole  = (string) ($vpRow['position_role'] ?? '');
         $vpEmp   = (string) ($vpRow['employee_no'] ?? '');
-        /* THE PROFILE CARD: photo or initials, name, role (admin: every venue; staff: one). */
+        /* THE PROFILE CARD: photo or initials, name, role (DB-DECISIONS 28): "Super admin",
+           "Admin · USeP CEDU", "Staff · USeP Hostel" (both CEDU offices: both names). */
         $vpPhoto   = (string) ($vpRow['photo_path'] ?? '');
-        $vpIsAdmin = session('account_type', '') === 'admin';
-        $vpVenue   = '';
-        if (!$vpIsAdmin) {
-            try {
-                $vpV = venusep_db_or_fail()->prepare('SELECT v.name FROM staff s JOIN venues v ON v.id = s.venue_id WHERE s.user_id = :u');
-                $vpV->execute([':u' => $uid]);
-                $vpVenue = (string) $vpV->fetchColumn();
-            } catch (PDOException $e) {
-                sql_failed($e);
-                $vpVenue = '';
-            }
-        }
-        $vpRoleLine = $vpIsAdmin
-            ? 'Administrator' . ($vpRole !== '' ? ' · ' . $vpRole : '') . ' · All venues'
-            : ($vpRole !== '' ? $vpRole : 'Staff') . ($vpVenue !== '' ? ' · ' . $vpVenue : '');
+        $vpAccess  = match (true) {
+            !empty($vpRow['is_super_admin'])                  => 'Super admin',
+            ($vpRow['account_type'] ?? '') === 'admin'        => 'Admin · ' . (OFFICE_GROUPS[$vpRow['office_group'] ?? ''] ?? 'no group yet'),
+            default                                           => 'Staff' . (empty($vpRow['office']) ? '' : ' · ' . $vpRow['office']),
+        };
+        $vpRoleLine = $vpAccess . ($vpRole !== '' ? ' · ' . $vpRole : '');
         $vpParts2 = preg_split('/\s+/', trim($vpName));
         $vpInitials = strtoupper(mb_substr($vpParts2[0] ?? '', 0, 1) . mb_substr($vpParts2[1] ?? '', 0, 1)) ?: '?';   // vp_initials()
         $vpCsrf = csrf_token();
@@ -74,7 +70,7 @@ class AdminProfileController
         $vpTfaLow = $vpTfa !== null && $vpTfa['enabled'] && $vpTfa['codes_left'] <= TFA_CODES_LOW;
 
         return view('auth.admin-profile', compact(
-            'vpName', 'vpFirst', 'vpLast', 'vpEmail', 'vpPhone', 'vpRole', 'vpEmp', 'vpPhoto', 'vpRoleLine',
+            'vpName', 'vpFirst', 'vpLast', 'vpEmail', 'vpPhone', 'vpRole', 'vpAccess', 'vpEmp', 'vpPhoto', 'vpRoleLine',
             'vpInitials', 'vpCsrf',
             'vpTfaShow', 'vpTfa', 'vpTfaLow', 'vpMustChange'
         ));

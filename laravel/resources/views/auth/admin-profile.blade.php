@@ -411,13 +411,19 @@
               <label class="form-label" for="profile-number">Number</label>
               <input class="form-control" id="profile-number" type="text" value="{{ $vpPhone }}" placeholder="09XX XXX XXXX"/>
             </div>
-            <!-- Employee number and role are set by an ADMIN in Staff Management,
-                 not by the person themselves: they are what the organisation says
-                 about you, not what you say about you. Shown read-only. -->
+            <!-- Role, position and employee number are what the organisation says about
+                 you, not what you say about you: shown read-only. The role comes from the
+                 account (DB-DECISIONS 28), the employee number from the database (migration 18). -->
             <div class="form-field">
               <label class="form-label" for="profile-role">Role</label>
-              <input class="form-control" id="profile-role" type="text" value="{{ $vpRole ?: '—' }}" readonly/>
+              <input class="form-control" id="profile-role" type="text" value="{{ $vpAccess }}" readonly/>
             </div>
+            @if ($vpRole !== '')
+            <div class="form-field">
+              <label class="form-label" for="profile-position">Position</label>
+              <input class="form-control" id="profile-position" type="text" value="{{ $vpRole }}" readonly/>
+            </div>
+            @endif
             <div class="form-field">
               <label class="form-label" for="profile-emp">Employee no.</label>
               <input class="form-control" id="profile-emp" type="text" value="{{ $vpEmp ?: '—' }}" readonly/>

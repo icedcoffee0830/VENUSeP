@@ -190,7 +190,8 @@ class StaffManagementTest extends TestCase
                           'phone' => '+63 917 555 0100', 'employee_no' => 'EMP-T-1', 'position_role' => 'Clerk'])
                 ->assertOk()->assertExactJson(['ok' => true, 'message' => 'Account updated.']);
             $s = DB::table('staff')->where('user_id', 74)->first();
-            $this->assertSame(['Maco Case', '09175550100', 'EMP-T-1', 'Clerk', 1],
+            /* the employee number is the database's, never typed (migration 18): a posted one is ignored */
+            $this->assertSame(['Maco Case', '09175550100', $orig->employee_no, 'Clerk', 1],
                 [$s->full_name, $s->phone, $s->employee_no, $s->position_role, (int) $s->venue_id]);
             $this->assertSame('macocase@gmail.com', DB::table('users')->where('id', 74)->value('email'));
         } finally {

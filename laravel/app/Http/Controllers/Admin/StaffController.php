@@ -17,7 +17,8 @@ use PDOException;
 
    STAFF SAVE — an ADMIN editing SOMEBODY ELSE'S account. JSON.
      POST action=update|set_venue|set_active|reset_password|handover, user_id
-       update:     full_name, email, employee_no, position_role, phone[, venue_id]
+       update:     full_name, email, position_role, phone[, venue_id]
+                   (the employee number is the database's: given once, never edited — migration 18)
        set_venue:  venue_id (required for a staff account — no unassigned staff;
                    the DB trigger trg_staff_venue_required says the same)[, both_cedu=0|1]
        set_active: active=0|1
@@ -262,13 +263,11 @@ class StaffController
                 'message' => 'Venue assignment updated.']);
         }
 
-        /* UPDATE — name, contact, and the two fields the ORGANISATION owns
-           (employee number and role). */
+        /* UPDATE — name, contact, and the role the ORGANISATION owns. */
         if ($action === 'update') {
             $name  = trim((string) $request->input('full_name', ''));
             $email = strtolower(trim((string) $request->input('email', '')));
             $phone = trim((string) $request->input('phone', ''));
-            $emp   = trim((string) $request->input('employee_no', ''));
             $role  = trim((string) $request->input('position_role', ''));
             $venueGiven = $request->request->has('venue_id');
             $venue = null;
@@ -296,7 +295,6 @@ class StaffController
                 $pdo->prepare('UPDATE users SET email = :e WHERE id = :u')->execute([':e' => $email, ':u' => $target]);
                 $staffValues = [
                     ':u' => $target, ':n' => $name,
-                    ':e' => $emp !== '' ? mb_substr($emp, 0, 80) : null,
                     ':r' => $role !== '' ? mb_substr($role, 0, 120) : null,
                     ':p' => $phoneNorm,
                 ];
@@ -304,17 +302,17 @@ class StaffController
                     $staffValues[':v'] = $venue['id'];
                     $staffValues[':c'] = (int) !empty($venue['cedu']);   // the tick for both CEDU offices ends outside CEDU
                     $pdo->prepare(
-                        'INSERT INTO staff (user_id, venue_id, full_name, employee_no, position_role, phone)
-                         VALUES (:u, :v, :n, :e, :r, :p)
+                        'INSERT INTO staff (user_id, venue_id, full_name, position_role, phone)
+                         VALUES (:u, :v, :n, :r, :p)
                          ON DUPLICATE KEY UPDATE venue_id = VALUES(venue_id), full_name = VALUES(full_name),
-                                                 employee_no = VALUES(employee_no), position_role = VALUES(position_role),
+                                                 position_role = VALUES(position_role),
                                                  phone = VALUES(phone), both_cedu_offices = both_cedu_offices AND :c'
                     )->execute($staffValues);
                 } else {
                     $pdo->prepare(
-                        'INSERT INTO staff (user_id, full_name, employee_no, position_role, phone)
-                         VALUES (:u, :n, :e, :r, :p)
-                         ON DUPLICATE KEY UPDATE full_name = VALUES(full_name), employee_no = VALUES(employee_no),
+                        'INSERT INTO staff (user_id, full_name, position_role, phone)
+                         VALUES (:u, :n, :r, :p)
+                         ON DUPLICATE KEY UPDATE full_name = VALUES(full_name),
                                                  position_role = VALUES(position_role), phone = VALUES(phone)'
                     )->execute($staffValues);
                 }
@@ -322,12 +320,9 @@ class StaffController
             } catch (PDOException $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }
                 if ($e->getCode() === '23000') {
-                    /* uq_users_email or uq_staff_employee_no — say which. */
-                    $dupEmp = strpos($e->getMessage(), 'employee_no') !== false;
-                    return $this->reply(409, ['ok' => false, 'field' => $dupEmp ? 'employee_no' : 'email',
-                        'message' => $dupEmp
-                            ? 'That employee number already belongs to another account.'
-                            : 'That email address already belongs to another account.']);
+                    /* uq_users_email */
+                    return $this->reply(409, ['ok' => false, 'field' => 'email',
+                        'message' => 'That email address already belongs to another account.']);
                 }
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was saved.']);

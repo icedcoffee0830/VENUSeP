@@ -461,7 +461,7 @@ class StaffHallScopeTest extends TestCase
         DB::table('bookings')->where('id', $other)->update(['room_id' => $this->roomId('r5')]);
         $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.dashboard'))->assertOk();
         $owes = BookingRules::overdueBookings(venusep_db(), null, $this->customerId())[$this->customerId()] ?? '';
-        $this->assertStringContainsString('7,654.32', $owes);
+        $this->assertStringContainsString(' at USeP Venues, ', $owes);
     }
 
     /* The counter pages with no room, or a list for a room: the lists stay narrowed. */

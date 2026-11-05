@@ -262,5 +262,34 @@ export default {
       await page.setViewportSize(DESKTOP);
       return page;
     });
+
+    await step('The queue keeps its tab and search in the address; the booking page names the tab and offers the next one', async () => {
+      const page = s.admin;
+      await page.setViewportSize(DESKTOP);
+      await page.goto(ctx.url('/admin/booking-requests'));
+      await page.locator('#brTabBtns .br-tab', { hasText: 'Overdue' }).click();
+      expect.match(page.url(), /tab=overdue/, 'the tab in the address');
+      await page.reload();
+      await expect.visible(page.locator('#brTabBtns .br-tab.active', { hasText: 'Overdue' }), 'a reload forgot the tab');
+      const rows = page.locator('#brRows a.br-row');
+      const n = await rows.count();
+      expect.ok(n > 1, 'the snapshot needs two overdue bookings on the first page');
+      const second = await rows.nth(1).locator('.r-id').textContent();
+      await rows.first().click();
+      await page.waitForURL(/booking-request\?id=/);
+      await expect.visible(page.locator('.br-crumb .br-back', { hasText: 'Overdue' }), 'the back link does not name the tab');
+      await expect.text(page, /1 of \d+ in this tab/);
+      expect.equal(await page.locator('.br-done').count(), 0, 'a done note before any action');
+      /* a real action on this booking, as the button would send it */
+      expect.equal(await page.evaluate(() => staffAction('extend_deadline', {})), true, 'the action failed');
+      await expect.visible(page.locator('.br-done', { hasText: 'waiting in this tab' }), 'no done note after the action');
+      await page.locator('.br-next').click();
+      await page.waitForURL(new RegExp(second.trim() + '$'));
+      await expect.text(page, /2 of \d+ in this tab/);
+      await page.locator('.br-crumb .br-back').click();
+      await page.waitForURL(/tab=overdue/);
+      await expect.visible(page.locator('#brTabBtns .br-tab.active', { hasText: 'Overdue' }), 'back did not land on the tab');
+      return page;
+    });
   },
 };

@@ -238,8 +238,16 @@
          so both send you back to page 1 — staying on page 4 of a list that now
          has two pages reads as an empty queue. */
       let page = 1, pageSize = 10;
-      function setTab(k) { tab = k; page = 1; draw(); }
-      function setQ(v) { q = v.trim().toLowerCase(); page = 1; drawRows(); }
+      /* The address keeps the tab and the search, so Back, a refresh and a link all land here again. */
+      function keepInAddress() {
+        const to = new URL(location.href);
+        const typed = document.getElementById('brSearch').value.trim();
+        if (tab === 'all') to.searchParams.delete('tab'); else to.searchParams.set('tab', tab);
+        if (typed) to.searchParams.set('q', typed); else to.searchParams.delete('q');
+        history.replaceState(null, '', to);
+      }
+      function setTab(k) { tab = k; page = 1; keepInAddress(); draw(); }
+      function setQ(v) { q = v.trim().toLowerCase(); page = 1; keepInAddress(); drawRows(); }
       function setPage(n) { page = n; drawRows(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
       function setPageSize(n) { pageSize = parseInt(n, 10) || 10; page = 1; drawRows(); }
 
@@ -329,6 +337,12 @@
          row, so it arrives here the same way every other booking does: it is
          simply in BR above. The injection that used to live here is gone. */
       document.getElementById('brPageSize').addEventListener('change', function () { setPageSize(this.value); });
+      /* Opening a row: the booking page reads this for its back link, its place and Next. */
+      document.getElementById('brRows').addEventListener('click', (e) => {
+        if (!e.target.closest('a.br-row')) return;
+        const list = { tab: tab, label: TABS.find((t) => t.k === tab).t, url: location.href, ids: rowsOf().map((r) => r.id) };
+        try { sessionStorage.setItem('venusep_queue', JSON.stringify(list)); } catch (err) {}
+      });
       draw();
       /* the 30-second check: fresh rows under the same tab, search and page */
       Live.watch('queue', () => Live.refresh().then(() => { BR = Live.data('br-rows'); draw(); }));

@@ -31,6 +31,15 @@
       .br-page { color: var(--vm-text); padding: 22px 0 0; width: 100%; } /* 22px + 4px from .app-content = 26px top, sides owned by .container-fluid */
       .br-back { color: var(--vm-muted); display: inline-block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.9rem; text-decoration: none; }
       .br-back:hover { color: var(--vm-text); }
+      .br-crumb { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; }
+      .br-crumb span { color: #6e6a64; font-size: 13px; }
+      .br-done { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 1rem; padding: 12px 14px; border-radius: 12px; background: #eaf6ef; color: #1c7a4f; font-size: 14px; font-weight: 600; }
+      .br-done > i { font-size: 18px; }
+      .br-done > span { flex: 1; min-width: 200px; }
+      .br-done small { display: block; color: #2c6a4c; font-size: 13px; font-weight: 400; }
+      .br-next { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; height: 38px; padding: 0 1rem; border-radius: 10px; background: #a11626; color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
+      .br-next:hover { background: #7d0f1e; color: #fff; }
+      @media (max-width: 767.98px) { .br-next { width: 100%; height: 44px; } }
       .br-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.2rem; }
       .br-subtitle { color: var(--vm-muted); font-size: 0.84rem; margin: 0; }
 
@@ -224,7 +233,7 @@
          reply is what gets drawn — so the screen can never claim a state the
          database did not reach.
          ============================================================ */
-      let acting = false;
+      let acting = false, acted = false;
       async function staffAction(action, extra, onOk) {
         if (acting || !cur) return false;
         acting = true;
@@ -249,6 +258,7 @@
             if (out.booking.tl) cur.tl = out.booking.tl;
           }
           if (typeof onOk === 'function') onOk(out);
+          acted = true;
           acting = false; render(); return true;
         } catch (e) {
           cur.actionError = 'Could not reach the server, so nothing was changed.';
@@ -261,6 +271,7 @@
       async function reloadCur() {
         await Live.refresh();
         Object.assign(cur, Live.data('brq-row') || {}, { fileRefundOpen: false, xMode: null, actionError: null });
+        acted = true;
         render();
         loadMail();
       }
@@ -1106,11 +1117,39 @@
           </div>`;
       }
 
+      /* The list this booking was opened from (the queue saves it on the row's click): the back
+         link names its tab, the page says where you are, and Next opens the following one.
+         Opened any other way (a bell, a link): the plain back link, and no Next. */
+      const QUEUE_URL = {!! json_encode(route('admin.booking-requests')) !!};
+      const queue = (function () {
+        try {
+          const list = JSON.parse(sessionStorage.getItem('venusep_queue'));
+          return list && list.ids.includes(qid) ? list : null;
+        } catch (e) { return null; }
+      })();
+      function backLink() {
+        if (!queue) return `<a class="br-back" href="${QUEUE_URL}">&larr; Back to Booking Requests</a>`;
+        const all = queue.tab === 'all';
+        return `<div class="br-crumb"><a class="br-back" href="${esc(queue.url)}">&larr; ${all ? 'Back to Booking Requests' : esc(queue.label)}</a>
+          <span>${queue.ids.indexOf(qid) + 1} of ${queue.ids.length} in this ${all ? 'list' : 'tab'}</span></div>`;
+      }
+      /* after an action: on to the next booking of the same tab */
+      function doneNote() {
+        if (!acted || !queue) return '';
+        const at = queue.ids.indexOf(qid), left = queue.ids.length - at - 1;
+        const word = queue.tab === 'confirm' ? 'receipt' : 'booking';
+        return left
+          ? `<div class="br-done" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Saved.<small>${left} more ${left === 1 ? word : word + 's'} waiting in this ${queue.tab === 'all' ? 'list' : 'tab'}.</small></span>
+              <a class="br-next" href="${QUEUE_URL.replace('booking-requests', 'booking-request')}?id=${encodeURIComponent(queue.ids[at + 1])}">Next ${word} <i class="bi bi-arrow-right" aria-hidden="true"></i></a></div>`
+          : `<div class="br-done" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Saved. That was the last one.</span>
+              <a class="br-next" href="${esc(queue.url)}">Back to the list</a></div>`;
+      }
+
       function render() {
         // venue-only: a hostel booking has named guests, not an attendee count
         const over = !isHostel() && cur.attendees > cur.capacity;
         document.getElementById('brqRoot').innerHTML = `
-          <a class="br-back" href="{{ route('admin.booking-requests') }}">&larr; Back to Booking Requests</a>
+          ${backLink()}
           <div class="br-head">
             <div>
               <h1 class="br-title">${cur.id} · ${esc(cur.event)}</h1>
@@ -1127,6 +1166,7 @@
               ${cur.actionError && !cur.attErr ? `<div role="alert" style="color:#b23a3a;font-size:0.78rem;margin-top:0.4rem;text-align:right">${esc(cur.actionError)}</div>` : ''}
             </div>
           </div>
+          ${doneNote()}
 
           <div class="br-grid">
             <div>

@@ -166,7 +166,7 @@ final class BookingRules
         $out = [];
         foreach ($rows as $r) {
             $amount = (float) $r['total_amount'];
-            $out[(int) $r['customer_id']][(int) $r['venue_id']] ??= !staff_sees_room($r['room_id'], $r['venue_id'])
+            $out[(int) $r['customer_id']][(int) $r['venue_id']] ??= session('account_type') === 'staff' && !staff_may_handle_room($r['room_id'], $r['venue_id'])
                 ? 'Another room at ' . $r['office']
                 : $r['name'] . ' at ' . $r['office'] . ', '
                   . ($r['first_day'] ? date('M j, Y', strtotime($r['first_day'])) : '—')

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\AdminPeople;
 
+use App\Http\Controllers\Customer\BookingRules;
 use App\Queries\ReportQueries;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -455,6 +456,12 @@ class StaffHallScopeTest extends TestCase
         /* their own hall keeps the details, and a customer still reads their own */
         DB::table('bookings')->where('id', $other)->update(['room_id' => self::R1]);
         $this->asStaff()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk()->assertSee('7,654.32');
+
+        /* an admin reads it whole, another group's office included (the counter booking's history) */
+        DB::table('bookings')->where('id', $other)->update(['room_id' => $this->roomId('r5')]);
+        $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.dashboard'))->assertOk();
+        $owes = BookingRules::overdueBookings(venusep_db(), null, $this->customerId())[$this->customerId()] ?? '';
+        $this->assertStringContainsString('7,654.32', $owes);
     }
 
     /* The counter pages with no room, or a list for a room: the lists stay narrowed. */

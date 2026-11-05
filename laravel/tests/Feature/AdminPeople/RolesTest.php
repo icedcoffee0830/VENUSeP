@@ -211,6 +211,32 @@ class RolesTest extends TestCase
         $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $venues->id, 'new_password' => 'Long-enough-1'])->assertOk();
     }
 
+    /* The tick for both CEDU offices must not survive a move out of CEDU: moved back later,
+       the person would silently get the other office again. Every way of moving them. */
+    public function test_moving_two_office_staff_out_of_cedu_clears_the_tick(): void
+    {
+        $tick = fn ($acct) => (int) DB::table('staff')->where('user_id', $acct->id)->value('both_cedu_offices');
+        $update = fn ($acct, int $venue) => $this->postForm('admin.staff-save', ['action' => 'update', 'user_id' => $acct->id,
+            'full_name' => 'Two Offices', 'email' => $acct->email, 'venue_id' => $venue])->assertOk();
+        $this->actingAsAdmin();
+
+        $byUpdate = $this->staffAt(self::VENUES, true);
+        $update($byUpdate, self::HOSTEL);
+        $this->assertSame(1, $tick($byUpdate), 'a move inside CEDU keeps the tick');
+        $update($byUpdate, self::BAHAY);
+        $this->assertSame(0, $tick($byUpdate));
+
+        $byVenueForm = $this->staffAt(self::VENUES, true);
+        $bahay = DB::table('venues')->where('id', self::BAHAY)->first();
+        $venues = DB::table('venues')->where('id', self::HOSTEL)->first();
+        $move = fn ($v) => $this->postForm('admin.venue-save', ['venue_id' => $v->id, 'name' => $v->name, 'description' => (string) $v->description,
+            'move_staff' => json_encode([$byVenueForm->id])])->assertOk();
+        $move($venues);
+        $this->assertSame(1, $tick($byVenueForm), 'a move inside CEDU keeps the tick');
+        $move($bahay);
+        $this->assertSame(0, $tick($byVenueForm));
+    }
+
     public function test_the_super_admin_manages_admins_but_nobody_resets_the_super_admin(): void
     {
         $na = $this->makeAccount('admin');
@@ -307,6 +333,25 @@ class RolesTest extends TestCase
         $to = DB::table('notifications as n')->join('users as u', 'u.id', '=', 'n.user_id')->where('n.id', '>', $before)->pluck('u.email')->all();
         DB::table('notifications')->where('id', '>', $before)->delete();
         $this->assertContains('francishubero@gmail.com', $to);
+    }
+
+    /* The same copy: a table made there takes general_ci, the older ones keep unicode_ci, and
+       Activity (block reason next to office name) fails. Re-running migration 17 repairs it. */
+    public function test_migration_17_repairs_its_tables_made_with_another_collation(): void
+    {
+        preg_match_all('/^ALTER TABLE \w+ CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;/m',
+            (string) file_get_contents(dirname(base_path()) . '/venusep_migration_17.sql'), $repair);
+        $this->assertCount(2, $repair[0], 'the migration repairs both of its tables');
+        $this->actingAsAdmin();
+        try {
+            DB::statement('ALTER TABLE customer_office_blocks CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
+            $this->get(route('admin.activity'))->assertStatus(500);
+        } finally {
+            foreach ($repair[0] as $statement) {
+                DB::statement($statement);
+            }
+        }
+        $this->get(route('admin.activity'))->assertOk();
     }
 
     public function test_two_office_staff_may_sign_in_on_either_cedu_card(): void

@@ -146,7 +146,8 @@ class OfficeSettingsController extends Controller
         foreach ($changed as $field => $value) {
             $column = self::FIELDS[$field][1];
             $pdo->prepare("UPDATE venues SET $column = :x WHERE id = :v")->execute([':x' => $value, ':v' => $office['id']]);
-            $log->execute([':v' => $office['id'], ':f' => $field, ':o' => (string) $old[$field], ':n' => (string) $value,
+            /* the history columns hold 100 characters; a location may have 500 */
+            $log->execute([':v' => $office['id'], ':f' => $field, ':o' => mb_substr((string) $old[$field], 0, 100), ':n' => mb_substr((string) $value, 0, 100),
                            ':w' => $reason !== '' ? $reason : null, ':u' => $actor]);
         }
         $pdo->commit();

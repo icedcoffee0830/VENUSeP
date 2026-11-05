@@ -172,7 +172,10 @@ CREATE TABLE IF NOT EXISTS customer_office_blocks (
         ON UPDATE CASCADE ON DELETE SET NULL,
     CONSTRAINT fk_customer_office_blocks_lifted_by FOREIGN KEY (lifted_by_user_id) REFERENCES users(id)
         ON UPDATE CASCADE ON DELETE SET NULL
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- The same collation as every other table, also when an earlier run of this file made the
+-- table on a database copy with the server default: Activity reads its text next to theirs.
+ALTER TABLE customer_office_blocks CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- ---- accounts made at the counter, and their email corrections (DB-DECISIONS 28) ----
 ALTER TABLE customers
@@ -194,7 +197,8 @@ CREATE TABLE IF NOT EXISTS customer_email_fixes (
         ON UPDATE CASCADE ON DELETE CASCADE,
     CONSTRAINT fk_customer_email_fixes_by FOREIGN KEY (fixed_by_user_id) REFERENCES users(id)
         ON UPDATE CASCADE ON DELETE SET NULL
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+ALTER TABLE customer_email_fixes CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 DELIMITER $$
 

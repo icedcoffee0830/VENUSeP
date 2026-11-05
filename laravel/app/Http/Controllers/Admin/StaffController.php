@@ -302,12 +302,13 @@ class StaffController
                 ];
                 if ($venueGiven) {
                     $staffValues[':v'] = $venue['id'];
+                    $staffValues[':c'] = (int) !empty($venue['cedu']);   // the tick for both CEDU offices ends outside CEDU
                     $pdo->prepare(
                         'INSERT INTO staff (user_id, venue_id, full_name, employee_no, position_role, phone)
                          VALUES (:u, :v, :n, :e, :r, :p)
                          ON DUPLICATE KEY UPDATE venue_id = VALUES(venue_id), full_name = VALUES(full_name),
                                                  employee_no = VALUES(employee_no), position_role = VALUES(position_role),
-                                                 phone = VALUES(phone)'
+                                                 phone = VALUES(phone), both_cedu_offices = both_cedu_offices AND :c'
                     )->execute($staffValues);
                 } else {
                     $pdo->prepare(

@@ -137,6 +137,7 @@ class StaffActionCoverageTest extends TestCase
     {
         config(['venusep.max_days_ahead' => 183]);
         [$id, $ref] = $this->seedHostelBooking('approved', 'paid_cash', 'cash', false, true);
+        $this->beforeApplicationDestroyed(fn () => DB::delete('DELETE FROM bookings WHERE id = ?', [$id]));
         $was = DB::table('hostel_booking_details')->where('booking_id', $id)->first();
         $in = date('Y-m-d', strtotime('+183 days'));
         $this->actingAsAdmin();

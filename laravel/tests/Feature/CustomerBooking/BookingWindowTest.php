@@ -19,6 +19,15 @@ class BookingWindowTest extends TestCase
         config(['venusep.max_days_ahead' => 183]);
     }
 
+    /* A booking that got through (the rule broken) must not stay behind for the next test. */
+    protected function tearDown(): void
+    {
+        DB::delete("DELETE b FROM bookings b JOIN venue_booking_details d ON d.booking_id = b.id WHERE d.event_name = 'Window test'");
+        DB::delete("DELETE b FROM bookings b JOIN customers c ON c.id = b.customer_id WHERE c.full_name = 'Window Walk-in'");
+        DB::delete("DELETE FROM customers WHERE full_name = 'Window Walk-in' AND user_id IS NULL");
+        parent::tearDown();
+    }
+
     private function day(int $ahead): string
     {
         return date('Y-m-d', strtotime('+' . $ahead . ' days'));

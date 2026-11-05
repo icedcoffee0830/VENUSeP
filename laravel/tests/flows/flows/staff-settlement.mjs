@@ -50,7 +50,7 @@ export default {
       await expect.text(page, 'Choose a reason and write a note.');
       await page.locator('#xReason').selectOption('fake');
       await page.locator('#xNote').fill('Nobody answers this number');
-      await Promise.all([page.waitForEvent('load'), page.locator('#xSend').click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#xSend').click()]);
       const b = await dbOne(`SELECT reservation_status FROM bookings WHERE id = ?`, [s.a.id]);
       expect.equal(b.reservation_status, 'cancelled', 'reservation_status');
       expect.equal(await page.getByRole('button', { name: 'Force cancel' }).count(), 0, 'Force cancel still offered');
@@ -66,7 +66,7 @@ export default {
       await page.locator('#xOutD').fill(day);
       await page.locator('#xStart').fill('09:00');
       await page.locator('#xEnd').fill('12:00');
-      await Promise.all([page.waitForEvent('load'), page.locator('#xSend').click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#xSend').click()]);
       const d = await dbOne(`SELECT start_date FROM venue_booking_details WHERE booking_id = ?`, [s.b.id]);
       expect.equal(String(d.start_date).slice(0, 10), day, 'start_date');
     });

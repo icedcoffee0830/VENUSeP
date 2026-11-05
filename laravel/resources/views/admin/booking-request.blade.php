@@ -163,6 +163,7 @@
          this page answers "the customer's" (see gcAccount below). -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     {!! $gcashCheckerJs !!}
+    @fragment('brq-row')<script type="application/json" data-live="brq-row">{!! json_encode($brqData[request('id')] ?? null, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
     <script>
       /* Booking Request detail — one full window per request (mockup).
          Reads ?id=BRQ-xxxx; actions update badges + timeline in-page (demo only).
@@ -253,6 +254,15 @@
           cur.actionError = 'Could not reach the server, so nothing was changed.';
           acting = false; render(); return false;
         }
+      }
+
+      /* The refund and settlement actions change more than their reply says (documents, the
+         refund row, the panels on offer): this booking again from the server, then a redraw. */
+      async function reloadCur() {
+        await Live.refresh();
+        Object.assign(cur, Live.data('brq-row') || {}, { fileRefundOpen: false, xMode: null, actionError: null });
+        render();
+        loadMail();
       }
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -562,7 +572,7 @@
         const out = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was filed.' }; });
-        if (out.ok) { location.reload(); return; }
+        if (out.ok) { reloadCur(); return; }
         send.disabled = false;
         document.getElementById('rfErr').textContent = out.message || 'Nothing was filed.';
       }
@@ -626,14 +636,14 @@
         const out = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was changed.' }; });
-        if (out.ok) { location.reload(); return; }
+        if (out.ok) { reloadCur(); return; }
         const err = document.getElementById('xErr');
         if (err) { err.textContent = out.message || 'Nothing was changed.'; return; }
         cur.actionError = out.message || 'Nothing was changed.';
         render();
       }
       function approveLostReceipt() {
-        staffAction('refund_approve', {}, function () { location.reload(); });
+        staffAction('refund_approve', {}, reloadCur);
       }
       async function addRefundProof(input) {
         const body = new FormData();
@@ -642,7 +652,7 @@
         const out = await fetch({!! json_encode(route('admin.booking-action')) !!}, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .catch(function () { return { ok: false, message: 'Could not reach the server, so nothing was attached.' }; });
-        if (out.ok) { location.reload(); return; }
+        if (out.ok) { reloadCur(); return; }
         cur.actionError = out.message || 'Nothing was attached.';
         render();
       }

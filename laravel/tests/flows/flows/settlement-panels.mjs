@@ -20,7 +20,7 @@ export default {
       await page.getByRole('button', { name }).click();
       await expect.visible(page.locator('#xSend'), 'the panel did not open');
     };
-    const send = (page) => Promise.all([page.waitForEvent('load'), page.locator('#xSend').click()]);
+    const send = (page) => Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#xSend').click()]);
     const booking = (id) => dbOne(`SELECT reservation_status, payment_status, write_off_reason FROM bookings WHERE id = ?`, [id]);
     /* the customer's first booking page: the Overdue block says so up front */
     const blocked = async (page) => {
@@ -70,7 +70,7 @@ export default {
     await step('The right password reverses it: back to unpaid, the receipt void, the button gone', async () => {
       const page = s.admin;
       await page.locator('#xPass').fill(ctx.password);
-      await Promise.all([page.waitForEvent('load'), page.locator('#xSend').click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#xSend').click()]);
       const b = await booking(s.paid.id);
       expect.equal(b.payment_status, s.paid.payment_method === 'cash' ? 'await_cash' : 'await_gcash', 'payment_status');
       const r = await dbOne(`SELECT voided_at, void_reason FROM system_receipts WHERE booking_id = ?`, [s.paid.id]);
@@ -133,7 +133,7 @@ export default {
     await step('The admin approves: Completed and written off, and the customer\'s block ends', async () => {
       const page = s.admin;
       await open(page, refOf(s.a));
-      await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Approve write-off' }).click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.getByRole('button', { name: 'Approve write-off' }).click()]);
       const b = await booking(s.a.id);
       expect.equal(b.reservation_status, 'completed', 'reservation_status');
       expect.equal(b.payment_status, 'written_off', 'payment_status');
@@ -148,7 +148,7 @@ export default {
       await s.staff.locator('#xNote').fill('They changed their number');
       await send(s.staff);
       await open(s.admin, refOf(s.b));
-      await Promise.all([s.admin.waitForEvent('load'), s.admin.getByRole('button', { name: 'Decline write-off' }).click()]);
+      await Promise.all([s.admin.waitForResponse((r) => r.url().includes('part=1')), s.admin.getByRole('button', { name: 'Decline write-off' }).click()]);
       const b = await booking(s.b.id);
       expect.equal(b.payment_status, 'overdue', 'payment_status');
       expect.equal(b.write_off_reason, null, 'write_off_reason');

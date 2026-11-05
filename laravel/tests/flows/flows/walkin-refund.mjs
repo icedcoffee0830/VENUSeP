@@ -55,7 +55,7 @@ export default {
     await step('The right number files it; the staff return the money in cash', async () => {
       const page = s.staff;
       await page.locator('#rfNumber').fill(s.a.number);
-      await Promise.all([page.waitForEvent('load'), page.locator('#rfSend').click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#rfSend').click()]);
       await expect.text(page, 'Receipt checked by staff');
       expect.equal(await page.getByRole('button', { name: 'Return for correction' }).count(), 0, '"Return for correction" shown for a walk-in');
       await page.getByRole('button', { name: 'Mark refunded' }).click();
@@ -73,7 +73,7 @@ export default {
       s.b = await seedPaidWalkIn(2);
       await openFiled(s.staff, s.b.ref);
       await s.staff.locator('#rfNumber').fill(s.b.number);
-      await Promise.all([s.staff.waitForEvent('load'), s.staff.locator('#rfSend').click()]);
+      await Promise.all([s.staff.waitForResponse((r) => r.url().includes('part=1')), s.staff.locator('#rfSend').click()]);
       await s.staff.getByRole('button', { name: 'Mark refunded' }).click();
       await s.staff.locator('#payoutMethod').selectOption('gcash');
       await expect.visible(s.staff.locator('#payoutTo'), 'the GCash number field did not appear');
@@ -90,12 +90,12 @@ export default {
       await page.locator('#rfSend').click();
       await expect.text(page, 'Attach the proof you found');
       await page.locator('#rfFiles').setInputFiles({ name: 'gmail-search.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 proof') });
-      await Promise.all([page.waitForEvent('load'), page.locator('#rfSend').click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#rfSend').click()]);
       await expect.text(page, 'Refund on hold — an administrator must approve the proof');
       await expect.text(page, 'Waiting for an administrator to approve the proof');
       expect.equal(await page.getByRole('button', { name: 'Mark refunded' }).count(), 0, '"Mark refunded" before the approval');
       await expect.visible(page.getByRole('link', { name: 'gmail-search.pdf' }), 'the proof has no link on the request');
-      await Promise.all([page.waitForEvent('load'), page.locator('#rfAddProof').setInputFiles({ name: 'cashier-note.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 more') })]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.locator('#rfAddProof').setInputFiles({ name: 'cashier-note.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 more') })]);
       await expect.visible(page.getByRole('link', { name: 'cashier-note.pdf' }), 'the added proof has no link on the request');
     });
 
@@ -103,7 +103,7 @@ export default {
       s.admin = await ctx.loginAdmin(ADMIN);
       const page = s.admin;
       await page.goto(ctx.url(`/admin/booking-request?id=${s.c.ref}`));
-      await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Approve the proof' }).click()]);
+      await Promise.all([page.waitForResponse((r) => r.url().includes('part=1')), page.getByRole('button', { name: 'Approve the proof' }).click()]);
       await page.getByRole('button', { name: 'Mark refunded' }).click();
       await page.getByRole('button', { name: 'Complete refund' }).click();
       await expect.text(page, 'Refunded — booking closed');

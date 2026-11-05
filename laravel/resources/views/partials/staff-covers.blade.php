@@ -43,7 +43,8 @@
     <h2 id="smCoversTitle">Covers</h2>
     <div class="staff-panel-tools"><button type="button" class="btn-staff-add" style="border:0;cursor:pointer" id="smCoverOpen"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Set up a cover</button></div>
   </div>
-  <div class="staff-panel-body">
+  @fragment('sm-covers')
+  <div class="staff-panel-body" data-live="sm-covers">
 @if ($smCover['covers'])
     <div class="sm-scroll">
       <table class="sm-list">
@@ -74,11 +75,13 @@
     <p class="sm-empty">No covers right now.</p>
 @endif
   </div>
+  @endfragment
 </section>
 
 <section class="staff-panel sm-section" aria-labelledby="smMovesTitle">
   <div class="staff-panel-header"><h2 id="smMovesTitle">Moves between groups</h2></div>
-  <div class="staff-panel-body">
+  @fragment('sm-moves')
+  <div class="staff-panel-body" data-live="sm-moves">
 @if ($smCover['moves'])
     <div class="sm-scroll">
       <table class="sm-list">
@@ -105,6 +108,7 @@
     <p class="sm-empty">No moves waiting. Start one with Move group on a staff member's row.</p>
 @endif
   </div>
+  @endfragment
 </section>
 
 <dialog class="sm-dlg" id="smHallsDlg" aria-labelledby="smHallsTitle">
@@ -154,11 +158,13 @@
   </form>
 </dialog>
 
+@fragment('sm-cover-data')<script type="application/json" data-live="sm-cover-data">{!! json_encode(['offices' => $smCover['offices'], 'halls' => $smCover['halls'], 'staff' => $smCover['staff'], 'group' => $smCover['group'], 'super' => $smCover['super'],
+  'rows' => array_values(array_filter($smRows, fn ($r) => $r['role'] === 'Staff' && $r['canManage'] && $r['status'] === 'Active'))], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
 <script>
   (function () {
-    const COVER = {!! json_encode(['offices' => $smCover['offices'], 'halls' => $smCover['halls'], 'staff' => $smCover['staff'], 'group' => $smCover['group'], 'super' => $smCover['super']], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-    const ROWS = {!! json_encode(array_values(array_filter($smRows, fn ($r) => $r['role'] === 'Staff' && $r['canManage'] && $r['status'] === 'Active')), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-    const CSRF = {!! json_encode(csrf_token()) !!};
+    let COVER, ROWS;
+    window.smCoverRead = function () { COVER = Live.data('sm-cover-data'); ROWS = COVER.rows; };
+    window.smCoverRead();
     const COVER_URL = @json(route('admin.staff-cover-save'));
     const STAFF_URL = @json(route('admin.staff-save'));
     const officeOf = (id) => COVER.offices.find((o) => String(o.id) === String(id));
@@ -171,15 +177,7 @@
         return opt;
       }));
     }
-    function post(url, fields) {
-      const body = new FormData();
-      Object.entries(fields).forEach(([k, v]) => body.append(k, v));
-      body.append('_token', CSRF);
-      return fetch(url, { method: 'POST', body: body, credentials: 'same-origin' })
-        .then((r) => r.json().catch(() => ({ ok: false, message: 'The server sent an unreadable reply.' })))
-        .catch(() => ({ ok: false, message: 'Could not reach the server, so nothing was changed.' }));
-    }
-    /* a form in a dialog: send, show a refusal inside it, reload on success */
+    /* a form in a dialog: send, show a refusal inside it, redraw on success */
     function submits(dialog, send) {
       const form = dialog.querySelector('form');
       const error = dialog.querySelector('.sm-error');
@@ -191,7 +189,13 @@
         button.disabled = true;
         const res = await send(new FormData(form));
         button.disabled = false;
-        if (res.ok) { window.location.reload(); return; }
+        if (res.ok) {
+          dialog.close();
+          form.reset();
+          Live.say(res.message || 'Saved.');
+          window.smRedraw();
+          return;
+        }
         error.textContent = res.message || 'Nothing was changed.';
         if (res.field && form.elements[res.field]) form.elements[res.field].focus();
       });
@@ -219,7 +223,7 @@
       }));
       open(hallsDlg);
     };
-    submits(hallsDlg, (data) => post(STAFF_URL, { action: 'set_halls', user_id: hallsFor.id,
+    submits(hallsDlg, (data) => Live.post(STAFF_URL, { action: 'set_halls', user_id: hallsFor.id,
       hall_ids: JSON.stringify(data.getAll('hall').map(Number)) }));
 
     /* ---- a cover ---- */
@@ -242,7 +246,7 @@
       coverChanged();
       open(coverDlg);
     });
-    submits(coverDlg, (data) => post(COVER_URL, Object.assign({ action: 'cover_create' }, Object.fromEntries(data))));
+    submits(coverDlg, (data) => Live.post(COVER_URL, Object.assign({ action: 'cover_create' }, Object.fromEntries(data))));
 
     /* ---- a permanent move to the other group ---- */
     const moveDlg = document.getElementById('smMoveDlg');
@@ -271,7 +275,7 @@
     submits(moveDlg, (data) => {
       const replacements = {};
       moveDlg.querySelectorAll('[data-hall]').forEach((s) => { replacements[s.dataset.hall] = Number(s.value); });
-      return post(COVER_URL, { action: 'move_create', user_id: moveFor.id, venue_id: data.get('venue_id'), reason: data.get('reason'),
+      return Live.post(COVER_URL, { action: 'move_create', user_id: moveFor.id, venue_id: data.get('venue_id'), reason: data.get('reason'),
         replacements: JSON.stringify(replacements) });
     });
 
@@ -293,9 +297,10 @@
         if (!(await venusepConfirm('It stops now, for this staff member and for both offices.',
           { title: 'End this cover now?', okLabel: 'End cover', danger: true }))) return;
       }
-      const res = await post(COVER_URL, fields);
+      const res = await Live.post(COVER_URL, fields);
       if (!res.ok) { venusepAlert(res.message || 'Nothing was changed.'); return; }
-      window.location.reload();
+      Live.say(res.message || 'Saved.');
+      window.smRedraw();
     });
   })();
 </script>

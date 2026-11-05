@@ -517,6 +517,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
   <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
+  @fragment('sm-rows')<script type="application/json" data-live="sm-rows">{!! json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
   <script>
     const roleBadge = (cell) => `<span class="badge-role">${cell.getValue()}</span>`;
     const statusBadge = (cell) => {
@@ -528,9 +529,8 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       /* The real staff-side accounts, from `users` + `staff`. */
-      const data = {!! json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
+      const data = Live.data('sm-rows');
       const venues = {!! json_encode($smVenues, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-      const CSRF = {!! json_encode(csrf_token()) !!};
       /* No "Unassigned" (2026-10-27): every staff member handles exactly one
          venue, and staff-save.php refuses an empty one. The list holds only the
          offices this admin may move staff to (DB-DECISIONS 28). */
@@ -556,15 +556,18 @@
          admin. Those checks live there and not here — this is a convenience,
          not a boundary. */
       const staffAction = function (body, onOk) {
-        body.append('_token', CSRF);   /* Laravel's CSRF check reads _token (the old field was csrf) */
-        return fetch(@json(route('admin.staff-save')), { method: 'POST', body: body, credentials: 'same-origin' })
-          .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'The server sent an unreadable reply.' }; }); })
-          .then(function (res) {
-            if (!res.ok) { venusepAlert(res.message || 'Nothing was changed.'); return false; }
-            if (typeof onOk === 'function') onOk(res);
-            return true;
-          })
-          .catch(function () { venusepAlert('Could not reach the server, so nothing was changed.'); return false; });
+        return Live.post(@json(route('admin.staff-save')), body).then(function (res) {
+          if (!res.ok) { venusepAlert(res.message || 'Nothing was changed.'); return false; }
+          if (typeof onOk === 'function') onOk(res);
+          return true;
+        });
+      };
+      /* Everything on this page from the server again, keeping the table's page, sort and filters. */
+      window.smRedraw = function () {
+        return Live.refresh().then(function () {
+          table.replaceData(Live.data('sm-rows'));
+          window.smCoverRead();
+        });
       };
 
       const toggleActive = async function (row) {
@@ -579,7 +582,7 @@
         body.append('action', 'set_active');
         body.append('user_id', row.id);
         body.append('active', suspend ? '0' : '1');
-        staffAction(body, function () { window.location.reload(); });
+        staffAction(body, window.smRedraw);
       };
 
       const resetPassword = async function (row) {
@@ -658,7 +661,7 @@
               body.append('action', 'set_venue');
               body.append('user_id', row.id);
               body.append('venue_id', cell.getValue() || '');
-              staffAction(body).then(function () { window.location.reload(); });
+              staffAction(body).then(window.smRedraw);   /* a refused move puts the cell back */
             },
           },
           {

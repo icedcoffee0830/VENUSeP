@@ -36,7 +36,7 @@ async function fillCover(ctx, page, { staff, office, fromSql, toSql }) {
 }
 
 async function saveCover(page, form) {
-  const reloaded = page.waitForEvent('load');
+  const reloaded = page.waitForResponse((r) => r.url().includes('part=1'));
   await form.getByRole('button', { name: 'Set up cover' }).click();
   await reloaded;
 }
@@ -90,7 +90,7 @@ export default {
 
     await step('The admin ends it early: the booking closes to the staff member', async () => {
       const page = s.cedu;
-      const reloaded = page.waitForEvent('load');
+      const reloaded = page.waitForResponse((r) => r.url().includes('part=1'));
       await coverRow(page, 'on').getByRole('button', { name: 'End now' }).click();
       await modal(ctx, page, { expect: /stops now/, ok: 'End cover' });
       await reloaded;
@@ -111,7 +111,7 @@ export default {
 
       const bahay = s.bahay = await ctx.loginAdmin(BAHAY_ADMIN);
       await bahay.goto(ctx.url('/admin/staff'));
-      const reloaded = bahay.waitForEvent('load');
+      const reloaded = bahay.waitForResponse((r) => r.url().includes('part=1'));
       await coverRow(bahay, 'waiting').getByRole('button', { name: 'Reject' }).click();
       await modal(ctx, bahay, { expect: /Reject this request/, fill: 'Flow test: no room for it', ok: 'Reject' });
       await reloaded;
@@ -126,7 +126,7 @@ export default {
       await saveCover(page, form);
       const bahay = s.bahay;
       await bahay.goto(ctx.url('/admin/staff'));
-      const reloaded = bahay.waitForEvent('load');
+      const reloaded = bahay.waitForResponse((r) => r.url().includes('part=1'));
       await coverRow(bahay, 'waiting').getByRole('button', { name: 'Approve' }).click();
       await reloaded;
       await expect.visible(coverRow(bahay, 'scheduled').getByText('Starts later'), 'the approved cover does not say Starts later');

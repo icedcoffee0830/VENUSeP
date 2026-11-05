@@ -116,7 +116,7 @@ class StaffController
             $smVenues = [];
         }
 
-        return view('admin.staff-management', ['smRows' => $smRows, 'smVenues' => $smVenues, 'smCover' => StaffCoverController::pageData()]);
+        return live_view('admin.staff-management', ['smRows' => $smRows, 'smVenues' => $smVenues, 'smCover' => StaffCoverController::pageData()]);
     }
 
     public function register()

@@ -96,7 +96,7 @@ export default {
       const card = page.locator(`[data-office="${s.venueId}"]`);
       await card.locator('input[name="discount"]').fill(String(s.newPct));
       await card.locator('.os-form input[name="reason"]').fill('Flow discount snapshot test ' + ctx.uniq);
-      const reloaded = page.waitForEvent('load').then(() => 'reloaded', () => 'timeout');
+      const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => 'reloaded', () => 'timeout');
       await card.getByRole('button', { name: /^Save / }).click();
       expect.equal(await reloaded, 'reloaded', 'the rate save');
       const set = await dbOne(`SELECT discount_percent AS v FROM venues WHERE id = ?`, [s.venueId]);

@@ -143,7 +143,7 @@ export default {
       await page.locator('#table-filter').fill(CUSTOMER);
       const row = page.locator('.tabulator-row', { hasText: CUSTOMER });
       await expect.visible(row, `no row for ${CUSTOMER}`);
-      const reloaded = page.waitForEvent('load').then(() => true, () => false);
+      const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);
       await row.locator('.btn-cust-toggle', { hasText: 'Disable' }).click();
       const box = modalBox(page);
       await expect.visible(box, 'no confirm dialog');

@@ -32,7 +32,7 @@ async function toggleCustomer(ctx, page, row, label, okLabel = label) {
   await row.locator('.btn-cust-toggle', { hasText: label }).click();
   /* .catch: a dangling wait must not crash the runner when the step fails first */
   const answer = page.waitForResponse((r) => r.url().includes('/admin/customer-save') && r.request().method() === 'POST').catch(() => null);
-  const reloaded = page.waitForEvent('load').then(() => true, () => false);
+  const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);
   await modal(ctx, page, { expect: new RegExp(okLabel), ok: okLabel });
   const res = await answer;
   if (!res) ctx.fail(`${label} sent no request to /admin/customer-save`);

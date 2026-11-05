@@ -139,7 +139,7 @@ export default {
       const card = page.locator('[data-office="1"]');
       await card.locator('input[name="discount"]').fill(String(s.rate));
       await card.locator('.os-form input[name="reason"]').fill(s.reason);
-      const reloaded = page.waitForEvent('load').then(() => true, () => false);
+      const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);
       await card.getByRole('button', { name: /^Save / }).click();
       expect.ok(await reloaded, 'the page did not reload after Save');
       await expect.visible(page.locator('[data-office="1"]').getByText(s.reason), 'the change is not in the history');
@@ -341,7 +341,7 @@ export default {
       const row = page.locator('.tabulator-row', { hasText: s.newEmail });
       await row.getByRole('button', { name: 'Suspend' }).click();
       const answer = page.waitForResponse((r) => r.url().includes('/admin/staff-save') && r.request().method() === 'POST').catch(() => null);
-      const reloaded = page.waitForEvent('load').then(() => true, () => false);   // the table reloads after a change
+      const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);   // the table reloads after a change
       await modal(ctx, page, { expect: /Suspend /, ok: 'Suspend' });
       const res = await answer;
       if (!res) ctx.fail('Suspend sent no request to /admin/staff-save');

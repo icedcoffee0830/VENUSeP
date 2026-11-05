@@ -101,7 +101,7 @@ export default {
       const card = page.locator('[data-office="1"]');
       await card.locator('input[name="opens"]').fill('09:00');
       await card.locator('input[name="closes"]').fill('17:00');
-      const reloaded = page.waitForEvent('load').then(() => true, () => false);
+      const reloaded = page.waitForResponse((r) => r.url().includes('part=1')).then(() => true, () => false);
       await card.getByRole('button', { name: /^Save / }).click();
       expect.ok(await reloaded, 'no reload after Save');
       await s.staff.goto(ctx.url('/customer/room-reservation?room=r1&counter=1'));

@@ -193,6 +193,8 @@ export default {
       expect.equal(late, 0, 'overdue rows under Awaiting payment');
       await page.locator('.br-tab', { hasText: 'Overdue' }).click();
       expect.equal(await page.locator('a.br-row', { hasText: s.ref }).count(), 0, `${s.ref} under Overdue`);
+      await page.goto(ctx.url('/admin/booking-request?id=' + encodeURIComponent(s.ref)));   // back on the stay's page, where the next steps work
+      await expect.url(page, /\/admin\/booking-request\?id=/);
     });
 
     await step('The customer chooses to pay cash at the front desk', async () => {

@@ -39,8 +39,10 @@
       .booking-history-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
       .booking-table-scroll { overflow-x: auto; }
       .booking-history-table { width: 100%; border-collapse: collapse; min-width: 900px; }
-      .booking-history-table th, .booking-history-table td { padding: 11px 14px; text-align: left; border-bottom: 1px solid #f2efe9; font-size: 13px; white-space: nowrap; }
+      .booking-history-table th, .booking-history-table td { padding: 11px 8px; text-align: left; border-bottom: 1px solid #f2efe9; font-size: 13px; }
       .booking-history-table th { background: #faf9f7; }
+      /* long names and notes wrap, so nine columns fit the panel with no sideways scroll */
+      .booking-history-table td.booking-id, .booking-history-table td.booking-amount { white-space: nowrap; }
       .sortable-heading { border: 0; background: transparent; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #6b6258; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; padding: 0; }
       .sortable-heading::after { content: "\F282"; font-family: "bootstrap-icons"; font-size: 10px; opacity: .3; }
       .sortable-heading[data-direction="asc"]::after { content: "\F235"; opacity: .8; }
@@ -63,16 +65,18 @@
       .badge-payment-pending { background: #eef0f2; color: #55606b; }
       .badge-payment-due { background: #fbf1dd; color: #8a5a00; }
       .badge-overdue { background: #fcecec; color: #b23a3a; }
-      .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+      .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
       .booking-pay-note.is-overdue { color: #b23a3a; }
-      .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); }
-      .booking-overdue-help { flex-basis: 100%; max-width: 26rem; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; }
+      .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); white-space: normal; }
+      .booking-overdue-help { flex-basis: 100%; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; white-space: normal; }
+      /* desktop: the notice gets a fixed width and wraps there, with the buttons below it */
+      @media (min-width: 1001px) { .booking-actions:has(.booking-overdue-help) { display: flex; width: 11.5rem; } }
       .booking-overdue-help strong { color: #b23a3a; }
       /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
       .badge-expired, .badge-released { background: #eef0f2; color: #55606b; }
       .booking-status-note { display: block; margin-top: 4px; max-width: 220px; font-size: 11px; line-height: 1.4; color: var(--muted); }
       /* row actions */
-      .booking-actions { display: inline-flex; gap: 6px; }
+      .booking-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
       .booking-action { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
       .booking-action:hover { background: #f4f2ee; border-color: #c9c2b6; }
       .booking-action[disabled] { opacity: .5; cursor: not-allowed; }
@@ -127,7 +131,6 @@
         .booking-history-table td.booking-actions-cell::before { display: none; }
         .booking-empty-state td { grid-column: 1 / -1; }
         .booking-empty-state td::before { display: none; }
-        .booking-actions { flex-wrap: wrap; }
         .booking-history-filters { grid-template-columns: 1fr 1fr; }
         .booking-status-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
       }

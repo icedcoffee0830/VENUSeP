@@ -77,6 +77,7 @@ class StaffManagementTest extends TestCase
     {
         $this->actingAsAdmin()->get(route('admin.admin-register'))->assertOk()
             ->assertSee('Create a staff or admin account')
+            ->assertSee('<a class="auth-back" href="' . route('admin.staff') . '">', false)
             ->assertSee('<option value="3">USeP Hostel</option>', false)
             ->assertSee(json_encode(route('root.register-submit')), false)
             ->assertSee(asset('logo/Logo Header 3.png'), false);

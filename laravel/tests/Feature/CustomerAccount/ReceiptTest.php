@@ -50,6 +50,8 @@ class ReceiptTest extends TestCase
             ->assertOk()
             ->assertSee('System Receipt')
             ->assertSee('A refund request needs this receipt.')
+            ->assertSee('<a class="rc-back" href="' . route('customer.booking-history') . '">', false)
+            ->assertSee('Back to My bookings')
             ->assertSee('Send this receipt as a PDF to', false)
             ->assertSee('customer@gmail.com')
             ->assertSee(route('root.receipt-pdf', ['booking' => $ref]), false)

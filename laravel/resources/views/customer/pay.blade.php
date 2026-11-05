@@ -22,7 +22,9 @@
       body { background: #fff !important; }
       .app-main { background: #fff !important; }
       .pay-wrap { max-width: 720px; margin: 0 auto; padding-top: 22px; }
-      .pay-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #4a4440; text-decoration: none; margin-bottom: 14px; }
+      /* the only way out on a phone: the tab bar is off on this page */
+      .pay-nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px; margin-bottom: 14px; }
+      .pay-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; font-weight: 600; color: #4a4440; text-decoration: none; }
       .pay-back:hover { color: var(--crimson); }
       .pay-title { margin: 0 0 4px; font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
       .pay-sub { margin: 0 0 18px; color: var(--soft); font-size: 13.5px; }
@@ -59,7 +61,10 @@
         <div class="app-content">
           <div class="container-fluid">
             <div class="pay-wrap">
-              <a class="pay-back" href="{{ route('customer.booking-history') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to Booking History</a>
+              <nav class="pay-nav" aria-label="Leave this page">
+                <a class="pay-back" href="{{ route('customer.booking-history') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to My bookings</a>
+                <a class="pay-back" href="{{ route('customer.venues') }}"><i class="bi bi-house" aria-hidden="true"></i>Home page</a>
+              </nav>
               @fragment('pay-body')
               <div data-live="pay-body" data-pay-code="{{ $payCode }}" data-pay-open="{{ $payOpen ? 1 : 0 }}">
               <h1 class="pay-title">{{ $payOpen ? 'Pay for your booking' : 'Payment' }}</h1>

@@ -96,6 +96,8 @@
       .form-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
       .form-check-input { width: 15px; height: 15px; accent-color: var(--crimson); }
       .form-check-label { color: var(--muted); }
+      .auth-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: #4a4440; text-decoration: none; }
+      .auth-back:hover { color: var(--crimson); }
       .auth-link { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
       .auth-link:hover { color: var(--crimson); }
       .btn-auth { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border: 0; border-radius: 999px;
@@ -150,6 +152,7 @@
       </aside>
       <section class="auth-panel" aria-labelledby="adminRegisterTitle">
         <div class="auth-card">
+          <a class="auth-back" href="{{ route('admin.staff') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to Staff Management</a>
           <a class="auth-brand" href="{{ route('admin.admin-login') }}" title="VENUSeP staff"><img src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP" /></a>
           <div class="auth-heading">
             <h1 class="auth-title" id="adminRegisterTitle">Create a staff or admin account</h1>

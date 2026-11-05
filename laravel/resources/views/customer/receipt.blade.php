@@ -74,7 +74,7 @@
           <div class="container-fluid">
             <div class="rc-wrap">
               <div class="rc-bar">
-                <a class="rc-back" href="{{ route('customer.booking-history') }}" onclick="if (document.referrer.indexOf(location.origin) === 0 && history.length > 1) { history.back(); return false; }"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back</a>
+                <a class="rc-back" href="{{ route('customer.booking-history') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to My bookings</a>
                 <div class="rc-tools">
                   <a class="rc-btn" href="{{ route('root.receipt-pdf', ['booking' => $rcRef]) }}"><i class="bi bi-download" aria-hidden="true"></i>Download PDF</a>
                   @if ($rcFlash !== 'sent')

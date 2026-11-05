@@ -240,6 +240,10 @@ export default {
       await page.goto(ctx.url('/admin/staff'));
       await page.getByRole('link', { name: 'Add account' }).click();
       await expect.url(page, /\/admin\/admin-register/);
+      await page.getByRole('link', { name: 'Back to Staff Management' }).click();
+      await expect.url(page, /\/admin\/staff$/);
+      await page.getByRole('link', { name: 'Add account' }).click();
+      await expect.url(page, /\/admin\/admin-register/);
       await page.locator('input[name="account_role"][value="staff"]').check();
       await page.locator('#staffVenue').selectOption(String(venue.id));
       await page.locator('#adminFullName').fill(s.newName);

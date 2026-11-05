@@ -90,12 +90,34 @@ class BookingSubmitController extends Controller
         );
         $roomStmt->execute([':c' => $roomCode]);
         $room = $roomStmt->fetch();
-        if (!$room || !$room['is_active']) {
+        if (!$room) {
             return self::reply(404, ['ok' => false, 'message' => 'That room is not available for booking.']);
+        }
+        /* Closed or deleted while the customer was booking (a deleted room is inactive too). */
+        if (!$room['is_active']) {
+            return self::reply(409, ['ok' => false, 'error' => 'room_changed', 'room' => null,
+                'message' => $room['name'] . ' was closed for booking while you were booking. Please pick another room.']);
         }
         $wantType = $type === 'venue' ? 'event' : 'hostel';
         if ($room['room_type'] !== $wantType) {
             return self::reply(409, ['ok' => false, 'message' => 'That room does not take this kind of booking.']);
+        }
+
+        /* The page sends the rate it showed. A price changed while the customer was
+           booking is refused, with the room as it is now so the page can redraw it. */
+        $rate  = (float) ($type === 'venue' ? $room['fee_per_day'] : $room['rate_per_head_per_night']);
+        $shown = $request->post('shown_rate');
+        if ($shown !== null && abs((float) $shown - $rate) >= 0.005) {
+            $fresh = ['id' => $roomCode, 'name' => $room['name']];
+            if ($type === 'venue') {
+                $fresh += ['fee' => $rate, 'capacity' => (int) $room['attendee_capacity']];
+            } else {
+                $beds = $pdo->prepare('SELECT COUNT(*) FROM hostel_beds WHERE room_id = :r AND is_active = 1');
+                $beds->execute([':r' => $room['id']]);
+                $fresh += ['rate' => $rate, 'beds' => (int) $beds->fetchColumn()];
+            }
+            return self::reply(409, ['ok' => false, 'error' => 'price_changed', 'room' => $fresh,
+                'message' => 'The price of ' . $room['name'] . ' changed to ₱' . number_format($rate, fmod($rate, 1.0) == 0.0 ? 0 : 2) . '. Please check and submit again.']);   /* = usep_peso() */
         }
 
         $office = office_by_id($room['venue_id']);

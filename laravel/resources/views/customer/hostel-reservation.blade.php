@@ -562,6 +562,7 @@ async function submitRequest(){
   })));
   fd.append('affiliated', state.affiliated ? '1' : '0');
   fd.append('agree_no_refund', state.agreeNoRefund ? '1' : '0');
+  fd.append('shown_rate', String(roomRate(getRoom())));   /* a price changed meanwhile is refused (409 price_changed) */
   /* COUNTER: who it is for travels with the stay, and no ID file does — the
      server re-checks every one of these (admin/booking-create.php).
      PAY TO USE: the stay is only recorded once the cash is in hand, so staff
@@ -586,7 +587,7 @@ async function submitRequest(){
   try{
     const res = await fetch(COUNTER ? '{{ route('admin.booking-create') }}' : '{{ route('customer.booking-submit') }}', { method:'POST', body:fd, credentials:'same-origin' });
     const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
-    if(!out.ok){ submitting=false; state.submitError = out.message || 'Your booking was not submitted.'; render(); return; }
+    if(!out.ok){ submitting=false; if(out.room) Object.assign(getRoom(), out.room); state.submitError = out.message || 'Your booking was not submitted.'; render(); return; }
     state.reference = out.reference;          /* the database owns booking identity */
     state.bookingDbId = out.bookingId;
     state.submitError = null;

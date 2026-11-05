@@ -856,6 +856,7 @@ async function submitRequest(){
   fd.append('affiliated', state.affiliated ? '1' : '0');
   fd.append('method', state.payMethod);
   fd.append('agree_no_refund', state.agreeNoRefund ? '1' : '0');
+  fd.append('shown_rate', String(getRoom().fee));   /* a price changed meanwhile is refused (409 price_changed) */
 
   /* COUNTER: who it is for travels with the booking, and no ID file does. The
      server re-checks every one of these — that the customer id exists, that
@@ -879,6 +880,7 @@ async function submitRequest(){
     const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
     if(!out.ok){
       submitting = false;
+      if(out.room) Object.assign(getRoom(), out.room);   /* price_changed: redraw with the room as it is now */
       state.submitError = out.message || 'Your booking was not submitted.';
       render();
       return;

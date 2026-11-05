@@ -95,6 +95,13 @@ export default {
       await page.getByText('Not affiliated', { exact: true }).click();
       await page.locator('#idFileInput').setInputFiles(await ctx.fixtures.idImage(s.name));
       await expect.text(page, 'Reviewed by staff together with your reservation');
+      // the price changed while the customer was booking (stood in for by an older
+      // fee on the page): refused, and the page redraws with the room's real fee
+      const fee = Number((await dbOne(`SELECT e.fee_per_day AS f FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = ?`, [ROOM_CODE])).f);
+      await page.evaluate(() => { getRoom().fee -= 100; render(); });
+      await page.getByRole('button', { name: 'Submit booking request' }).click();
+      await expect.text(page, /The price of .+ changed to ₱[\d,.]+\. Please check and submit again\./);
+      expect.equal(await page.evaluate(() => getRoom().fee), fee, 'the page did not take the new fee');
       await page.getByRole('button', { name: 'Submit booking request' }).click();
       await expect.text(page, 'Request submitted — awaiting approval', 30_000);
       const refCell = page.locator('div', { hasText: /^Reference$/ }).locator('xpath=following-sibling::div[1]').first();

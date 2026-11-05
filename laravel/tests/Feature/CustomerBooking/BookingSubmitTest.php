@@ -222,6 +222,49 @@ class BookingSubmitTest extends TestCase
         $this->assertSame($before, DB::table('bookings')->count());
     }
 
+    /* The page sends the rate it showed; a price changed while the customer was
+       booking is refused with the room as it is now, and nothing is saved (2026-11-05). */
+    public function test_a_venue_price_changed_while_booking_is_refused_with_the_new_room(): void
+    {
+        $before = DB::table('bookings')->count();
+        $fee = (float) DB::selectOne("SELECT e.fee_per_day FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = 'r5'")->fee_per_day;
+        $name = DB::table('rooms')->where('room_code', 'r5')->value('name');
+        $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost(['shown_rate' => (string) ($fee - 100)]))
+            ->assertStatus(409)->assertExactJson(['ok' => false, 'error' => 'price_changed',
+                'message' => 'The price of ' . $name . ' changed to ₱' . number_format($fee, fmod($fee, 1.0) == 0.0 ? 0 : 2) . '. Please check and submit again.',
+                'room' => ['id' => 'r5', 'name' => $name, 'fee' => $fee,
+                    'capacity' => (int) DB::selectOne("SELECT e.attendee_capacity c FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = 'r5'")->c]]);
+        $this->assertSame($before, DB::table('bookings')->count());
+
+        /* the price it showed is the price now: booked */
+        $res = $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost(['shown_rate' => (string) $fee]))->assertOk();
+        $this->made[] = $res->json('bookingId');
+    }
+
+    public function test_a_hostel_price_changed_while_booking_is_refused_with_the_new_room(): void
+    {
+        $before = DB::table('bookings')->count();
+        $rate = (float) DB::table('hostel_room_details')->where('room_id', 9)->value('rate_per_head_per_night');
+        $res = $this->asCustomer()->post(route('customer.booking-submit'), $this->hostelPost(['shown_rate' => (string) ($rate + 50)]))
+            ->assertStatus(409)->assertJson(['ok' => false, 'error' => 'price_changed', 'room' => ['id' => 'h1', 'rate' => $rate]]);
+        $this->assertStringContainsString('changed to ₱' . number_format($rate, fmod($rate, 1.0) == 0.0 ? 0 : 2) . '. Please check and submit again.', $res->json('message'));
+        $this->assertSame((int) DB::table('hostel_beds')->where('room_id', 9)->where('is_active', 1)->count(), $res->json('room.beds'));
+        $this->assertSame($before, DB::table('bookings')->count());
+    }
+
+    public function test_a_room_closed_while_booking_is_a_409_that_says_so(): void
+    {
+        $name = DB::table('rooms')->where('room_code', 'r5')->value('name');
+        DB::update("UPDATE rooms SET is_active = 0 WHERE room_code = 'r5'");
+        try {
+            $this->asCustomer()->post(route('customer.booking-submit'), $this->venuePost())
+                ->assertStatus(409)->assertExactJson(['ok' => false, 'error' => 'room_changed', 'room' => null,
+                    'message' => $name . ' was closed for booking while you were booking. Please pick another room.']);
+        } finally {
+            DB::update("UPDATE rooms SET is_active = 1 WHERE room_code = 'r5'");
+        }
+    }
+
     public function test_a_hostel_stay_assigns_one_bed_per_guest_per_night(): void
     {
         $in  = date('Y-m-d', strtotime('+1 day'));

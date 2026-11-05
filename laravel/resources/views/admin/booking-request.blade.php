@@ -610,7 +610,7 @@
             + `<div class="br-fld"><label for="xRef">Cashier reference</label><input id="xRef"></div><div class="br-fld"><label for="xOn">Date returned</label><input id="xOn" type="date"></div><div class="br-fld"><label for="xFile">Proof from the Cashier</label><input id="xFile" type="file" accept="image/*,application/pdf"></div>`],
           reverse_payment: ['Reverse this payment', 'Check the office\'s GCash app first. The payment is rejected, the System Receipt becomes VOID, and the customer gets 48 hours to pay.',
             sel({ fake: 'Fake receipt', wrong: 'Recorded on the wrong booking', never: 'The money never arrived', other: 'Other' }) + note('Note (at least 10 characters)')
-            + `<div class="br-fld"><label for="xPass">Your password</label><input id="xPass" type="password" autocomplete="current-password"></div>`],
+            + `<div class="br-fld"><label for="xPass">Your password</label><span class="vz-pw"><input id="xPass" type="password" autocomplete="current-password">${venusepEye}</span></div>`],
         }[cur.xMode];
         return `<div class="br-ovr" style="margin-top:0.9rem;text-align:left">
             <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">${P[0]}</div>

@@ -60,6 +60,7 @@ export default {
       await page.locator('#xSend').click();
       await expect.text(page, 'Enter your password to confirm.');
       await page.locator('#xPass').fill('not-the-password');
+      await expect.eye(page.locator('#xPass'));
       await page.locator('#xSend').click();
       await expect.text(page, /Wrong password\. \d+ attempt\(s\) left/);
       const b = await booking(s.paid.id);

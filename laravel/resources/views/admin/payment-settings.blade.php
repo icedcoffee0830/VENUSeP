@@ -7,6 +7,8 @@
 @push('head')
     <!-- shared VENUSeP modal: the password re-entry for a GCash account change -->
     <link rel="stylesheet" href="{{ asset('assets/css/confirm-modal.css') }}" />
+    {{-- in the head: the refund-switch script below the form needs venusepEye --}}
+    <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
 @endpush
 
 @push('styles')
@@ -293,7 +295,7 @@
           <div class="rs-modal-body">
             <ul class="rs-list" id="rsModalList"></ul>
             <label class="rs-pw-label" for="rsPassword">Enter your admin password to confirm</label>
-            <input class="ps-control" type="password" id="rsPassword" autocomplete="current-password" />
+            <span class="vz-pw"><input class="ps-control" type="password" id="rsPassword" autocomplete="current-password" /></span>
             <div class="rs-msg" id="rsMsg" role="alert" hidden></div>
           </div>
           <div class="rs-modal-foot">
@@ -324,6 +326,8 @@
         const list = document.getElementById('rsModalList');
         const form = document.getElementById('rsForm');
         const pw = document.getElementById('rsPassword');
+        pw.insertAdjacentHTML('afterend', venusepEye);
+        const hidePw = function () { if (pw.type !== 'password') pw.nextElementSibling.click(); };
         const msg = document.getElementById('rsMsg');
         const confirmBtn = document.getElementById('rsConfirm');
 
@@ -385,7 +389,7 @@
         }
         function close() {
           if (busy) return;
-          modal.hidden = true; pw.value = ''; hideMsg();
+          modal.hidden = true; pw.value = ''; hidePw(); hideMsg();
           if (openBtn) openBtn.focus();
         }
 
@@ -449,7 +453,6 @@
          only; nothing persists and no booking page is affected until
          includes/payment-settings.php is backed by a database.
          ============================================================ -->
-    <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
     <script>
       /* The checker compares DIGITS, never the pretty form — so a number is
          valid on its digits alone. 11 digits starting 09 is the PH mobile

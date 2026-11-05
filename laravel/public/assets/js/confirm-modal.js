@@ -21,7 +21,11 @@
      value on OK (or Enter), null on Cancel / Escape / click outside.
      opts.inputType:'password' hides what is typed, which prompt() never
      could: an admin re-entering a password at the payment settings had it
-     shown on screen (2026-10-27).
+     shown on screen (2026-10-27). It carries the show-password eye.
+
+   window.venusepEye: the eye's button, for a password box outside these
+     dialogs: <span class="vz-pw"><input type="password">venusepEye</span>.
+     One click handler below serves every eye on the page.
 
    opts: { title, okLabel, cancelLabel, danger,
            inputType, label, placeholder, autocomplete }   (the last four: prompt only)
@@ -39,6 +43,19 @@
     warning:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
   };
+
+  /* the sign-in page's eye; every page that asks for a password loads Bootstrap Icons */
+  window.venusepEye = '<button class="vz-eye" type="button" data-vz-eye aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>';
+  document.addEventListener('click', function (e) {
+    var eye = e.target.closest && e.target.closest('[data-vz-eye]');
+    if (!eye) return;
+    var input = eye.previousElementSibling;
+    var show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    eye.setAttribute('aria-pressed', show ? 'true' : 'false');
+    eye.firstElementChild.className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+  });
 
   function escapeHtml(s) {
     var d = document.createElement('div');
@@ -59,8 +76,10 @@
     var field = mode === 'prompt'
       ? '<div class="vz-modal-field">' +
           (opts.label ? '<label class="vz-modal-label" for="vzPromptInput">' + escapeHtml(opts.label) + '</label>' : '') +
+          (opts.inputType === 'password' ? '<span class="vz-pw">' : '') +
           '<input class="vz-modal-input" id="vzPromptInput" data-vz="input" type="' + (opts.inputType === 'password' ? 'password' : 'text') + '"' +
           ' placeholder="' + escapeHtml(opts.placeholder || '') + '" autocomplete="' + escapeHtml(opts.autocomplete || 'off') + '">' +
+          (opts.inputType === 'password' ? window.venusepEye + '</span>' : '') +
         '</div>'
       : '';
 

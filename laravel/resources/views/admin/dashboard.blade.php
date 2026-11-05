@@ -1009,6 +1009,7 @@ const RES = {
 };
 const PAY = {
   locked:      { t: 'Payment locked',              c: 'b-gray'  },
+  written_off: { t: 'Written off',                 c: 'b-gray'  },
   await_gcash: { t: 'Awaiting payment · GCash',    c: 'b-amber' },
   await_cash:  { t: 'Awaiting payment · Cash',     c: 'b-amber' },
   auto_pass:   { t: 'Receipt passed auto-check',   c: 'b-navy'  },

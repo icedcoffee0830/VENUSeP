@@ -142,7 +142,9 @@
          reservation status and payment status are SEPARATE badges. */
       /* Every reservation_statuses code, because the queue now renders whatever
          the database holds — an unmapped code used to crash the row builder. */
-      const RES = {
+      /* Every status the database knows comes first (status_badge_maps), so a new
+         status can never blank the list; the hand-written labels below win. */
+      const RES = Object.assign({!! json_encode(status_badge_maps()['res'], JSON_UNESCAPED_UNICODE) !!}, {
         pending:   { t: 'Pending review', c: 'b-amber' },
         approved:  { t: 'Approved',       c: 'b-green' },
         completed: { t: 'Completed',      c: 'b-navy'  },
@@ -152,9 +154,10 @@
         /* USeP closed the room while this booking was inside the closure. The
            customer is owed a replacement, a new date, or a non-deniable refund. */
         disrupted: { t: 'Room closed · action needed', c: 'b-red' },
-      };
-      const PAY = {
+      });
+      const PAY = Object.assign({!! json_encode(status_badge_maps()['pay'], JSON_UNESCAPED_UNICODE) !!}, {
         locked:      { t: 'Payment locked',              c: 'b-gray'  },
+        written_off: { t: 'Written off',                 c: 'b-gray'  },
         await_gcash: { t: 'Awaiting payment · GCash',    c: 'b-amber' },
         await_cash:  { t: 'Awaiting payment · Cash',     c: 'b-amber' },
         auto_pass:   { t: 'Receipt passed auto-check',   c: 'b-navy'  },
@@ -184,7 +187,10 @@
         refund_processing:{ t: 'Refund · processing',           c: 'b-navy'  },
         refunded:         { t: 'Refunded',                      c: 'b-gray'  },
         refund_denied:    { t: 'Refund denied',                 c: 'b-red'   },
-      };
+      });
+      /* A code neither list knows shows its own name: one odd row must never blank the page. */
+      function resBadge(code) { return RES[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
+      function payBadge(code) { return PAY[code] || { t: String(code || 'Unknown status'), c: 'b-gray' }; }
       /* THE QUEUE — real `bookings` rows, shaped in PHP above. This was a
          hand-written array of 15 invented requests; it is now whatever the
          database actually holds, so the customer side and this page can never
@@ -307,8 +313,8 @@
             <span><div class="r-id">${r.id}</div><div class="r-name">${esc(r.name)}${r.blocked ? ' <span class="br-badge b-red">Blocked</span>' : ''}</div><div class="r-sub">${esc(r.type)}${r.office ? ' · ' + esc(r.office) : ''}</div></span>
             <span class="hide-md"><div class="r-main">${esc(r.room)}</div><div class="r-sub">${esc(r.venue)}</div></span>
             <span class="hide-md r-main">${esc(r.dates)}</span>
-            <span class="hide-md"><span class="br-badge ${RES[r.res].c}">${RES[r.res].t}</span></span>
-            <span><span class="br-badge ${PAY[r.pay].c}">${r.pay === 'paid_cash' ? esc(r.payLabel) : PAY[r.pay].t}</span></span>
+            <span class="hide-md"><span class="br-badge ${resBadge(r.res).c}">${esc(resBadge(r.res).t)}</span></span>
+            <span><span class="br-badge ${payBadge(r.pay).c}">${r.pay === 'paid_cash' ? esc(r.payLabel) : esc(payBadge(r.pay).t)}</span></span>
             <span class="hide-md r-act ${r.cls}">${esc(actLabel(r))}</span>
             <span class="r-chev">&rsaquo;</span>
           </a>`).join('') || '<div style="padding:1.2rem;color:#8a857d;font-size:.85rem">No requests match.</div>';

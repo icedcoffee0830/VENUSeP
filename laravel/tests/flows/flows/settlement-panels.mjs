@@ -142,6 +142,22 @@ export default {
       expect.equal(await blocked(s.customer), 0, 'the Overdue block after the write-off');
     });
 
+    /* A written-off status once had no badge on the list, and drawing that one row blanked
+       the whole All tab. Search for it so its row is on the page being drawn. */
+    await step('Booking Management\'s All tab still draws, with the written-off row', async () => {
+      const page = s.admin;
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto(ctx.url('/admin/booking-requests'));
+      await page.locator('#brSearch').fill(refOf(s.a));
+      const row = page.locator('#brRows .br-row').filter({ hasText: refOf(s.a) });
+      await expect.visible(row, 'the written-off row on the All tab');
+      expect.equal(await row.locator('.br-badge', { hasText: 'Written off' }).count(), 1, 'its Written off badge');
+      await page.locator('#brSearch').fill('');
+      expect.ok(await page.locator('#brRows .br-row').count() > 0, 'the All tab drew rows');
+      expect.equal(errors.length, 0, 'page errors: ' + errors.join(' | '));
+    });
+
     await step('The admin declines another: still Overdue, the request is cleared, staff may ask again', async () => {
       await open(s.staff, refOf(s.b));
       await panel(s.staff, 'Request write-off');

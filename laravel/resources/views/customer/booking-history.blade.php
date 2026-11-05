@@ -164,6 +164,7 @@
 
               <nav class="booking-status-tabs" aria-label="Filter bookings by status" role="tablist">
                 <button class="booking-status-tab active" type="button" role="tab" aria-selected="true" data-booking-status="">All</button>
+                <button class="booking-status-tab" type="button" role="tab" aria-selected="false" data-booking-status="due">Due payments</button>
                 <button class="booking-status-tab" type="button" role="tab" aria-selected="false" data-booking-status="Approved">Approved</button>
                 <button class="booking-status-tab" type="button" role="tab" aria-selected="false" data-booking-status="Completed">Completed</button>
                 <button class="booking-status-tab" type="button" role="tab" aria-selected="false" data-booking-status="Rejected">Rejected</button>
@@ -230,6 +231,7 @@
                           data-amount="{{ $booking['amountValue'] }}"
                           data-payment-status="{{ $booking['paymentStatus'] }}"
                           data-status="{{ $booking['bookingStatus'] }}"
+                          data-due="{{ $booking['reservationCode'] !== \App\Support\Status::CANCELLED && in_array($booking['paymentCode'], \App\Support\Status::PAYMENT_DUE, true) ? '1' : '' }}"
                         >
                           <td class="booking-id" data-label="Booking"><strong>{{ $booking['bookingId'] }}</strong></td>
                           <td data-label="Venue">{{ $booking['venue'] }}</td>
@@ -386,7 +388,7 @@
           const venue = venueFilter.value, dateFrom = dateFromFilter.value, dateTo = dateToFilter.value;
           filteredRows = sortRows(rows.filter(function (row) {
             const searchable = [row.dataset.bookingId, row.dataset.venue, row.dataset.eventName].join(' ').toLowerCase();
-            return (!activeStatus || row.dataset.status === activeStatus)
+            return (!activeStatus || (activeStatus === 'due' ? row.dataset.due === '1' : row.dataset.status === activeStatus))
               && (!query || searchable.includes(query))
               && (!venue || row.dataset.venue === venue)
               && (!dateFrom || row.dataset.eventDate >= dateFrom)

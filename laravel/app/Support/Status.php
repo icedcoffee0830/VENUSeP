@@ -35,6 +35,9 @@ final class Status
        deadline, which puts it back here (Aron 2026-11-05). */
     public const PAY_OPEN = [self::AWAIT_GCASH, self::AWAIT_CASH];
 
+    /* Booking History's "Due payments" tab: awaiting payment (as Booking Management's tab counts it) + overdue. */
+    public const PAYMENT_DUE = [self::AWAIT_GCASH, self::AWAIT_CASH, self::AWAIT_POS, self::OVERDUE];
+
     /* A booking that owes nothing yet. */
     public const UNPAID = [self::LOCKED, self::AWAIT_EVENT, self::AWAIT_GCASH, self::AWAIT_CASH, self::AWAIT_POS];
 

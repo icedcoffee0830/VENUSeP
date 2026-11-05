@@ -771,3 +771,158 @@ starts.
 
 ## Offices run separately (2026-11-01, migration 16)
 Each `venues` row has its own hours, closed days, closures, discount, grace days, lead time and cleanup gap. This replaces the single `discount_percent` and `postpay_grace_days` settings (the rows stay, unused, as the seed values). Bookings keep the rate shown when booked (`quoted_discount_percent`) and take the discount at approval from it. A deadline never lands on a day its office is closed. Paid and finished bookings become Completed in `sp_expire_due_bookings`. Demo mode is removed.
+
+## 28. Roles and offices — decided 2026-11-04
+Agreed with Aron on 2026-11-03 and 2026-11-04.
+
+**Offices and groups**
+- There are **three fixed offices**: Bahay Alumni, USeP Venues and USeP Hostel. Nobody
+  can add an office.
+- The offices form **two groups**:
+  - Bahay Alumni;
+  - USeP CEDU, which is USeP Venues and USeP Hostel together.
+- USeP Venues and USeP Hostel keep separate records. They only share their group's admins.
+- Admins add, edit and close the halls and rooms inside their own offices.
+
+**Three roles**
+- **Super admin:** exactly one. Sees everything. Handles the technical side, and also
+  does daily admin work (approving bookings and so on).
+- **Normal admin:** belongs to exactly one group, always. Sees only that group.
+- **Staff:** sees their own office. A CEDU staff member can be ticked for both Venues
+  and Hostel; that is set per person, and only inside CEDU.
+- Two-step verification is required for the super admin and normal admins. Staff are
+  still excluded (as in #20).
+
+**Who is told, and who sees logs**
+- Booking notifications go to the office's staff and the group's normal admin. **Never
+  to the super admin**, who gets only system-level notifications.
+- Activity logs: super admin only.
+- A booking's own History stays visible to normal admins and staff on their own bookings.
+
+**Who may do what**
+
+| Task | Super admin | Normal admin | Staff |
+|---|---|---|---|
+| Office settings, discount, office contact info | every office | own offices | no |
+| GCash accounts (one per office: Venues and Hostel have different numbers) | no | own offices | no |
+| Refund switch (one per office) | yes | no | no |
+| Backup and restore | yes | no | no |
+| Create admins | yes | no | no |
+| Create staff (no approval step) | any office | own offices | no |
+| Reset passwords | any admin or staff | staff in own offices | no |
+| Suspend accounts | any admin or staff | staff in own offices; never another admin | no |
+| Move staff | anywhere | CEDU admin: between Venues and Hostel only | no |
+| Block a customer at an office | yes | own group's offices | no |
+| Suspend a customer account completely | yes | no | no |
+
+- Nobody resets the super admin's password inside the system: it uses Forgot password.
+
+**Handing over the super admin**
+- The super admin picks an existing normal admin, retypes their own password and writes
+  a reason.
+- In that one step the normal admin becomes super admin and the old super admin is
+  suspended. The old account is never deleted and never becomes a normal admin.
+- Both are emailed. It cannot be undone.
+- A group left without a normal admin is covered by the super admin.
+- At go-live the super admin should use an office email address. phpMyAdmin is the last
+  resort; the steps go in the printed notes.
+
+**Starting accounts**
+- `admin@gmail.com`: super admin.
+- Francis: Bahay Alumni normal admin.
+- A dummy "CEDU Admin", `cedu.admin@gmail.com`: CEDU normal admin.
+- Any other admin accounts are listed for Aron to decide.
+
+**Forgot password**
+- An emailed reset link for everyone, the super admin included, using the customer's flow:
+  - the link lasts 30 minutes and works once;
+  - it signs out the account's other devices;
+  - it does not sign the person in, and two-step verification is still asked.
+- The emails are real.
+
+**Customers**
+- One shared customer record across all offices.
+- **Only the customer edits their own details.** No admin or staff edits them.
+- Customers page: a normal admin sees only customers who booked in their group; the super
+  admin sees all.
+- **Counter search finds any customer**, so nobody gets a second account:
+  - exact email or mobile number, or a name of 3 letters or more;
+  - about 10 results at most;
+  - email and phone are partly hidden;
+  - nothing from another office is shown;
+  - searches are not logged.
+- **Creating an account at the counter:**
+  - an email that already has an account is refused: "already has an account, search
+    instead";
+  - a mobile number someone else uses is only a warning;
+  - a likely typo in the email's domain gets a suggestion (gmail, yahoo, outlook,
+    hotmail, usep.edu.ph);
+  - the confirm step shows the email large, with "read it back to the customer".
+- **Fixing a wrong email:**
+  - any normal admin of the group whose counter created the account (for CEDU, either
+    counter);
+  - only if the customer never signed in and it is not a Google account;
+  - the reason is recorded, and the welcome email goes to the corrected address.
+- A customer with no password (a Google account) at the counter: staff tick "ID
+  checked", and that is recorded on the booking.
+
+**Blocking a customer (per office, not the whole account)**
+- A blocked customer can still sign in and see everything, but cannot make new bookings at
+  that office, online or at the counter.
+- Blocking and unblocking: that office's group normal admin, or the super admin. A reason
+  is required and recorded.
+- The customer sees: "You can't make new bookings at [office] right now. Please contact
+  the office", with the office's phone, email, location and hours. **The reason is never
+  shown to them.**
+- At the counter, staff see "Blocked at this office". Other offices see nothing.
+- Staff cannot approve a blocked customer's request. Lists show a "Blocked" badge.
+- Bookings already approved are not touched.
+- A pending request still blocked when its start time comes is cancelled automatically:
+  status cancelled, a History note saying why, and an email with the office's contact
+  info (no reason).
+- Pending requests may already close by themselves at their start time: check that, and
+  reuse it.
+- Full suspension (cannot sign in) is the super admin's only, for fake, spam or fraud
+  accounts.
+
+**Office contact info**
+- Each office has its own phone, email and location in Office Settings. Its hours come
+  from the existing opening and closing times.
+- Used in the block message, in that office's emails to customers, and on the public page
+  (in place of the one site-wide footer).
+
+**Refund switch per office (super admin only)**
+- Bahay Alumni and USeP Venues: on = pay before the event, refunds allowed; off = pay
+  after the event, no refunds.
+- USeP Hostel always pays before the stay. Its switch only turns refunds on or off.
+  Settings show "Payment: always before the stay (fixed)".
+- Each booking keeps the rule it was made under (a snapshot, as in #16 and #18).
+- The public "How it works" step 4 and the FAQ describe each office's rule.
+
+**Counter mode (walk-in bookings)**
+- Staff: their own office or offices. CEDU normal admin: Venues and Hostel. Bahay Alumni
+  normal admin: Bahay Alumni. Super admin: all.
+- No office yet: "You have no office yet. Ask an admin to assign one."
+- Opening another office's booking page directly is refused straight away.
+
+**Reports**
+- One page and one set of queries. The office filter is a plain WHERE in the query file,
+  not a database view.
+- An office toggle on the Reports page only:
+  - super admin: Bahay Alumni, Venues, Hostel, CEDU (both) or All;
+  - CEDU normal admin and two-office staff: Venues, Hostel or Both;
+  - Bahay Alumni normal admin and one-office staff: no toggle.
+- Staff see their whole office's report, money included, and can print it.
+- Sections:
+  - shared: bookings, revenue, discounts, refunds, cancellations, write-offs;
+  - venues only: events by hall, days and hours;
+  - hostel only: bed-nights, occupancy, bathroom types.
+- A customer is counted once in a combined report (one line on the printout).
+- The toggle is its own small included file. The teammate owns only the printout header.
+- Other admin pages have no toggle. For the super admin and the CEDU normal admin, their
+  lists are mixed, with an office label on each row.
+
+**Google sign-in**
+- One address everywhere. A small safety net in the code: if sign-in starts on a different
+  host, it first moves to the configured one.
+- Aron checks the Google Cloud redirect addresses and the publishing status himself.

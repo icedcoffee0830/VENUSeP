@@ -179,7 +179,7 @@ class StaffHallsTest extends TestCase
         [$id, $ref] = $this->seedVenueBooking('r1');
         $day = now()->addHours(10);
         DB::table('venue_booking_details')->where('booking_id', $id)->update(['start_date' => $day->toDateString(), 'end_date' => $day->toDateString()]);
-        DB::table('venue_booking_slots')->where('booking_id', $id)->update(['slot_date' => $day->toDateString(), 'start_time' => $day->format('H:i:s')]);
+        DB::table('venue_booking_slots')->where('booking_id', $id)->update(['slot_date' => $day->toDateString(), 'start_time' => $day->format('H:i:s'), 'end_time' => '23:59:59']);
         try {
             legacy('notifications');
             $mine = array_column(notif_reminders(DB::connection()->getPdo(), [self::BAHAY], false, $on->id), 'text');

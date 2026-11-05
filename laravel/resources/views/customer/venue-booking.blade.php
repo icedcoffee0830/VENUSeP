@@ -530,7 +530,7 @@
           <span class="lp-step-n">4</span>
           {{-- each office's own rule: its refund switch also sets a venue's payment timing (DB-DECISIONS #18, 28) --}}
           <h3>Pay when your office asks</h3>
-          <p>GCash or over the counter.@foreach ($lpOffices as $o)<br><strong>{{ $o['name'] }}:</strong> {{ $o['type'] === 'hostel' ? 'before your stay, by your check-in day' : ($o['refunds'] ? 'before your event, at least one day ahead' : 'after your event, by the day after it') }}.@endforeach</p>
+          <p>GCash or over the counter.@foreach ($lpOffices as $o)<br><strong>{{ $o['name'] }}:</strong> {{ ['pay_to_use' => 'before your stay, by your check-in day', 'prepay' => 'before your event, at least one day ahead', 'postpay' => 'after your event, by the day after it'][office_payment_policy($o)] }}.@endforeach</p>
         </div>
       </div>
     </div>

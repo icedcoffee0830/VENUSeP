@@ -32,6 +32,14 @@ require_once __DIR__ . '/offices.php';
    about no one office: those pages (the public page, the FAQ) describe each office's rule. */
 $REFUNDS_ENABLED = (office_page()['refunds'] ?? false);
 
+/* When a NEW booking at this office is paid, by payment_policy_for()'s names (and
+   v_booking_summary.payment_policy): the hostel is always pay to use (#26), a venue
+   follows its office's switch (#18). */
+function office_payment_policy(array $office): string
+{
+    return $office['type'] === 'hostel' ? 'pay_to_use' : ($office['refunds'] ? 'prepay' : 'postpay');
+}
+
 /* =====================================================================
    PAYMENT TIMING (DB-DECISIONS #18, 2026-09-17) — the office's switch also decides
    WHEN a venue booking is paid, and a booking keeps the policy it was made under

@@ -605,3 +605,40 @@ Migration 17 is still not on the real DB; the additions are in the same file, sa
   customer_office_blocks...) kept the previous run's rows, which broke a second run of `office-block`.
 - Not done: walk-ins (no account) cannot be blocked (there is no record to block; a new customer
   row each visit). No notification bell entry for a block.
+
+### 14e. Phase F (2026-11-05): refund switch per office (migration 17 grew)
+Migration 17 is still not on the real DB; the addition is in the same file, safe to re-run (the
+test/flows snapshot is again `.before-m17` + the new migration 17).
+- **Schema:** `venues.refunds_enabled` (default off). The first run copies the old site-wide
+  `system_settings.refunds_enabled` into every office, so nothing changes on day one; a re-run never
+  overwrites a later change. The old row stays (its description says "No longer read").
+  No booking backfill: bookings already store their rule since #16 / #26 (`refunds_allowed`,
+  `pay_to_use`), so a backfill from today's value would have taken refunds away from bookings made
+  while it was on.
+- **Rule:** Bahay Alumni and USeP Venues: on = pay before + refunds, off = pay after + no refunds.
+  USeP Hostel always pays before (`pay_to_use`, unchanged); its switch is refunds only.
+- **One place:** `office_all()['refunds']` (offices.php). `$REFUNDS_ENABLED` (refund-policy.php) is now
+  the switch of the page's office (`office_page()`, the booking pages); off on a page about no office.
+  `office_payment_policy()` (same file) is the one copy of "hostel always before, a venue follows its
+  switch" for the pages. `refunds_enabled()` and `refund_setting_details()` are gone. New bookings snapshot their office's
+  switch: `BookingSubmitController` (online) and `BookingCreateController` (counter). Every read of an
+  existing booking already used its snapshot (refund request, staff actions, emails, procedures).
+- **Payment Settings:** one row per office (the ones the viewer sees), each with its pill, its rule
+  ("Payment: always before the stay (fixed)." on the hostel row), last change, and for the super
+  admin only a button. Same modal and re-type-password guard, per office. `RefundSwitchController`
+  takes `venue_id`; the change is logged in `venue_settings_history` (field `refunds`), so Office
+  Settings history and Activity show it.
+- **Public page:** "How it works" step 4 has one line per office; the refund card says the one rule
+  when the offices agree, else "Refunds depend on the office." and names them. **FAQ:** the
+  "After you book" section opens with each office's rule; a refunds-ON/OFF question shows while an
+  office it is about is in that state (`faq_row_for`, faqs.php: hostel section = the hostel, booking
+  and cash = the event offices, the rest = all), tagged with the office names when the offices
+  differ. Admin FAQ preview: "Live now" per office; starts on Everything while they differ.
+- **Flows:** a flow's `settings: { refunds_enabled }` sets every office (FlowsDb). The
+  refund-and-rejection flow turns Bahay Alumni on in the UI and checks the other offices stay off.
+- Tests: `AdminSettings/RefundSwitchPerOfficeTest` (per-office timing, hostel fixed pay-before,
+  super-admin only, snapshot kept after a flip, public page and FAQ per office), updated
+  `PaymentSettingsTest` and `PostPayDayAfterTest`.
+- Note: the Payment Settings text still says closures by USeP are "offered ... or their money back"
+  (unchanged wording); memory venusep-refund-policy says with the switch off nothing is refundable,
+  a closure included. Left as is: not part of this phase.

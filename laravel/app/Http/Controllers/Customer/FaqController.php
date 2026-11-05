@@ -42,7 +42,7 @@ class FaqController
                 $html .= '<p class="fq-a fq-rules">Each office sets its own rule for new bookings:</p><div class="fq-a"><ul>';
                 foreach ($fqOffices as $o) {
                     $html .= '<li><strong>' . e($o['name']) . ':</strong> '
-                           . ($o['type'] === 'hostel' ? 'paid before your stay' : ($o['refunds'] ? 'paid before your event' : 'paid after your event'))
+                           . ['pay_to_use' => 'paid before your stay', 'prepay' => 'paid before your event', 'postpay' => 'paid after your event'][office_payment_policy($o)]
                            . ($o['refunds'] ? ', and you can ask for a refund.' : ', and non-refundable.') . '</li>';
                 }
                 $html .= '</ul></div>';

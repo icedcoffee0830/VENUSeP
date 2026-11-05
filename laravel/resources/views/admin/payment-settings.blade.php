@@ -198,13 +198,11 @@
                         <strong>New {{ $hostel ? 'stays' : 'bookings' }} are non-refundable.</strong> Customers confirm this before they book.
                       @endif
                       <br>
-                      @if ($hostel)
-                        Payment: always before the stay (fixed).
-                      @elseif ($o['refunds'])
-                        Payment: <strong>before the event</strong>, after approval, by the day before.
-                      @else
-                        Payment: <strong>after the event</strong>, due the day after the last booked day; overdue after {{ $o['grace'] }} days, nothing is released.
-                      @endif
+                      @switch (office_payment_policy($o))
+                        @case ('pay_to_use') Payment: always before the stay (fixed). @break
+                        @case ('prepay') Payment: <strong>before the event</strong>, after approval, by the day before. @break
+                        @default Payment: <strong>after the event</strong>, due the day after the last booked day; overdue after {{ $o['grace'] }} days, nothing is released.
+                      @endswitch
                     </p>
                     <div class="rs-meta">
                       @if ($o['last'])

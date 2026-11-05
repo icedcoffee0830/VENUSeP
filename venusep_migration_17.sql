@@ -1,12 +1,22 @@
 -- ============================================================================
 --  VENUSeP — MIGRATION 17: roles and offices (decided 2026-11-04, DB-DECISIONS 28).
---  Run against an EXISTING venusep database, after 16. Safe to re-run
+--  Run against the EXISTING database your site uses, after 16. Safe to re-run
 --  (idempotent): an account an admin has changed since is never overwritten.
 --
---      Windows (cmd, not PowerShell):
---          C:\xampp\mysql\bin\mysql.exe -u root venusep < venusep_migration_17.sql
+--  THE DATABASE NAME in these commands must be the one your site uses: DB_DATABASE in
+--  laravel\.env. Aron's site uses venusep_laravel, not venusep; a build from SETUP.md
+--  uses venusep. XAMPP installed somewhere else means another path to mysql.exe.
 --
---  It ends by listing every admin with its role, so check that list.
+--      Windows (cmd, not PowerShell), from the folder that holds this file:
+--          C:\xamp5\mysql\bin\mysqldump.exe -u root --routines --triggers --events --single-transaction venusep_laravel > %USERPROFILE%\venusep_laravel_before_m17.sql
+--          C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_17.sql
+--
+--  It ends by listing every admin with its role, then one line that must read
+--  "OK: exactly one super admin", then any office with no group (there should be
+--  none). If it says NONE (admin@gmail.com missing or suspended), pick the super
+--  admin by hand:
+--      UPDATE users SET is_super_admin = 1, office_group = NULL
+--       WHERE email = '<that admin>' AND account_type = 'admin' AND is_active = 1;
 --
 --  WHAT CHANGES
 --    Offices: each office belongs to a group (venues.office_group):
@@ -50,7 +60,11 @@
 --        up two-step verification at first sign-in, like every admin.
 --      Any other admin keeps no group (sees nothing) until Aron decides.
 --
---  ROLLBACK: restore the backup taken before running this. Or, by hand:
+--  ROLLBACK: restore the backup taken before running this, into an emptied database
+--  (the backup does not drop the tables and function this migration adds):
+--      C:\xamp5\mysql\bin\mysql.exe -u root -e "DROP DATABASE venusep_laravel; CREATE DATABASE venusep_laravel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+--      C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < %USERPROFILE%\venusep_laravel_before_m17.sql
+--  Or, by hand:
 --      ALTER TABLE users DROP CONSTRAINT chk_users_super_admin, DROP CONSTRAINT chk_users_office_group,
 --          DROP INDEX uq_users_one_super_admin, DROP COLUMN super_admin_marker,
 --          DROP COLUMN is_super_admin, DROP COLUMN office_group, DROP COLUMN handed_over_at;
@@ -303,3 +317,8 @@ SELECT u.email,
   FROM users u
  WHERE u.account_type = 'admin'
  ORDER BY u.is_super_admin DESC, u.office_group, u.email;
+
+SELECT IF(COUNT(*) = 1, 'OK: exactly one super admin', 'NONE: no super admin, see the notes at the top') AS super_admin_check
+  FROM users WHERE is_super_admin = 1;
+
+SELECT name AS office_with_no_group FROM venues WHERE office_group IS NULL;

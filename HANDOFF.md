@@ -495,8 +495,10 @@ What it did:
 ## 14. 2026-11-04 night — roles foundation (branch `roles`, migration 17)
 
 Built from DB-DECISIONS section 28. **Migration 17 is NOT on the real `venusep` DB yet**: Aron runs
-`C:\xampp\mysql\bin\mysql.exe -u root venusep < venusep_migration_17.sql` in cmd, after a backup. It
-ends by listing every admin and its role. Applied to the test/flows snapshot
+`C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_17.sql` in cmd, after a backup
+(the `mysqldump.exe` line in the migration's header). **The database name must be the one the site uses
+(`DB_DATABASE` in `laravel\.env`): Aron's site uses `venusep_laravel`, not `venusep`.** It ends by listing
+every admin and its role, then "OK: exactly one super admin", then any office with no group. Applied to the test/flows snapshot
 (`_tools\venusep_snapshot.sql`, appended like migration 16; the copy before it is `.before-m17`).
 
 - **Schema:** `venues.office_group` (bahay_alumni | cedu); `users.is_super_admin` (one only:

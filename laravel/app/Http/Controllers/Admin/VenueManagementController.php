@@ -69,7 +69,7 @@ class VenueManagementController extends Controller
             $vmStaffByVenue[(int) $vmStaff['venue_id']][] = (string) $vmStaff['full_name'];
         }
 
-        return view('admin.venue-management', [
+        return live_view('admin.venue-management', [
             'TODAY' => date('Y-m-d'),
             'venues' => $venues,
             'rooms' => $venueRooms,   // the event rooms, same data the booking page shows
@@ -80,7 +80,6 @@ class VenueManagementController extends Controller
             'vmVenueRows' => $vmVenueRows,
             'vmStaffByVenue' => $vmStaffByVenue,
             'vmMyVenue' => $vmMyVenue,
-            'dcCsrf' => csrf_token(),
             'pricingScript' => $pricingScript,
         ]);
     }

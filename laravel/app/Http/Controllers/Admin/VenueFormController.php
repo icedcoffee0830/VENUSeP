@@ -51,7 +51,7 @@ class VenueFormController extends Controller
         $vfHere   = array_values(array_filter($vfStaff, function ($s) use ($venueId) { return $venueId && (int) $s['venue_id'] === $venueId; }));
         $vfOthers = array_values(array_filter($vfStaff, function ($s) use ($venueId) { return !$venueId || (int) $s['venue_id'] !== $venueId; }));
 
-        return view('admin.venue-form', [
+        return live_view('admin.venue-form', [
             'venueId' => $venueId,
             'venueFormRow' => $venueFormRow,
             'venueFormCsrf' => csrf_token(),

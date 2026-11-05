@@ -393,6 +393,8 @@ if (!function_exists('vf_initials')) {
         <!-- Assigned staff -->
         <p class="vm-staff-title">Assigned Staff</p>
         <p class="vm-staff-hint">Staff handle only their own venue's bookings, and each staff member belongs to exactly one venue. Adding someone here moves them from the venue they handle now.</p>
+        @fragment('vf-staff')
+        <div data-live="vf-staff">
         <div class="vm-staff-list" id="staffList">
           @if (!$vfHere)
             <div class="vm-staff-empty" id="staffEmpty">No staff handle this venue yet{{ $vfCanAssign ? ' — add someone below.' : '.' }}</div>
@@ -427,6 +429,8 @@ if (!function_exists('vf_initials')) {
           <button type="button" class="vm-picker-done" onclick="togglePicker()">Done</button>
         </div>
         @endif
+        </div>
+        @endfragment
 
         <div class="vm-form-foot">
           <a class="vm-btn vm-btn-outline" href="{{ route('admin.venue-management') }}">Cancel</a>
@@ -528,12 +532,11 @@ if (!function_exists('vf_initials')) {
           .then(vpParseApiResponse)
           .then(function (res) {
             if (!res.ok) { venusepAlert(res.message || 'Could not save the venue.'); return; }
-            /* move on only once OK is clicked — unlike alert(), the modal does
-               not block, and navigating at once wiped it off the screen */
             var movedLine = (res.moved && res.moved.length) ? '\n\n' + res.moved.join(', ') + (res.moved.length === 1 ? ' now handles ' : ' now handle ') + name + '.' : '';
-            venusepAlert('Venue saved.' + movedLine, { tone: 'ok', title: 'Saved' }).then(function () {
-              location.href = {!! json_encode(route('admin.venue-management')) !!};
-            });
+            /* the form stays: the queued moves are done, the staff lists come back from the server */
+            moves.forEach(function (id) { delete VP_MOVES[id]; });
+            Live.refresh();
+            venusepAlert('Venue saved.' + movedLine, { tone: 'ok', title: 'Saved' });
           })
           .catch(function (err) { venusepAlert(err && err.message ? err.message : 'Could not reach the server.'); });
       }

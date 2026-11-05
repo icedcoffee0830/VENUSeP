@@ -63,7 +63,8 @@ export default {
       await page.locator('#roomCap').fill(String(s.eventCap));
       await page.getByRole('button', { name: 'Save Changes' }).click();
       await modal(ctx, page, { expect: /Saved/ });
-      await expect.url(page, /\/admin\/venue-management/);
+      await expect.url(page, /room-form.id=/);   // an edit stays on the form
+      await page.goto(ctx.url('/admin/venue-management'));
 
       const after = await dbOne(`SELECT r.description, e.attendee_capacity FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = ?`, [EVENT_ROOM]);
       expect.equal(after.description, s.eventDesc, 'rooms.description');
@@ -89,7 +90,8 @@ export default {
       await page.locator('#roomCheckIn').fill('15:00');
       await page.getByRole('button', { name: 'Save Changes' }).click();
       await modal(ctx, page, { expect: /Saved/ });
-      await expect.url(page, /\/admin\/venue-management/);
+      await expect.url(page, /room-form.id=/);   // an edit stays on the form
+      await page.goto(ctx.url('/admin/venue-management'));
 
       const after = await dbOne(`SELECT r.description, h.check_in_time FROM rooms r JOIN hostel_room_details h ON h.room_id = r.id WHERE r.room_code = ?`, [HOSTEL_ROOM]);
       expect.equal(after.description, s.hostelDesc, 'rooms.description');

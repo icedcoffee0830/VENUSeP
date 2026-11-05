@@ -168,7 +168,8 @@
 
             <!-- REFUND REQUESTS — one switch per office, the super admin's only (DB-DECISIONS 28).
                  Everything shown here is re-checked by RefundSwitchController. -->
-            <section class="rs-card" id="rsCard" aria-labelledby="rsTitle">
+            @fragment('rs-card')
+            <section class="rs-card" id="rsCard" aria-labelledby="rsTitle" data-live="rs-card">
               @if ($rsJustSaved)
                 <div class="rs-flash" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>Saved. Refund requests at {{ $rsJustSaved['name'] }} are now {{ $rsJustSaved['refunds'] ? 'ON' : 'OFF' }}.</div>
               @endif
@@ -228,6 +229,7 @@
                 <li>Changing it needs your password, and every change is recorded in the office's settings history.</li>
               </ul>
             </section>
+            @endfragment
 
             <div class="ps-why">
               Each number below is used <strong>twice</strong>: the booking page tells the customer where to send the money, and the receipt checker verifies it landed there. Both read the same value, so they cannot drift apart — change it here and both move together. <strong>A wrong number does not fail loudly:</strong> the customer pays exactly what they were shown and every receipt is auto-rejected as “receiver mismatch”, which looks like the scanner is broken.
@@ -387,7 +389,8 @@
           if (openBtn) openBtn.focus();
         }
 
-        document.querySelectorAll('[data-rs-open]').forEach(function (b) { b.addEventListener('click', function () { open(b); }); });
+        /* on the document: the card and its buttons are redrawn after a change */
+        document.addEventListener('click', function (e) { const b = e.target.closest('[data-rs-open]'); if (b) open(b); });
         document.getElementById('rsCancel').addEventListener('click', close);
         modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) close(); });
@@ -408,7 +411,16 @@
             .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'Unexpected reply from the server.' }; }); })
             .then(function (res) {
               busy = false;
-              if (res.ok) { location.replace(@json(route('admin.payment-settings', ['refunds' => 'saved'])) + '&office=' + encodeURIComponent(office.id)); return; }
+              if (res.ok) {
+                /* the card again, with its Saved note; the address carries the note, as a page load did */
+                const url = @json(route('admin.payment-settings', ['refunds' => 'saved'])) + '&office=' + encodeURIComponent(office.id);
+                const id = office.id;
+                confirmBtn.disabled = false; pw.disabled = false;
+                history.replaceState(null, '', url);
+                close();
+                Live.refresh(url).then(function () { document.querySelector('[data-rs-open][data-venue="' + id + '"]').focus(); });
+                return;
+              }
               pw.value = '';
               if (res.error === 'locked') { startCountdown(res.seconds || 10); return; }
               confirmBtn.disabled = false; pw.disabled = false;

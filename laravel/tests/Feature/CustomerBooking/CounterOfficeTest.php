@@ -104,7 +104,7 @@ class CounterOfficeTest extends TestCase
         }
         $res->assertRedirect(route('customer.venues') . '?counter=1');
         $this->assertStringContainsString(
-            $role === 'no_office' ? 'You have no office yet' : 'is another office. At the counter you can book your own office',
+            $role === 'no_office' ? 'You have no office yet' : 'That room is not one you handle. At the counter you can book your own rooms only.',
             $this->get($res->headers->get('Location'))->getContent()
         );
     }

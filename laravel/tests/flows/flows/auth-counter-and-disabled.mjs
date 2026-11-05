@@ -103,7 +103,7 @@ export default {
 
       await page.goto(ctx.url(`/customer/hostel-reservation?room=${HOSTEL_ROOM}&counter=1`));
       await stillCounter(ctx, page, /\/customer\/venues\?counter=1$/);
-      await expect.text(page, 'USeP Hostel is another office');
+      await expect.text(page, 'That room is not one you handle');
       expect.equal(await page.locator('#hostel-listings').count(), 0, 'the hostel section on a Bahay Alumni counter');
       await expect.text(page, 'One place on campus');
       return page;

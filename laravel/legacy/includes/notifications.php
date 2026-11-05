@@ -37,12 +37,17 @@ function notify_new_request(PDO $pdo, int $bookingId, ?int $actorUserId): void
     $s->closeCursor();
 }
 
-/* A refund with a missing receipt waits for the group's normal admin to approve it. */
+/* Something only an admin decides (a refund with a missing receipt, a write-off) waits for
+   the group's normal admin; a group with no active normal admin is covered by the super
+   admin (DB-DECISIONS 28). The NOT EXISTS reads its own users u, not the outer one. */
 function notify_refund_needs_admin(PDO $pdo, int $bookingId, int $actorUserId, string $kind = 'refund_needs_admin'): void
 {
+    $group = sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId);
     $pdo->prepare(
         "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id)
-         SELECT u.id, :k, :b, :a FROM users u WHERE u.is_active = 1 AND u.id <> :a2 AND " . sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId)
+         SELECT u.id, :k, :b, :a FROM users u
+          WHERE u.is_active = 1 AND u.id <> :a2
+            AND (($group) OR (u.is_super_admin = 1 AND NOT EXISTS (SELECT 1 FROM users u WHERE u.is_active = 1 AND $group)))"
     )->execute([':k' => $kind, ':b' => $bookingId, ':a' => $actorUserId, ':a2' => $actorUserId]);
 }
 

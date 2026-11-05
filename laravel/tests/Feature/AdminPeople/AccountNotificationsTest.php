@@ -97,4 +97,23 @@ class AccountNotificationsTest extends TestCase
         notify_account_event(venusep_db(), 'account_created', $sa, ['email' => 'x@test.local', 'role' => 'staff'], [3]);
         $this->assertSame(['cedu.admin@gmail.com'], $this->told('account_created'));
     }
+
+    /* A request only an admin can decide (lost receipt, write-off) goes to the booking's
+       group's normal admin; with none active there, to the super admin instead (DB-DECISIONS 28). */
+    public function test_an_admin_request_goes_to_the_super_admin_when_the_group_has_no_active_admin(): void
+    {
+        legacy('db', 'notifications');
+        $booking = (int) DB::table('bookings as b')->join('rooms as r', 'r.id', '=', 'b.room_id')->where('r.venue_id', 1)->value('b.id');
+        $staff = (int) DB::table('users')->where('email', 'staff@gmail.com')->value('id');
+        notify_refund_needs_admin(venusep_db(), $booking, $staff, 'write_off_requested');
+        $this->assertSame(['francishubero@gmail.com'], $this->told('write_off_requested'));
+
+        DB::table('users')->where('email', 'francishubero@gmail.com')->update(['is_active' => 0]);
+        try {
+            notify_refund_needs_admin(venusep_db(), $booking, $staff);
+            $this->assertSame(['admin@gmail.com'], $this->told('refund_needs_admin'));
+        } finally {
+            DB::table('users')->where('email', 'francishubero@gmail.com')->update(['is_active' => 1]);
+        }
+    }
 }

@@ -60,16 +60,18 @@ class OfficeBlockHiddenTest extends TestCase
             ->assertSee('room-reservation?room=r1', false);
     }
 
-    /* Nothing left to list: the page still opens and the modal names all three. */
+    /* Nothing left to list: the page still opens, and the strip names all three on every load. */
     public function test_blocked_at_every_office_the_landing_page_still_opens(): void
     {
         foreach ([1, 2, 3] as $office) {
             $this->block($office);
         }
         $this->actingAsCustomer(self::EMAIL);
-        $this->landing()->assertSee("You can't book at Bahay Alumni right now.")->assertSee("You can't book at USeP Venues right now.")
-            ->assertSee("You can't book at USeP Hostel right now.")->assertDontSee('room-reservation?room=', false)
-            ->assertDontSee('hostel-reservation?room=', false);
+        foreach ([1, 2] as $visit) {
+            $this->landing()->assertSee("You can't book at Bahay Alumni right now.")->assertSee("You can't book at USeP Venues right now.")
+                ->assertSee("You can't book at USeP Hostel right now.")->assertDontSee('room-reservation?room=', false)
+                ->assertDontSee('hostel-reservation?room=', false);
+        }
     }
 
     public function test_more_rooms_on_another_offices_page_leaves_out_the_blocked_office(): void
@@ -91,19 +93,20 @@ class OfficeBlockHiddenTest extends TestCase
         }
     }
 
-    public function test_the_modal_shows_once_per_session_and_never_the_reason(): void
+    public function test_the_modal_shows_once_per_session_the_strip_every_load_and_never_the_reason(): void
     {
         $this->block(2);
         $this->actingAsCustomer(self::EMAIL);
         $this->landing()->assertSee(self::MODAL, false)->assertSee("You can't book at USeP Venues right now. Please contact the office.")
             ->assertSee('usep.venues@example.com')->assertDontSee('Secret reason');
-        $this->landing()->assertDontSee(self::MODAL, false);
+        $this->landing()->assertDontSee(self::MODAL, false)->assertSee("You can't book at USeP Venues right now. Please contact the office.")
+            ->assertSee('usep.venues@example.com')->assertDontSee('Secret reason');
     }
 
     public function test_a_customer_with_no_block_sees_every_office_and_no_modal(): void
     {
         $this->actingAsCustomer(self::EMAIL);
-        $this->landing()->assertDontSee(self::MODAL, false)->assertSee('room-reservation?room=r1', false)
+        $this->landing()->assertDontSee(self::MODAL, false)->assertDontSee("You can't book at")->assertSee('room-reservation?room=r1', false)
             ->assertSee('room-reservation?room=r5', false)->assertSee('hostel-reservation?room=h1', false);
     }
 

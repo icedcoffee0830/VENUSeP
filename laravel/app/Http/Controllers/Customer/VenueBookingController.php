@@ -23,7 +23,7 @@ class VenueBookingController extends Controller
         extract(legacy('pricing'));
         $isUsep = usep_is_account($customerContact['email']);
 
-        /* An office the customer is blocked at is not listed (the modal says why): DB-DECISIONS 28 */
+        /* An office the customer is blocked at is not listed (the strip and the modal say why): DB-DECISIONS 28 */
         $lpBlocked = BookingRules::blockedOfficeNames();
         $venueRooms = array_values(array_filter($venueRooms, fn ($r) => !in_array($r['venue'], $lpBlocked, true)));
         $lpHostelBlocked = in_array($HOSTEL_VENUE, $lpBlocked, true);
@@ -87,6 +87,7 @@ class VenueBookingController extends Controller
             'lpRefundOff'   => array_column(array_filter($lpOffices, fn ($o) => !$o['refunds']), 'name'),
             'lpCounter'     => $lpCounter,
             'overdueNotice' => BookingRules::overdueNoticeForPage(),   /* an Overdue booking blocks new ones at its office (2026-11-01) */
+            'blockNotices'  => BookingRules::blockNoticesForLanding(),   /* blocked at an office (DB-DECISIONS 28) */
             'lpQ'           => $lpCounter ? '?counter=1' : '',
         ]);
     }

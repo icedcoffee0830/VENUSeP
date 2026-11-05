@@ -68,6 +68,11 @@ export default {
       expect.ok(await page.locator('a[href*="room-reservation?room=r5"]').count() > 0, 'USeP Venues went too');
       await page.reload();
       expect.equal(await page.locator('#blockModal').count(), 0, 'the modal came back in the same session');
+      /* the strip stays on every load, after the modal is gone */
+      const strip = page.locator('[role="alert"]', { hasText: NOTICE });
+      await expect.visible(strip, 'no warning strip on the landing page');
+      await expect.visible(strip.getByText(office.contact_email), 'no contact details in the strip');
+      expect.ok(!(await page.content()).includes(REASON), 'the reason reached the page');
       return page;
     });
 

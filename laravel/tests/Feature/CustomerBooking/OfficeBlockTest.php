@@ -88,6 +88,7 @@ class OfficeBlockTest extends TestCase
         $notice = "You can't book at USeP Venues right now. Please contact the office.";
         $this->actingAsCustomer(self::EMAIL)->get(route('customer.room-reservation', ['room' => 'r5']))->assertOk()
             ->assertSee($notice)->assertSee('usep.venues@example.com')->assertDontSee('Secret reason');
+        $this->get(route('customer.venues'))->assertOk()->assertSee($notice);
         $this->get(route('customer.room-reservation', ['room' => 'r1']))->assertOk()->assertDontSee($notice);
     }
 

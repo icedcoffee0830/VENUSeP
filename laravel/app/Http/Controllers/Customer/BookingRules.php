@@ -238,6 +238,17 @@ final class BookingRules
         return array_map(fn ($v) => office_by_id($v)['name'] ?? '', self::blockedOfficeIds());
     }
 
+    /* The landing page's strip: every office the customer is blocked at, on every load. */
+    public static function blockNoticesForLanding(): array
+    {
+        return self::noticesFor(self::blockedOfficeIds());
+    }
+
+    private static function noticesFor(array $officeIds): array
+    {
+        return array_values(array_filter(array_map(fn ($v) => self::blockNotice((int) session('customer_id'), $v), $officeIds)));
+    }
+
     /* The block modal's notices on this page: each blocked office once per session, and the
        page's own office every time (a direct link). $room: the page's ?room=. */
     public static function blockModalNotices(mixed $room): array
@@ -250,7 +261,7 @@ final class BookingRules
         $told = session('block_modal_told', []);
         $show = array_filter($blocked, fn ($v) => $v === $here || !in_array($v, $told, true));
         session(['block_modal_told' => array_values(array_unique(array_merge($told, $show)))]);
-        return array_values(array_filter(array_map(fn ($v) => self::blockNotice((int) session('customer_id'), $v), $show)));
+        return self::noticesFor($show);
     }
 
     /* For the counter's "who" step: the customers blocked at THIS room's office, id => true. */

@@ -847,7 +847,7 @@ function detailScreen(){
       ${policy('Your receipts','You get a <strong>VENUSeP Transaction Receipt</strong> once your payment is confirmed, a <strong>GCash Payment Receipt</strong> if you paid online, and an <strong>Official Receipt</strong> from the '+CASHIER.name+' once the staff hand over your payment. The OR arrives after your booking is already paid — the booking is not waiting on it.')}
       ${policy('At check-in','Show the staff the valid ID you submitted. Check-in needs a <strong>paid</strong> stay: a GCash receipt still being reviewed is confirmed by staff first. Each guest sleeps in the bed booked under their name.')}
       ${!REFUNDS_ENABLED
-        ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your dates and guests before you submit and pay. If USeP has to close the room, the hostel office will offer you a <strong>replacement room or new dates</strong> instead; if you cannot accept either, your payment is returned.')
+        ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your dates and guests before you submit and pay. If USeP has to close the room, the hostel office will offer you a <strong>replacement room or new dates</strong> instead.')
         : policy('Refunds','A refund requires the VENUSeP Transaction Receipt, the GCash Payment Receipt (if you paid by GCash), <strong>and</strong> the Official Receipt. Requests missing any of these cannot be processed.')}`;
   }
 

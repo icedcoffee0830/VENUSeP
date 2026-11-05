@@ -33,6 +33,14 @@ class PaymentSettingsTest extends TestCase
             ->assertSee(asset('assets/js/confirm-modal.js'), false);
     }
 
+    /* Refunds are a switch only: the page and the turn-off warning promise no money back. */
+    public function test_the_page_says_a_closure_is_not_refundable_with_refunds_off(): void
+    {
+        $this->actingAsAdmin()->get(route('admin.payment-settings'))->assertOk()
+            ->assertSee('With refunds OFF, nothing is refundable through VENUSeP, even when the office closes.')
+            ->assertDontSee('money back');
+    }
+
     public function test_staff_sees_the_card_read_only(): void
     {
         $this->actingAsStaff()->get(route('admin.payment-settings'))->assertOk()

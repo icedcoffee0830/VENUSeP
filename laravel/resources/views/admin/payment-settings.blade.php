@@ -227,7 +227,7 @@
               @endforeach
               <ul class="rs-rules">
                 <li>A change applies to <strong>new bookings at that office only</strong>. Every booking keeps the policy it was made under.</li>
-                <li>Closures by USeP are not affected. Those customers are always offered a replacement room, a new date, or their money back.</li>
+                <li>With refunds OFF, nothing is refundable through VENUSeP, even when the office closes. Staff handle those cases outside the system.</li>
                 <li>Changing it needs your password, and every change is recorded in the office's settings history.</li>
               </ul>
             </section>
@@ -379,7 +379,7 @@
             office.hostel
               ? 'Payment does not change: hostel stays are always paid before the stay.'
               : 'New bookings switch to <strong>post-pay</strong>: nothing is paid until the event is over, then it is due the day after the event. Unpaid bookings go overdue after ' + office.grace + ' days instead of being released.',
-            'Closures by USeP are not affected. Those customers are still offered a replacement or their money back.'
+            'With refunds OFF, nothing is refundable through VENUSeP, even when the office closes. Staff handle those cases outside the system.'
           ];
           list.innerHTML = items.map(function (t) { return '<li>' + t + '</li>'; }).join('');
           pw.value = ''; hideMsg();

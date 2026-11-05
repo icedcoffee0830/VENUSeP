@@ -21,6 +21,15 @@ class FaqTest extends TestCase
             ->assertDontSee('class="sidebar', false);
     }
 
+    /* Migration 19: with refunds off nothing is refundable, even a closure; the receipt's name. */
+    public function test_the_closure_answer_follows_the_refund_rule_and_the_receipt_has_its_new_name(): void
+    {
+        $this->get(route('customer.faq'))->assertOk()
+            ->assertSee('If it was off, nothing can be refunded through VENUSeP, even when the office closes the room.')
+            ->assertDontSee('your payment is returned in full')
+            ->assertSee('VENUSeP Transaction Receipt')->assertDontSee('System Receipt');
+    }
+
     /* Counter mode (staff + ?counter=1): the page's own links (back link, help
        button, footer) keep ?counter=1, and the customer-only ones (bookings,
        calendar, transactions) are not offered — they end at the customer sign-in. */

@@ -1,8 +1,10 @@
 -- ============================================================================
 --  VENUSeP — MIGRATION 19: rounding never cancels the USeP discount, and a booking is
---  never free (decided 2026-11-05, option B).
+--  never free (decided 2026-11-05, option B). Also the FAQ wording: the refund rule and
+--  the receipt's new name (decided 2026-11-06).
 --  Run against the EXISTING database your site uses, after 18. Safe to re-run
---  (idempotent): it only replaces sp_approve_booking. No table and no stored amount changes.
+--  (idempotent): it replaces sp_approve_booking and rewords FAQ text that still has the old
+--  words. No table and no stored amount changes.
 --
 --  THE DATABASE NAME in these commands must be the one your site uses: DB_DATABASE in
 --  laravel\.env. Aron's site uses venusep_laravel, not venusep; a build from SETUP.md
@@ -12,7 +14,7 @@
 --          C:\xamp5\mysql\bin\mysqldump.exe -u root --routines --triggers --events --single-transaction venusep_laravel > %USERPROFILE%\venusep_laravel_before_m19.sql
 --          C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_19.sql
 --
---  It ends with one line that must read "OK: sp_approve_booking has the migration 19 rounding".
+--  It ends with one line that must read "OK: migration 19 is in: the rounding and the FAQ wording".
 --
 --  WHAT CHANGES
 --    The USeP discount at approval, in sp_approve_booking (every approval goes through it:
@@ -26,9 +28,17 @@
 --      An exact amount is unchanged (4,000 -> 3,200). The discount is always the rest
 --      (room price - final price). Bookings approved before this keep their amounts.
 --
---  ROLLBACK: run sp_approve_booking from venusep_migration_18.sql again (from its
---  "DROP PROCEDURE IF EXISTS sp_approve_booking$$" to its "END$$", between a DELIMITER $$
---  and a DELIMITER ;), or restore the backup taken before running this:
+--    The FAQ, built-in answers and their "Restore" copies (faqs.answer, faqs.default_answer):
+--      - "What if USeP closes or cancels my venue?" no longer promises the payment back: with
+--        refunds off nothing is refundable, even when the office closes the room. Only the
+--        exact old text changes, so an answer someone reworded is left alone: read that one
+--        on the FAQ page afterwards;
+--      - "VENUSeP System Receipt" becomes "VENUSeP Transaction Receipt", wherever it is used.
+--
+--  ROLLBACK: for the rounding alone, run sp_approve_booking from venusep_migration_18.sql
+--  again (from its "DROP PROCEDURE IF EXISTS sp_approve_booking$$" to its "END$$", between a
+--  DELIMITER $$ and a DELIMITER ;). For everything, the FAQ wording too, restore the backup
+--  taken before running this:
 --      C:\xamp5\mysql\bin\mysql.exe -u root -e "DROP DATABASE venusep_laravel; CREATE DATABASE venusep_laravel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 --      C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < %USERPROFILE%\venusep_laravel_before_m19.sql
 -- ============================================================================
@@ -123,9 +133,24 @@ END$$
 
 DELIMITER ;
 
+-- ---- FAQ wording ----
+-- Exact old text only, so a reworded answer stays; the second run finds nothing to change.
+SET @m19_old_close = 'If USeP has to close a room you have booked — for maintenance or any other reason — the venue office will offer you a **replacement room** or a **new date**. If you cannot accept either, your payment is returned in full. This does not depend on the refund policy.';
+SET @m19_new_close = 'If USeP has to close a room you have booked — for maintenance or any other reason — the venue office will offer you a **replacement room** or a **new date**. Each office decides whether it takes refund requests, and your booking keeps the rule that applied when you made it. If the rule was on, you can request a refund. If it was off, nothing can be refunded through VENUSeP, even when the office closes the room.';
+UPDATE faqs SET answer = @m19_new_close WHERE answer = @m19_old_close COLLATE utf8mb4_bin;
+UPDATE faqs SET default_answer = @m19_new_close WHERE default_answer = @m19_old_close COLLATE utf8mb4_bin;
+
+UPDATE faqs SET answer = REPLACE(answer, 'VENUSeP System Receipt', 'VENUSeP Transaction Receipt')
+ WHERE answer LIKE '%VENUSeP System Receipt%';
+UPDATE faqs SET default_answer = REPLACE(default_answer, 'VENUSeP System Receipt', 'VENUSeP Transaction Receipt')
+ WHERE default_answer LIKE '%VENUSeP System Receipt%';
+
 -- ---- check ----
-SELECT IF(COUNT(*) = 1, 'OK: sp_approve_booking has the migration 19 rounding',
-          'NOT APPLIED: sp_approve_booking is still the old one; run this file again') AS m19_check
-  FROM information_schema.ROUTINES
- WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = 'sp_approve_booking'
-   AND ROUTINE_DEFINITION LIKE '%FLOOR(v_exact)%';
+SELECT IF((SELECT COUNT(*) FROM information_schema.ROUTINES
+            WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = 'sp_approve_booking'
+              AND ROUTINE_DEFINITION LIKE '%FLOOR(v_exact)%') = 1
+          AND (SELECT COUNT(*) FROM faqs
+                WHERE answer = @m19_old_close COLLATE utf8mb4_bin OR default_answer = @m19_old_close COLLATE utf8mb4_bin
+                   OR answer LIKE '%VENUSeP System Receipt%' OR default_answer LIKE '%VENUSeP System Receipt%') = 0,
+          'OK: migration 19 is in: the rounding and the FAQ wording',
+          'NOT APPLIED: the rounding or the FAQ wording is still the old one; run this file again') AS m19_check;

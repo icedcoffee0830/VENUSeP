@@ -422,13 +422,18 @@ function setBooking(key,val){
     const nx=new Date(val+'T00:00:00'); nx.setDate(nx.getDate()+1);
     state.booking.checkOut=isoOf(nx);
   }
+  /* dates with fewer free beds drop the extra names */
+  const o=state.booking.occupants;
+  o.length=Math.min(o.length, Math.max(1, bedLimit()));
   render();
 }
+/* One named guest per free bed: the beds free on every night picked, the whole room before that. */
+function bedLimit(){ const b=state.booking; return maxBedsFree(getRoom(), nightsOf(b.checkIn,b.checkOut)); }
 /* The bed stepper IS the roster editor — that is what makes beds = occupants.length
    true by construction rather than by discipline. */
 function setBeds(n){
-  const R=getRoom(); const o=state.booking.occupants;
-  n=Math.max(1, Math.min(n, R?R.beds:6));
+  const o=state.booking.occupants;
+  n=Math.max(1, Math.min(n, bedLimit()));
   while(o.length<n) o.push({name:'', gender:'F'});
   while(o.length>n) o.pop();
   render();
@@ -927,7 +932,7 @@ function detailScreen(){
             ${dateField('checkOut','Check-out',b.checkOut)}
           </div>
 
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px">
+          ${d.maxFree===0?'':`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px">
             <div>
               <div style="font-size:12px;font-weight:600;color:#f2d0cb">Beds</div>
               <div style="font-size:12.5px;color:#d5b8b5">${d.nights.length?d.maxFree+' free for your dates':'up to '+cap}</div>
@@ -935,7 +940,7 @@ function detailScreen(){
             <div style="display:flex;align-items:center;gap:0;border:1px solid transparent;border-radius:10px;overflow:hidden;height:38px;background:#fff">
               <button onclick="setBeds(${beds-1})" ${beds<=1?'disabled':''} style="width:36px;height:100%;border:none;background:none;font-size:17px;color:${beds<=1?'#c6c2ba':'#4a463f'};cursor:${beds<=1?'default':'pointer'}">−</button>
               <span style="min-width:26px;text-align:center;font-size:14px;font-weight:680;color:#1c1b19" aria-live="polite">${beds}</span>
-              <button onclick="setBeds(${beds+1})" ${beds>=cap?'disabled':''} style="width:36px;height:100%;border:none;background:none;font-size:17px;color:${beds>=cap?'#c6c2ba':'#4a463f'};cursor:${beds>=cap?'default':'pointer'}">+</button>
+              <button onclick="setBeds(${beds+1})" ${beds>=d.maxFree?'disabled':''} style="width:36px;height:100%;border:none;background:none;font-size:17px;color:${beds>=d.maxFree?'#c6c2ba':'#4a463f'};cursor:${beds>=d.maxFree?'default':'pointer'}">+</button>
             </div>
           </div>
 
@@ -943,7 +948,7 @@ function detailScreen(){
             <div style="font-size:12px;font-weight:600;color:#f2d0cb;margin-bottom:2px">Who is sleeping in each bed?</div>
             ${roster}
             ${beds===cap?`<div style="font-size:12.5px;color:#e9d0cd;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.16)">Booking all ${cap} beds gives you the whole room to yourselves.</div>`:''}
-          </div>
+          </div>`}
 
           ${firstNight&&takenNow?`
           <div style="font-size:12px;color:#e9d0cd;margin-bottom:12px;padding:9px 11px;border:1px solid rgba(255,255,255,.22);border-radius:10px">

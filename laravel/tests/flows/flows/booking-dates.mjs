@@ -18,7 +18,7 @@ const pickable = (page, day) => page.locator(`.cal-pop button[onclick*="calPick(
 
 export default {
   name: 'booking-dates',
-  title: 'Date pickers: month label readable, the 183-day window, too-long warning while picking',
+  title: 'Date pickers: month label readable, the 183-day window, too-long warning while picking; names limited to free beds',
 
   async run(ctx) {
     const { step, expect } = ctx;
@@ -60,6 +60,41 @@ export default {
       await page.evaluate(([a, b]) => { setBooking('checkIn', a); setBooking('checkOut', b); }, [iso(addDays(1)), iso(addDays(WINDOW + 2))]);
       await expect.text(page, 'A stay can be at most 183 nights');
       expect.ok(await page.locator('#hbGo').isDisabled(), 'Continue is open on a stay that is too long');
+      return page;
+    });
+
+    await step('Hostel: names stop at the beds free for the dates', async () => {
+      const page = s.page;
+      await page.goto(ctx.url('/customer/hostel-reservation?room=' + HOSTEL_ROOM));
+      s.night = iso(addDays(3));
+      /* every other bed of the room taken on that night, as the page's own data would say */
+      await page.evaluate((night) => {
+        const R = getRoom();
+        R.occupied = Object.assign({}, R.occupied, { [night]: Array.from({ length: R.beds - 2 }, () => ({ gender: 'F' })) });
+        setBeds(R.beds);
+      }, s.night);
+      const beds = await page.evaluate(() => getRoom().beds);
+      expect.ok(beds >= 3, 'the room is too small for this check');
+      expect.equal(await page.locator('.bed-name').count(), beds, 'before the dates, every bed can be named');
+      await page.evaluate(([a, b]) => { setBooking('checkIn', a); setBooking('checkOut', b); }, [s.night, iso(addDays(4))]);
+      expect.equal(await page.locator('.bed-name').count(), 2, 'name boxes once only 2 beds are free');
+      await expect.text(page, '2 free for your dates');
+      expect.ok(await page.locator('button[onclick^="setBeds("]').last().isDisabled(), 'the + button goes past the free beds');
+      return page;
+    });
+
+    await step('Hostel: no bed free means no name box at all, and it comes back with free dates', async () => {
+      const page = s.page;
+      await page.evaluate((night) => {
+        const R = getRoom();
+        R.occupied[night] = Array.from({ length: R.beds }, () => ({ gender: 'F' }));
+        setBooking('checkOut', state.booking.checkOut);
+      }, s.night);
+      expect.equal(await page.locator('.bed-name').count(), 0, 'name boxes with no bed free');
+      await expect.text(page, 'No beds left for these dates');
+      expect.ok(await page.locator('#hbGo').isDisabled(), 'Continue is open with no bed free');
+      await page.evaluate(([a, b]) => { setBooking('checkIn', a); setBooking('checkOut', b); }, [iso(addDays(5)), iso(addDays(6))]);
+      expect.ok(await page.locator('.bed-name').count() >= 1, 'no name box on dates with beds free');
       return page;
     });
 

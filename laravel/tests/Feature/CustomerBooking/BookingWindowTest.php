@@ -19,11 +19,20 @@ class BookingWindowTest extends TestCase
         config(['venusep.max_days_ahead' => 183]);
     }
 
-    /* A booking that got through (the rule broken) must not stay behind for the next test. */
+    /* A booking that got through (the rule broken) must not stay behind for the next test;
+       a counter stay is paid at once, and its payment and receipt hold the booking row in place. */
     protected function tearDown(): void
     {
-        DB::delete("DELETE b FROM bookings b JOIN venue_booking_details d ON d.booking_id = b.id WHERE d.event_name = 'Window test'");
-        DB::delete("DELETE b FROM bookings b JOIN customers c ON c.id = b.customer_id WHERE c.full_name = 'Window Walk-in'");
+        $made = DB::select(
+            "SELECT b.id FROM bookings b JOIN customers c ON c.id = b.customer_id
+               LEFT JOIN venue_booking_details d ON d.booking_id = b.id
+              WHERE d.event_name = 'Window test' OR c.full_name = 'Window Walk-in'"
+        );
+        foreach ($made as $b) {
+            DB::delete('DELETE FROM system_receipts WHERE booking_id = ?', [$b->id]);
+            DB::delete('DELETE FROM payments WHERE booking_id = ?', [$b->id]);
+            DB::delete('DELETE FROM bookings WHERE id = ?', [$b->id]);
+        }
         DB::delete("DELETE FROM customers WHERE full_name = 'Window Walk-in' AND user_id IS NULL");
         parent::tearDown();
     }

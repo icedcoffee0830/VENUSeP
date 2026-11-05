@@ -261,6 +261,8 @@ const ACCOUNT = {!! json_encode([
   'role'  => $customerContact['universityId'] !== '' ? 'USeP · ' . $customerContact['universityId'] : 'Customer',
   'email' => $customerContact['email'],
   'phone' => $customerContact['phone'],
+  /* the profile photo for the "Booking under" card, else '' (initials); never at the counter (a walk-in) */
+  'photo' => !counter_mode() && ($customerContact['photo'] ?? '') !== '' ? asset($customerContact['photo']) : '',
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const CSRF = {!! json_encode(csrf_token()) !!};
 
@@ -1300,7 +1302,9 @@ function detailScreen(){
         <div style="border-top:1px solid rgba(255,255,255,.16);padding-top:14px;margin-bottom:12px">
           <div style="${LBL};margin-bottom:8px">Booking under</div>
           <div style="display:flex;align-items:center;gap:10px;padding:2px 0">
-            <div style="width:34px;height:34px;flex:none;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#8a1222">${esc(initials(ACCOUNT.name))}</div>
+            ${ACCOUNT.photo
+              ? `<img src="${esc(ACCOUNT.photo)}" alt="" width="34" height="34" style="width:34px;height:34px;flex:none;border-radius:999px;object-fit:cover;background:#fff">`
+              : `<div style="width:34px;height:34px;flex:none;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#8a1222">${esc(initials(ACCOUNT.name))}</div>`}
             <div style="line-height:1.3;min-width:0">
               <div style="font-size:13.5px;font-weight:640;color:#fff">${esc(ACCOUNT.name)}</div>
               <div style="font-size:12px;color:#d5b8b5;overflow-wrap:anywhere">${esc(ACCOUNT.email)}</div>

@@ -24,6 +24,18 @@ class CustomerQueries
         return [$mobile, '63' . substr($mobile, 1)];
     }
 
+    /* A customer account's own address and name, or null. */
+    public static function findEmailAndName(int $userId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT u.email, c.full_name
+            FROM users u
+            JOIN customers c ON c.user_id = u.id
+            WHERE u.id = ?
+        ", [$userId]);
+        return $row ? (array) $row : null;
+    }
+
     /* The active account a counter booking is for, and whether it has no password, or null. */
     public static function findForCounterBooking(int $customerId): ?array
     {

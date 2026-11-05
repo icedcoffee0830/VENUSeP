@@ -21,7 +21,7 @@ trait SavesWithHistory
        because a trigger cannot see who is signed in. A procedure may set its own note
        instead: sp_approve_booking does. On its own only for a save inside a transaction
        the caller opened (the payment reversal). */
-    private static function signedAs(int $actor, string $note, callable $write): mixed
+    private static function signedAs(int $actor, ?string $note, callable $write): mixed
     {
         DB::statement('SET @venusep_actor_user_id = ?, @venusep_action_note = ?', [$actor, $note]);
         try {

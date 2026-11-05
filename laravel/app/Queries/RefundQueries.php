@@ -4,7 +4,8 @@ namespace App\Queries;
 
 use Illuminate\Support\Facades\DB;
 
-/* The SQL behind the staff's side of a refund: filing one for a walk-in, deciding it,
+/* The SQL behind a refund. The customer's side: filing, correcting, withdrawing. The
+   staff's side: filing one for a walk-in, deciding it,
    paying it out, and recording one the school made outside the system.
    Columns: venusep_schema.sql (search "CREATE TABLE refunds").
 
@@ -22,6 +23,89 @@ use Illuminate\Support\Facades\DB;
 class RefundQueries
 {
     use SavesWithHistory;
+
+    /* The customer's own booking, as a refund needs it, or null. */
+    public static function findForCustomer(int $bookingId, int $customerId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT b.id, b.payment_method, b.payment_status, b.total_amount, b.refunds_allowed,
+                   COALESCE(vd.start_date, hd.check_in_date) AS first_day,
+                   (SELECT p.id FROM payments p
+                     WHERE p.booking_id = b.id AND p.payment_record_status = 'confirmed'
+                     ORDER BY p.id DESC LIMIT 1) AS payment_id
+            FROM bookings b
+            LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
+            LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
+            WHERE b.id = ? AND b.customer_id = ?
+        ", [$bookingId, $customerId]);
+        return $row ? (array) $row : null;
+    }
+
+    /* The customer pulls the request back before any decision: the payment is as it was. */
+    public static function withdraw(int $refundId, int $bookingId, string $paidState, int $actor): void
+    {
+        self::saveAs($actor, 'Refund request withdrawn by the customer.', function () use ($refundId, $bookingId, $paidState) {
+            self::mustChange('withdraw', DB::update("
+                UPDATE refunds
+                SET refund_status = 'withdrawn',
+                    withdrawn_at = NOW()
+                WHERE id = ?
+            ", [$refundId]));
+            self::mustChange('withdraw', DB::update("
+                UPDATE bookings
+                SET payment_status = ?
+                WHERE id = ?
+            ", [$paidState, $bookingId]));
+        });
+    }
+
+    /* The customer's new request: the booking waits for staff. */
+    public static function fileRequest(int $bookingId, ?int $paymentId, string $category, string $reason, mixed $amount, ?string $refundTo, int $orPending, int $actor): int
+    {
+        return self::saveAs($actor, 'Refund requested by the customer.', function () use ($bookingId, $paymentId, $category, $reason, $amount, $refundTo, $orPending, $actor) {
+            DB::insert("
+                INSERT INTO refunds (booking_id, payment_id, refund_status, reason_category, reason,
+                                     amount_requested, refund_to_number, official_receipt_pending, requested_by_user_id)
+                VALUES (?, ?, 'requested', ?, ?, ?, ?, ?, ?)
+            ", [$bookingId, $paymentId, $category, $reason, $amount, $refundTo, $orPending, $actor]);
+            $refundId = (int) DB::getPdo()->lastInsertId();
+            self::markRequested($bookingId, $orPending, $actor);
+            return $refundId;
+        });
+    }
+
+    /* A corrected request goes back to staff. The original filing date stays. */
+    public static function resubmit(int $refundId, int $bookingId, string $category, string $reason, ?string $refundTo, int $orPending, int $actor): void
+    {
+        self::saveAs($actor, 'Corrected documents resubmitted.', function () use ($refundId, $bookingId, $category, $reason, $refundTo, $orPending, $actor) {
+            self::mustChange('resubmit', DB::update("
+                UPDATE refunds
+                SET refund_status = 'requested',
+                    reason_category = ?,
+                    reason = ?,
+                    refund_to_number = ?,
+                    official_receipt_pending = ?,
+                    resubmitted_at = NOW(),
+                    correction_attempts = correction_attempts + 1
+                WHERE id = ?
+            ", [$category, $reason, $refundTo, $orPending, $refundId]));
+            self::markRequested($bookingId, $orPending, $actor);
+        });
+    }
+
+    /* The booking's side of a request; an administrator hears of one filed without its receipt. */
+    private static function markRequested(int $bookingId, int $orPending, int $actor): void
+    {
+        self::mustChange('markRequested', DB::update("
+            UPDATE bookings
+            SET payment_status = 'refund_requested'
+            WHERE id = ?
+        ", [$bookingId]));
+        if ($orPending) {
+            legacy('notifications');
+            notify_refund_needs_admin(DB::connection()->getPdo(), $bookingId, $actor);
+        }
+    }
 
     /* A booking's latest refund request, or null. */
     public static function findLatestRefund(int $bookingId): ?array

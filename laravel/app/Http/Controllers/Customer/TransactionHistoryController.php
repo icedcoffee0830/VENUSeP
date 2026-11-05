@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
-use PDO;
+use App\Queries\BookingQueries;
 use PDOException;
 
 /* TRANSACTION HISTORY (was customer/transaction-history.php) — the customer's
@@ -30,12 +30,11 @@ class TransactionHistoryController
     /** @return string[] distinct customer labels in the table's sort order */
     private static function labels(string $table): array
     {
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             return [];
         }
         try {
-            $labels = $pdo->query("SELECT customer_label FROM {$table} ORDER BY sort_order")->fetchAll(PDO::FETCH_COLUMN);
+            $labels = BookingQueries::customerLabels($table);
         } catch (PDOException $e) {
             sql_failed($e);
             return [];   // a filter with only "All" rather than a broken page

@@ -398,6 +398,12 @@ class BookingQueries
         notify_booking_parties(DB::connection()->getPdo(), $id, 'booking_moved', $actor, ['note' => $note]);
     }
 
+    /* The words customers see for a status, in order. $table: reservation_statuses or payment_statuses. */
+    public static function customerLabels(string $table): array
+    {
+        return array_column(DB::select("SELECT customer_label FROM {$table} ORDER BY sort_order"), 'customer_label');
+    }
+
     /* The days the other halls of these offices are taken, for a staff member's calendar:
        dates only, so nothing else can reach the page. end_date is exclusive, as the calendar
        wants it: a venue's last day + 1, a hostel's check-out morning. */

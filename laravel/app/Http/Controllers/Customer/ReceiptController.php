@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\CustomerQueries;
+use App\Queries\PaymentQueries;
 use Illuminate\Http\Request;
 
 /* ==================================================================
@@ -37,9 +39,7 @@ class ReceiptController
         }
 
         /* Own booking only — checked against the SESSION's customer id. */
-        $rcStmt = $rcPdo->prepare('SELECT customer_id FROM bookings WHERE id = :b');
-        $rcStmt->execute([':b' => $rcBookingId]);
-        if ((int) $rcStmt->fetchColumn() !== (int) session('customer_id')) {
+        if (PaymentQueries::findBookingCustomer($rcBookingId) !== (int) session('customer_id')) {
             return self::notFound();
         }
         $rcReceipt = receipt_for_booking($rcPdo, $rcBookingId);
@@ -48,9 +48,7 @@ class ReceiptController
         }
 
         /* The account's own address and name — the only place "Email me" can send. */
-        $rcStmt = $rcPdo->prepare('SELECT u.email, c.full_name FROM users u JOIN customers c ON c.user_id = u.id WHERE u.id = :u');
-        $rcStmt->execute([':u' => (int) session('user_id')]);
-        $rcMe = $rcStmt->fetch() ?: ['email' => '', 'full_name' => ''];
+        $rcMe = CustomerQueries::findEmailAndName((int) session('user_id')) ?? ['email' => '', 'full_name' => ''];
 
         $rcSelf = route('customer.receipt', ['booking' => $rcRef]);
 

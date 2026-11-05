@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\PaymentQueries;
 use App\Support\Status;
 use Illuminate\Http\Request;
-use PDO;
+use Illuminate\Support\Facades\DB;
 use PDOException;
 
 /* =====================================================================
@@ -57,8 +58,7 @@ class PaymentSubmitController
             return self::reply(400, ['ok' => false, 'message' => 'Invalid booking reference.']);
         }
 
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             return self::reply(503, ['ok' => false, 'message' => 'The database is unreachable, so your payment was not recorded.']);
         }
 
@@ -67,18 +67,7 @@ class PaymentSubmitController
         venusep_expire_due_bookings();
 
         /* The booking must be THIS customer's — scoped by customer_id. */
-        $bk = $pdo->prepare(
-            "SELECT b.id, b.customer_id, b.payment_status, b.payment_method, b.total_amount, b.pay_to_use,
-                    v.name AS venue_name,
-                    g.account_name, g.mobile_number
-               FROM bookings b
-               JOIN rooms r  ON r.id = b.room_id
-               JOIN venues v ON v.id = r.venue_id
-               LEFT JOIN gcash_accounts g ON g.venue_id = v.id AND g.is_active = 1 AND g.valid_until IS NULL
-              WHERE b.id = :b AND b.customer_id = :c"
-        );
-        $bk->execute([':b' => $id, ':c' => (int) session('customer_id')]);
-        $booking = $bk->fetch();
+        $booking = PaymentQueries::findForCustomer($id, (int) session('customer_id'));
         if (!$booking) {
             return self::reply(404, ['ok' => false, 'message' => 'That booking was not found.']);
         }
@@ -92,13 +81,9 @@ class PaymentSubmitController
                     ? 'Staff have already recorded your cash payment, so it cannot be cancelled.'
                     : 'There is no cash payment to cancel.']);
             }
-            $pdo->prepare('SET @venusep_actor_user_id = :a, @venusep_action_note = :n')
-                ->execute([':a' => (int) session('user_id'), ':n' => $booking['pay_to_use']
-                    ? 'Guest cancelled paying cash at the front desk; GCash is open again.'
-                    : 'Customer cancelled paying cash at the office; GCash is open again.']);
-            $pdo->prepare("UPDATE bookings SET payment_status = 'await_gcash', payment_method = IF(pay_to_use, NULL, 'gcash')
-                            WHERE id = :b AND payment_status = 'await_cash'")->execute([':b' => $id]);
-            $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
+            PaymentQueries::cancelCashChoice($id, (int) session('user_id'), $booking['pay_to_use']
+                ? 'Guest cancelled paying cash at the front desk; GCash is open again.'
+                : 'Customer cancelled paying cash at the office; GCash is open again.');
             return self::reply(200, ['ok' => true, 'status' => 'await_gcash', 'message' => 'Cash choice cancelled. You can pay by GCash again.']);
         }
         /* ...and while that choice stands, GCash stays closed: one way to pay at a time. */
@@ -119,23 +104,13 @@ class PaymentSubmitController
 
         /* The customer may switch method at the payment step: saved only with a request that
            goes through (cash here, GCash inside its transaction below). */
-        $saveMethod = function () use ($pdo, $method, $booking, $id) {
-            if ($method !== $booking['payment_method']) {
-                $pdo->prepare('UPDATE bookings SET payment_method = :m WHERE id = :b')
-                    ->execute([':m' => $method, ':b' => $id]);
-            }
-        };
+        $methodChanged = $method !== $booking['payment_method'];
 
         /* CASH — nothing to submit. The customer pays at the office and staff
            record it, which is what creates the payment row. */
         if ($method === 'cash') {
-            $saveMethod();
-            $pdo->prepare('SET @venusep_actor_user_id = :a, @venusep_action_note = :n')
-                ->execute([':a' => (int) session('user_id'),
-                           ':n' => $booking['pay_to_use'] ? 'Guest will pay cash at the front desk.' : 'Customer will pay in cash.']);
-            $pdo->prepare("UPDATE bookings SET payment_status = 'await_cash' WHERE id = :b")
-                ->execute([':b' => $id]);
-            $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
+            PaymentQueries::chooseCash($id, $methodChanged, (int) session('user_id'),
+                $booking['pay_to_use'] ? 'Guest will pay cash at the front desk.' : 'Customer will pay in cash.');
             return self::reply(200, ['ok' => true, 'status' => 'await_cash',
                 'message' => $booking['pay_to_use'] ? 'Pay at the hostel front desk — staff will record it.' : 'Pay at the venue office — staff will record it.']);
         }
@@ -197,122 +172,87 @@ class PaymentSubmitController
         }
         $sha = hash_file('sha256', doc_path($path));
 
-        /* RECORD THE ATTEMPT — every one, whatever its verdict. */
+        /* RECORD THE ATTEMPT — every one, whatever its verdict. A refusal returns its reply
+           before anything is written, so the transaction has nothing to keep. */
         try {
-            $pdo->beginTransaction();
-            $saveMethod();
+            $refused = DB::transaction(function () use ($request, $file, $id, $booking, $methodChanged, $bothWrong, $bothRight, $claimRef, $claimName, $claimNumber, $claimCentavos, $claimWhen, $confidence, $path, $sha, &$flags, &$used, &$allowed, &$verdict, &$isLast, &$dupRef, &$dupFile) {
+                /* Lock this booking's row: two uploads at the same moment must not both be
+                   counted as "attempt 5", nor both slip past a closed payment. */
+                $locked = PaymentQueries::lockForUpload($id);
+                if (!$locked || !in_array($locked['payment_status'], Status::PAY_OPEN, true)) {
+                    return ['ok' => false, 'message' => 'This booking is not currently awaiting a payment.'];
+                }
+                $allowed = (int) $locked['receipt_attempts_allowed'];
+                ['used' => $used, 'last' => $lastNo] = PaymentQueries::countUploads($id);
 
-            /* Lock this booking's row: two uploads at the same moment must not both be
-               counted as "attempt 5", nor both slip past a closed payment. */
-            $lk = $pdo->prepare('SELECT payment_status, receipt_attempts_allowed FROM bookings WHERE id = :b FOR UPDATE');
-            $lk->execute([':b' => $id]);
-            $locked = $lk->fetch();
-            if (!$locked || !in_array($locked['payment_status'], Status::PAY_OPEN, true)) {
-                $pdo->rollBack();
-                @unlink(doc_path($path));
-                return self::reply(409, ['ok' => false, 'message' => 'This booking is not currently awaiting a payment.']);
-            }
-            $allowed = (int) $locked['receipt_attempts_allowed'];
-            $usedQ = $pdo->prepare('SELECT COUNT(*), COALESCE(MAX(attempt_no), 0) FROM gcash_receipts WHERE booking_id = :b');
-            $usedQ->execute([':b' => $id]);
-            [$used, $lastNo] = array_map('intval', $usedQ->fetch(PDO::FETCH_NUM));
+                /* THE LIMIT. One more upload is refused outright and recorded nowhere. */
+                if ($used >= $allowed) {
+                    return ['ok' => false, 'limit' => true, 'attemptsUsed' => $used, 'attemptsAllowed' => $allowed,
+                        'message' => 'You have used all ' . $allowed . ' receipt attempts for this booking. Staff will review your '
+                                   . 'payment and contact you, or you can pay in cash at the office.'];
+                }
 
-            /* THE LIMIT. One more upload is refused outright and recorded nowhere. */
-            if ($used >= $allowed) {
-                $pdo->rollBack();
-                @unlink(doc_path($path));
-                return self::reply(409, ['ok' => false, 'limit' => true, 'attemptsUsed' => $used, 'attemptsAllowed' => $allowed,
-                    'message' => 'You have used all ' . $allowed . ' receipt attempts for this booking. Staff will review your '
-                               . 'payment and contact you, or you can pay in cash at the office.']);
-            }
+                /* THIS BOOKING'S OWN EARLIER RECEIPT, sent again: refused, NOT counted. */
+                $again = PaymentQueries::findOwnEarlierUpload($id, $sha, $claimRef);
+                if ($again) {
+                    $againFlags = json_decode((string) $again['flags_json'], true);
+                    $again['flags'] = is_array($againFlags) ? $againFlags : [];
+                    $left = $allowed - $used;
+                    return ['ok' => false, 'verdict' => 'rejected', 'repeat' => true,
+                        'attemptsUsed' => $used, 'attemptsAllowed' => $allowed,
+                        'message' => ($again['same_file'] ? 'You already uploaded this exact image' : 'You already uploaded a receipt with this reference number')
+                                   . ' (attempt ' . (int) $again['attempt_no'] . ', ' . booking_receipt_outcome($again) . '). '
+                                   . 'The same receipt cannot be accepted again, so this upload was not counted — you still have '
+                                   . $left . ' attempt' . ($left === 1 ? '' : 's') . ' left. Please upload a different receipt.'];
+                }
 
-            /* THIS BOOKING'S OWN EARLIER RECEIPT, sent again: refused, NOT counted. */
-            $againQ = $pdo->prepare(
-                'SELECT attempt_no, verdict, flags_json, override_note, sha256_hash = :sha AS same_file
-                   FROM gcash_receipts
-                  WHERE booking_id = :b AND (sha256_hash = :sha2 OR reference_number = :r)
-                  ORDER BY id DESC LIMIT 1'
-            );
-            $againQ->execute([':sha' => $sha, ':b' => $id, ':sha2' => $sha, ':r' => $claimRef]);
-            $again = $againQ->fetch();
-            if ($again) {
-                $pdo->rollBack();
-                @unlink(doc_path($path));
-                $againFlags = json_decode((string) $again['flags_json'], true);
-                $again['flags'] = is_array($againFlags) ? $againFlags : [];
-                $left = $allowed - $used;
-                return self::reply(409, ['ok' => false, 'verdict' => 'rejected', 'repeat' => true,
-                    'attemptsUsed' => $used, 'attemptsAllowed' => $allowed,
-                    'message' => ($again['same_file'] ? 'You already uploaded this exact image' : 'You already uploaded a receipt with this reference number')
-                               . ' (attempt ' . (int) $again['attempt_no'] . ', ' . booking_receipt_outcome($again) . '). '
-                               . 'The same receipt cannot be accepted again, so this upload was not counted — you still have '
-                               . $left . ' attempt' . ($left === 1 ? '' : 's') . ' left. Please upload a different receipt.']);
-            }
+                /* DUPLICATES — against every receipt that was not rejected, on ANY booking. */
+                $dupRef = PaymentQueries::referenceIsActive($claimRef);
+                $dupFile = PaymentQueries::fileIsActive($sha);
+                if ($dupRef)  { $flags[] = 'duplicate_ref'; }
+                if ($dupFile) { $flags[] = 'duplicate_file'; }
 
-            /* DUPLICATES — against every receipt that was not rejected, on ANY booking. */
-            $dupQ = $pdo->prepare('SELECT 1 FROM gcash_receipts WHERE active_reference = :v LIMIT 1');
-            $dupQ->execute([':v' => $claimRef]);
-            $dupRef = $dupQ->fetchColumn() !== false;
-            $dupQ = $pdo->prepare('SELECT 1 FROM gcash_receipts WHERE active_sha256 = :v LIMIT 1');
-            $dupQ->execute([':v' => $sha]);
-            $dupFile = $dupQ->fetchColumn() !== false;
-            if ($dupRef)  { $flags[] = 'duplicate_ref'; }
-            if ($dupFile) { $flags[] = 'duplicate_file'; }
+                $verdict = ($dupRef || $dupFile || $bothWrong) ? 'rejected'
+                         : (($bothRight && !$flags) ? 'accepted' : 'manual_review');
 
-            $verdict = ($dupRef || $dupFile || $bothWrong) ? 'rejected'
-                     : (($bothRight && !$flags) ? 'accepted' : 'manual_review');
+                /* The LAST allowed attempt goes to staff whatever its verdict. */
+                $isLast = ($used + 1 >= $allowed);
+                if ($isLast) { $flags[] = 'attempt_limit_reached'; }
+                $flags = array_values(array_unique($flags));
 
-            /* The LAST allowed attempt goes to staff whatever its verdict. */
-            $isLast = ($used + 1 >= $allowed);
-            if ($isLast) { $flags[] = 'attempt_limit_reached'; }
-            $flags = array_values(array_unique($flags));
+                if ($methodChanged) {
+                    PaymentQueries::saveMethod($id, 'gcash');
+                }
 
-            /* A payment row only for a receipt that is going to staff as a payment. */
-            $paymentId = null;
-            if ($verdict !== 'rejected') {
-                $pdo->prepare(
-                    "INSERT INTO payments (booking_id, payment_method, amount, payment_record_status, paid_at)
-                     VALUES (:b, 'gcash', :a, 'under_review', NOW())"
-                )->execute([':b' => $id, ':a' => $booking['total_amount']]);
-                $paymentId = (int) $pdo->lastInsertId();
-            }
+                /* A payment row only for a receipt that is going to staff as a payment. */
+                $paymentId = $verdict === 'rejected' ? null : PaymentQueries::addPaymentUnderReview($id, $booking['total_amount']);
 
-            $pdo->prepare(
-                'INSERT INTO gcash_receipts
-                    (payment_id, booking_id, attempt_no, file_path, original_filename, reference_number,
-                     receiver_name, receiver_number, amount_centavos, receipt_datetime,
-                     sha256_hash, ocr_confidence, verdict, flags_json, ocr_text)
-                 VALUES (:p, :b, :n, :f, :o, :r, :rn, :rnum, :amt, :when, :sha, :conf, :v, :flags, :txt)'
-            )->execute([
-                ':p' => $paymentId, ':b' => $id, ':n' => $lastNo + 1, ':f' => $path,
-                ':o' => mb_substr((string) $file->getClientOriginalName(), 0, 255),
-                ':r' => $claimRef, ':rn' => mb_substr($claimName, 0, 150), ':rnum' => mb_substr($claimNumber, 0, 30),
-                ':amt' => $claimCentavos, ':when' => $claimWhen,
-                ':sha' => $sha, ':conf' => $confidence, ':v' => $verdict,
-                ':flags' => json_encode($flags),
-                ':txt' => mb_substr((string) $request->input('text_excerpt', ''), 0, 2000),
-            ]);
+                PaymentQueries::addUpload([
+                    'payment' => $paymentId, 'booking' => $id, 'attempt' => $lastNo + 1, 'path' => $path,
+                    'filename' => mb_substr((string) $file->getClientOriginalName(), 0, 255),
+                    'reference' => $claimRef, 'receiverName' => mb_substr($claimName, 0, 150),
+                    'receiverNumber' => mb_substr($claimNumber, 0, 30),
+                    'centavos' => $claimCentavos, 'when' => $claimWhen,
+                    'sha' => $sha, 'confidence' => $confidence, 'verdict' => $verdict,
+                    'flags' => json_encode($flags),
+                    'text' => mb_substr((string) $request->input('text_excerpt', ''), 0, 2000),
+                ]);
 
-            /* under_review for anything staff must look at; a rejected attempt with
-               tries left changes nothing. */
-            if ($verdict !== 'rejected' || $isLast) {
-                /* The CUSTOMER did this — named for the booking timeline. */
-                $pdo->prepare('SET @venusep_actor_user_id = :u')->execute([':u' => (int) session('user_id')]);
-                $pdo->prepare('SET @venusep_action_note = :n')->execute([':n' => $isLast
-                    ? 'Receipt attempt ' . ($used + 1) . ' of ' . $allowed . ' — the last allowed; sent to staff for manual review.'
-                    : null]);
-                $pdo->prepare("UPDATE bookings SET payment_status = 'under_review' WHERE id = :b")->execute([':b' => $id]);
-                $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
-            }
-            $pdo->commit();
+                /* under_review for anything staff must look at; a rejected attempt with
+                   tries left changes nothing. The CUSTOMER did this: named for the History. */
+                if ($verdict !== 'rejected' || $isLast) {
+                    PaymentQueries::sendToReview($id, (int) session('user_id'), $isLast
+                        ? 'Receipt attempt ' . ($used + 1) . ' of ' . $allowed . ' — the last allowed; sent to staff for manual review.'
+                        : null);
+                }
+                return null;
+            });
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
             @unlink(doc_path($path));
             /* 23000 = a UNIQUE violation: another upload of the same receipt landed
                between the check above and this insert. Nothing was recorded. */
             if ($e->getCode() === '23000') {
-                $dupRefRace = strpos($e->getMessage(), 'uq_gcash_active_reference') !== false;
+                $dupRefRace = strpos((string) ($e->errorInfo[2] ?? ''), 'uq_gcash_active_reference') !== false;
                 return self::reply(409, ['ok' => false, 'verdict' => 'rejected',
                     'message' => $dupRefRace
                         ? 'That GCash reference number has already been used for a booking.'
@@ -320,6 +260,11 @@ class PaymentSubmitController
             }
             sql_failed($e);
             return self::reply(500, ['ok' => false, 'message' => 'Something went wrong, so your payment was not recorded.']);
+        }
+
+        if ($refused) {
+            @unlink(doc_path($path));
+            return self::reply(409, $refused);
         }
 
         $attemptInfo = ['attemptsUsed' => $used + 1, 'attemptsAllowed' => $allowed, 'limit' => $isLast];

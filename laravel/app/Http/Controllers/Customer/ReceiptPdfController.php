@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\PaymentQueries;
 use Illuminate\Http\Request;
 
 /* =====================================================================
@@ -44,10 +45,8 @@ class ReceiptPdfController
 
         /* THE PERMISSION CHECK, against the SESSION's customer id — never anything
            the request supplied. */
-        $stmt = $pdo->prepare('SELECT customer_id FROM bookings WHERE id = :b');
-        $stmt->execute([':b' => $bookingId]);
-        $owner = $stmt->fetchColumn();
-        if ($owner === false || ($isStaff ? !staff_may_handle_booking($bookingId) : (int) $owner !== (int) session('customer_id'))) {
+        $owner = PaymentQueries::findBookingCustomer($bookingId);
+        if ($owner === null || ($isStaff ? !staff_may_handle_booking($bookingId) : (int) $owner !== (int) session('customer_id'))) {
             return self::deny();
         }
 

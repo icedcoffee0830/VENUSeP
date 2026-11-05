@@ -335,6 +335,25 @@ class RolesTest extends TestCase
         $this->assertContains('francishubero@gmail.com', $to);
     }
 
+    /* The same copy: a table made there takes general_ci, the older ones keep unicode_ci, and
+       Activity (block reason next to office name) fails. Re-running migration 17 repairs it. */
+    public function test_migration_17_repairs_its_tables_made_with_another_collation(): void
+    {
+        preg_match_all('/^ALTER TABLE \w+ CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;/m',
+            (string) file_get_contents(dirname(base_path()) . '/venusep_migration_17.sql'), $repair);
+        $this->assertCount(2, $repair[0], 'the migration repairs both of its tables');
+        $this->actingAsAdmin();
+        try {
+            DB::statement('ALTER TABLE customer_office_blocks CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
+            $this->get(route('admin.activity'))->assertStatus(500);
+        } finally {
+            foreach ($repair[0] as $statement) {
+                DB::statement($statement);
+            }
+        }
+        $this->get(route('admin.activity'))->assertOk();
+    }
+
     public function test_two_office_staff_may_sign_in_on_either_cedu_card(): void
     {
         $two = $this->staffAt(self::VENUES, true);

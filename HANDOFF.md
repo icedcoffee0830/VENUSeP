@@ -683,3 +683,9 @@ new migration 17).
   `hostel-and-counter` and `abook-staff-actions` now search the counter customer by exact email.
 - Not done: email fixes are not on the Activity page (they are in `customer_email_fixes`); a
   counter account has no "resend welcome email" button; walk-in email entry has no typo suggestion.
+
+### 14g. Independent review (2026-11-05)
+- **Migration 17 changed after Aron ran it on `venusep_laravel`; it is safe to run again** (checked on a copy that already had it, with rows in the new tables: nothing lost, nothing overwritten). Two collation fixes: `sp_notify_venue_staff` has no string variable, and `customer_office_blocks` / `customer_email_fixes` are always `utf8mb4_unicode_ci` (the file converts them if an earlier run made them with the server default; Activity failed otherwise). Only a database whose default is general_ci was affected.
+- Staff moves: the tick for both CEDU offices now ends on every move out of CEDU (Staff Management edit, venue form). Office Settings: the history keeps the first 100 characters, so a long location no longer fails on a strict MySQL (XAMPP's is not strict).
+- Tests: `RolesTest` (collation x2, the tick), `OfficeSettingsTest` (long location). `OfficeSettingsTest` counts history rows, so it needs a reset test DB: two of its tests fail on a second run without one.
+- The snapshot in `_tools` is again `.before-m17` + the new migration 17.

@@ -760,7 +760,7 @@ function calHtml(field){
   <div onclick="closeCal()" style="position:fixed;inset:0;z-index:69"></div>
   <div class="cal-pop" style="${field==='dateEnd'?'right:0':'left:0'}" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <button type="button" class="cal-nav" onclick="calNav(-1)">‹</button>
+      <button type="button" class="cal-nav" aria-label="Previous month" onclick="calNav(-1)">‹</button>
       <span style="font-size:13.5px;font-weight:650;color:#1c1b19">${monthLabel}</span>
       <button type="button" class="cal-nav" aria-label="Next month" ${state.cal.month>=LAST_DAY.slice(0,7)?'disabled':''} onclick="calNav(1)">›</button>
     </div>

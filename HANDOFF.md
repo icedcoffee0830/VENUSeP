@@ -789,3 +789,11 @@ Decision: memory `venusep-teammate-bugs-2026-11-05`, item 11. **All of it is in 
 rounds UP to the peso, DOWN when up gives back the full price (₱3 -> ₱2), never 0 (₱1 stays ₱1, no discount).
 `usep_discounted()` / `priceWithDiscount()` use the same rule. The test/flows snapshot is `.before-m19` + a blank line
 + migration 19.
+
+### 15f. Phase Q (2026-11-05, branch `fixes-3`, no migration)
+- **Booking window**: 183 days ahead, every office, online, counter and staff date moves (`BookingRules::lastBookableDay()` / `tooFarAhead()`, checked on the LAST day; a stay's check-out). Replaces the venue year and the hostel's 7-day `hostel_advance_booking_max_days`: that row is still in `system_settings` but nothing reads it. `VENUSEP_MAX_DAYS_AHEAD` exists only so tests can use far dates: it must not be in a real `.env`.
+- **Blocks**: `BookingRules::blockedOfficeNames()` hides the office from the landing page, nav and More rooms; `partials/block-modal` (inside `partials/customer-nav`, so not on the account pages) tells each office once per session (`block_modal_told`) and on every direct link. The landing banner is gone; the direct-link banner stays.
+- **Pagers** are above the rows on all six tables. The four Tabulator pages move `.tabulator-footer` on `tableBuilt`, so Tab reaches it first too.
+- **My bookings** is cards below 1280px (the table needs about 1245px).
+- **Booking Management blank list**: proven to be the written_off row fixed in 1245c9f, for every role (flow `booking-list-roles`). An admin with no group lists nothing, by design (`BookingListRolesTest`).
+- New flows: `booking-dates`, `booking-history-due`, `booking-list-roles`, `table-pagers`, `my-bookings-widths`.

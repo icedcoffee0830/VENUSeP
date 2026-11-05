@@ -501,7 +501,7 @@ function calHtml(field){
   return `
   <div class="cal-pop" style="${field==='checkOut'?'right:0':'left:0'}" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <button class="cal-nav" onclick="calNav(-1)">‹</button>
+      <button class="cal-nav" aria-label="Previous month" onclick="calNav(-1)">‹</button>
       <span style="font-size:13px;font-weight:650;color:#1c1b19">${label}</span>
       <button class="cal-nav" aria-label="Next month" ${state.cal.month>=LAST_DAY.slice(0,7)?'disabled':''} onclick="calNav(1)">›</button>
     </div>

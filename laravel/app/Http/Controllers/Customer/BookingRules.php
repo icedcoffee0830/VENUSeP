@@ -194,31 +194,35 @@ final class BookingRules
         return $notice ? [$notice] : [];
     }
 
-    /* The offices the signed-in customer is blocked at, by name: hidden from their booking
-       listings (Aron 2026-11-05). Staff at the counter still see every office. */
-    public static function blockedOfficeNames(): array
+    /* The office ids the signed-in customer is blocked at; none at the counter or for anyone else. */
+    private static function blockedOfficeIds(): array
     {
         if (counter_mode() || !customer_logged_in()) {
             return [];
         }
         legacy('offices');
-        return array_map(fn ($v) => office_by_id($v)['name'] ?? '', BlockQueries::activeOfficeIds((int) session('customer_id')));
+        return BlockQueries::activeOfficeIds((int) session('customer_id'));
+    }
+
+    /* Those offices by name: hidden from the customer's booking listings (Aron 2026-11-05). */
+    public static function blockedOfficeNames(): array
+    {
+        return array_map(fn ($v) => office_by_id($v)['name'] ?? '', self::blockedOfficeIds());
     }
 
     /* The block modal's notices on this page: each blocked office once per session, and the
        page's own office every time (a direct link). $room: the page's ?room=. */
     public static function blockModalNotices(mixed $room): array
     {
-        if (counter_mode() || !customer_logged_in()) {
+        $blocked = self::blockedOfficeIds();
+        if (!$blocked) {
             return [];
         }
-        legacy('offices');
-        $customerId = (int) session('customer_id');
         $here = is_string($room) ? (office_of_room($room)['id'] ?? null) : null;
         $told = session('block_modal_told', []);
-        $show = array_filter(BlockQueries::activeOfficeIds($customerId), fn ($v) => $v === $here || !in_array($v, $told, true));
+        $show = array_filter($blocked, fn ($v) => $v === $here || !in_array($v, $told, true));
         session(['block_modal_told' => array_values(array_unique(array_merge($told, $show)))]);
-        return array_values(array_filter(array_map(fn ($v) => self::blockNotice($customerId, $v), $show)));
+        return array_values(array_filter(array_map(fn ($v) => self::blockNotice((int) session('customer_id'), $v), $show)));
     }
 
     /* For the counter's "who" step: the customers blocked at THIS room's office, id => true. */

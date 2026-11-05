@@ -91,6 +91,11 @@ export default {
       await page.reload();
       const box = await page.locator('#blockModal').boundingBox();
       expect.ok(box && box.x >= 0 && box.x + box.width <= 360 && box.y >= 0 && box.y + box.height <= 700, 'the modal runs off the screen: ' + JSON.stringify(box));
+      return page;
+    });
+
+    await step('Esc closes the modal', async () => {
+      const page = s.customer;
       await page.keyboard.press('Escape');
       expect.ok(!(await page.locator('#blockModal').isVisible()), 'Esc did not close the modal');
       await page.setViewportSize({ width: 1280, height: 900 });

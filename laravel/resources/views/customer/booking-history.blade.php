@@ -48,6 +48,7 @@
       .sortable-heading[data-direction="asc"]::after { content: "\F235"; opacity: .8; }
       .sortable-heading[data-direction="desc"]::after { content: "\F229"; opacity: .8; }
       .booking-history-table tbody tr:hover { background: #faf9f7; }
+      .booking-history-table .vz-chip { border-radius: 14px; white-space: normal; }
       .booking-amount { font-variant-numeric: tabular-nums; }
       .booking-empty-state td { text-align: center; color: var(--muted); padding: 28px; }
 

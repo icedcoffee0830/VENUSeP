@@ -20,8 +20,7 @@
   } else {
     /* What waits for this person, read on every page. The Staff count opens the tab that waits. */
     $sbIsAdmin = session('account_type') === 'admin';
-    $sbWaiting = $sbIsAdmin ? \App\Queries\CoverQueries::waitingFor(admin_is_super() ? null
-      : \Illuminate\Support\Facades\DB::selectOne('SELECT office_group FROM users WHERE id = ?', [(int) session('user_id')])?->office_group) : ['covers' => 0, 'moves' => 0];
+    $sbWaiting = $sbIsAdmin ? \App\Queries\CoverQueries::waitingForMe() : ['covers' => 0, 'moves' => 0];
     $sbTab = $sbWaiting['covers'] ? ['tab' => 'covers'] : ($sbWaiting['moves'] ? ['tab' => 'moves'] : []);
     $sbCounts = ['Booking Management' => \App\Queries\BookingQueries::needsAction(), 'Staff Management' => $sbWaiting['covers'] + $sbWaiting['moves']];
     $items = [
@@ -91,7 +90,7 @@
 @endif
 @else
 @php [$label, $href, $icon] = $item; @endphp
-    <li><a href="{{ $href }}"@if ($label === $active) class="active" aria-current="page"@endif><i class="bi {{ $icon }}"></i><span>{{ $label }}</span>@isset ($sbCounts[$label])@fragment('sb-' . $label)<span class="cnt" data-live="sb-{{ $label }}" aria-label="{{ $sbCounts[$label] }} need you"@unless ($sbCounts[$label]) hidden @endunless>{{ $sbCounts[$label] }}</span>@endfragment @endisset</a></li>
+    <li><a href="{{ $href }}"@if ($label === $active) class="active" aria-current="page"@endif><i class="bi {{ $icon }}" aria-hidden="true"></i><span>{{ $label }}</span>@isset ($sbCounts[$label])@fragment('sb-' . $label)<span class="cnt" data-live="sb-{{ $label }}" aria-label="{{ $sbCounts[$label] }} need you"@unless ($sbCounts[$label]) hidden @endunless>{{ $sbCounts[$label] }}</span>@endfragment @endisset</a></li>
 @endif
 @endforeach
   </ul>

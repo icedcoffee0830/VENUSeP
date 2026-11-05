@@ -161,6 +161,7 @@
 
       const table = new Tabulator('#customers-table', Object.assign({
         data: data,
+        placeholder: 'No customers match these filters.',
         layout: 'fitColumns',
         pagination: true,
         paginationSize: 10,

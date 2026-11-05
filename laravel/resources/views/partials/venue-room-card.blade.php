@@ -12,7 +12,7 @@
 <article class="vm-card{{ $room['active'] ? '' : ' is-inactive' }}"@if (!$room['active'] || $mt) data-attention="1"@endif>
   <div class="vm-thumb">
 @if ($roomCover)
-    <img src="{{ $roomCover }}" alt="{{ $room['name'] }}" loading="lazy" />
+    <img src="{{ $roomCover }}" alt="{{ $room['name'] }}" width="320" height="200" loading="lazy" />
 @else
     <i class="bi bi-image" aria-hidden="true"></i><span class="vm-sr">No photo yet</span>
 @endif

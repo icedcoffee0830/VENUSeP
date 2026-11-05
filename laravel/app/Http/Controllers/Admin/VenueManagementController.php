@@ -37,20 +37,11 @@ class VenueManagementController extends Controller
         ));
         $pricingScript = ob_get_clean();
 
-        /* Venue cards must start from venues, not rooms: a newly created venue has no
-           rooms yet and still belongs on this page. LEFT JOINs keep that venue in the
-           result while deriving its active room, hostel-bed and assigned-staff counts. */
+        /* The sections start from venues, not rooms: a new venue has no rooms yet and still belongs here. */
         $vmVenueRows = venusep_db_or_fail()->query(
-            "SELECT v.id, v.name, v.venue_type, v.description, v.cover_photo,
-                    COUNT(DISTINCT r.id) AS room_count,
-                    COUNT(DISTINCT hb.id) AS bed_count,
-                    COUNT(DISTINCT s.user_id) AS staff_count
+            "SELECT v.id, v.name, v.venue_type, v.description, v.cover_photo
                FROM venues v
-               LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1" . staff_hall_sql('r.id') . "
-               LEFT JOIN hostel_beds hb ON hb.room_id = r.id AND hb.is_active = 1
-               LEFT JOIN staff s ON s.venue_id = v.id
               WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . staff_hall_office_sql('v.id') . "
-              GROUP BY v.id, v.name, v.venue_type, v.description, v.cover_photo
               ORDER BY v.id"
         )->fetchAll();
 
@@ -71,10 +62,8 @@ class VenueManagementController extends Controller
 
         return live_view('admin.venue-management', [
             'TODAY' => date('Y-m-d'),
-            'venues' => $venues,
             'rooms' => $venueRooms,   // the event rooms, same data the booking page shows
             'hostelRooms' => $hostelRooms,
-            'HOSTEL_VENUE' => $HOSTEL_VENUE,
             'HOSTEL_CR_LABEL' => $HOSTEL_CR_LABEL,
             'DISCOUNT_PERCENT' => $DISCOUNT_PERCENT,
             'vmVenueRows' => $vmVenueRows,

@@ -215,6 +215,7 @@
 
       const table = new Tabulator('#users-table', Object.assign({
         data: data,
+        placeholder: 'No people match these filters.',
         layout: 'fitColumns',
         pagination: true,
         paginationSize: 10,

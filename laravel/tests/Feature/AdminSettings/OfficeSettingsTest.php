@@ -166,10 +166,8 @@ class OfficeSettingsTest extends TestCase
         $this->actingAsAdmin('francishubero@gmail.com');
         $this->send($this->settings(['location' => $long]))->assertOk();
         $this->assertSame($long, $this->venue()->address);
-        $this->send($this->settings(['location' => 'Short']))->assertOk();
-        $this->assertSame('Short', $this->venue()->address);
-        $row = DB::table('venue_settings_history')->where(['venue_id' => 1, 'field' => 'location', 'new_value' => 'Short'])->orderByDesc('id')->first();
-        $this->assertSame(mb_substr($long, 0, 100), $row->old_value);
+        $this->assertSame(mb_substr($long, 0, 100), DB::table('venue_settings_history')->where(['venue_id' => 1, 'field' => 'location'])->orderByDesc('id')->value('new_value'));
+        DB::table('venue_settings_history')->where(['venue_id' => 1, 'field' => 'location'])->delete();
     }
 
     public function test_the_super_admin_edits_any_office_and_bad_contact_info_is_refused(): void

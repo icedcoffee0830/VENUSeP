@@ -827,7 +827,7 @@ tr:hover {
       a.ad-row:hover { background: #faf9f7; }
       .ad-row .r-name { font-weight: 600; font-size: 13.5px; color: #1f1e1e; }
       .ad-row .r-room { font-weight: 500; font-size: 13px; color: #1f1e1e; }
-      .ad-row .r-sub { font-size: 11.5px; color: #8a857d; margin-top: 2px; }
+      .ad-row .r-sub { font-size: 11.5px; color: #6e6a64; margin-top: 2px; }
       .ad-row .r-badges { display: flex; flex-wrap: wrap; gap: 6px; }
       .ad-row .r-act { font-size: 11.5px; color: #6b675f; margin-top: 4px; }
       .ad-row .r-act.warn { color: #8a5a12; }
@@ -852,7 +852,7 @@ tr:hover {
       /* page title row — open, no white strip behind it */
       .header { background: transparent; padding: 0 2px 4px; margin-bottom: 16px; }
       .header h1 { font-size: 22px; letter-spacing: -0.01em; }
-      .header p { font-size: 13px; color: #8a857d; margin-top: 3px; }
+      .header p { font-size: 13px; color: #6e6a64; margin-top: 3px; }
 
       /* buttons — calmer: semibold, rounder, no jump on hover */
       .btn { font-weight: 600; font-size: 13.5px; border-radius: 10px; }
@@ -866,9 +866,9 @@ tr:hover {
       .stat-card { border: 1px solid #e5e5e5; border-radius: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); padding: 16px 18px; min-height: 116px; }
       .stat-card::before { display: none; } /* the black accent bar is gone */
       .stat-card .stat-icon { position: absolute; top: 14px; right: 16px; width: auto; height: auto; border: none; background: none; box-shadow: none; color: #c4bfb5; font-size: 17px; padding: 0; }
-      .stat-card h3 { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; color: #8a857d; margin-bottom: 0; padding-right: 30px; }
+      .stat-card h3 { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; color: #6e6a64; margin-bottom: 0; padding-right: 30px; }
       .stat-card .number { font-size: 27px; font-weight: 700; letter-spacing: -0.01em; margin-top: 10px; }
-      .stat-card .info { font-size: 11.5px; color: #8a857d; margin-top: 4px; }
+      .stat-card .info { font-size: 11.5px; color: #6e6a64; margin-top: 4px; }
       a.stat-card:hover { border-color: #1f1e1e; box-shadow: 0 2px 10px rgba(31, 30, 30, 0.07); }
 
       /* panels — same card language as the rest of the system */
@@ -974,7 +974,7 @@ tr:hover {
                         <div class="ad-venue">
                             <div>
                                 <div class="r-name" style="font-weight:600;font-size:13.5px;color:#1f1e1e">{{ $adV['name'] }}</div>
-                                <div class="r-sub" style="font-size:11.5px;color:#8a857d;margin-top:2px">{{ (string) $adV['description'] }}</div>
+                                <div class="r-sub" style="font-size:11.5px;color:#6e6a64;margin-top:2px">{{ (string) $adV['description'] }}</div>
                             </div>
                             <span style="font-size:12px;color:#6b675f;white-space:nowrap">{{ (int) $adV['rooms'] }} room{{ (int) $adV['rooms'] === 1 ? '' : 's' }}</span>
                         </div>

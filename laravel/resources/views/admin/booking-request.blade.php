@@ -17,8 +17,8 @@
         --vm-border: #e7e6e3;
         --vm-hairline: #f0efec;
         --vm-text: #1f1e1e;
-        --vm-muted: #8a8680;
-        --vm-label: #a3a09a;
+        --vm-muted: #6e6a64;
+        --vm-label: #6e6a64;
         --vm-hover: #f5f4f2;
         --vm-dark: #1f1e1e;
         --vm-navy: #1f2a44;
@@ -358,8 +358,8 @@
         if (!target) return line('#b23a3a', 'Enter the number before attaching a receipt — the check has nothing to compare against without it.');
         let out = "";
         if (declared && target !== declared)      out += line('#8a5a12', '<strong>You changed this.</strong> The customer asked for it to go to ' + fmt(declared) + '.');
-        else if (declared)                        out += line('#8a857d', 'Given by the customer on their refund request.');
-        else                                      out += line('#8a857d', 'No number was declared on the request — this is the number on their account.');
+        else if (declared)                        out += line('#6e6a64', 'Given by the customer on their refund request.');
+        else                                      out += line('#6e6a64', 'No number was declared on the request — this is the number on their account.');
         if (declared && onFile && declared !== onFile)
           out += line('#b23a3a', '&#9888; <strong>This is NOT the number on their account</strong> (' + fmt(onFile) + '). Check it against the sender on the original payment before sending.');
         else if (declared && onFile)
@@ -403,7 +403,7 @@
       }
       function amountVerdict(read, required) {
         const a = pesoCentavos(read), b = pesoCentavos(required);
-        if (a == null || b == null) return ' <span style="color:#8a857d">· could not compare</span>';
+        if (a == null || b == null) return ' <span style="color:#6e6a64">· could not compare</span>';
         if (a === b) return ' <span style="color:#1c7a4f">· matches</span>';
         return ' <span style="color:#b23a3a">· ' + (a < b ? 'SHORT by ' : 'OVER by ') + centavosFmt(Math.abs(b - a)) + '</span>';
       }

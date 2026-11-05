@@ -203,14 +203,14 @@
                         @fragment('cp-email-password')
                         <div data-live="cp-email-password" style="display:contents">
                         @if ($cpHasPassword)
-                        <div class="profile-form-group" id="emailPasswordGroup" hidden><label for="emailPassword">Current Password <span style="font-weight:400;color:#8a857d">(to change your email)</span></label><input class="form-control" id="emailPassword" name="current_password" type="password" autocomplete="current-password" aria-describedby="emailPasswordValidation"><small class="profile-validation" id="emailPasswordValidation" aria-live="polite"></small></div>
+                        <div class="profile-form-group" id="emailPasswordGroup" hidden><label for="emailPassword">Current Password <span style="font-weight:400;color:#6e6a64">(to change your email)</span></label><input class="form-control" id="emailPassword" name="current_password" type="password" autocomplete="current-password" aria-describedby="emailPasswordValidation"><small class="profile-validation" id="emailPasswordValidation" aria-live="polite"></small></div>
                         @elseif (!$cpReauthOk)
                         <div class="profile-form-group" id="emailPasswordGroup" hidden><p class="signin-note" role="status">To change your email, first confirm it&rsquo;s you with Google (Account Security, below).</p></div>
                         @endif
                         </div>
                         @endfragment
                         <div class="profile-form-group"><label for="contactNumber">Contact Number</label><input class="form-control" id="contactNumber" name="contact_number" type="tel" autocomplete="tel" value="{{ $customerProfile['phone'] }}" aria-describedby="contactNumberValidation" required><small class="profile-validation" id="contactNumberValidation" aria-live="polite"></small></div>
-                        <div class="profile-form-group"><label for="universityId">USeP ID number <span style="font-weight:400;color:#8a857d">(optional)</span></label><input class="form-control" id="universityId" name="university_id_no" type="text" value="{{ $customerProfile['universityId'] }}" placeholder="e.g. 2023-00412"><small class="profile-validation">Staff check your uploaded ID against this when applying the USeP discount.</small></div>
+                        <div class="profile-form-group"><label for="universityId">USeP ID number <span style="font-weight:400;color:#6e6a64">(optional)</span></label><input class="form-control" id="universityId" name="university_id_no" type="text" value="{{ $customerProfile['universityId'] }}" placeholder="e.g. 2023-00412"><small class="profile-validation">Staff check your uploaded ID against this when applying the USeP discount.</small></div>
                         <div class="profile-form-group full-width"><label for="address">Address</label><input class="form-control" id="address" name="address" type="text" autocomplete="street-address" value="{{ $customerProfile['address'] }}" required></div>
                       </div>
                       <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-check2" aria-hidden="true"></i>Save Changes</button><button class="btn-profile" type="reset">Cancel</button></div>

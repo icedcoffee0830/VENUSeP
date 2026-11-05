@@ -321,7 +321,7 @@
             <span><span class="br-badge ${payBadge(r.pay).c}">${r.pay === 'paid_cash' ? esc(r.payLabel) : esc(payBadge(r.pay).t)}</span></span>
             <span class="hide-md r-act ${r.cls}">${esc(actLabel(r))}</span>
             <span class="r-chev">&rsaquo;</span>
-          </a>`).join('') || '<div style="padding:1.2rem;color:#8a857d;font-size:.85rem">No requests match.</div>';
+          </a>`).join('') || '<div style="padding:1.2rem;color:#6e6a64;font-size:.85rem">No requests match.</div>';
         drawPager(all.length);
       }
       function draw() {

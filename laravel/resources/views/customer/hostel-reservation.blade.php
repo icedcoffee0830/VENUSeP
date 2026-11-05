@@ -103,7 +103,7 @@
   .bed-no{font-size:12.5px;font-weight:650;color:#a5a19a;text-align:center}
   .bed-name{height:36px;border:1px solid rgba(0,0,0,.14);border-radius:9px;padding:0 10px;font-size:13px;background:#fff;width:100%}
   .g-seg{display:flex;border:1px solid rgba(0,0,0,.14);border-radius:9px;overflow:hidden;height:36px;background:#fff}
-  .g-seg button{flex:1;border:none;background:none;font-size:12px;font-weight:600;color:#8a857d;cursor:pointer;padding:0}
+  .g-seg button{flex:1;border:none;background:none;font-size:12px;font-weight:600;color:#6e6a64;cursor:pointer;padding:0}
   .g-seg button.on{background:#a11626;color:#fff}
 @include('partials.booking-css-footer-viewer')
 @include('partials.booking-css-more-rooms')
@@ -785,7 +785,7 @@ function detailScreen(){
 
   const tabDefs=[['overview','Overview'],['availability','Availability'],['policies','Policies']];
   const tabs=tabDefs.map(([k,label])=>`
-    <button onclick="setTab('${k}')" style="background:none;border:none;padding:12px 14px;font-size:14px;font-weight:${state.tab===k?680:550};color:${state.tab===k?'#1c1b19':'#8a857d'};border-bottom:2px solid ${state.tab===k?'#a11626':'transparent'};cursor:pointer;margin-bottom:-1px">${label}</button>`).join('');
+    <button onclick="setTab('${k}')" style="background:none;border:none;padding:12px 14px;font-size:14px;font-weight:${state.tab===k?680:550};color:${state.tab===k?'#1c1b19':'#6e6a64'};border-bottom:2px solid ${state.tab===k?'#a11626':'transparent'};cursor:pointer;margin-bottom:-1px">${label}</button>`).join('');
 
   let content='';
   if(state.tab==='overview'){
@@ -990,7 +990,7 @@ function bookingRows(){
     mathLabel: `${d.beds} × ${peso(d.rate)} × ${d.nights.length} night${d.nights.length>1?'s':''}`,
   };
 }
-const blk=(label,value,span)=>`<div style="min-width:0;${span?'grid-column:1 / -1;':''}"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+const blk=(label,value,span)=>`<div style="min-width:0;${span?'grid-column:1 / -1;':''}"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
 
 function rosterHtml(occupants){
   return `
@@ -1013,7 +1013,7 @@ function reviewScreen(){
   return `
   ${pageHeader()}
   <main style="max-width:620px;margin:0 auto;padding:34px 24px 72px">
-    <button onclick="backToDetail()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">← Back</button>
+    <button onclick="backToDetail()" style="background:none;border:none;color:#6e6a64;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">← Back</button>
     <h1 style="margin:0 0 6px;font-size:25px;font-weight:720;letter-spacing:-.01em">Review your booking</h1>
     <p style="margin:0 0 22px;font-size:14px;color:#7a766f">${COUNTER?'Check the details with the guest, then take the payment.':'Check the details, then attach a valid ID. Once staff approve it, you pay before you check in.'}</p>
     <div style="margin-top:14px"><label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
@@ -1023,7 +1023,7 @@ function reviewScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
-        ${blk('Room', esc(R.name)+' <span style="font-weight:400;color:#8a857d">· '+esc(CR_LABEL[R.cr_type])+'</span>')}
+        ${blk('Room', esc(R.name)+' <span style="font-weight:400;color:#6e6a64">· '+esc(CR_LABEL[R.cr_type])+'</span>')}
         ${blk('Booked by', esc(COUNTER ? state.booker.name : ACCOUNT.name))}
         ${blk('Check-in', esc(fmtDate(x.d.b.checkIn)))}
         ${blk('Check-out', esc(fmtDate(x.d.b.checkOut)))}
@@ -1032,11 +1032,11 @@ function reviewScreen(){
       </div>
       ${rosterHtml(state.booking.occupants)}
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:14px;padding-top:13px;border-top:1px solid rgba(0,0,0,.08)">
-        <span style="font-size:12.5px;color:#8a857d">${esc(x.mathLabel)}</span>
+        <span style="font-size:12.5px;color:#6e6a64">${esc(x.mathLabel)}</span>
         <span style="font-size:21px;font-weight:720">${peso(x.d.total)}</span>
       </div>
       ${x.d.discountAmount>0?`
-      <div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#8a857d;margin-top:4px">
+      <div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#6e6a64;margin-top:4px">
         <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
         <span style="color:#1c7a4f;font-weight:640">&minus;${peso(x.d.discountAmount)}</span>
       </div>
@@ -1059,7 +1059,7 @@ function reviewScreen(){
          DB-DECISIONS #2 applies the discount to hostel bookings too. -->
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px">
       <div style="font-size:14.5px;font-weight:680;margin-bottom:3px">USeP affiliation <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">USeP students, faculty, employees and alumni get <strong>${DISCOUNT_PERCENT}% off</strong> the whole stay. Staff confirm it from your ID.</div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:12px">USeP students, faculty, employees and alumni get <strong>${DISCOUNT_PERCENT}% off</strong> the whole stay. Staff confirm it from your ID.</div>
       ${[[true,'I am USeP-affiliated','Student, faculty or employee &mdash; upload your <strong>USeP ID</strong> below'],
          [false,'Not affiliated','Upload any valid government-issued ID below']].map(function(o){
         const on = state.affiliated === o[0];
@@ -1068,7 +1068,7 @@ function reviewScreen(){
               ${on?`<span style="width:8px;height:8px;border-radius:999px;background:#a11626"></span>`:''}</span>
             <span style="min-width:0">
               <span style="display:block;font-size:13.5px;font-weight:640;color:#1c1b19">${o[1]}</span>
-              <span style="display:block;font-size:12.5px;color:#8a857d;margin-top:2px">${o[2]}</span>
+              <span style="display:block;font-size:12.5px;color:#6e6a64;margin-top:2px">${o[2]}</span>
             </span>
           </div>`;
       }).join('')}
@@ -1080,7 +1080,7 @@ function reviewScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:14px">
       <div style="font-size:14.5px;font-weight:680;margin-bottom:3px">Valid ID <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px">One ID for the person booking. Staff check it before approving, and match it at check-in.</div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:12px">One ID for the person booking. Staff check it before approving, and match it at check-in.</div>
       <input type="file" id="idFile" accept="image/png,image/jpeg,image/webp,application/pdf" style="display:none" onchange="uploadId(this)">
       ${idOk?`
         <div style="display:flex;align-items:center;gap:11px;border:1px solid rgba(0,0,0,.12);border-radius:11px;padding:11px 13px;background:#fff">
@@ -1097,7 +1097,7 @@ function reviewScreen(){
     ${REFUNDS_ENABLED?'':`
     <div style="background:#fff;border:1px solid ${state.agreeNoRefund?'#d4ebdd':'#f0d9b8'};border-radius:16px;padding:18px;margin-top:14px">
       <div style="font-size:14.5px;font-weight:680;margin-bottom:3px">Non-refundable booking <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:12px;line-height:1.55">USeP does not give refunds. Once you pay, this stay is final. If USeP has to close the room, you will be offered a replacement room or new dates instead.</div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:12px;line-height:1.55">USeP does not give refunds. Once you pay, this stay is final. If USeP has to close the room, you will be offered a replacement room or new dates instead.</div>
       <label style="display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.55;color:#1c1b19;cursor:pointer">
         <input type="checkbox" id="agreeNoRefund" ${state.agreeNoRefund?'checked':''} onchange="toggleAgreeNoRefund(this)" style="margin-top:2px;width:15px;height:15px;accent-color:#a11626;flex:none">
         <span>I understand this booking is <strong>non-refundable</strong> once paid.</span>
@@ -1149,10 +1149,10 @@ function pendingScreen(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
         ${blk('Reference', esc(state.reference))}
         ${blk('Room', esc(R.name))}
-        ${blk('Stay', esc(x.stayLabel)+' <span style="font-weight:400;color:#8a857d">· '+esc(x.nightsLabel)+'</span>')}
+        ${blk('Stay', esc(x.stayLabel)+' <span style="font-weight:400;color:#6e6a64">· '+esc(x.nightsLabel)+'</span>')}
         ${blk('Amount (before check-in)', peso(x.d.total))}
       </div>
-      <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">The hostel is <strong>pay to use</strong>: staff check you in once the stay is paid. A GCash receipt still being reviewed is confirmed first.</div>
+      <div style="font-size:12px;color:#6e6a64;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">The hostel is <strong>pay to use</strong>: staff check you in once the stay is paid. A GCash receipt still being reviewed is confirmed first.</div>
     </div>
 
         <!-- Live system: real people do these steps. Say who has it and where the
@@ -1161,7 +1161,7 @@ function pendingScreen(){
       <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the hostel staff now. You will see the decision in <a href="{{ route('customer.booking-history') }}" style="color:#1f1e1e;font-weight:640">My Bookings</a> &mdash; pay there with <strong>Pay now</strong>, or bring the cash and your valid ID to the front desk.</div>
     </div>
 
-    <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse other rooms</button>
+    <button onclick="restart()" style="background:none;border:none;color:#6e6a64;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse other rooms</button>
   </main>`;
 }
 
@@ -1183,7 +1183,7 @@ function paymentScreen(){
         <span style="width:14px;height:14px;border-radius:999px;border:1.5px solid ${on?'#a11626':'#c6c2ba'};display:flex;align-items:center;justify-content:center;flex:none">${on?'<span style="width:7px;height:7px;border-radius:999px;background:#a11626"></span>':''}</span>
         <span style="font-size:13.5px;font-weight:650">${title}</span>
       </div>
-      <div style="font-size:12.5px;color:#8a857d;margin-top:4px;line-height:1.45">${sub}</div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-top:4px;line-height:1.45">${sub}</div>
     </button>`;
   };
 
@@ -1193,7 +1193,7 @@ function paymentScreen(){
       ${blk('GCash number', esc(gcAccount().number.replace(/^(\d{4})(\d{3})(\d{4})$/,'$1 $2 $3')))}
       ${blk('Reference to include', esc(state.reference))}
       ${blk('Exact amount', '<span style="font-size:16px">'+peso(x.d.total)+'</span>')}
-      <div style="grid-column:1 / -1;font-size:12.5px;color:#8a857d;line-height:1.5;border-top:1px solid rgba(0,0,0,.06);padding-top:11px">
+      <div style="grid-column:1 / -1;font-size:12.5px;color:#6e6a64;line-height:1.5;border-top:1px solid rgba(0,0,0,.06);padding-top:11px">
         This is the hostel staff's designated GCash account — <strong>not</strong> the same account as the event venues. The staff cash this out and hand it to the ${esc(CASHIER.name)}, who issues your Official Receipt.
       </div>
     </div>
@@ -1209,7 +1209,7 @@ function paymentScreen(){
       ${blk('Open', esc(CASH_PAY.hours))}
       ${blk('Quote your reference', esc(state.reference))}
       ${blk('Exact amount', '<span style="font-size:16px">'+peso(x.d.total)+'</span>')}
-      <div style="grid-column:1 / -1;font-size:12.5px;color:#8a857d;line-height:1.5;border-top:1px solid rgba(0,0,0,.06);padding-top:11px">
+      <div style="grid-column:1 / -1;font-size:12.5px;color:#6e6a64;line-height:1.5;border-top:1px solid rgba(0,0,0,.06);padding-top:11px">
         Pay the hostel staff when you arrive, by the end of ${esc(payByInfo().label)} &mdash; you get your bed once it is paid. Your Official Receipt comes back from the ${esc(CASHIER.name)} later.
       </div>
     </div>`;
@@ -1222,10 +1222,10 @@ function paymentScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-bottom:14px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
-        ${blk('Room', esc(R.name)+' <span style="font-weight:400;color:#8a857d">· '+esc(CR_LABEL[R.cr_type])+'</span>')}
-        ${blk('Stay', esc(x.stayLabel)+' <span style="font-weight:400;color:#8a857d">· '+esc(x.nightsLabel)+'</span>')}
+        ${blk('Room', esc(R.name)+' <span style="font-weight:400;color:#6e6a64">· '+esc(CR_LABEL[R.cr_type])+'</span>')}
+        ${blk('Stay', esc(x.stayLabel)+' <span style="font-weight:400;color:#6e6a64">· '+esc(x.nightsLabel)+'</span>')}
         ${blk('Beds', esc(x.bedsLabel))}
-        ${blk('Amount due', '<span style="font-size:17px">'+peso(x.d.total)+'</span> <span style="font-weight:400;color:#8a857d;font-size:12px">'+esc(x.mathLabel)+'</span>')}
+        ${blk('Amount due', '<span style="font-size:17px">'+peso(x.d.total)+'</span> <span style="font-weight:400;color:#6e6a64;font-size:12px">'+esc(x.mathLabel)+'</span>')}
       </div>
     </div>
 
@@ -1285,13 +1285,13 @@ function doneScreen(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
         ${blk('Reference', esc(state.reference))}
         ${blk('Pay by', 'end of '+esc(payByInfo().label))}
-        ${blk('Room', esc(R.name)+' <span style="font-weight:400;color:#8a857d">· '+esc(CR_LABEL[R.cr_type])+'</span>')}
-        ${blk('Stay', esc(x.stayLabel)+' <span style="font-weight:400;color:#8a857d">· '+esc(x.nightsLabel)+'</span>')}
+        ${blk('Room', esc(R.name)+' <span style="font-weight:400;color:#6e6a64">· '+esc(CR_LABEL[R.cr_type])+'</span>')}
+        ${blk('Stay', esc(x.stayLabel)+' <span style="font-weight:400;color:#6e6a64">· '+esc(x.nightsLabel)+'</span>')}
         ${blk('Beds', esc(x.bedsLabel))}
         ${blk('Total', peso(x.d.total))}
       </div>
       ${rosterHtml(state.booking.occupants)}
-      <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:12px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">
+      <div style="font-size:12px;color:#6e6a64;line-height:1.6;margin-top:12px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">
         <strong style="font-weight:640;color:#4a463f">At check-in:</strong> show the staff the valid ID you submitted. You get your bed once the stay is paid. Each guest sleeps in the bed booked under their name.
       </div>
     </div>
@@ -1301,7 +1301,7 @@ function doneScreen(){
       <div style="font-size:12.5px;color:#6b675f;line-height:1.6">The ${esc(CASHIER.name)} issues the Official Receipt once the staff hand the money over. It will appear on this stay in <a href="{{ route('customer.booking-history') }}" style="color:#1f1e1e;font-weight:640">My Bookings</a>.</div>
     </div>` : ''}'}
 
-    <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Back to venues</button>
+    <button onclick="restart()" style="background:none;border:none;color:#6e6a64;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Back to venues</button>
   </main>`;
 }
 
@@ -1326,7 +1326,7 @@ function currentScreen(){
 function counterDoneScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
   const r = state.counterResult || {};
-  const blk2=(label,value)=>`<div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+  const blk2=(label,value)=>`<div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
   const next = state.booking.checkIn===TODAY
     ? 'Paid. Check the guest in from the booking when they are ready.'
     : 'Paid. The guest checks in on <strong>'+esc(fmtDate(state.booking.checkIn))+'</strong> with the valid ID you saw.';
@@ -1345,7 +1345,7 @@ function counterDoneScreen(){
         ${blk2('Paid in cash', peso(x.d.total))}
       </div>
       <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:12px;font-size:12.5px;color:#4a463f;line-height:1.6">${next} The Transaction Receipt is on the booking${state.booker.mode==='walkin'&&!state.booker.noEmail?' and was emailed to the guest':''}.</div>
-      <div style="font-size:12.5px;color:#8a857d;line-height:1.6;margin-top:8px">
+      <div style="font-size:12.5px;color:#6e6a64;line-height:1.6;margin-top:8px">
         ${state.booker.mode==='walkin'
           ? 'No account, so any refund is handled by staff at the counter.'
           : 'Linked to <strong>'+esc(state.booker.name)+'</strong>&rsquo;s account &mdash; they also see it in My Bookings.'}
@@ -1355,7 +1355,7 @@ function counterDoneScreen(){
       <a href="{{ route('admin.booking-request') }}?id=${encodeURIComponent(state.reference)}" style="flex:1;min-width:180px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:680;text-decoration:none">Open the booking</a>
       <a href="{{ route('customer.hostel-reservation') }}?room=${encodeURIComponent(state.roomId)}&counter=1" style="flex:none;height:48px;padding:0 20px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;color:#1c1b19;font-size:14px;font-weight:640;text-decoration:none">Another booking</a>
     </div>
-    <a href="{{ route('admin.dashboard') }}" style="display:inline-block;margin-top:16px;color:#8a857d;font-size:13px;font-weight:600">Back to the dashboard</a>
+    <a href="{{ route('admin.dashboard') }}" style="display:inline-block;margin-top:16px;color:#6e6a64;font-size:13px;font-weight:600">Back to the dashboard</a>
   </main>`;
 }
 /* Redraw, then put the caret back where it was — the bed-name inputs and the

@@ -25,7 +25,7 @@
         --ps-muted: #6b675f;
         --ps-text: #1c1b19;
         --ps-dark: #1f1e1e;
-        --ps-warn: #ff6b12;
+        --ps-warn: #8a5a12;
         --ps-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
       }
       .ps-header { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: 1.4rem; }

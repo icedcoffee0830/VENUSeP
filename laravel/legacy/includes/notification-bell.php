@@ -49,11 +49,11 @@ $GLOBALS['nbRendered'] = true;
   .nb-item.is-unread .nb-dot{background:#a11626}
   .nb-item.is-unread .nb-text{font-weight:650;color:#1c1b19}
   .nb-text{display:block;font-size:13px;line-height:1.45;color:#4a463f}
-  .nb-ago{display:block;font-size:11.5px;color:#8a857d;margin-top:2px}
+  .nb-ago{display:block;font-size:11.5px;color:#6e6a64;margin-top:2px}
   .nb-remind{background:#fdf7ee}
   .nb-remind .nb-dot{background:#d9930d}
   .nb-remind .nb-text{color:#7a4d0f}
-  .nb-empty{padding:26px 14px;text-align:center;font-size:13px;color:#8a857d}
+  .nb-empty{padding:26px 14px;text-align:center;font-size:13px;color:#6e6a64}
   @media (max-width:767.98px){.nb-panel{position:fixed;top:62px;right:8px}}
   @media print{.nb-wrap{display:none!important}}
 </style>

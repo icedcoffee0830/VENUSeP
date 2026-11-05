@@ -194,14 +194,14 @@ function counterBar(){
 function whoScreen(){
   const b = state.booker;
   const card = (inner, pad) => `<div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:${pad||'16px'};box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05);margin-top:14px">${inner}</div>`;
-  const label = t => `<div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:6px">${t}</div>`;
+  const label = t => `<div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:6px">${t}</div>`;
   const inputStyle = 'width:100%;height:42px;border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:0 12px;font-size:14px;font-family:inherit;background:#fff';
 
   const modeBtn = (m, title, sub) => {
     const on = b.mode === m;
     return `<button type="button" onclick="setBookerMode('${m}')" style="flex:1;min-width:200px;text-align:left;border:1.5px solid ${on?'#a11626':'rgba(0,0,0,.14)'};background:${on?'#fdf4f5':'#fff'};border-radius:12px;padding:12px 14px;cursor:pointer;font-family:inherit">
       <div style="font-size:13.5px;font-weight:680;color:#1c1b19">${title}</div>
-      <div style="font-size:12.5px;color:#8a857d;margin-top:2px">${sub}</div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-top:2px">${sub}</div>
     </button>`;
   };
 
@@ -212,7 +212,7 @@ function whoScreen(){
       <button type="button" onclick="pickCustomer(${Number(r.id)}, ${esc(JSON.stringify(String(r.name || '')))}, ${esc(JSON.stringify(String(r.phone || '')))}, ${r.noPassword ? 'true' : 'false'})"
               style="display:block;width:100%;text-align:left;border:none;border-bottom:1px solid #f0efec;background:#fff;padding:10px 12px;cursor:pointer;font-family:inherit">
         <div style="font-size:13.5px;font-weight:640;color:#1c1b19">${esc(r.name)}${r.usep ? ` <span style="font-size:11px;font-weight:650;color:#1c7a4f;background:#eaf6ef;border-radius:999px;padding:1px 7px;margin-left:4px">USeP account</span>` : ''}</div>
-        <div style="font-size:12.5px;color:#8a857d">${esc(r.email)} &middot; ${esc(r.phone)}</div>
+        <div style="font-size:12.5px;color:#6e6a64">${esc(r.email)} &middot; ${esc(r.phone)}</div>
         ${COUNTER_BLOCKED[r.id] ? `<div style="font-size:12px;font-weight:650;color:#b23a3a;margin-top:2px">Blocked at this office</div>` : ''}
       </button>`).join('');
 
@@ -220,7 +220,7 @@ function whoScreen(){
       ${label('Find the account')}
       <input id="bkSearch" type="text" value="${esc(b.query)}" oninput="searchCustomers(this.value)" placeholder="Full name, exact email, or mobile number" aria-label="Find the account" aria-describedby="bkSearchHint" style="${inputStyle}" autocomplete="off" spellcheck="false">
       <div id="bkSearchHint" style="font-size:12px;color:#77736c;margin-top:6px;line-height:1.5">A name (at least three letters), or the whole email or mobile number. Every office&rsquo;s accounts are searched. Email and phone are shown partly hidden &mdash; enough to confirm, not enough to copy down.</div>
-      ${b.searching ? `<div style="font-size:12.5px;color:#8a857d;margin-top:10px">Searching&hellip;</div>` : ''}
+      ${b.searching ? `<div style="font-size:12.5px;color:#6e6a64;margin-top:10px">Searching&hellip;</div>` : ''}
       ${results ? `<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden;margin-top:10px">${results}</div>` : ''}
       ${(!b.searching && b.query.trim().length>=3 && !b.results.length && !b.customerId)
         ? `<div style="font-size:12.5px;color:#8a5a12;margin-top:10px">No account matches that. If they have never registered, switch to <strong>New account</strong> or <strong>No account</strong>.</div>` : ''}
@@ -228,7 +228,7 @@ function whoScreen(){
       ${b.customerId ? `
         <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:14px">
           <div style="font-size:13.5px;font-weight:680;color:#1c1b19">${esc(b.name)}</div>
-          <div style="font-size:12.5px;color:#8a857d;margin-bottom:10px">${esc(b.phone)}</div>
+          <div style="font-size:12.5px;color:#6e6a64;margin-bottom:10px">${esc(b.phone)}</div>
           ${COUNTER_BLOCKED[b.customerId] ? `
             <div role="alert" style="background:#fcecec;border:1px solid #f0c9c9;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5;color:#8a1f1f">
               <strong>Blocked at this office.</strong> This customer can&rsquo;t make new bookings here, online or at the counter, until an admin lifts the block.
@@ -249,7 +249,7 @@ function whoScreen(){
               <span style="font-size:13.5px;line-height:1.5;color:#1c1b19"><strong>ID checked:</strong> I looked at a valid ID and it is this person, <strong>${esc(b.name)}</strong>.</span>
             </label>` : `
             ${label('Hand the screen to the customer')}
-            <div style="font-size:12.5px;color:#8a857d;margin-bottom:8px;line-height:1.5">They type their own password to confirm this is their account. It is checked and discarded &mdash; they are not signed in, and you stay signed in.</div>
+            <div style="font-size:12.5px;color:#6e6a64;margin-bottom:8px;line-height:1.5">They type their own password to confirm this is their account. It is checked and discarded &mdash; they are not signed in, and you stay signed in.</div>
             <input id="bkPassword" type="password" placeholder="Customer's password" style="${inputStyle}" autocomplete="off">
             ${b.error ? `<div style="font-size:12.5px;color:#b23a3a;margin-top:8px">${esc(b.error)}</div>` : ''}
             <button type="button" onclick="verifyBooker()" style="margin-top:10px;height:40px;padding:0 16px;border:1px solid rgba(0,0,0,.16);border-radius:10px;background:#fff;font-size:13px;font-weight:640;cursor:pointer;font-family:inherit">Confirm identity</button>`}
@@ -326,7 +326,7 @@ function whoScreen(){
   const ready = counterBookerReady();
   return `
   <main style="max-width:680px;margin:0 auto;padding:26px 18px 80px">
-    <button onclick="state.screen='detail';window.scrollTo(0,0);render()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">&larr; Back to the room</button>
+    <button onclick="state.screen='detail';window.scrollTo(0,0);render()" style="background:none;border:none;color:#6e6a64;font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px">&larr; Back to the room</button>
     <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px">Who is this booking for?</h1>
     <p style="font-size:14px;color:#6b675f;margin:0 0 4px;line-height:1.6">The room and dates are set. Now the person at the counter.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">

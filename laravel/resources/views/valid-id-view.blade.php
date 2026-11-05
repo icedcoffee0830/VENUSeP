@@ -40,18 +40,18 @@
   .vi-tool { width: 38px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); background: rgba(20,18,17,.7); color: #fff; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
   .vi-tool:hover { background: rgba(60,55,52,.85); }
   .vi-missing { color: #d9d3cc; text-align: center; font-size: 14px; line-height: 1.6; max-width: 340px; }
-  .vi-missing i { display: block; font-size: 34px; margin-bottom: 10px; color: #8a857d; }
+  .vi-missing i { display: block; font-size: 34px; margin-bottom: 10px; color: #6e6a64; }
   /* side card */
   .vi-card { background: #fff; border: 1px solid #ebe7e2; border-radius: 16px; padding: 18px; align-self: start; position: sticky; top: 78px; }
-  .vi-card h2 { margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #8a857d; }
+  .vi-card h2 { margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #6e6a64; }
   .vi-card h2 + .vi-row { border-top: 0; }
   .vi-row { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0; border-top: 1px solid #f2efeb; font-size: 13px; }
-  .vi-row span:first-child { color: #8a857d; flex: none; }
+  .vi-row span:first-child { color: #6e6a64; flex: none; }
   .vi-row span:last-child { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
   .vi-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 650; }
   .vi-tag.ok { background: #e8f2ec; color: #1c7a4f; } .vi-tag.warn { background: #fdf3e6; color: #8a5a12; } .vi-tag.bad { background: #fcecec; color: #b23a3a; }
   .vi-block + .vi-block { margin-top: 18px; padding-top: 16px; border-top: 1px solid #ebe7e2; }
-  .vi-note { margin: 14px 0 0; font-size: 12px; color: #8a857d; line-height: 1.55; }
+  .vi-note { margin: 14px 0 0; font-size: 12px; color: #6e6a64; line-height: 1.55; }
   @media (max-width: 860px) {
     .vi-main { grid-template-columns: 1fr; padding: 12px 12px 22px; }
     .vi-stage { min-height: 60vh; }

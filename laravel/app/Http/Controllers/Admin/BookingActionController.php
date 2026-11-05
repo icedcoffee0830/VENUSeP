@@ -139,7 +139,7 @@ class BookingActionController extends Controller
                 'resLabel'   => $after['bookingStatusStaff'],
                 'payLabel'   => $after['paymentStatusStaff'],
                 'total'      => $after['amount'],
-                'discount'   => $after['discountPercent'],
+                'discount'   => $after['discountAmount'] > 0 ? $after['discountPercent'] : 0,   /* rounding can leave no discount: the rate stays on the row, unsaid */
                 'payBy'      => $after['payment']['payByLabel'],
                 'graceEnds'  => $after['payment']['graceEndsLabel'] ?? null,
                 'method'     => $after['method'],          /* Cash received turns a stay into a cash booking */

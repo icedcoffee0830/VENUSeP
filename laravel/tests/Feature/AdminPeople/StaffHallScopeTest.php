@@ -462,7 +462,7 @@ class StaffHallScopeTest extends TestCase
         /* an admin reads it whole, another group's office included (the counter booking's history) */
         DB::table('bookings')->where('id', $other)->update(['room_id' => $this->roomId('r5')]);
         $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.dashboard'))->assertOk();
-        $owes = BookingRules::overdueBookings(venusep_db(), null, $owner)[$owner] ?? '';
+        $owes = BookingRules::overdueBookings(null, $owner)[$owner] ?? '';
         $this->assertStringContainsString(' at USeP Venues, ', $owes);
     }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Queries\BookingCreateQueries;
 
 /* THE REQUEST DETAIL (was admin/booking-request.php) — built from the same
    `bookings` rows the queue and the customer's own history read. Every
@@ -158,7 +159,7 @@ class BookingRequestController extends Controller
             'writeOff'  => $b['writeOffReason'],
             'canForceCancel' => $b['reservationCode'] === 'approved'
                 && in_array($b['paymentCode'], ['locked', 'await_event', 'await_gcash', 'await_cash', 'await_pos'], true)
-                && !\App\Http\Controllers\Customer\BookingRules::eventStarted(venusep_db(), (int) $b['id']),
+                && !BookingCreateQueries::eventStarted((int) $b['id']),
             'isPaid'    => in_array($b['paymentCode'], ['confirmed', 'paid_cash', 'refund_denied'], true),
             'organization' => $b['organization'],
             'receipt'   => $receipt,

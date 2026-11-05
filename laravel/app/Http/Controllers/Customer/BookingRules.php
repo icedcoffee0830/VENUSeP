@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Customer;
 
 use App\Queries\BlockQueries;
+use App\Queries\BookingCreateQueries;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -27,7 +28,7 @@ final class BookingRules
 
     /* The page sends the rate it showed. A different rate now gets this reply, with the
        room as it is now so the page can redraw it; null when it matches or none was sent. */
-    public static function priceChanged(PDO $pdo, array $room, string $roomCode, mixed $shown, string $advice): ?array
+    public static function priceChanged(array $room, string $roomCode, mixed $shown, string $advice): ?array
     {
         $event = $room['room_type'] === 'event';
         $rate  = (float) ($event ? $room['fee_per_day'] : $room['rate_per_head_per_night']);
@@ -38,9 +39,7 @@ final class BookingRules
         if ($event) {
             $now += ['fee' => $rate, 'capacity' => (int) $room['attendee_capacity']];
         } else {
-            $beds = $pdo->prepare('SELECT COUNT(*) FROM hostel_beds WHERE room_id = :r AND is_active = 1');
-            $beds->execute([':r' => $room['id']]);
-            $now += ['rate' => $rate, 'beds' => (int) $beds->fetchColumn()];
+            $now += ['rate' => $rate, 'beds' => BookingCreateQueries::countActiveBeds((int) $room['id'])];
         }
         return ['ok' => false, 'error' => 'price_changed', 'room' => $now,
             'message' => 'The price of ' . $room['name'] . ' changed to ₱' . self::peso($rate) . '. ' . $advice];
@@ -98,40 +97,11 @@ final class BookingRules
     }
 
     /* The refusal once a customer holds MAX_UNPAID unpaid upcoming bookings at this office. */
-    public static function tooManyUnpaid(PDO $pdo, int $customerId, int $venueId): ?string
+    public static function tooManyUnpaid(int $customerId, int $venueId): ?string
     {
-        $st = $pdo->prepare(
-            "SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id
-              WHERE b.customer_id = :c AND r.venue_id = :v
-                AND b.reservation_status IN ('pending', 'approved')
-                AND b.payment_status IN ('locked', 'await_event', 'await_gcash', 'await_cash', 'await_pos')
-                AND fn_booking_last_day(b.id) >= CURDATE()"
-        );
-        $st->execute([':c' => $customerId, ':v' => $venueId]);
         $max = (int) config('venusep.max_unpaid');
-        return (int) $st->fetchColumn() < $max ? null
+        return BookingCreateQueries::countUnpaidUpcoming($customerId, $venueId) < $max ? null
             : 'You already have ' . $max . ' unpaid bookings with this office. Please pay or cancel one before booking again.';
-    }
-
-    /* Has the event begun? A venue booking at its first slot; a hostel stay once its first
-       day has passed or the guest is in. */
-    public static function eventStarted(PDO $pdo, int $bookingId): bool
-    {
-        $st = $pdo->prepare(
-            "SELECT COALESCE(
-                (SELECT TIMESTAMP(s.slot_date, s.start_time) FROM venue_booking_slots s WHERE s.booking_id = :b ORDER BY s.slot_date, s.start_time LIMIT 1) <= NOW(),
-                (SELECT h.checked_in = 1 OR h.check_in_date < CURDATE() FROM hostel_booking_details h WHERE h.booking_id = :b2), 0)"
-        );
-        $st->execute([':b' => $bookingId, ':b2' => $bookingId]);
-        return (bool) $st->fetchColumn();
-    }
-
-    /* What the new booking keeps for later: the rate shown right now, and who it is for. */
-    public static function stamp(PDO $pdo, int $bookingId, int $discount, $organization): void
-    {
-        $org = mb_substr(trim((string) $organization), 0, 190);
-        $pdo->prepare('UPDATE bookings SET quoted_discount_percent = :d, organization_name = :o WHERE id = :b')
-            ->execute([':d' => $discount, ':o' => $org !== '' ? $org : null, ':b' => $bookingId]);
     }
 
     /* THE UNPAID-BOOKING BLOCK (Aron, 2026-11-01). The offices (one `venues` row each) are
@@ -145,20 +115,11 @@ final class BookingRules
        unpaid booking per office; every such customer when $customerId is null.
        A staff session reads the details of its own halls only: the rule is the office's, so
        it still hears of the rest, as "Another room at <office>" (DB-DECISIONS 28). */
-    public static function overdueBookings(PDO $pdo, ?string $roomCode = null, ?int $customerId = null): array
+    public static function overdueBookings(?string $roomCode = null, ?int $customerId = null): array
     {
         legacy('auth');
         try {
-            $stmt = $pdo->prepare(
-                "SELECT b.customer_id, b.room_id, r.venue_id, r.name, v.name AS office, fn_booking_first_day(b.id) AS first_day, b.total_amount
-                   FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id
-                  WHERE b.payment_status = 'overdue'"
-                  . ($roomCode === null ? '' : ' AND r.venue_id = (SELECT venue_id FROM rooms WHERE room_code = :room)')
-                  . ($customerId === null ? '' : ' AND b.customer_id = :c') . '
-                  ORDER BY b.current_deadline_at, b.id'
-            );
-            $stmt->execute(($roomCode === null ? [] : [':room' => $roomCode]) + ($customerId === null ? [] : [':c' => $customerId]));
-            $rows = $stmt->fetchAll();
+            $rows = BookingCreateQueries::overdueBookings($roomCode, $customerId);
         } catch (PDOException $e) {
             sql_failed($e);
             return [];
@@ -176,9 +137,9 @@ final class BookingRules
     }
 
     /* The refusal booking-submit gives, and the notice the booking pages show up front. */
-    public static function overdueNotice(PDO $pdo, int $customerId, ?string $roomCode = null): ?string
+    public static function overdueNotice(int $customerId, ?string $roomCode = null): ?string
     {
-        $which = self::overdueBookings($pdo, $roomCode, $customerId)[$customerId] ?? null;
+        $which = self::overdueBookings($roomCode, $customerId)[$customerId] ?? null;
         return $which === null ? null
             : 'You have an unpaid booking (' . $which . '). Please settle it before booking with that office again. Other offices are not affected.';
     }
@@ -187,16 +148,16 @@ final class BookingRules
        $room: the room on the page; the landing page has none and lists every office. */
     public static function overdueNoticeForPage(mixed $room = null): ?string
     {
-        if (counter_mode() || !customer_logged_in() || !($pdo = venusep_db())) {
+        if (counter_mode() || !customer_logged_in() || !venusep_db()) {
             return null;
         }
-        return self::overdueNotice($pdo, (int) session('customer_id'), is_string($room) ? $room : null);
+        return self::overdueNotice((int) session('customer_id'), is_string($room) ? $room : null);
     }
 
     /* For the counter's "who" step: every customer who owes THIS room's office. */
     public static function overdueForCounter(mixed $room): array
     {
-        return (counter_mode() && is_string($room) && ($pdo = venusep_db())) ? self::overdueBookings($pdo, $room) : [];
+        return (counter_mode() && is_string($room) && venusep_db()) ? self::overdueBookings($room) : [];
     }
 
     /* THE OFFICE BLOCK (DB-DECISIONS 28): an admin blocked the customer at one office. They
@@ -277,16 +238,6 @@ final class BookingRules
         return $office ? BlockQueries::blockedCustomersAt($office['id']) : [];
     }
 
-    /* Opens a new booking's transaction (booking-submit and the counter). The
-       deadline housekeeping runs just BEFORE it, never inside (migration 15): its
-       UPDATEs lock every bookings row they scan, so inside the transaction two
-       submits a moment apart deadlocked on each other's new booking row. */
-    public static function beginBooking(PDO $pdo): void
-    {
-        $pdo->exec('CALL sp_expire_due_bookings()');
-        $pdo->beginTransaction();
-    }
-
     /* One exact bed per guest, free on EVERY night of the stay; the
        UNIQUE(active_bed_id, night_date) index is the last-bed race guard. Two stays
        submitted at once can pick the same free bed: the second one's insert hits
@@ -295,7 +246,9 @@ final class BookingRules
        (a hard closure inside the stay is sp_assign_bed's SQLSTATE 45000).
        Call it OUTSIDE a transaction: each bed is its own transaction (since
        migration 15 sp_assign_bed leaves that to its caller), so a lost bed leaves
-       no half-written row behind and the retry reads the beds afresh. */
+       no half-written row behind and the retry reads the beds afresh.
+       Stays on plain PDO, its own transactions never meeting a DB:: one: HostelBedRaceTest
+       hands in a PDO that answers the free-bed read with a stale bed. */
     public static function assignBeds(PDO $pdo, int $roomId, int $bookingId, array $occupantIds, string $checkIn, string $checkOut): void
     {
         $free = $pdo->prepare(

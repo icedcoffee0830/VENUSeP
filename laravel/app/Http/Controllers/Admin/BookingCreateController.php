@@ -6,7 +6,10 @@ use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Customer\BookingRules;
 use App\Queries\BlockQueries;
+use App\Queries\BookingCreateQueries;
+use App\Queries\CustomerQueries;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -99,12 +102,7 @@ class BookingCreateController extends Controller
                 $this->reply(400, ['ok' => false, 'message' => 'Pick the customer&rsquo;s account.']);
             }
             try {
-                $stmt = $pdo->prepare(
-                    'SELECT c.id, c.full_name, u.password_hash IS NULL AS no_password FROM customers c JOIN users u ON u.id = c.user_id
-                      WHERE c.id = :c AND u.is_active = 1 LIMIT 1'
-                );
-                $stmt->execute([':c' => $c['customerId']]);
-                $row = $stmt->fetch();
+                $row = CustomerQueries::findForCounterBooking($c['customerId']);
             } catch (PDOException $e) {
                 sql_failed($e);
                 $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
@@ -150,17 +148,7 @@ class BookingCreateController extends Controller
 
         /* ---- the room, and the rate THIS server believes in ---- */
         try {
-            $roomStmt = $pdo->prepare(
-                "SELECT r.id, r.venue_id, r.name, r.room_type, r.is_active, erd.attendee_capacity, erd.fee_per_day,
-                        hrd.rate_per_head_per_night, v.discount_percent
-                   FROM rooms r
-                   JOIN venues v ON v.id = r.venue_id
-                   LEFT JOIN event_room_details erd  ON erd.room_id = r.id
-                   LEFT JOIN hostel_room_details hrd ON hrd.room_id = r.id
-                  WHERE r.room_code = :c"
-            );
-            $roomStmt->execute([':c' => $roomCode]);
-            $room = $roomStmt->fetch();
+            $room = BookingCreateQueries::findRoom($roomCode);
         } catch (PDOException $e) {
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
@@ -176,7 +164,7 @@ class BookingCreateController extends Controller
             $this->reply(409, BookingRules::roomClosed($room));
         }
         /* New price wins: staff tell the customer, then collect or return the difference. */
-        if ($changed = BookingRules::priceChanged($pdo, $room, $roomCode, $request->post('shown_rate'), 'Please check with the customer and submit again.')) {
+        if ($changed = BookingRules::priceChanged($room, $roomCode, $request->post('shown_rate'), 'Please check with the customer and submit again.')) {
             $this->reply(409, $changed);
         }
         /* Blocked at this office (DB-DECISIONS 28); trg_bookings_block_ins refuses it too. */
@@ -206,36 +194,38 @@ class BookingCreateController extends Controller
     }
 
     /* A walk-in with no account is a customers row with user_id NULL (DB-DECISIONS #4). */
-    private function insertWalkIn(PDO $pdo, array &$c): void
+    private function insertWalkIn(array &$c): void
     {
-        $pdo->prepare('INSERT INTO customers (user_id, full_name, phone, contact_email, address) VALUES (NULL, :n, :p, :e, :a)')
-            ->execute([':n' => $c['bookerName'], ':p' => $c['phone'], ':e' => $c['contactEmail'] !== '' ? $c['contactEmail'] : null,
-                       ':a' => $c['address'] !== '' ? $c['address'] : null]);
-        $c['customerId'] = (int) $pdo->lastInsertId();
+        $c['customerId'] = CustomerQueries::addWalkIn($c['bookerName'], $c['phone'], $c['contactEmail'], $c['address']);
+    }
+
+    /* The booking row of a counter booking: the discount is granted here. */
+    private function newBooking(string $type, array $c, string $method, float $roomPrice, float $pct, float $discount, float $total): array
+    {
+        return ['customer' => $c['customerId'], 'room' => $c['room']['id'], 'type' => $type, 'method' => $method,
+                'affiliated' => $c['usepId'], 'verified' => $c['usepId'], 'price' => $roomPrice, 'percent' => $pct,
+                'discount' => $discount, 'total' => $total, 'refunds' => $c['refundsAllowed'], 'actor' => $c['actor'],
+                'quotedPercent' => (int) $c['room']['discount_percent'], 'organization' => request()->post('organization')];
     }
 
     /* THE EVIDENCE — each row is a judgement a person made, with their name on it. */
-    private function timeline(PDO $pdo, int $bookingId, array $c, float $pct, string $createdNote): void
+    private function timeline(int $bookingId, array $c, float $pct, string $createdNote): void
     {
-        $tl = $pdo->prepare('INSERT INTO booking_timeline (booking_id, action_code, performed_by_user_id, note) VALUES (:b, :a, :u, :n)');
-        $tl->execute([':b' => $bookingId, ':a' => 'counter_created', ':u' => $c['actor'], ':n' => $createdNote]);
-        $tl->execute([':b' => $bookingId, ':a' => 'counter_id_checked', ':u' => $c['actor'],
-            ':n' => $c['usepId']
-                ? 'Valid USeP ID inspected in person; ' . (int) $pct . '% affiliate discount applied.'
-                : 'Valid ID inspected in person; no affiliate discount.']);
-        if ($c['bookerMode'] === 'account' && ($owes = BookingRules::overdueBookings($pdo, null, (int) $c['customerId'])[(int) $c['customerId']] ?? null)) {
-            $tl->execute([':b' => $bookingId, ':a' => 'counter_overdue_booked', ':u' => $c['actor'], ':n' => 'The customer has an unpaid booking: ' . $owes . '.']);
+        $add = fn (string $code, string $note) => BookingCreateQueries::addHistory($bookingId, $code, $c['actor'], $note);
+        $add('counter_created', $createdNote);
+        $add('counter_id_checked', $c['usepId']
+            ? 'Valid USeP ID inspected in person; ' . (int) $pct . '% affiliate discount applied.'
+            : 'Valid ID inspected in person; no affiliate discount.');
+        if ($c['bookerMode'] === 'account' && ($owes = BookingRules::overdueBookings(null, (int) $c['customerId'])[(int) $c['customerId']] ?? null)) {
+            $add('counter_overdue_booked', 'The customer has an unpaid booking: ' . $owes . '.');
         }
         if ($c['bookerMode'] === 'account') {
-            $tl->execute($c['identityByIdCheck']
-                ? [':b' => $bookingId, ':a' => 'counter_identity_id_checked', ':u' => $c['actor'],
-                   ':n' => 'ID checked: the account has no password, so staff confirmed who the customer is from a valid ID seen in person.']
-                : [':b' => $bookingId, ':a' => 'counter_identity_confirmed', ':u' => $c['actor'],
-                   ':n' => 'Customer confirmed the account by entering their password at the counter.']);
+            $c['identityByIdCheck']
+                ? $add('counter_identity_id_checked', 'ID checked: the account has no password, so staff confirmed who the customer is from a valid ID seen in person.')
+                : $add('counter_identity_confirmed', 'Customer confirmed the account by entering their password at the counter.');
         }
         if ($c['walkinNoEmail']) {
-            $tl->execute([':b' => $bookingId, ':a' => 'counter_no_email', ':u' => $c['actor'],
-                ':n' => 'Guest has no email: nothing is emailed; the Transaction Receipt is printed at the counter.']);
+            $add('counter_no_email', 'Guest has no email: nothing is emailed; the Transaction Receipt is printed at the counter.');
         }
     }
 
@@ -293,46 +283,25 @@ class BookingCreateController extends Controller
 
         /* ---- 1. the stay itself ---- */
         $bookingId = 0;
-        $removeStay = function () use ($pdo, &$bookingId, &$c) {
+        $removeStay = function () use (&$bookingId, &$c) {
             if ($bookingId) {
-                $pdo->prepare('DELETE FROM bookings WHERE id = :b')->execute([':b' => $bookingId]);
+                BookingCreateQueries::remove($bookingId);
             }
             if ($c['isNewWalkIn'] && $c['customerId']) {
-                $pdo->prepare('DELETE FROM customers WHERE id = :c AND user_id IS NULL')->execute([':c' => $c['customerId']]);
+                CustomerQueries::removeWalkIn($c['customerId']);
             }
         };
         try {
-            BookingRules::beginBooking($pdo);
-            if ($c['isNewWalkIn']) {
-                $this->insertWalkIn($pdo, $c);
-            }
-            $pdo->prepare(
-                "INSERT INTO bookings
-                    (customer_id, room_id, booking_type, reservation_status, payment_status,
-                     payment_method, is_usep_affiliated, affiliation_verified,
-                     room_price, discount_percent, discount_amount, total_amount,
-                     refunds_allowed, updated_by_user_id)
-                 VALUES (:c, :r, 'hostel', 'pending', 'locked', :m, :a, :av, :rp, :dp, :da, :t, :ra, :u)"
-            )->execute([
-                ':c' => $c['customerId'], ':r' => $room['id'], ':m' => $method, ':a' => $c['usepId'], ':av' => $c['usepId'],
-                ':rp' => $roomPrice, ':dp' => $pct, ':da' => $discount, ':t' => $total,
-                ':ra' => $c['refundsAllowed'], ':u' => $c['actor'],
-            ]);
-            $bookingId = (int) $pdo->lastInsertId();
-            BookingRules::stamp($pdo, $bookingId, (int) $room['discount_percent'], request()->post('organization'));
-            $pdo->prepare('INSERT INTO hostel_booking_details (booking_id, check_in_date, check_out_date, checked_in) VALUES (:b, :i, :o, 0)')
-                ->execute([':b' => $bookingId, ':i' => $checkIn, ':o' => $checkOut]);
-            $occIns = $pdo->prepare('INSERT INTO hostel_occupants (booking_id, full_name, gender, is_primary_guest) VALUES (:b, :n, :g, :p)');
-            $occIds = [];
-            foreach ($guests as $i => $o) {
-                $occIns->execute([':b' => $bookingId, ':n' => $o['name'], ':g' => $o['gender'], ':p' => $i === 0 ? 1 : 0]);
-                $occIds[] = (int) $pdo->lastInsertId();
-            }
-            $pdo->prepare('UPDATE bookings SET current_deadline_at = fn_payment_deadline(:b) WHERE id = :b2')
-                ->execute([':b' => $bookingId, ':b2' => $bookingId]);
-            $pdo->commit();
+            $occIds = BookingCreateQueries::saveNew(function () use (&$bookingId, &$c, $method, $roomPrice, $pct, $discount, $total, $checkIn, $checkOut, $guests) {
+                if ($c['isNewWalkIn']) {
+                    $this->insertWalkIn($c);
+                }
+                $bookingId = BookingCreateQueries::addBooking($this->newBooking('hostel', $c, $method, $roomPrice, $pct, $discount, $total));
+                $ids = BookingCreateQueries::addStay($bookingId, $checkIn, $checkOut, $guests);
+                BookingCreateQueries::setPayDeadline($bookingId);
+                return $ids;
+            });
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created.']);
         }
@@ -354,31 +323,28 @@ class BookingCreateController extends Controller
         /* ---- 3. the evidence, the approval, the cash, the receipt email ---- */
         $queued = null;
         try {
-            $pdo->beginTransaction();
-            $this->timeline($pdo, $bookingId, $c, $pct, 'Walk-in stay booked at the front desk for ' . $c['bookerName'] . '.');
-            $ap = $pdo->prepare('CALL sp_approve_booking(:b, :u)');
-            $ap->execute([':b' => $bookingId, ':u' => $c['actor']]);
-            $ap->closeCursor();
-            /* the cash staff took before pressing the button: paid, with its
-               payment row and System Receipt, in this same transaction */
-            $receiptId = payment_confirm($pdo, $bookingId, $c['actor'], 'Cash received at the counter.', true);
-            if ($receiptId === null) {
-                throw new RuntimeException('no receipt was issued');
-            }
-            /* One email, not two: the System Receipt already names the stay. */
-            if ($c['contactEmail'] !== '') {
-                try {
-                    $queued = queue_walkin_receipt($pdo, $bookingId, $receiptId, $c['actor']);
-                } catch (Throwable $mailErr) {
-                    if ($mailErr instanceof PDOException) {
-                        throw $mailErr;
-                    }
-                    error_log('VENUSeP walk-in receipt email for booking ' . $bookingId . ': ' . $mailErr->getMessage());
+            DB::transaction(function () use ($pdo, $bookingId, $c, $pct, &$queued) {
+                $this->timeline($bookingId, $c, $pct, 'Walk-in stay booked at the front desk for ' . $c['bookerName'] . '.');
+                BookingCreateQueries::approveNow($bookingId, $c['actor']);
+                /* the cash staff took before pressing the button: paid, with its
+                   payment row and System Receipt, in this same transaction */
+                $receiptId = payment_confirm($pdo, $bookingId, $c['actor'], 'Cash received at the counter.', true);
+                if ($receiptId === null) {
+                    throw new RuntimeException('no receipt was issued');
                 }
-            }
-            $pdo->commit();
+                /* One email, not two: the System Receipt already names the stay. */
+                if ($c['contactEmail'] !== '') {
+                    try {
+                        $queued = queue_walkin_receipt($pdo, $bookingId, $receiptId, $c['actor']);
+                    } catch (Throwable $mailErr) {
+                        if ($mailErr instanceof PDOException) {
+                            throw $mailErr;
+                        }
+                        error_log('VENUSeP walk-in receipt email for booking ' . $bookingId . ': ' . $mailErr->getMessage());
+                    }
+                }
+            });
         } catch (Throwable $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $removeStay();
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was created and nothing was charged.']);
@@ -388,9 +354,7 @@ class BookingCreateController extends Controller
         if ($queued !== null) {
             mail_send($pdo, $queued);
         }
-        $after = $pdo->prepare('SELECT submitted_at, current_deadline_at FROM bookings WHERE id = :b');
-        $after->execute([':b' => $bookingId]);
-        $row = $after->fetch();
+        $row = BookingCreateQueries::findDates($bookingId);
         $this->reply(200, [
             'ok'        => true,
             'bookingId' => $bookingId,
@@ -425,11 +389,9 @@ class BookingCreateController extends Controller
             $this->reply(400, ['ok' => false, 'message' => 'Enter an attendee count within the room capacity.']);
         }
 
-        $blockStmt = $pdo->prepare('SELECT fn_room_hard_blocked(:r, :d) AS blocked');
         $slots = [];
         for ($d = $startIso; $d <= $endIso; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
-            $blockStmt->execute([':r' => $room['id'], ':d' => $d]);
-            if ((int) $blockStmt->fetchColumn() === 1) {
+            if (BookingCreateQueries::isHardBlocked((int) $room['id'], $d)) {
                 continue;                       // a venue booking books AROUND a closed day
             }
             $t = isset($times[$d]) && is_array($times[$d]) ? $times[$d] : [];
@@ -466,61 +428,31 @@ class BookingCreateController extends Controller
         /* ---- the write ---- */
         $queued = null;   /* the walk-in confirmation email, sent after commit */
         try {
-            BookingRules::beginBooking($pdo);
-            if ($c['isNewWalkIn']) {
-                $this->insertWalkIn($pdo, $c);
-            }
-            $ins = $pdo->prepare(
-                "INSERT INTO bookings
-                    (customer_id, room_id, booking_type, reservation_status, payment_status,
-                     payment_method, is_usep_affiliated, affiliation_verified,
-                     room_price, discount_percent, discount_amount, total_amount,
-                     refunds_allowed, updated_by_user_id)
-                 VALUES (:c, :r, 'venue', 'pending', 'locked', :m, :a, :av, :rp, :dp, :da, :t, :ra, :u)"
-            );
-            $ins->execute([
-                ':c' => $c['customerId'], ':r' => $room['id'], ':m' => $method,
-                ':a' => $c['usepId'], ':av' => $c['usepId'],
-                ':rp' => $roomPrice, ':dp' => $pct, ':da' => $discount, ':t' => $total,
-                ':ra' => $c['refundsAllowed'], ':u' => $c['actor'],
-            ]);
-            $bookingId = (int) $pdo->lastInsertId();
-            BookingRules::stamp($pdo, $bookingId, (int) $room['discount_percent'], request()->post('organization'));
-
-            $pdo->prepare(
-                'INSERT INTO venue_booking_details (booking_id, event_name, start_date, end_date, attendee_count)
-                 VALUES (:b, :n, :s, :e, :a)'
-            )->execute([':b' => $bookingId, ':n' => $eventName, ':s' => $startIso, ':e' => $endIso, ':a' => $attendees]);
-
-            /* The same concurrency guard the customer flow goes through. */
-            $slotCall = $pdo->prepare('CALL sp_add_venue_slot(:b, :d, :s, :e)');
-            foreach ($slots as $s) {
-                $slotCall->execute([':b' => $bookingId, ':d' => $s['date'], ':s' => $s['start'], ':e' => $s['end']]);
-                $slotCall->closeCursor();
-            }
-
-            $this->timeline($pdo, $bookingId, $c, $pct, 'Walk-in booking taken at the counter for ' . $c['bookerName'] . '.');
-
-            /* Approved on the spot, through the one procedure that knows what "approved" means. */
-            $ap = $pdo->prepare('CALL sp_approve_booking(:b, :u)');
-            $ap->execute([':b' => $bookingId, ':u' => $c['actor']]);
-            $ap->closeCursor();
-
-            /* The walk-in's confirmation email, queued now, sent after commit. */
-            if ($c['contactEmail'] !== '') {
-                try {
-                    $queued = queue_walkin_booking($pdo, $bookingId, $c['actor']);
-                } catch (Throwable $mailErr) {
-                    if ($mailErr instanceof PDOException) {
-                        throw $mailErr;
-                    }
-                    error_log('VENUSeP walk-in confirmation email for booking ' . $bookingId . ': ' . $mailErr->getMessage());
+            $bookingId = BookingCreateQueries::saveNew(function () use ($pdo, &$c, &$queued, $method, $roomPrice, $pct, $discount, $total, $eventName, $startIso, $endIso, $attendees, $slots) {
+                if ($c['isNewWalkIn']) {
+                    $this->insertWalkIn($c);
                 }
-            }
+                $id = BookingCreateQueries::addBooking($this->newBooking('venue', $c, $method, $roomPrice, $pct, $discount, $total));
+                /* The same concurrency guard the customer flow goes through. */
+                BookingCreateQueries::addEvent($id, $eventName, $startIso, $endIso, $attendees, $slots);
 
-            $pdo->commit();
+                $this->timeline($id, $c, $pct, 'Walk-in booking taken at the counter for ' . $c['bookerName'] . '.');
+                BookingCreateQueries::approveNow($id, $c['actor']);
+
+                /* The walk-in's confirmation email, queued now, sent after commit. */
+                if ($c['contactEmail'] !== '') {
+                    try {
+                        $queued = queue_walkin_booking($pdo, $id, $c['actor']);
+                    } catch (Throwable $mailErr) {
+                        if ($mailErr instanceof PDOException) {
+                            throw $mailErr;
+                        }
+                        error_log('VENUSeP walk-in confirmation email for booking ' . $id . ': ' . $mailErr->getMessage());
+                    }
+                }
+                return $id;
+            });
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             /* 40001 = a deadlock with a booking made at the same moment (MySQL
                1213, nothing was saved) — told like a taken slot. */
             $refused = in_array($e->getCode(), ['45000', '40001'], true);
@@ -540,9 +472,7 @@ class BookingCreateController extends Controller
         }
 
         try {
-            $after = $pdo->prepare('SELECT submitted_at, current_deadline_at FROM bookings WHERE id = :b');
-            $after->execute([':b' => $bookingId]);
-            $row = $after->fetch();
+            $row = BookingCreateQueries::findDates($bookingId);
         } catch (PDOException $e) {
             sql_failed($e, optional: true);
             $row = ['submitted_at' => null, 'current_deadline_at' => null];

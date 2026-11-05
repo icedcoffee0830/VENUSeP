@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Admin\Concerns;
 
 use App\Http\Controllers\Customer\BookingRules;
+use App\Queries\BookingCreateQueries;
 use App\Queries\BookingQueries;
 use App\Queries\PaymentQueries;
 use App\Queries\RefundQueries;
 use App\Support\Status;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /* What ends a booking outside the normal flow (Aron, 2026-11-01). Each returns after a
    commit; refusals throw through reply(). Staff act on their own office only: the
@@ -35,7 +37,7 @@ trait BookingSettlementActions
         if (!in_array($booking['payment_status'], Status::UNPAID, true)) {
             $this->reply(409, ['ok' => false, 'message' => 'This booking has a payment or a debt on it, so it cannot be force cancelled.']);
         }
-        if (BookingRules::eventStarted(venusep_db(), (int) $booking['id'])) {
+        if (BookingCreateQueries::eventStarted((int) $booking['id'])) {
             $this->reply(409, ['ok' => false, 'message' => 'The event has already started, so it cannot be force cancelled.']);
         }
 
@@ -171,7 +173,7 @@ trait BookingSettlementActions
             || !in_array($booking['payment_status'], array_merge(Status::UNPAID, [Status::CONFIRMED, Status::PAID_CASH]), true)) {
             $this->reply(409, ['ok' => false, 'message' => 'This booking cannot be moved.']);
         }
-        if (BookingRules::eventStarted(venusep_db(), $id)) {
+        if (BookingCreateQueries::eventStarted($id)) {
             $this->reply(409, ['ok' => false, 'message' => 'The event has already started, so it cannot be moved.']);
         }
         if ((int) $booking['date_moves'] >= 1 && !$closure && session('account_type') !== 'admin') {
@@ -199,13 +201,11 @@ trait BookingSettlementActions
             $this->reply(400, ['ok' => false, 'message' => 'The new dates must cover the same number of days, so the price stays the same.']);
         }
 
-        // Save. BookingRules::beginBooking runs the deadline housekeeping, then opens a plain
-        // PDO transaction, as a new booking does: this save keeps it instead of saveAs's.
-        $pdo = venusep_db();
-        BookingRules::beginBooking($pdo);
-        BookingQueries::moveVenueSlots($id, $from, $to, $start, $end);
-        BookingQueries::saveDateMove($id, $closure, $actor, $note);
-        $pdo->commit();
+        // Save: the deadline housekeeping, then one transaction, as a new booking does.
+        BookingCreateQueries::saveNew(function () use ($id, $from, $to, $start, $end, $closure, $actor, $note) {
+            BookingQueries::moveVenueSlots($id, $from, $to, $start, $end);
+            BookingQueries::saveDateMove($id, $closure, $actor, $note);
+        });
     }
 
     private function moveStay(array $booking, int $actor, string $in, string $out, array $office, bool $closure, string $note): void
@@ -241,9 +241,7 @@ trait BookingSettlementActions
             $this->reply(409, ['ok' => false, 'message' => 'There are not enough free beds on those dates. Nothing changed.']);
         }
         /* saveDateMove runs inside its caller's transaction, like the venue move's. */
-        $pdo->beginTransaction();
-        BookingQueries::saveDateMove($id, $closure, $actor, $note);
-        $pdo->commit();
+        DB::transaction(fn () => BookingQueries::saveDateMove($id, $closure, $actor, $note));
     }
 
     /* HOSTEL CHECK-OUT: the bed is free again from today, however early they left. */

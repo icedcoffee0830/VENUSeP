@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 
    customers.counter_venue_id: the office whose counter made the account (NULL = the
      customer signed up themselves).
+   customers.user_id NULL: a walk-in with no account (DB-DECISIONS #4).
    customer_email_fixes: one row per corrected email (old, new, reason, who, when).
    Read only: users (an account never signed into = last_login_at NULL; a Google
      account = google_sub set). */
@@ -21,6 +22,35 @@ class CustomerQueries
     private static function mobileArgs(string $mobile): array
     {
         return [$mobile, '63' . substr($mobile, 1)];
+    }
+
+    /* The active account a counter booking is for, and whether it has no password, or null. */
+    public static function findForCounterBooking(int $customerId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT c.id, c.full_name, u.password_hash IS NULL AS no_password
+            FROM customers c
+            JOIN users u ON u.id = c.user_id
+            WHERE c.id = ? AND u.is_active = 1
+            LIMIT 1
+        ", [$customerId]);
+        return $row ? (array) $row : null;
+    }
+
+    /* A walk-in guest with no account. */
+    public static function addWalkIn(string $name, string $phone, string $email, string $address): int
+    {
+        DB::insert("
+            INSERT INTO customers (user_id, full_name, phone, contact_email, address)
+            VALUES (NULL, ?, ?, ?, ?)
+        ", [$name, $phone, $email !== '' ? $email : null, $address !== '' ? $address : null]);
+        return (int) DB::getPdo()->lastInsertId();
+    }
+
+    /* Take away a walk-in whose first booking could not be finished. */
+    public static function removeWalkIn(int $customerId): void
+    {
+        DB::delete('DELETE FROM customers WHERE id = ? AND user_id IS NULL', [$customerId]);
     }
 
     /* Active customer accounts of every office, ten at most, by the exact email, the exact

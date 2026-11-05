@@ -29,6 +29,13 @@
 --      (trg_bookings_block_ins), and a pending request still blocked when it is
 --      due to start is cancelled by sp_expire_due_bookings (with a History note);
 --      the customer is emailed (email kind booking_block_cancelled).
+--    Refund switch per office (phase F): venues.refunds_enabled, changed by the super
+--      admin only. Bahay Alumni and USeP Venues: on = pay before + refunds, off = pay
+--      after + no refunds. USeP Hostel always pays before; its switch is refunds only.
+--      The first run copies the old site-wide value (system_settings.refunds_enabled,
+--      kept but no longer read) into every office, so nothing changes on day one.
+--      Existing bookings keep their own rule: they already store it (refunds_allowed,
+--      pay_to_use, set when made), so nothing is backfilled.
 --    Starting accounts:
 --      admin@gmail.com = super admin;
 --      francishubero@gmail.com = Bahay Alumni normal admin;
@@ -46,6 +53,7 @@
 --      then run sp_notify_venue_staff from venusep_migration_12.sql again.
 --      DROP TRIGGER trg_bookings_block_ins; DROP FUNCTION fn_customer_blocked; DROP TABLE customer_office_blocks;
 --      then run sp_expire_due_bookings from venusep_migration_16.sql again.
+--      ALTER TABLE venues DROP COLUMN refunds_enabled; (the old site-wide row is still there)
 --      (The office contact text and the new email kind can stay: nothing old reads them.)
 --  The CEDU Admin account stays unless you delete it.
 -- ============================================================================
@@ -106,6 +114,19 @@ UPDATE venues SET address = 'USeP Tagum–Mabini Campus, Apokon, Tagum City' WHE
 UPDATE venues SET contact_phone = '0900 000 0000' WHERE contact_phone IS NULL OR contact_phone = '';
 UPDATE venues SET contact_email = CONCAT(LOWER(REPLACE(venue_code, '-', '.')), '@example.com')
  WHERE contact_email IS NULL OR contact_email = '';
+
+-- ---- the refund switch, one per office (DB-DECISIONS 28) ----
+-- Only the first run copies the old site-wide value: a re-run never undoes the super admin's changes.
+SET @refunds_first = (SELECT COUNT(*) = 0 FROM information_schema.COLUMNS
+                       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'venues' AND COLUMN_NAME = 'refunds_enabled');
+ALTER TABLE venues
+    ADD COLUMN IF NOT EXISTS refunds_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+UPDATE venues
+   SET refunds_enabled = COALESCE((SELECT s.setting_value = '1' FROM system_settings s WHERE s.setting_key = 'refunds_enabled'), FALSE)
+ WHERE @refunds_first = 1;
+UPDATE system_settings
+   SET description = 'No longer read (migration 17): each office has its own switch, venues.refunds_enabled.'
+ WHERE setting_key = 'refunds_enabled';
 
 -- ---- a customer blocked at one office (DB-DECISIONS 28): one active block per office ----
 CREATE TABLE IF NOT EXISTS customer_office_blocks (

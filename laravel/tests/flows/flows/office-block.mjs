@@ -76,9 +76,11 @@ export default {
       await page.goto(ctx.url('/customer/room-reservation?room=r1'));
       await expect.visible(page.locator('#blockModal'), 'no modal on a direct link');
       await page.locator('#blockModal').getByRole('button', { name: 'OK' }).click();
-      await expect.text(page, NOTICE);
+      /* the banner, not the closed modal: both hold the words */
+      const banner = page.locator('[role="alert"]', { hasText: NOTICE });
+      await expect.visible(banner, 'no warning on the page after the modal closed');
       const office = await dbOne(`SELECT contact_phone, contact_email FROM venues WHERE id = 1`);
-      await expect.text(page, office.contact_email);
+      await expect.visible(banner.getByText(office.contact_email), 'no contact details in the warning');
       expect.equal(await page.getByText(REASON).count(), 0, 'the reason is shown to the customer');
       return page;
     });

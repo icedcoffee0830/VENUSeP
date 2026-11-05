@@ -11,7 +11,7 @@ use PDOException;
    calls this about once a minute, from every signed-in page of both portals.
    (Old: notifications.php.)
 
-   GET                            { ok, unread, items[], reminders[] }
+   GET                            { ok, unread, needsYou, items[], reminders[] }
    POST _token, action=read, id   mark one read (the person clicked it)
    POST _token, action=read_all   "Mark all as read"
 
@@ -65,6 +65,7 @@ class NotificationsController
             return $this->reply(200, [
                 'ok'        => true,
                 'unread'    => notif_unread_count($pdo, $userId),
+                'needsYou'  => $type === 'customer' && notif_needs_customer($pdo, $userId),
                 'items'     => notif_items($pdo, $userId, $type),
                 'reminders' => $type === 'customer' ? [] : notif_reminders($pdo, staff_venue_scope(), $type === 'admin', $type === 'staff' ? (int) session('user_id') : null),
             ]);

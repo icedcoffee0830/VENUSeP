@@ -89,6 +89,24 @@ function notif_unread_count(PDO $pdo, int $userId): int
     return (int) $s->fetchColumn();
 }
 
+/* Is something waiting for this customer? The red dot on the phone's Bookings tab. It reads
+   the bell's rows but not their read marks: the dot stays until the thing is done, so
+   "Mark all as read" does not hide a payment that is still due. Waiting = a payment due or
+   a refund returned for correction, or a rejected request that can still take a new ID
+   (the same test as Booking History's "Send a new ID"). */
+function notif_needs_customer(PDO $pdo, int $userId): bool
+{
+    $waiting = "'" . implode("','", [...\App\Support\Status::PAYMENT_DUE, \App\Support\Status::REFUND_CORRECTION]) . "'";
+    $s = $pdo->prepare(
+        "SELECT EXISTS (SELECT 1 FROM notifications n JOIN bookings b ON b.id = n.booking_id
+          WHERE n.user_id = :u
+            AND ((b.payment_status IN ($waiting) AND b.reservation_status NOT IN ('cancelled', 'rejected', 'released'))
+              OR (b.reservation_status = 'rejected' AND fn_booking_first_day(b.id) > CURDATE())))"
+    );
+    $s->execute([':u' => $userId]);
+    return (bool) $s->fetchColumn();
+}
+
 /* $id = null marks them all read. Only ever the viewer's own rows. */
 function notif_mark_read(PDO $pdo, int $userId, ?int $id): void
 {

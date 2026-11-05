@@ -72,6 +72,7 @@ $GLOBALS['nbRendered'] = true;
 
     function paint() {
       each('.nb-count', function (c) { c.hidden = !data.unread; c.textContent = data.unread > 99 ? '99+' : data.unread; });
+      each('.ct-dot', function (d) { d.hidden = !data.needsYou; });   /* the phone tab bar's Bookings tab */
       each('.nb-bell', function (b) {
         b.setAttribute('aria-label', data.unread ? 'Notifications, ' + data.unread + ' unread' : 'Notifications');
         b.setAttribute('aria-expanded', open ? 'true' : 'false');

@@ -68,6 +68,8 @@
       .form-check-input { width: 16px; height: 16px; accent-color: var(--black); flex: none; }
 
       .account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+      .account-faq { display: none; }   /* phones: the tab bar has no FAQ tab, so it is here (desktop has it in the header) */
+      @media (max-width: 767.98px) { .account-faq { display: inline-flex; } .account-actions .btn-profile { min-height: 44px; } }
 
       /* ways of signing in (#23): password + Google, then the controls for each */
       .signin-notice { margin: 0 0 14px; padding: 10px 13px; border-radius: 10px; background: #fcf6f4; border: 1px solid #efe0db; color: #4a4440; font-size: .84rem; line-height: 1.5; }
@@ -319,7 +321,7 @@
 
                   <section class="profile-section" aria-labelledby="accountActionsTitle">
                     <div class="profile-section-header"><h2 id="accountActionsTitle">Account Actions</h2><p>Manage access to your VENUSeP account.</p></div>
-                    <div class="account-actions"><a class="btn-profile" href="{{ route('customer.logout') }}"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>Log Out</a><!-- [SIM] deactivate not built --><button class="btn-profile btn-profile-danger" type="button" disabled title="Account deactivation is under development"><i class="bi bi-person-x" aria-hidden="true"></i>Deactivate Account</button></div>
+                    <div class="account-actions"><a class="btn-profile account-faq" href="{{ route('customer.faq', ['in' => 'app']) }}"><i class="bi bi-question-circle" aria-hidden="true"></i>FAQ</a><a class="btn-profile" href="{{ route('customer.logout') }}"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>Log Out</a><!-- [SIM] deactivate not built --><button class="btn-profile btn-profile-danger" type="button" disabled title="Account deactivation is under development"><i class="bi bi-person-x" aria-hidden="true"></i>Deactivate Account</button></div>
                   </section>
                 </div>
               </div>

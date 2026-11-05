@@ -69,11 +69,12 @@
       <li><button class="hd-toggle" id="hdBurger" type="button" aria-label="Show or hide the menu" aria-controls="hdSidebar"><i class="bi bi-list"></i></button></li>
     </ul>
     <ul class="hd-nav">
-      <li><a class="hd-quick{{ request()->routeIs('customer.faq') ? ' is-here' : '' }}" href="{{ route('customer.faq', ['in' => 'app']) }}"><i class="bi bi-question-circle"></i><span>FAQ</span></a></li>
+      <li><a class="hd-quick{{ request()->routeIs('customer.faq') ? ' is-here' : '' }}" aria-label="FAQ" href="{{ route('customer.faq', ['in' => 'app']) }}"><i class="bi bi-question-circle"></i><span>FAQ</span></a></li>
       <li>@include('partials.notification-bell', ['nbLook' => 'admin'])</li>
       <li><span class="hd-sep" aria-hidden="true"></span></li>
       <li>@fragment('hd-user')<a class="hd-user" data-live="hd-user" href="{{ route('customer.customer-profile') }}" title="Your profile">@if ($hdPhoto !== '')<img class="hd-avatar" src="{{ asset($hdPhoto) }}" alt="" width="30" height="30">@else<span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span>@endif<span class="hd-username">{{ $hdName }}</span></a>@endfragment</li>
     </ul>
+    @include('partials.customer-tabs')
   </div>
 </nav>
 @else

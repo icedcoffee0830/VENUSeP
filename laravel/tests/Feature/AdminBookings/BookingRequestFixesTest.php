@@ -66,7 +66,8 @@ class BookingRequestFixesTest extends TestCase
         $this->assertSame(['POS recorded', 'Official Receipt recorded', 'Guest checked in'], array_column($tl, 'x'));
         $this->assertSame(['POS POS-123 recorded (CEDU).', 'Official Receipt OR-456 recorded (University Cashier).', 'Guest checked in.'],
             array_column($tl, 'm'));
-        $this->assertStringEndsWith(' — admin@gmail.com', $tl[0]['w']);   // the admin has no staff profile: the email names them
+        /* migration 18 gave the seeded admin a staff row (for its employee number), named by its username */
+        $this->assertStringEndsWith(' — ' . DB::table('users')->where('email', 'admin@gmail.com')->value('username'), $tl[0]['w']);
     }
 
     /* Bug 8: a hostel stay paid at the front desk read "Paid at cashier" (the

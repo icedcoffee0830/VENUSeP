@@ -248,7 +248,7 @@
                               {{-- Payment is open (or a receipt is with staff): the way back to
                                    the payment step, customer.pay. Overdue: closed until staff extend
                                    the deadline (that puts it back to await_*). --}}
-                              @if (in_array($booking['paymentCode'], ['await_gcash', 'await_cash'], true))
+                              @if (in_array($booking['paymentCode'], \App\Support\Status::PAY_OPEN, true))
                                 <a class="booking-action booking-action-pay" href="{{ route('customer.pay', ['booking' => $booking['bookingId']]) }}">
                                   <i class="bi bi-wallet2" aria-hidden="true"></i>Pay now
                                 </a>

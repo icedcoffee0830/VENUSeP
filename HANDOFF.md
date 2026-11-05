@@ -689,3 +689,37 @@ new migration 17).
 - Staff moves: the tick for both CEDU offices now ends on every move out of CEDU (Staff Management edit, venue form). Office Settings: the history keeps the first 100 characters, so a long location no longer fails on a strict MySQL (XAMPP's is not strict).
 - Tests: `RolesTest` (collation x2, the tick), `OfficeSettingsTest` (long location). `OfficeSettingsTest` counts history rows, so it needs a reset test DB: two of its tests fail on a second run without one.
 - The snapshot in `_tools` is again `.before-m17` + the new migration 17.
+
+## 15. 2026-11-05 — phase L fixes (branch `fixes-2`, migration 18)
+
+Decisions: memory `venusep-teammate-bugs-2026-11-05` (ANSWERS). **Migration 18 is NOT on the real DB**: Aron runs
+`C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_18.sql` in cmd, after the backup in its header.
+It ends with "OK: every staff and admin account has an employee number". Applied to the test/flows snapshot
+(`_tools\venusep_snapshot.sql`, appended; the copy before it is `.before-m18`).
+
+- **Offices are fixed:** nobody adds or deletes an office, the super admin included (venue-save / catalog-delete
+  refuse with 403, venue-form without an id goes back to the list; the buttons are gone).
+- **Proxies:** `trustProxies` believes only `X-Forwarded-Proto` from 127.0.0.1/::1, never a forwarded host or port.
+- **Admin-only requests** (lost-receipt refund, write-off, outside refund recorded): `notify_refund_needs_admin()`
+  tells the group's active normal admins; with none active, the super admin.
+- **Top-right chip:** the profile photo (`asset(photo_path)`), else the initials — admin/staff header, the customer
+  header and the customer browse bar.
+- **Profile:** Role = "Super admin" / "Admin · USeP CEDU" / "Staff · USeP Hostel" (both CEDU offices: both names);
+  Position (if set) and the employee number, all read-only. **Employee numbers** (migration 18): `EMP-<year>-NNNN`
+  (the format of Marites Robles's EMP-2021-0043), given by `trg_staff_employee_no_ins` from `employee_no_counters`
+  (per year; its row lock keeps two accounts made at once apart), required, never changed
+  (`trg_staff_employee_no_upd` refuses). Old rows backfilled (year of the staff row); the seeded super admin got a
+  staff row. Staff Management's update no longer takes `employee_no`.
+- **Booking Management:** "Awaiting payment" tab (await_gcash, await_cash, await_pos; never overdue) and the newest
+  request first (the Refunds tab keeps soonest-event-first).
+- **Overdue:** no Pay now, the pay page and payment-submit refuse ("Payment overdue. Please contact the office." +
+  the office's contact line) until staff extend the deadline (that sets await_* again). `Status::PAY_OPEN`.
+- **Counter phones:** walk-in and new-account mobiles take only 09XXXXXXXXX or +639XXXXXXXXX, spaces allowed
+  (`ph_mobile_strict()`, bookings.php; `cleanPhone()` its JS twin; inputmode/pattern/message on screen). The other
+  phone fields (profile, registration) keep the looser `cb_normalise_mobile()`.
+- **Discount:** sp_approve_booking (migration 18) rounds a discounted total UP to the whole peso and stores
+  discount = room price − total (every approval, counter included). Previews (`priceWithDiscount`,
+  `usep_discounted`) use the same rule. A pending USeP claim shows the full price with "USeP discount applied once
+  your ID is verified" (booking history, pay page, details modal). Amounts show centavos when they have any.
+- Not done: the note is not in the narrow Transaction History tables; emails (payment_overdue still says
+  "until it is paid") are the later email phase.

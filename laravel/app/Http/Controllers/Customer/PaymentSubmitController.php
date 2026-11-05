@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Support\Status;
 use Illuminate\Http\Request;
 use PDO;
 use PDOException;
@@ -107,8 +108,7 @@ class PaymentSubmitController
         }
 
         /* Payment has to be OPEN. */
-        /* Overdue is closed until staff extend the deadline, which puts it back to await_* (Aron 2026-11-05). */
-        if (!in_array($booking['payment_status'], ['await_gcash', 'await_cash'], true)) {
+        if (!in_array($booking['payment_status'], Status::PAY_OPEN, true)) {
             $why = match ($booking['payment_status']) {
                 'await_event' => 'This booking cannot be paid until after your event has finished.',
                 'overdue'     => 'Payment overdue. Please contact the office.',
@@ -207,7 +207,7 @@ class PaymentSubmitController
             $lk = $pdo->prepare('SELECT payment_status, receipt_attempts_allowed FROM bookings WHERE id = :b FOR UPDATE');
             $lk->execute([':b' => $id]);
             $locked = $lk->fetch();
-            if (!$locked || !in_array($locked['payment_status'], ['await_gcash', 'await_cash'], true)) {
+            if (!$locked || !in_array($locked['payment_status'], Status::PAY_OPEN, true)) {
                 $pdo->rollBack();
                 @unlink(doc_path($path));
                 return self::reply(409, ['ok' => false, 'message' => 'This booking is not currently awaiting a payment.']);

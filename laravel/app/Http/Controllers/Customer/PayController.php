@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Support\Status;
 use Illuminate\Http\Request;
 
 /* PAY (was customer/pay.php) — one booking's payment step, reached from
@@ -30,8 +31,7 @@ class PayController
         }
 
         $payCode     = (string) $payB['paymentCode'];
-        /* Overdue is closed until staff extend the deadline, which puts it back to await_* (Aron 2026-11-05). */
-        $payOpen     = in_array($payCode, ['await_gcash', 'await_cash'], true);
+        $payOpen     = in_array($payCode, Status::PAY_OPEN, true);
         $payIsHostel = $payB['type'] === 'hostel';
         $payAccount  = gcAccountFor($gcAccounts, $payB['venueName']);   /* null = this venue cannot take GCash yet */
         /* The receipt staff are reviewing, if one is in. */

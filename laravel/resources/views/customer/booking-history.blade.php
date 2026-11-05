@@ -87,7 +87,7 @@
       .booking-action-pay:hover { background: #7d0f1e; border-color: #7d0f1e; }
 
       /* footer / pagination */
-      .booking-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; }
+      .booking-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid #e7e2db; }
       .booking-entries-control { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 8px; }
       .booking-entries-select { height: 32px; border: 1px solid #d7d7d7; border-radius: 8px; padding: 0 8px; font: inherit; font-size: 12.5px; }
       .booking-table-info { font-size: 12.5px; color: var(--muted); margin: 0; }
@@ -202,6 +202,19 @@
                 <div class="booking-history-panel-header">
                   <h2 id="previousBookingsTitle">Previous Bookings</h2>
                 </div>
+                <div class="booking-table-footer">
+                  <label class="booking-entries-control" for="booking-history-entries">
+                    Show
+                    <select id="booking-history-entries" class="booking-entries-select">
+                      <option value="10" selected>10</option>
+                      <option value="25">25</option>
+                      <option value="50">50</option>
+                    </select>
+                    entries
+                  </label>
+                  <p id="booking-history-info" class="booking-table-info" aria-live="polite"></p>
+                  <nav id="booking-history-pagination" class="booking-pagination" aria-label="Booking history pages"></nav>
+                </div>
                 <div class="booking-table-scroll">
                   <table id="bookingHistoryTable" class="booking-history-table">
                     <thead>
@@ -298,19 +311,6 @@
                     </tbody>
                     @endfragment
                   </table>
-                </div>
-                <div class="booking-table-footer">
-                  <label class="booking-entries-control" for="booking-history-entries">
-                    Show
-                    <select id="booking-history-entries" class="booking-entries-select">
-                      <option value="10" selected>10</option>
-                      <option value="25">25</option>
-                      <option value="50">50</option>
-                    </select>
-                    entries
-                  </label>
-                  <p id="booking-history-info" class="booking-table-info" aria-live="polite"></p>
-                  <nav id="booking-history-pagination" class="booking-pagination" aria-label="Booking history pages"></nav>
                 </div>
               </section>
             </div>

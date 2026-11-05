@@ -482,6 +482,7 @@
 @endif
         ],
       });
+      table.on('tableBuilt', () => table.element.prepend(table.element.querySelector('.tabulator-footer')));   /* the pager goes above the rows */
 
       document.getElementById('table-filter').addEventListener('input', (event) => {
         const value = event.target.value;

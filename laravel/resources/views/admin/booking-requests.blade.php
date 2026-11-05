@@ -72,7 +72,7 @@
          button styling. The queue is a list of links rather than a table, so
          it cannot BE that table, but it should not behave like a different
          product either. 157 rows on one endless page was the complaint. */
-      .br-foot { align-items: center; background: #faf9f7; border-top: 1px solid var(--vm-border); display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; padding: 0.6rem 1.1rem; }
+      .br-foot { align-items: center; background: #faf9f7; border-bottom: 1px solid var(--vm-border); display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; padding: 0.6rem 1.1rem; }
       .br-foot[hidden] { display: none; }
       .br-pagesize { align-items: center; color: var(--vm-muted); display: flex; font-size: 0.76rem; gap: 0.4rem; }
       .br-pagesize select { border: 1px solid #d7d7d7; border-radius: 7px; background: #fff; color: #1f1e1e; font-family: inherit; font-size: 0.78rem; padding: 0.2rem 0.4rem; }
@@ -106,16 +106,6 @@
               </div>
 
               <div class="br-card br-list">
-                <div class="br-hd">
-                  <span>Request · Customer</span>
-                  <span class="hide-md">Room</span>
-                  <span class="hide-md">Event date(s)</span>
-                  <span class="hide-md">Reservation</span>
-                  <span>Payment</span>
-                  <span class="hide-md">Next action</span>
-                  <span></span>
-                </div>
-                <div id="brRows"></div>
                 <div class="br-foot" id="brFoot" hidden>
                   <label class="br-pagesize">Page Size
                     <select id="brPageSize">
@@ -128,6 +118,16 @@
                   <span class="br-shown" id="brShown"></span>
                   <div class="br-pages" id="brPages"></div>
                 </div>
+                <div class="br-hd">
+                  <span>Request · Customer</span>
+                  <span class="hide-md">Room</span>
+                  <span class="hide-md">Event date(s)</span>
+                  <span class="hide-md">Reservation</span>
+                  <span>Payment</span>
+                  <span class="hide-md">Next action</span>
+                  <span></span>
+                </div>
+                <div id="brRows"></div>
               </div>
             </div>
           </div>

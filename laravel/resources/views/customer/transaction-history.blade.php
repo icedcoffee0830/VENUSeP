@@ -249,6 +249,7 @@
            size to print the whole list. */
         document.getElementById('print-table').addEventListener('click', () => table.print('visible', true));
         venusepPageSize(table, [10, 25, 50]);
+        table.on('tableBuilt', () => table.element.prepend(table.element.querySelector('.tabulator-footer')));   /* the pager goes above the rows */
       });
     </script>
     @php include base_path('legacy/includes/booking-details-modal.php'); /* "View" */ @endphp

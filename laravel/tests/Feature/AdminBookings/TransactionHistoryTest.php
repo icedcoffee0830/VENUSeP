@@ -26,7 +26,7 @@ class TransactionHistoryTest extends TestCase
             ->assertSee('window.openBookingDetails', false)
             ->assertSee(json_encode(route('root.booking-details') . '?booking='), false)
             // on an admin page the modal's "Transaction Receipt" is the staff receipt page
-            ->assertSee('href="' . route('admin.receipt') . '?booking=${encodeURIComponent(d.reference)}">System Receipt', false)
+            ->assertSee('href="' . route('admin.receipt') . '?booking=${encodeURIComponent(d.reference)}">Transaction Receipt', false)
             ->assertSee(asset('assets/js/table-page-size.js'), false);
     }
 

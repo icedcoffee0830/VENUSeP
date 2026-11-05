@@ -202,6 +202,12 @@ export default {
       await expect.url(page, /\/customer\/receipt\?booking=/);
       await expect.visible(page.getByRole('heading', { name: 'System Receipt' }), 'no "System Receipt" heading');
       await expect.text(page, s.ref);
+      // the fixed top nav used to cover the two top buttons (2026-11-05)
+      const under = await page.evaluate(() => {
+        const nav = document.querySelector('nav.app-header').getBoundingClientRect().bottom;
+        return Math.min(...[...document.querySelectorAll('.rc-tools .rc-btn')].map((b) => b.getBoundingClientRect().top)) - nav;
+      });
+      expect.ok(under >= 0, `the receipt's top buttons sit ${-under}px under the nav`);
     });
 
     await step('The receipt PDF downloads', async () => {

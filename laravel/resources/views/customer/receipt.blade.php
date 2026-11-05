@@ -11,7 +11,6 @@
     <style>
       @media (max-width: 767.98px) { .container-fluid { padding-inline: 16px; } }
     </style>
-    </style>
 
     <!-- [1] PAGE CSS — the approved "Paper slip" receipt (_preview/email/receipt-view.html) -->
     <style>
@@ -66,10 +65,10 @@
       .rc-foot { margin: 26px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--soft); line-height: 1.6; }
       @media (max-width: 520px) { .rc-doc { text-align: left; } }
     </style>
-  </head>
-  <body class="receipt-page">
 @endpush
 @section('content')
+      {{-- app-main keeps the page below the fixed header and beside the sidebar --}}
+      <main class="app-main">
         <div class="app-content">
           <div class="container-fluid">
             <div class="rc-wrap">
@@ -142,4 +141,5 @@
             </div>
           </div>
         </div>
+      </main>
 @endsection

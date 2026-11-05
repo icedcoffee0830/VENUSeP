@@ -34,6 +34,9 @@
   nav.app-header .hd-quick i{font-size:1rem;line-height:1}
   nav.app-header .hd-quick:hover{background:rgba(255,255,255,.1);color:#fff}
   nav.app-header .hd-quick.is-here{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.18);color:#fff}
+  nav.app-header .hd-counter{display:inline-flex;align-items:center;gap:.45rem;height:36px;padding:0 .95rem;border-radius:10px;background:#fff;color:#1d1214;font-size:.84rem;font-weight:700;text-decoration:none;white-space:nowrap}
+  nav.app-header .hd-counter:hover{background:#f6e9eb}
+  nav.app-header .hd-counter i{color:#a11626}
   nav.app-header .hd-sep{width:1px;height:22px;background:rgba(255,255,255,.18);margin:0 .35rem}
   nav.app-header .hd-user{display:inline-flex;align-items:center;gap:.55rem;padding:.3rem .85rem .3rem .3rem;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-weight:700;font-size:.82rem;text-decoration:none;transition:background 180ms ease}
   nav.app-header .hd-user:hover{background:rgba(255,255,255,.18);color:#fff}
@@ -52,7 +55,8 @@
   @media (max-width:767.98px){
     nav.app-header{left:0;height:56px;min-height:56px}
     nav.app-header .hd-username{display:none}
-    nav.app-header .hd-quick span{display:none}
+    nav.app-header .hd-quick span,nav.app-header .hd-counter span{display:none}
+    nav.app-header .hd-counter{padding:0 .6rem}
     nav.app-header .hd-quick{padding:0 .55rem}
     nav.app-header .hd-wrap{flex-direction:row-reverse;justify-content:flex-start;gap:.6rem}      /* phone: everything on the right — burger at the edge, chip + quick links beside it */
     body.sb-open aside.sidebar{transform:none!important}
@@ -84,6 +88,7 @@
       <li><button class="hd-toggle" id="hdBurger" type="button" aria-label="Show or hide the menu" aria-controls="hdSidebar"><i class="bi bi-list"></i></button></li>
     </ul>
     <ul class="hd-nav">
+      <li><a class="hd-counter" href="{{ route('customer.venues', ['counter' => 1]) }}" aria-label="New counter booking"><i class="bi bi-plus-lg" aria-hidden="true"></i><span>Counter booking</span></a></li>
       <li>@include('partials.notification-bell', ['nbLook' => 'admin'])</li>
       <li>@fragment('hd-user')<a class="hd-user" data-live="hd-user" href="{{ route('admin.profile') }}" title="Your account · {{ $hdRole }}">@if ($hdPhoto !== '')<img class="hd-avatar" src="{{ asset($hdPhoto) }}" alt="" width="30" height="30">@else<span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span>@endif<span class="hd-username">{{ $hdName }}</span></a>@endfragment</li>
     </ul>

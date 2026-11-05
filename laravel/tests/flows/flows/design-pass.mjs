@@ -238,5 +238,29 @@ export default {
       expect.equal((await shortButtons(page, '.tabulator-row .lp-btn')).join() || 'none', 'none', 'row buttons under 44px');
       return page;
     });
+
+    await step('The staff-side sidebar fits a 768px laptop with full names, one line each, and says what waits', async () => {
+      const page = s.admin;
+      await page.setViewportSize({ width: 1366, height: 768 });
+      await page.goto(ctx.url('/admin/booking-requests'));
+      await expect.visible(page.locator('#brRows a.br-row').first(), 'no queue');
+      const bar = await page.evaluate(() => {
+        const side = document.querySelector('aside.sidebar');
+        const links = [...side.querySelectorAll('.menu a')];
+        return { fits: side.scrollHeight <= side.clientHeight, logOut: links.at(-1).getBoundingClientRect().bottom <= innerHeight,
+          wrapped: links.filter((a) => a.scrollWidth > a.clientWidth || a.getBoundingClientRect().height > 36).map((a) => a.textContent.trim()) };
+      });
+      expect.equal(bar.fits, true, 'the sidebar scrolls at 768');
+      expect.equal(bar.logOut, true, 'Log Out is off the screen');
+      expect.equal(bar.wrapped.join() || 'none', 'none', 'links on two lines or cut');
+      const need = (await page.locator('#brCount').textContent()).match(/(\d+) need action/)[1];
+      expect.equal((await page.locator('aside .cnt[data-live="sb-Booking Management"]').textContent()).trim(), need, 'the count against the queue');
+      await expect.visible(page.locator('.hd-counter'), 'no Counter booking in the header');
+      await page.goto(ctx.url('/admin/calendar'));
+      await page.locator('.hd-counter').click();
+      await page.waitForURL(/customer\/venues/);
+      await page.setViewportSize(DESKTOP);
+      return page;
+    });
   },
 };

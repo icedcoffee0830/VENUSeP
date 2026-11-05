@@ -29,6 +29,17 @@ use Illuminate\Support\Facades\DB;
    fn_customer_blocked tells whether the customer is blocked at the booking's office. */
 class BookingQueries
 {
+    /* The bookings this session must act on: the sidebar's count, the queue's "need action" and
+       its tabs (booking_queue_category()). Narrowed like every staff list. */
+    public static function needsAction(): int
+    {
+        return (int) DB::selectOne("
+            SELECT COUNT(*) AS n FROM bookings b JOIN rooms r ON r.id = b.room_id
+            WHERE (b.reservation_status = 'pending'
+                   OR b.payment_status IN ('await_pos', 'overdue', 'refund_requested', 'refund_await_or', 'under_review'))
+        " . staff_venue_sql('r.venue_id IN (%s)', 'AND') . staff_hall_sql('r.id'))->n;
+    }
+
     use SavesWithHistory;
 
     /* The booking a staff action is about, as it is right now, or null. */

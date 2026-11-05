@@ -5,8 +5,9 @@
 --}}
 @php
   legacy('auth');   /* admin_is_super() */
-  $items = $portal === 'customer'
-    ? [
+  $sbCounts = [];
+  if ($portal === 'customer') {
+    $items = [
         //  label                  route                            icon
         ['Browse Venues',       route('customer.venues'),              'bi-building'],
         ['Booking History',     route('customer.booking-history'),     'bi-clock-history'],
@@ -15,30 +16,42 @@
         ['Profile',             route('customer.customer-profile'),    'bi-person'],
         ['FAQ',                 route('customer.faq', ['in' => 'app']), 'bi-question-circle'],   /* ?in=app = keep the sidebar frame */
         ['Log Out',             route('customer.logout'),              'bi-box-arrow-right'],   /* ends the session */
-      ]
-    : [
+    ];
+  } else {
+    /* What waits for this person, read on every page. The Staff count opens the tab that waits. */
+    $sbIsAdmin = session('account_type') === 'admin';
+    $sbWaiting = $sbIsAdmin ? \App\Queries\CoverQueries::waitingFor(admin_is_super() ? null
+      : \Illuminate\Support\Facades\DB::selectOne('SELECT office_group FROM users WHERE id = ?', [(int) session('user_id')])?->office_group) : ['covers' => 0, 'moves' => 0];
+    $sbTab = $sbWaiting['covers'] ? ['tab' => 'covers'] : ($sbWaiting['moves'] ? ['tab' => 'moves'] : []);
+    $sbCounts = ['Booking Management' => \App\Queries\BookingQueries::needsAction(), 'Staff Management' => $sbWaiting['covers'] + $sbWaiting['moves']];
+    $items = [
         ['Dashboard',           route('admin.dashboard'),              'bi-speedometer2'],
-        ['Venue Management',    route('admin.venue-management'),       'bi-building'],
-        ['Office Settings',     route('admin.office-settings'),        'bi-sliders', 'admin'],
-        ['Activity',            route('admin.activity'),               'bi-clock-history', 'super'],
         ['Booking Management',  route('admin.booking-requests'),       'bi-calendar-check'],
-        ['Transaction History', route('admin.transaction-history'),    'bi-receipt'],
         ['Calendar',            route('admin.calendar'),               'bi-calendar-event'],
-        ['Staff Management',    route('admin.staff'),                  'bi-people', 'admin'],   /* admins only (staff:admin) */
+        ['Transaction History', route('admin.transaction-history'),    'bi-receipt'],
+        ['#Venues and people'],
+        ['Venue Management',    route('admin.venue-management'),       'bi-building'],
+        ['Staff Management',    route('admin.staff', $sbTab),          'bi-people', 'admin'],   /* admins only (staff:admin) */
         ['Customer Management', route('admin.customer-management'),    'bi-person-badge', 'admin'],   /* admins only (2026-10-31) */
-        ['Reports',             route('admin.reports'),                'bi-bar-chart'],
+        ['#Office setup'],
+        ['Office Settings',     route('admin.office-settings'),        'bi-sliders', 'admin'],
         ['Payment Settings',    route('admin.payment-settings'),       'bi-wallet2'],
         ['FAQ Management',      route('admin.faq-management'),         'bi-question-circle', 'admin'],   /* admin-added FAQ entries (2026-09-18) */
         ['Backup & Restore',    route('admin.backup-restore'),         'bi-database-check', 'super'],    /* the super admin only (DB-DECISIONS 28) */
+        ['#Records'],
+        ['Reports',             route('admin.reports'),                'bi-bar-chart'],
+        ['Activity',            route('admin.activity'),               'bi-clock-history', 'super'],
+        ['#'],
         ['Settings',            route('admin.profile'),                'bi-gear'],
         ['Log Out',             route('admin.logout'),                 'bi-box-arrow-right'],   /* ends the session */
-      ];
+    ];
+  }
   /* a 4th column 'admin' = an admin-only page: staff are not shown the link (Bug 5);
-     'super' = the super admin's only */
+     'super' = the super admin's only. A '#Heading' starts a group: staff get a plain list. */
   $items = array_filter($items, fn ($i) => match ($i[3] ?? '') {
       'admin' => session('account_type') === 'admin',
       'super' => admin_is_super(),
-      default => true,
+      default => !str_starts_with($i[0], '#') || session('account_type') === 'admin',
   });
 @endphp
 <style>
@@ -56,13 +69,30 @@
   aside.sidebar .menu i{width:20px;text-align:center;font-size:18px;color:inherit}
   aside.sidebar .menu span{font-size:14px}
   aside.sidebar .menu li:last-child{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}
-  @media (max-width:767.98px){aside.sidebar{transform:translateX(-100%)!important;will-change:transform}}   /* will-change: the slide runs on the GPU */
+  /* the staff side: grouped and tighter, so every link fits a 768px-tall laptop; a count for what waits */
+  aside.sidebar.grouped .menu{padding:10px 8px 14px}
+  aside.sidebar.grouped .menu li{margin:0 0 2px}
+  aside.sidebar.grouped .menu a{gap:8px;height:34px;padding:0 8px;white-space:nowrap}
+  aside.sidebar.grouped .menu i{width:18px;font-size:17px}
+  aside.sidebar.grouped .menu span{font-size:13px}
+  aside.sidebar.grouped .menu li:last-child{margin-top:8px;padding-top:8px}
+  aside.sidebar .menu li.grp{margin:10px 0 2px;padding:0 8px;color:#dac5c3;font-size:12px;font-weight:600;letter-spacing:.02em}
+  aside.sidebar .menu span.cnt{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:20px;height:20px;margin-left:auto;padding:0 5px;border-radius:999px;background:#ffd166;color:#3a0c14;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+  aside.sidebar .menu span.cnt[hidden]{display:none}
+  @media (max-width:767.98px){aside.sidebar{transform:translateX(-100%)!important;will-change:transform}aside.sidebar.grouped .menu a{height:44px}}   /* will-change: the slide runs on the GPU */
 </style>
-<aside class="sidebar" id="hdSidebar">
+<aside class="sidebar{{ $portal === 'customer' ? '' : ' grouped' }}" id="hdSidebar">
   <div class="logo"><img src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP logo" /></div>
   <ul class="menu">
-@foreach ($items as [$label, $href, $icon])
-    <li><a href="{{ $href }}"@if ($label === $active) class="active"@endif><i class="bi {{ $icon }}"></i><span>{{ $label }}</span></a></li>
+@foreach ($items as $item)
+@if (str_starts_with($item[0], '#'))
+@if ($item[0] !== '#')
+    <li class="grp">{{ substr($item[0], 1) }}</li>
+@endif
+@else
+@php [$label, $href, $icon] = $item; @endphp
+    <li><a href="{{ $href }}"@if ($label === $active) class="active" aria-current="page"@endif><i class="bi {{ $icon }}"></i><span>{{ $label }}</span>@isset ($sbCounts[$label])@fragment('sb-' . $label)<span class="cnt" data-live="sb-{{ $label }}" aria-label="{{ $sbCounts[$label] }} need you"@unless ($sbCounts[$label]) hidden @endunless>{{ $sbCounts[$label] }}</span>@endfragment @endisset</a></li>
+@endif
 @endforeach
   </ul>
 </aside>

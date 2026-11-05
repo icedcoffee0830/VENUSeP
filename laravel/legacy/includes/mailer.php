@@ -27,9 +27,21 @@ require_once __DIR__ . '/documents.php';   /* doc_ensure_dir() for the log trans
 
 use PHPMailer\PHPMailer\PHPMailer;
 
-const MAIL_KINDS = ['walkin_booking', 'walkin_receipt', 'receipt_copy', 'password_reset',
-                    'booking_approved', 'booking_rejected', 'payment_due', 'payment_overdue', 'booking_cancelled',
-                    'super_admin_handover', 'booking_block_cancelled', 'counter_welcome'];
+/* Every email kind => the name staff see for it (the booking page's "Receipt & emails" panel). */
+const MAIL_KINDS = [
+    'walkin_booking'          => 'Booking confirmation',
+    'walkin_receipt'          => 'System Receipt',
+    'receipt_copy'            => 'System Receipt',
+    'password_reset'          => 'Password reset',
+    'booking_approved'        => 'Booking approved',
+    'booking_rejected'        => 'Booking rejected',
+    'payment_due'             => 'Payment reminder',
+    'payment_overdue'         => 'Payment overdue',
+    'booking_cancelled'       => 'Booking cancelled',
+    'super_admin_handover'    => 'Super admin handover',
+    'booking_block_cancelled' => 'Booking cancelled (office block)',
+    'counter_welcome'         => 'New account welcome',
+];
 
 /* The settings file's array over the defaults. A missing or broken file means
    'log' — the safe direction. Takes a path so the tests can point it anywhere. */
@@ -76,7 +88,7 @@ function mail_base_url(): string
 function mail_enqueue(PDO $pdo, array $m): int
 {
     $to = trim((string) ($m['to_email'] ?? ''));
-    if (!in_array($m['kind'] ?? '', MAIL_KINDS, true)) {
+    if (!isset(MAIL_KINDS[$m['kind'] ?? ''])) {
         throw new InvalidArgumentException('Unknown email kind.');
     }
     if ($to === '' || mb_strlen($to) > 190 || !filter_var($to, FILTER_VALIDATE_EMAIL)) {

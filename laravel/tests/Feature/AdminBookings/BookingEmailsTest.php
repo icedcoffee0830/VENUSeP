@@ -33,6 +33,19 @@ class BookingEmailsTest extends TestCase
                 'emails' => [['kind' => 'walkin_booking', 'status' => 'failed', 'attempts' => 0]]]);
     }
 
+    public function test_every_email_kind_has_a_label(): void
+    {
+        // the panel showed "undefined" for any kind but the three walk-in ones (2026-11-05)
+        [$id, $ref] = $this->seedVenueBooking('r1');
+        DB::table('email_outbox')->insert(['kind' => 'booking_approved', 'booking_id' => $id, 'to_email' => 'customer@gmail.com',
+            'subject' => 'Test', 'body_html' => '<p>Test</p>', 'body_text' => 'Test', 'status' => 'sent']);
+        $this->actingAsStaff()->get(route('admin.booking-emails', ['booking' => $ref]))
+            ->assertOk()->assertJson(['emails' => [['kind' => 'booking_approved', 'label' => 'Booking approved']]]);
+        foreach (MAIL_KINDS as $kind => $label) {
+            $this->assertNotSame('', $label, $kind);
+        }
+    }
+
     public function test_bad_reference_is_400(): void
     {
         $this->actingAsStaff()->get(route('admin.booking-emails', ['booking' => 'x']))

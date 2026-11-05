@@ -101,6 +101,7 @@ class BookingEmailsController extends Controller
         return [
             'id'        => (int) $r['id'],
             'kind'      => $r['kind'],
+            'label'     => MAIL_KINDS[$r['kind']] ?? $r['kind'],
             'status'    => $r['status'],
             'attempts'  => (int) $r['attempts'],
             'receiptId' => $r['receipt_id'] !== null ? (int) $r['receipt_id'] : null,

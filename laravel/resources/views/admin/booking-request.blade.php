@@ -1211,7 +1211,6 @@
          Walk-ins are emailed if they gave an address at the counter;
          account holders get nothing automatic — they use My Bookings.
          ============================================================ */
-      const MAIL_KIND = { walkin_booking: 'Booking confirmation', walkin_receipt: 'System Receipt', receipt_copy: 'System Receipt' };
       let mail = { loaded: false, data: null, error: null, busy: 0, flash: '' };
 
       async function loadMail() {
@@ -1242,7 +1241,7 @@
 
       function mailRow(m) {
         const rc = mail.data.receipt;
-        const what = MAIL_KIND[m.kind] + (m.receiptId && rc ? ' ' + rc.number : '')
+        const what = esc(m.label || m.kind) + (m.receiptId && rc ? ' ' + rc.number : '')
           + (m.kind === 'receipt_copy' ? ' <span class="soft">· requested by the customer</span>' : (m.receiptId ? ' <span class="soft">· PDF</span>' : ''));
         const chip = m.status === 'sent' ? '<span class="br-badge b-green">Sent</span>'
                    : m.status === 'failed' ? '<span class="br-badge b-red">Failed</span>'

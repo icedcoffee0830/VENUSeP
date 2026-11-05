@@ -213,7 +213,9 @@
                 block.closest('[popover]')?.hidePopover();
                 blockAction(row, block.dataset.act, Number(block.dataset.venue));
               } else if (e.target.closest('.btn-cust-fix-email')) fixEmailAction(row);
+@if ($cmMaySuspend)
               else if (e.target.closest('.btn-cust-toggle')) toggleActive(row);
+@endif
             },
           },
         ],

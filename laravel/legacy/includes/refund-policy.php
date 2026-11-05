@@ -1,19 +1,21 @@
 <?php
 /* =====================================================================
-   REFUND POLICY — is the customer refund module switched on?
-   THE ONE SOURCE for the switch, read from system_settings.refunds_enabled.
+   REFUND POLICY — does an office take refund requests?
+   ONE SWITCH PER OFFICE (DB-DECISIONS 28, 2026-11-04): venues.refunds_enabled,
+   read through office_all() ('refunds'), changed by the super admin only on
+   Payment Settings (RefundSwitchController).
 
    Included by:
      includes/customer-bookings.php  (so every page that knows the customer's
                                       bookings also knows the policy)
      admin/payment-settings.php      (the switch itself)
 
-   DECIDED 2026-09-16 (USeP does not do refunds):
-     · ONE global switch, admin-only, DEFAULT OFF.
-     · It covers CUSTOMER-REQUESTED refunds only. A closure by USeP
-       (maintenance etc.) is never affected: those customers are offered a
-       replacement room or a new date, and refunded if they decline both.
-     · Each booking snapshots the switch when it is MADE
+   DECIDED 2026-09-16 (USeP does not do refunds), per office since 2026-11-04:
+     · DEFAULT OFF. Bahay Alumni and USeP Venues: ON = pay before + refunds,
+       OFF = pay after + no refunds. USeP Hostel always pays before the stay
+       (bookings.pay_to_use); its switch only turns refunds on or off.
+     · It covers CUSTOMER-REQUESTED refunds only.
+     · Each booking snapshots its office's switch when it is MADE
        (bookings.refunds_allowed). Flipping it later never grants or removes
        refunds on an existing booking — customers are held to the policy
        they agreed to.
@@ -22,59 +24,17 @@
    FAIL SAFE: if the database cannot be reached this reports OFF. Wrongly
    saying "non-refundable" is recoverable; wrongly accepting a refund
    request the school will not honour is not.
-
-   This is the ONE part of the refund flow that is real. Bookings themselves
-   are real rows now (refunds, via customer/refund-submit.php).
    ===================================================================== */
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/offices.php';
 
-/* Full details for the admin card; null when the database is unreachable. */
-function refund_setting_details()
-{
-    static $cache = false;
-    if ($cache !== false) {
-        return $cache;
-    }
-    $cache = null;
-    $pdo = venusep_db();
-    if ($pdo === null) {
-        return $cache;
-    }
-    try {
-        $stmt = $pdo->prepare(
-            "SELECT s.setting_value, s.updated_at, u.email AS updated_by_email
-               FROM system_settings s
-               LEFT JOIN users u ON u.id = s.updated_by_user_id
-              WHERE s.setting_key = 'refunds_enabled'
-              LIMIT 1"
-        );
-        $stmt->execute();
-        $row = $stmt->fetch();
-        if ($row) {
-            $cache = [
-                'enabled' => $row['setting_value'] === '1',
-                'updated_at' => $row['updated_at'],
-                'updated_by' => $row['updated_by_email'],   // null = never changed since setup
-            ];
-        }
-    } catch (PDOException $e) {
-        sql_failed($e);
-        $cache = null;
-    }
-    return $cache;
-}
-
-function refunds_enabled()
-{
-    $d = refund_setting_details();
-    return $d !== null && $d['enabled'];
-}
-
-$REFUNDS_ENABLED = refunds_enabled();
+/* The switch of the office this page is about (?room=, a booking page); off on a page
+   about no one office: those pages (the public page, the FAQ) describe each office's rule. */
+$REFUNDS_ENABLED = (office_page()['refunds'] ?? false);
 
 /* =====================================================================
-   PAYMENT TIMING (DB-DECISIONS #18, 2026-09-17) — the SAME switch decides
-   WHEN a booking is paid, and a booking keeps the policy it was made under
+   PAYMENT TIMING (DB-DECISIONS #18, 2026-09-17) — the office's switch also decides
+   WHEN a venue booking is paid, and a booking keeps the policy it was made under
    (bookings.refunds_allowed):
 
      refunds ON  = PRE-PAY : pay after approval, by 23:59 the day before the

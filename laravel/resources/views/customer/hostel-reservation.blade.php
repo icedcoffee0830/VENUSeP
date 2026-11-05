@@ -192,7 +192,7 @@
    belongs to the hostel — so gcAccount() below is constant. It is still a
    function because that is the checker's contract. */
 const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-/* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
+/* This room's office's refund switch (includes/refund-policy.php, venues.refunds_enabled, DB-DECISIONS 28).
    OFF = the stay is non-refundable and the guest must tick that they understand
    before submitting. ON leaves the hostel's refund text as it was — a stay booked
    with refunds on can be refunded like a venue booking (Aron, 2026-10-30). */

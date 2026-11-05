@@ -140,6 +140,9 @@ final class FlowsDb
             if ($n === 0 && !$conn->selectOne('SELECT 1 AS x FROM system_settings WHERE setting_key = ?', [(string) $key])) {
                 throw new RuntimeException("Unknown setting '{$key}' (see the system_settings table).");
             }
+            if ($key === 'refunds_enabled') {   // one switch per office now (DB-DECISIONS 28): the flow's value for every office
+                $conn->update('UPDATE venues SET refunds_enabled = ?', [(int) $value]);
+            }
         }
         /* the demo password counts as each account's own (staff who never set one are held on their profile) */
         $conn->update('UPDATE users SET password_hash = ?, password_changed_at = COALESCE(password_changed_at, NOW()) WHERE password_hash IS NOT NULL',

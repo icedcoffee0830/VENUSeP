@@ -24,7 +24,12 @@ class FaqController
 {
     public function index(Request $request)
     {
-        extract(legacy('faqs'));   // $REFUNDS_ENABLED, $DISCOUNT_PERCENT, $POSTPAY_GRACE_DAYS, $HOSTEL_RATES, $HOSTEL_CR_LABEL
+        extract(legacy('faqs', 'offices'));   // $DISCOUNT_PERCENT, $POSTPAY_GRACE_DAYS, $HOSTEL_RATES, $HOSTEL_CR_LABEL
+        /* one refund switch per office (DB-DECISIONS 28): the preview starts on the state every
+           office is in, or on Everything while they differ */
+        $fqSwitches = array_column(office_all(), 'refunds', 'name');
+        $fqOn = array_filter($fqSwitches);
+        $fqLive = !$fqOn ? 'refunds_off' : (count($fqOn) === count($fqSwitches) ? 'refunds_on' : 'all');
 
         $fqSections = faq_sections();
         $fqRows     = faqs_by_section(true);                      /* every row, every policy — the page filters in the browser */
@@ -51,11 +56,12 @@ class FaqController
             'fqSections' => $fqSections,
             'fqRows'     => $fqRows,
             'fqDbOk'     => !empty($fqSections),
-            'fqLive'     => $REFUNDS_ENABLED ? 'refunds_on' : 'refunds_off',
+            'fqLive'     => $fqLive,
+            'fqSwitches' => $fqSwitches,
             'fqNote'     => $fqNotes[$fqMsg] ?? null,
-            'fqPolicies' => ['any' => 'Always shown', 'refunds_on' => 'Only when refunds are ON', 'refunds_off' => 'Only when refunds are OFF'],
+            'fqPolicies' => ['any' => 'Always shown', 'refunds_on' => 'Only where refunds are ON', 'refunds_off' => 'Only where refunds are OFF'],
             'fqTotal' => $fqTotal, 'fqAdded' => $fqAdded, 'fqHidden' => $fqHidden, 'fqChanged' => $fqChanged,
-            'REFUNDS_ENABLED' => $REFUNDS_ENABLED, 'DISCOUNT_PERCENT' => $DISCOUNT_PERCENT,
+            'DISCOUNT_PERCENT' => $DISCOUNT_PERCENT,
             'POSTPAY_GRACE_DAYS' => $POSTPAY_GRACE_DAYS, 'HOSTEL_CR_LABEL' => $HOSTEL_CR_LABEL,
             /* what each {placeholder} becomes (already escaped) — the "Insert a current value" menu shows the same */
             'fqValues' => faq_placeholders(),

@@ -528,13 +528,9 @@
         </div>
         <div class="lp-step">
           <span class="lp-step-n">4</span>
-@if ($REFUNDS_ENABLED) {{-- pre-pay — the refund switch also sets payment timing (DB-DECISIONS #18) --}}
-          <h3>Pay before your date</h3>
-          <p>GCash or over the counter, at least one day before the event. Then your booking is confirmed.</p>
-@else
-          <h3>Pay after your event</h3>
-          <p>Nothing to pay up front. Once your event is over, pay by GCash or over the counter by the day after it.</p>
-@endif
+          {{-- each office's own rule: its refund switch also sets a venue's payment timing (DB-DECISIONS #18, 28) --}}
+          <h3>Pay when your office asks</h3>
+          <p>GCash or over the counter.@foreach ($lpOffices as $o)<br><strong>{{ $o['name'] }}:</strong> {{ $o['type'] === 'hostel' ? 'before your stay, by your check-in day' : ($o['refunds'] ? 'before your event, at least one day ahead' : 'after your event, by the day after it') }}.@endforeach</p>
         </div>
       </div>
     </div>
@@ -672,21 +668,24 @@
 @endif
 
   <!-- ==================== REFUND ====================
-       Follows the admin refund switch (legacy refund-policy.php). OFF is the
+       Follows each office's refund switch (DB-DECISIONS 28). OFF is the
        USeP default: every new booking is final. -->
   <section class="lp-refund">
     <div class="lp-wrap">
       <div class="lp-refund-card" data-reveal>
         <div class="lp-refund-left">
           <span class="lp-refund-icon">
-@if ($REFUNDS_ENABLED)
+@if ($lpRefundOn)
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h13a5 5 0 0 1 0 10h-6"/><path d="m7 6-4 4 4 4"/></svg>
 @else
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
 @endif
           </span>
           <div>
-@if ($REFUNDS_ENABLED)
+@if ($lpRefundOn && $lpRefundOff)
+            <h3>Refunds depend on the office.</h3>
+            <p>At {{ \Illuminate\Support\Arr::join($lpRefundOn, ', ', ' and ') }} you can ask for a refund on an approved booking that is paid and has not been held yet, from your booking history. Bookings at {{ \Illuminate\Support\Arr::join($lpRefundOff, ', ', ' and ') }} are non-refundable: check your date, room and details before you pay.</p>
+@elseif ($lpRefundOn)
             <h3>Plans change &mdash; you can ask for a refund.</h3>
             <p>Approved bookings that are paid and have not been held yet are eligible. Request it from your booking history; staff make the final call and you will see the reason either way.</p>
 @else
@@ -735,7 +734,7 @@
         <div class="lp-footer-links">
           <a href="{{ route('customer.faq') }}{{ $lpQ }}">Frequently asked questions</a>
           <a href="{{ route('customer.faq') }}{{ $lpQ }}">How to pay by GCash</a>
-@if ($REFUNDS_ENABLED && !$lpCounter)
+@if ($lpRefundOn && !$lpCounter)
           <a href="{{ route('customer.booking-history') }}">Request a refund</a>
 @else
           <a href="{{ route('customer.faq') }}{{ $lpQ }}#after">Refund policy</a>

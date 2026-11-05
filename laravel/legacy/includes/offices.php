@@ -35,6 +35,8 @@ function office_all(): array
             'phone'      => (string) $v['contact_phone'],
             'email'      => (string) $v['contact_email'],
             'location'   => (string) $v['address'],
+            /* refund requests on NEW bookings (DB-DECISIONS 28): the super admin's switch, Payment Settings */
+            'refunds'    => (bool) $v['refunds_enabled'],
         ];
     }
     foreach ($pdo->query('SELECT id, venue_id, from_date, until_date, reason FROM venue_closures WHERE until_date >= CURDATE() ORDER BY from_date')->fetchAll() as $c) {

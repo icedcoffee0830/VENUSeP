@@ -192,7 +192,7 @@
 <script>
 /* Every venue's GCash account, from the gcash_accounts table. */
 const GCASH_ACCOUNTS = {!! json_encode($gcAccounts, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
-/* The admin refund switch (includes/refund-policy.php, system_settings.refunds_enabled).
+/* This room's office's refund switch (includes/refund-policy.php, venues.refunds_enabled, DB-DECISIONS 28).
    OFF = this booking is non-refundable, and the customer must tick that they
    understand before the request can be submitted. Whatever it is at submit time
    is what the booking keeps (bookings.refunds_allowed) — it never changes later. */

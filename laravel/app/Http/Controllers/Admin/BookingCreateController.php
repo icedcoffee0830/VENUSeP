@@ -172,7 +172,7 @@ class BookingCreateController extends Controller
         }
         $c['room'] = $room;
 
-        $c['refundsAllowed'] = refunds_enabled() ? 1 : 0;
+        $c['refundsAllowed'] = office_by_id($room['venue_id'])['refunds'] ? 1 : 0;   /* this office's switch (DB-DECISIONS 28), snapshotted */
         if (!$c['refundsAllowed'] && empty($request->post('agree_no_refund'))) {
             $this->reply(400, ['ok' => false, 'message' => 'The customer must confirm they understand the booking is non-refundable.']);
         }

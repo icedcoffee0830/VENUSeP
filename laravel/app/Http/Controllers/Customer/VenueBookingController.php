@@ -42,13 +42,14 @@ class VenueBookingController extends Controller
         $last = array_pop($what);
         $lpWhat = ucfirst(($what ? implode(', ', $what) . ' and ' : '') . $last);
 
+        $lpOffices = array_values(array_filter(office_all(), fn ($o) => staff_sees_venue($o['id'])));
+
         return view('customer.venue-booking', [
             'venueRooms'         => $venueRooms,
             'hostelRooms'        => $hostelRooms,
             'HOSTEL_VENUE'       => $HOSTEL_VENUE,
             'HOSTEL_CR_LABEL'    => $HOSTEL_CR_LABEL,
             'DISCOUNT_PERCENT'   => $DISCOUNT_PERCENT,
-            'REFUNDS_ENABLED'    => $REFUNDS_ENABLED,
             'POSTPAY_GRACE_DAYS' => $POSTPAY_GRACE_DAYS,
             'isUsep'             => $isUsep,
             'lpDiscountLabel'    => office_discount_label(),
@@ -72,7 +73,10 @@ class VenueBookingController extends Controller
             'lpSpaceCount' => count($venueRooms) + count($hostelRooms),
             'lpBedCount'   => array_sum(array_column($hostelRooms, 'beds')),
             /* Footer: each office's own contact info and hours (Office Settings, DB-DECISIONS 28) */
-            'lpOffices'     => array_values(array_filter(office_all(), fn ($o) => staff_sees_venue($o['id']))),
+            'lpOffices'     => $lpOffices,
+            /* the offices taking refund requests on new bookings, and the others (DB-DECISIONS 28) */
+            'lpRefundOn'    => array_column(array_filter($lpOffices, fn ($o) => $o['refunds']), 'name'),
+            'lpRefundOff'   => array_column(array_filter($lpOffices, fn ($o) => !$o['refunds']), 'name'),
             'lpCounter'     => $lpCounter,
             'overdueNotice' => BookingRules::overdueNoticeForPage(),   /* an Overdue booking blocks new ones at its office (2026-11-01) */
             'blockNotices'  => BookingRules::blockNoticesForPage(),   /* blocked at an office (DB-DECISIONS 28) */

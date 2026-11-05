@@ -31,6 +31,7 @@ class OfficeSettingsController extends Controller
         'phone'    => ['Phone', 'contact_phone'],
         'email'    => ['Email', 'contact_email'],
         'location' => ['Location', 'address'],
+        'refunds'  => ['Refund requests', 'refunds_enabled'],   // changed on Payment Settings only (RefundSwitchController)
     ];
 
     public function index()

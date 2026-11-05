@@ -139,11 +139,11 @@
             <!-- PREVIEW SWITCH: which refund-policy state to show the list for -->
             <section class="fq-card" aria-label="Preview">
               <div class="fq-preview">
-                <div class="fq-preview-label">Show the FAQ as customers see it when refunds are<small>Some answers change with the refund switch (payment timing does too). This preview changes nothing — the live setting is <strong>{!! $REFUNDS_ENABLED ? 'ON' : 'OFF' !!}</strong>.</small></div>
+                <div class="fq-preview-label">Show the FAQ as customers see it when refunds are<small>Some answers change with each office's refund switch (payment timing does too). This preview changes nothing. Live now: @foreach ($fqSwitches as $name => $on){{ $name }} <strong>{{ $on ? 'ON' : 'OFF' }}</strong>{{ $loop->last ? '.' : ' · ' }}@endforeach</small></div>
                 <div class="fq-seg" role="group" aria-label="Preview refund policy">
                   <button type="button" data-preview="refunds_on"{!! $fqLive === 'refunds_on' ? ' class="active"' : '' !!}>Refunds ON{!! $fqLive === 'refunds_on' ? '<span class="fq-live">· live</span>' : '' !!}</button>
                   <button type="button" data-preview="refunds_off"{!! $fqLive === 'refunds_off' ? ' class="active"' : '' !!}>Refunds OFF{!! $fqLive === 'refunds_off' ? '<span class="fq-live">· live</span>' : '' !!}</button>
-                  <button type="button" data-preview="all">Everything</button>
+                  <button type="button" data-preview="all"{!! $fqLive === 'all' ? ' class="active"' : '' !!}>Everything</button>
                 </div>
               </div>
             </section>

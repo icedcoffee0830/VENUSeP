@@ -2,16 +2,20 @@
 @php
   $hdName   = $portal === 'customer' ? 'Juan Miguel Dela Cruz' : 'Administrator';
   $hdRole   = '';
+  $hdPhoto  = '';   /* the photo the person chose on their profile page (profile-save action=photo), else initials */
   if ($portal === 'customer') {
     if (isset($customerContact['name'])) $hdName = $customerContact['name'];   /* pages that load the shared customer record */
     if (session('customer_name') && session('account_type') === 'customer') $hdName = session('customer_name');   /* who actually logged in */
+    $hdPhoto = (string) (\Illuminate\Support\Facades\DB::selectOne('SELECT photo_path FROM customers WHERE user_id = ?', [(int) session('user_id')])->photo_path ?? '');
   } else {
     /* who actually signed in (Bug 5) — the profile page's name rule: the staff
        row's full name, else the username (the seeded admin has no staff row) */
     $hdRole = session('account_type') === 'admin' ? 'Administrator' : 'Staff';
-    $hdName = (string) (\Illuminate\Support\Facades\DB::selectOne(
-      'SELECT COALESCE(s.full_name, u.username, u.email) AS who FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = ?',
-      [(int) session('user_id')])->who ?? $hdRole);
+    $hdWho = \Illuminate\Support\Facades\DB::selectOne(
+      'SELECT COALESCE(s.full_name, u.username, u.email) AS who, s.photo_path FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = ?',
+      [(int) session('user_id')]);
+    $hdName = (string) ($hdWho->who ?? $hdRole);
+    $hdPhoto = (string) ($hdWho->photo_path ?? '');
   }
   $hdParts  = preg_split('/\s+/', trim($hdName));   /* initials = first + last name */
   $hdAvatar = strtoupper(mb_substr($hdParts[0], 0, 1) . (count($hdParts) > 1 ? mb_substr(end($hdParts), 0, 1) : ''));
@@ -34,6 +38,7 @@
   nav.app-header .hd-user{display:inline-flex;align-items:center;gap:.55rem;padding:.3rem .85rem .3rem .3rem;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-weight:700;font-size:.82rem;text-decoration:none;transition:background 180ms ease}
   nav.app-header .hd-user:hover{background:rgba(255,255,255,.18);color:#fff}
   nav.app-header .hd-avatar{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#fff;color:#1d1214;font-size:12px;font-weight:700}
+  nav.app-header img.hd-avatar{object-fit:cover}
   /* the page behind the cards: the same crimson-to-black as the sidebar and
      header, so the whole viewport reads as one surface. Cards stay white —
      each page keeps its own card styles; this only paints what is behind them.
@@ -67,7 +72,7 @@
       <li><a class="hd-quick{{ request()->routeIs('customer.faq') ? ' is-here' : '' }}" href="{{ route('customer.faq', ['in' => 'app']) }}"><i class="bi bi-question-circle"></i><span>FAQ</span></a></li>
       <li>@include('partials.notification-bell', ['nbLook' => 'admin'])</li>
       <li><span class="hd-sep" aria-hidden="true"></span></li>
-      <li><a class="hd-user" href="{{ route('customer.customer-profile') }}" title="Your profile"><span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span><span class="hd-username">{{ $hdName }}</span></a></li>
+      <li><a class="hd-user" href="{{ route('customer.customer-profile') }}" title="Your profile">@if ($hdPhoto !== '')<img class="hd-avatar" src="{{ asset($hdPhoto) }}" alt="" width="30" height="30">@else<span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span>@endif<span class="hd-username">{{ $hdName }}</span></a></li>
     </ul>
   </div>
 </nav>
@@ -79,7 +84,7 @@
     </ul>
     <ul class="hd-nav">
       <li>@include('partials.notification-bell', ['nbLook' => 'admin'])</li>
-      <li><a class="hd-user" href="{{ route('admin.profile') }}" title="Your account · {{ $hdRole }}"><span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span><span class="hd-username">{{ $hdName }}</span></a></li>
+      <li><a class="hd-user" href="{{ route('admin.profile') }}" title="Your account · {{ $hdRole }}">@if ($hdPhoto !== '')<img class="hd-avatar" src="{{ asset($hdPhoto) }}" alt="" width="30" height="30">@else<span class="hd-avatar" aria-hidden="true">{{ $hdAvatar }}</span>@endif<span class="hd-username">{{ $hdName }}</span></a></li>
     </ul>
   </div>
 </nav>

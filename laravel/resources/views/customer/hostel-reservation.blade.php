@@ -90,7 +90,8 @@
   /* custom date-picker dropdown (booking panel) — same look as the venue page */
   .cal-pop{position:absolute;top:calc(100% + 6px);z-index:70;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.14);padding:12px;width:274px}
   .cal-nav{width:28px;height:28px;border:none;background:none;border-radius:8px;cursor:pointer;color:#5c584f;font-size:15px;line-height:1}
-  .cal-nav:hover{background:#f0eeea}
+  .cal-nav:hover:not(:disabled){background:#f0eeea}
+  .cal-nav:disabled{color:#c6c2ba;cursor:default}
   .cal-day{width:32px;height:32px;border:none;background:none;border-radius:999px;display:flex;align-items:center;justify-content:center;font:500 12.5px 'Inter',system-ui,sans-serif;color:#1c1b19;cursor:pointer;padding:0}
   .cal-day:hover:not(:disabled){background:#eef0f4}
   .cal-day:disabled{color:#c6c2ba;text-decoration:line-through;cursor:default;background:none}
@@ -222,11 +223,11 @@ const COUNTER_OVERDUE = {!! json_encode((object) $counterOverdue, JSON_UNESCAPED
 const COUNTER_BLOCKED = {!! json_encode((object) $counterBlocked) !!};
 const NOW = new Date();
 const TODAY = isoOf(NOW);
-/* THE ADVANCE LIMIT (system_settings.hostel_advance_booking_max_days, 2026-10-30): a
-   stay can be booked at most this many days before check-in; later check-ins are
-   greyed out, and booking-submit / booking-create refuse them. null = no limit. */
-const ADVANCE_DAYS = {{ json_encode($HOSTEL_ADVANCE_DAYS) }};
-const LAST_CHECKIN = ADVANCE_DAYS==null ? null : (function(){ const d=new Date(NOW); d.setDate(d.getDate()+ADVANCE_DAYS); return isoOf(d); })();
+/* THE BOOKING WINDOW (BookingRules::lastBookableDay): no date past LAST_DAY is bookable,
+   so the last check-in is the day before it; booking-submit / booking-create refuse the rest. */
+const LAST_DAY = @json($lastDay);
+const LAST_CHECKIN = (function(){ const d=new Date(LAST_DAY+'T00:00:00'); d.setDate(d.getDate()-1); return isoOf(d); })();
+const MAX_STAY = {{ \App\Http\Controllers\Customer\BookingRules::MAX_DAYS }};
 
 /* Rooms come from the ONE PHP source, so this page, the landing page and admin
    Venue Management can never disagree about what exists. photoUrls/panorama
@@ -366,14 +367,15 @@ function derive(){
   const total=hpr.total, discountPercent=hpr.discountPercent, discountAmount=hpr.discountAmount;
   const named=b.occupants.every(o=>o.name.trim().length>0);
   const badRange=!!(b.checkIn && b.checkOut && b.checkOut<=b.checkIn);
-  const tooFar=!!(b.checkIn && LAST_CHECKIN && b.checkIn>LAST_CHECKIN);
+  /* counted from the dates: nights stops at the longest stay */
+  const tooLong=!!(b.checkIn && b.checkOut && (Date.parse(b.checkOut)-Date.parse(b.checkIn))/864e5>MAX_STAY);
 
   /* the status card: neutral surface + a small dot, same as the venue page */
   let slot={show:false};
   if(b.checkIn && b.checkOut){
-    if(tooFar){
-      slot={show:true,dot:'#d9930d',title:'Check-in is too far ahead',
-            detail:'Hostel stays can be booked at most '+ADVANCE_DAYS+' days ahead — pick a check-in on or before '+fmtShort(LAST_CHECKIN)+'.'};
+    if(tooLong){
+      slot={show:true,dot:'#d9930d',title:'A stay can be at most '+MAX_STAY+' nights',
+            detail:'Pick an earlier check-out to continue.'};
     }else if(badRange){
       slot={show:true,dot:'#d9930d',title:'Check-out must be after check-in',
             detail: b.checkOut===b.checkIn ? 'A stay is at least one night — pick the next day or later for check-out.'
@@ -398,11 +400,11 @@ function derive(){
     }
   }
 
-  const ready = !!(R && nights.length>0 && !tooFar && !blocked && beds>0 && beds<=maxFree && named);
+  const ready = !!(R && nights.length>0 && !tooLong && !blocked && beds>0 && beds<=maxFree && named);
 
   let hint='';
   if(!b.checkIn||!b.checkOut) hint='Pick your check-in and check-out dates';
-  else if(tooFar) hint='Check-in can be at most '+ADVANCE_DAYS+' days ahead';
+  else if(tooLong) hint='A stay can be at most '+MAX_STAY+' nights';
   else if(badRange) hint='Check-out must be after check-in';
   else if(blocked) hint='Closed during your stay — pick different dates';
   else if(maxFree===0) hint='No beds available for these dates';
@@ -486,7 +488,7 @@ function calHtml(field){
   for(let i=0;i<start;i++) cells.push('<span></span>');
   for(let d=1;d<=dim;d++){
     const iso=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-    const off = iso<min || (field==='checkIn' && LAST_CHECKIN!==null && iso>LAST_CHECKIN);
+    const off = iso<min || iso>(field==='checkIn' ? LAST_CHECKIN : LAST_DAY);
     const cls='cal-day'+(iso===sel?' sel':'')+(iso===TODAY?' today':'');
     cells.push(`<button class="${cls}" ${off?'disabled':''} onclick="event.stopPropagation();calPick('${iso}')">${d}</button>`);
   }
@@ -496,13 +498,13 @@ function calHtml(field){
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <button class="cal-nav" onclick="calNav(-1)">‹</button>
       <span style="font-size:13px;font-weight:650;color:#1c1b19">${label}</span>
-      <button class="cal-nav" onclick="calNav(1)">›</button>
+      <button class="cal-nav" aria-label="Next month" ${state.cal.month>=LAST_DAY.slice(0,7)?'disabled':''} onclick="calNav(1)">›</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;justify-items:center">
       ${['S','M','T','W','T','F','S'].map(d=>`<span style="font-size:12px;font-weight:600;color:#a5a19a;padding:4px 0">${d}</span>`).join('')}
       ${cells.join('')}
     </div>
-    ${field==='checkIn' && LAST_CHECKIN ? `<div style="font-size:12px;color:#77736c;margin-top:6px;text-align:center">Check-in up to ${ADVANCE_DAYS} days ahead</div>` : ''}
+    <div style="font-size:12px;color:#77736c;margin-top:6px;text-align:center">Bookable up to ${fmtShort(LAST_DAY)}</div>
   </div>`;
 }
 function nextDay(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+1); return isoOf(d); }

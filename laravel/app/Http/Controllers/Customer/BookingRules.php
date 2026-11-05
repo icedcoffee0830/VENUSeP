@@ -12,8 +12,8 @@ use RuntimeException;
    One copy, so the counter cannot accept what the website refuses. */
 final class BookingRules
 {
-    /* A booking covers at most about 6 months; a venue can be booked 1 year ahead; one
-       customer holds at most 5 unpaid upcoming bookings per office online (2026-11-01).
+    /* A booking covers at most about 6 months; no booked date is further than the booking
+       window (lastBookableDay); one customer holds at most 5 unpaid upcoming bookings per office online (2026-11-01).
        Hours are each office's own (legacy offices.php). */
     public const MAX_DAYS = 183;
     private const HHMM = '/^([01]\d|2[0-3]):[0-5]\d$/';   /* a real time of day, "00:00".."23:59" */
@@ -43,12 +43,19 @@ final class BookingRules
             && $end > $start && $start >= $office['opens'] && $end <= $office['closes'];
     }
 
-    /* The refusal for a venue date beyond the year ahead, or null. */
-    public static function venueTooFarAhead(string $firstDay): ?string
+    /* THE BOOKING WINDOW (Aron, 2026-11-05): 183 days ahead, every office, online and at the
+       counter. Bookings already further out stay as they are. */
+    public static function lastBookableDay(): string
     {
-        $max = (int) config('venusep.max_days_ahead');
-        return self::daysBetween(date('Y-m-d'), $firstDay) <= $max ? null
-            : 'Venues can be booked at most 1 year ahead. Pick a date on or before ' . date('M j, Y', strtotime('+' . $max . ' days')) . '.';
+        return date('Y-m-d', strtotime('+' . (int) config('venusep.max_days_ahead') . ' days'));
+    }
+
+    /* The refusal when the last day of a booking (a stay's check-out) is past the window, or null. */
+    public static function tooFarAhead(string $lastDay): ?string
+    {
+        $max = self::lastBookableDay();
+        return $lastDay <= $max ? null
+            : 'Bookings can be made at most ' . (int) config('venusep.max_days_ahead') . ' days ahead. Pick dates on or before ' . date('M j, Y', strtotime($max)) . '.';
     }
 
     /* A stay cannot be split around a night its office is closed: the refusal, or null. */
@@ -97,30 +104,6 @@ final class BookingRules
         $org = mb_substr(trim((string) $organization), 0, 190);
         $pdo->prepare('UPDATE bookings SET quoted_discount_percent = :d, organization_name = :o WHERE id = :b')
             ->execute([':d' => $discount, ':o' => $org !== '' ? $org : null, ':b' => $bookingId]);
-    }
-
-    /* system_settings.hostel_advance_booking_max_days (DB-DECISIONS: a stay can't be
-       reserved more than this many days before check-in). null = no limit set. */
-    public static function hostelAdvanceDays(PDO $pdo): ?int
-    {
-        try {
-            $v = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'hostel_advance_booking_max_days'")->fetchColumn();
-        } catch (PDOException $e) {
-            sql_failed($e);
-            return null;
-        }
-        return ($v === false || (int) $v <= 0) ? null : (int) $v;
-    }
-
-    /* The refusal for a check-in beyond the advance limit, or null when it is within it. */
-    public static function hostelTooFarAhead(PDO $pdo, string $checkIn): ?string
-    {
-        $max = self::hostelAdvanceDays($pdo);
-        if ($max === null || self::daysBetween(date('Y-m-d'), $checkIn) <= $max) {
-            return null;
-        }
-        return 'Hostel stays can be booked at most ' . $max . ' days ahead. Pick a check-in on or before '
-            . date('M j, Y', strtotime('+' . $max . ' days')) . '.';
     }
 
     /* THE UNPAID-BOOKING BLOCK (Aron, 2026-11-01). The offices (one `venues` row each) are

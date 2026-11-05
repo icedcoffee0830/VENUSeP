@@ -132,6 +132,19 @@ class StaffActionCoverageTest extends TestCase
         $this->assertFalse(DB::connection()->getPdo()->inTransaction());
     }
 
+    /* The booking window holds for a move too: a date past it is refused, nothing changes. */
+    public function test_a_stay_cannot_be_moved_past_the_booking_window(): void
+    {
+        config(['venusep.max_days_ahead' => 183]);
+        [$id, $ref] = $this->seedHostelBooking('approved', 'paid_cash', 'cash', false, true);
+        $was = DB::table('hostel_booking_details')->where('booking_id', $id)->first();
+        $in = date('Y-m-d', strtotime('+183 days'));
+        $this->actingAsAdmin();
+        $this->act(['booking' => $ref, 'action' => 'move_date', 'from' => $in, 'to' => date('Y-m-d', strtotime($in . ' +1 day'))])
+            ->assertStatus(409)->assertJson(['message' => 'Bookings can be made at most 183 days ahead. Pick dates on or before ' . date('M j, Y', strtotime($in)) . '.']);
+        $this->assertSame($was->check_in_date, DB::table('hostel_booking_details')->where('booking_id', $id)->value('check_in_date'));
+    }
+
     /* A procedure's refusal (SIGNAL 45000) reads as it did before the SQL moved to DB::,
        never with the query appended. */
     public function test_a_database_refusal_is_shown_in_pdo_words_without_the_sql(): void

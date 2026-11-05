@@ -192,7 +192,7 @@ trait BookingSettlementActions
         if (!BookingRules::validHours($start, $end, $office)) {
             $this->reply(400, ['ok' => false, 'message' => 'Pick a start and end time within the office hours (' . $office['opens'] . ' to ' . $office['closes'] . ').']);
         }
-        if ($far = BookingRules::venueTooFarAhead($from)) {
+        if ($far = BookingRules::tooFarAhead($to)) {
             $this->reply(409, ['ok' => false, 'message' => $far]);
         }
         if (BookingRules::daysBetween($from, $to) + 1 !== BookingQueries::countHeldVenueDays($id)) {
@@ -212,6 +212,9 @@ trait BookingSettlementActions
     {
         $id = (int) $booking['id'];
         // Check
+        if ($far = BookingRules::tooFarAhead($out)) {
+            $this->reply(409, ['ok' => false, 'message' => $far]);
+        }
         if ($closed = BookingRules::stayClosed($office, $in, $out)) {
             $this->reply(409, ['ok' => false, 'message' => $closed]);
         }

@@ -136,13 +136,6 @@ class OfficeSettingsTest extends TestCase
         $this->assertSame(20.0, (float) $this->booking($id)->discount_percent);
     }
 
-    public function test_a_booking_is_limited_to_the_year_ahead(): void
-    {
-        config(['venusep.max_days_ahead' => 365]);
-        $this->assertNull(BookingRules::venueTooFarAhead(date('Y-m-d', strtotime('+365 days'))));
-        $this->assertStringContainsString('1 year ahead', (string) BookingRules::venueTooFarAhead(date('Y-m-d', strtotime('+366 days'))));
-    }
-
     /* Phase E: each office's phone, email and location, edited like its other settings. */
     public function test_a_normal_admin_edits_its_own_offices_contact_info_only(): void
     {

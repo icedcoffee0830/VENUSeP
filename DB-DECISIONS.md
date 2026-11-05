@@ -164,7 +164,7 @@ system_settings(setting_key PK, setting_value, value_type, description,
 - Seed keys:
   - `discount_percent = 20`  — the dynamic discount
   - `hostel_pos_deadline_hours = 72`
-  - `hostel_advance_booking_max_days = 7`  — hostel can't be reserved more than ~1 week before check-in; **events can be booked any time ahead.**
+  - `hostel_advance_booking_max_days = 7`  — **RETIRED 2026-11-05, nothing reads it.** Replaced by the booking window: every office, venue and hostel, online and at the counter, books at most 183 days ahead (fixed, `BookingRules::lastBookableDay()`). Bookings already further out stay.
 
 ## 11. Maintenance — KEEP, system-wide (all venues AND the hostel)
 A **maintenance window is a dated closure attached to a room.** There is no room

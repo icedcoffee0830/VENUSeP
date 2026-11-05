@@ -81,6 +81,8 @@ class RoomReservationController extends Controller
             'REFUNDS_ENABLED'  => $REFUNDS_ENABLED,
             'DISCOUNT_PERCENT' => $DISCOUNT_PERCENT,
             'customerContact'  => $customerContact,
+            /* the date picker greys out everything past the booking window */
+            'lastDay'          => BookingRules::lastBookableDay(),
         ]);
     }
 

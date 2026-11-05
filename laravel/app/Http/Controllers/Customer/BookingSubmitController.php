@@ -199,7 +199,7 @@ class BookingSubmitController extends Controller
             if (!$slots) {
                 return self::reply(409, ['ok' => false, 'message' => 'Every day you picked is closed for maintenance.']);
             }
-            if ($far = BookingRules::venueTooFarAhead($slots[0]['date'])) {
+            if ($far = BookingRules::tooFarAhead($endIso)) {
                 return self::reply(409, ['ok' => false, 'message' => $far]);
             }
             /* Lead time, measured from the FIRST day actually held. */
@@ -289,11 +289,10 @@ class BookingSubmitController extends Controller
             if ($checkIn < date('Y-m-d')) {
                 return self::reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
             }
-            /* The advance limit (system_settings, Aron 2026-10-30): no further ahead than N days. */
             if ($closed = BookingRules::stayClosed($office, $checkIn, $checkOut)) {
                 return self::reply(409, ['ok' => false, 'message' => $closed]);
             }
-            if ($tooFar = BookingRules::hostelTooFarAhead($pdo, $checkIn)) {
+            if ($tooFar = BookingRules::tooFarAhead($checkOut)) {
                 return self::reply(400, ['ok' => false, 'message' => $tooFar]);
             }
             /* PAY TO USE (DB-DECISIONS #26): no method is chosen now (NULL). */

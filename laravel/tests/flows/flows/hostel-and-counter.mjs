@@ -80,9 +80,8 @@ export default {
     await step('Picks two nights a few days out and names two guests', async () => {
       const page = s.cust;
       const room = await dbOne(`SELECT id FROM rooms WHERE room_code = ?`, [HOSTEL_ROOM]);
-      const maxDays = Number((await dbOne(`SELECT setting_value AS v FROM system_settings WHERE setting_key = 'hostel_advance_booking_max_days'`))?.v ?? 7);
-      // the first check-in from 3 days out (inside the advance window) with 2 beds free on both nights
-      for (let off = 3; off + 2 <= Math.max(maxDays, 3) + 2 && !s.checkIn; off++) {
+      // the first check-in from 3 days out with 2 beds free on both nights
+      for (let off = 3; off <= 7 && !s.checkIn; off++) {
         const n1 = iso(addDays(off)), n2 = iso(addDays(off + 1));
         const r = await dbOne(`SELECT
             (SELECT COUNT(*) FROM hostel_beds WHERE room_id = ?) -
@@ -91,7 +90,7 @@ export default {
           [room.id, room.id, n1, n2, room.id, n2, n1]);
         if (Number(r.free) >= 2 && Number(r.closed) === 0) { s.checkIn = n1; s.checkOut = iso(addDays(off + 2)); }
       }
-      expect.ok(s.checkIn, 'no two free nights in the advance-booking window');
+      expect.ok(s.checkIn, 'no two free nights in the next week');
       ctx.note(`stay ${s.checkIn} → ${s.checkOut}`);
 
       await pickHostelDate(page, 'checkIn', s.checkIn);

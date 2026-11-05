@@ -76,7 +76,8 @@
   /* custom date-picker dropdown (booking panel) */
   .cal-pop{position:absolute;top:calc(100% + 6px);z-index:70;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.14);padding:12px;width:274px}
   .cal-nav{width:28px;height:28px;border:none;background:none;border-radius:8px;cursor:pointer;color:#5c584f;font-size:15px;line-height:1}
-  .cal-nav:hover{background:#f0eeea}
+  .cal-nav:hover:not(:disabled){background:#f0eeea}
+  .cal-nav:disabled{color:#c6c2ba;cursor:default}
   .cal-day{width:32px;height:32px;border:none;background:none;border-radius:999px;display:flex;align-items:center;justify-content:center;font:500 12.5px 'Inter',system-ui,sans-serif;color:#1c1b19;cursor:pointer;padding:0}
   .cal-day:hover:not(:disabled){background:#eef0f4}
   .cal-day:disabled{color:#c6c2ba;text-decoration:line-through;cursor:default;background:none}
@@ -225,6 +226,10 @@ const ROOMS = {!! json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_
    advance rule and the earliest selectable date are both measured from here. */
 const NOW = new Date();
 const TODAY = isoOf(NOW);
+/* THE BOOKING WINDOW (BookingRules::lastBookableDay): no date past LAST_DAY is bookable;
+   booking-submit / booking-create refuse it too. One booking covers at most MAX_DAYS days. */
+const LAST_DAY = @json($lastDay);
+const MAX_DAYS = {{ \App\Http\Controllers\Customer\BookingRules::MAX_DAYS }};
 
 /* Each office's own lead time (Office Settings), online and at the counter. */
 function leadMsFor(room){ return (room && room.office ? room.office.lead : 12) * 3600000; }
@@ -581,6 +586,8 @@ function derive(){
   const totalFee=pr.total, discountPercent=pr.discountPercent, discountAmount=pr.discountAmount;
 
   const sr=slotStatus();
+  /* counted from the dates: rangeDates stops at the longest booking */
+  const tooLong=!!(b.date && b.dateEnd && (Date.parse(b.dateEnd)-Date.parse(b.date))/864e5+1>MAX_DAYS);
   const multi = allDates.length>1;                    // the range spans several days (per-day editor shows)
 
   /* precise wording for an incomplete/out-of-order day */
@@ -602,7 +609,9 @@ function derive(){
   /* status card: neutral surface + a small colored dot (amber = fix something,
      green = good to go) — calmer than the old solid red/green boxes */
   let slot={show:false};
-  if(sr.show){
+  if(tooLong){
+    slot={show:true,dot:'#d9930d',title:'A booking can cover at most '+MAX_DAYS+' days',detail:'Pick an earlier end date to continue.'};
+  } else if(sr.show){
     if(sr.badRange){
       slot={show:true,dot:'#d9930d',title:'End date must be on or after the start date',detail:'Adjust your reservation dates to check availability.'};
     } else if(sr.allBlocked){
@@ -641,10 +650,11 @@ function derive(){
   const bEnd=b.dateEnd||b.date;
   const dateOk=b.date && bEnd && bEnd>=b.date;
   const slotFree=sr.show && sr.ok && !tooSoon;
-  const ready=R && b.eventName && dateOk && slotFree && !isNaN(ba) && ba>0 && !over;
+  const ready=R && b.eventName && dateOk && !tooLong && slotFree && !isNaN(ba) && ba>0 && !over;
 
   let hint='';
-  if(!b.eventName) hint='Enter an event name to continue';
+  if(tooLong) hint='A booking can cover at most '+MAX_DAYS+' days';
+  else if(!b.eventName) hint='Enter an event name to continue';
   else if(!dateOk) hint='Pick valid reservation dates';
   else if(sr.show && sr.badRange) hint='End date must be on or after the start date';
   else if(sr.show && sr.allBlocked) hint = sr.why==='maintenance' ? 'Closed on these dates — pick different dates' : 'These dates are already booked — pick different ones';
@@ -739,7 +749,7 @@ function calHtml(field){
     /* a booked day stays pickable — other hours can still be booked
        (2026-10-27); it is marked, and says what is taken */
     const taken=R ? R.booked.filter(k=>k.date===iso) : [];
-    const off=iso<min;
+    const off=iso<min || iso>LAST_DAY;
     const cls='cal-day'+(inMonth?'':' out')+(iso===sel?' sel':'')+(iso===TODAY?' today':'')+(taken.length&&!off?' part':'');
     cells+=off
       ? `<button type="button" class="${cls}" disabled>${cur.getDate()}</button>`
@@ -752,12 +762,13 @@ function calHtml(field){
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <button type="button" class="cal-nav" onclick="calNav(-1)">‹</button>
       <span style="font-size:13.5px;font-weight:650;color:#1c1b19">${monthLabel}</span>
-      <button type="button" class="cal-nav" onclick="calNav(1)">›</button>
+      <button type="button" class="cal-nav" aria-label="Next month" ${state.cal.month>=LAST_DAY.slice(0,7)?'disabled':''} onclick="calNav(1)">›</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);justify-items:center;margin-bottom:4px">
       ${['S','M','T','W','T','F','S'].map(d=>`<span style="font-size:12px;font-weight:600;color:#a5a19a;width:32px;text-align:center">${d}</span>`).join('')}
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;justify-items:center">${cells}</div>
+    <div style="font-size:12px;color:#77736c;margin-top:6px;text-align:center">Bookable up to ${calDateLabel(LAST_DAY)}</div>
   </div>`;
 }
 

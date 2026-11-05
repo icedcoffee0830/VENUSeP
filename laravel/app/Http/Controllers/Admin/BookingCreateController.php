@@ -258,11 +258,10 @@ class BookingCreateController extends Controller
         if ($checkIn < date('Y-m-d')) {
             $this->reply(400, ['ok' => false, 'message' => 'Check-in cannot be in the past.']);
         }
-        /* the same advance limit as online (system_settings.hostel_advance_booking_max_days) */
         if ($closed = BookingRules::stayClosed(office_by_id($room['venue_id']), $checkIn, $checkOut)) {
             $this->reply(409, ['ok' => false, 'message' => $closed]);
         }
-        if ($tooFar = BookingRules::hostelTooFarAhead($pdo, $checkIn)) {
+        if ($tooFar = BookingRules::tooFarAhead($checkOut)) {
             $this->reply(400, ['ok' => false, 'message' => $tooFar]);
         }
         if (!is_array($occupants) || !$occupants || count($occupants) > 20) {
@@ -438,7 +437,7 @@ class BookingCreateController extends Controller
             $this->reply(409, ['ok' => false, 'message' => 'Every day picked is closed for maintenance.']);
         }
 
-        if ($far = BookingRules::venueTooFarAhead($slots[0]['date'])) {
+        if ($far = BookingRules::tooFarAhead($endIso)) {
             $this->reply(409, ['ok' => false, 'message' => $far]);
         }
         /* The office's lead time applies to walk-ins too (time for the Official Receipt). */

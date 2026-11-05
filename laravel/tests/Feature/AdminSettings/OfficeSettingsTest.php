@@ -157,6 +157,21 @@ class OfficeSettingsTest extends TestCase
         $this->assertNotSame('(084) 123 4567', $this->venue(2)->contact_phone);
     }
 
+    /* The form takes 500 characters; the history's old and new value columns hold 100. XAMPP's
+       MySQL quietly cuts a value that long, a strict server (most hosting) refuses the save. */
+    public function test_a_long_location_saves_and_its_history_keeps_what_fits(): void
+    {
+        $long = str_repeat('Long address line ', 20) . 'end';
+        DB::statement("SET SESSION sql_mode = 'STRICT_TRANS_TABLES'");
+        $this->actingAsAdmin('francishubero@gmail.com');
+        $this->send($this->settings(['location' => $long]))->assertOk();
+        $this->assertSame($long, $this->venue()->address);
+        $this->send($this->settings(['location' => 'Short']))->assertOk();
+        $this->assertSame('Short', $this->venue()->address);
+        $row = DB::table('venue_settings_history')->where(['venue_id' => 1, 'field' => 'location', 'new_value' => 'Short'])->orderByDesc('id')->first();
+        $this->assertSame(mb_substr($long, 0, 100), $row->old_value);
+    }
+
     public function test_the_super_admin_edits_any_office_and_bad_contact_info_is_refused(): void
     {
         $this->actingAsAdmin();

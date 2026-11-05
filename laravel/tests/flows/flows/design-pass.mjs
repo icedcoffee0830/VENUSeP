@@ -151,5 +151,47 @@ export default {
       await page.waitForFunction((n) => document.querySelectorAll('.th-card').length >= n, all);
       return page;
     });
+
+    await step('Venue Management: rooms sit under their venue, the jump bar narrows them, Needs attention finds the rest', async () => {
+      const page = s.admin;
+      await page.setViewportSize(DESKTOP);
+      await page.goto(ctx.url('/admin/venue-management'));
+      const hostel = page.locator('.vm-venue', { has: page.getByRole('heading', { name: 'USeP Hostel' }) });
+      await expect.visible(hostel.getByRole('link', { name: 'Add hostel room' }), 'no Add hostel room in the hostel section');
+      await expect.visible(hostel.getByText('Hostel Room 1'), 'a hostel room is not under the hostel');
+      expect.equal(await sideways(page), false, 'sideways scroll at 1280');
+      const bahay = page.locator('.vm-venue', { has: page.getByRole('heading', { name: 'Bahay Alumni' }) });
+
+      await page.locator('[data-jump]', { hasText: 'USeP Hostel' }).click();
+      expect.equal(await bahay.isVisible(), false, 'Bahay Alumni stays under the USeP Hostel filter');
+      await expect.visible(hostel, 'the hostel went');
+
+      await page.locator('[data-jump="attention"]').click();
+      const shown = await page.locator('.vm-card:visible').count();
+      const told = Number((await page.locator('[data-jump="attention"] span').textContent()).trim());
+      expect.equal(shown, told, 'cards under Needs attention');
+      expect.ok(told > 0, 'nothing needs attention in the snapshot');
+      expect.equal(await page.locator('.vm-card:visible:not([data-attention])').count(), 0, 'a healthy room under Needs attention');
+
+      await page.locator('[data-jump="all"]').click();
+      await page.locator('.vm-search').fill('Hostel Room 1');
+      await expect.visible(hostel.getByText('Hostel Room 1'), 'the search lost the room');
+      expect.equal(await bahay.isVisible(), false, 'a venue with no match stays');
+      return page;
+    });
+
+    await step('Venue Management on a phone: photo at the left, 44px buttons, no photo dots', async () => {
+      const page = s.admin;
+      await page.setViewportSize(PHONE);
+      await page.goto(ctx.url('/admin/venue-management'));
+      const card = page.locator('.vm-card').first();
+      await expect.visible(card, 'no room');
+      expect.equal(await sideways(page), false, 'sideways scroll on a phone');
+      const box = await card.locator('.vm-thumb').boundingBox();
+      expect.equal(Math.round(box.width), 112, 'the photo column');
+      expect.equal((await shortButtons(page, '.vm-card-foot .vm-btn, .vm-venue-acts .vm-btn')).join() || 'none', 'none', 'buttons under 44px');
+      expect.equal(await page.locator('.vm-dot-nav').count(), 0, 'photo dots');
+      return page;
+    });
   },
 };

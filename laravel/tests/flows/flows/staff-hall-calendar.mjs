@@ -66,5 +66,16 @@ export default {
       expect.ok(!html.includes(b.room), 'the room is in the page');
       return page;
     });
+
+    await step('Their hall\'s form shows the office read-only, and it still saves', async () => {
+      const page = s.staff;
+      await page.goto(ctx.url('/admin/room-form?id=r1'));
+      const loc = page.locator('input#roomLoc');
+      expect.equal(await loc.inputValue(), 'Bahay Alumni', 'the location');
+      expect.ok(await loc.evaluate((e) => e.readOnly), 'the location can be typed in');
+      await page.getByRole('button', { name: 'Save Changes' }).click();
+      await expect.text(page, 'Room saved.');
+      return page;
+    });
   },
 };

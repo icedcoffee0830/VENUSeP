@@ -171,6 +171,11 @@ class RoomSaveController extends Controller
         /* An empty room_id means CREATE. The Add Room screen has existed all along;
            until now it answered with an alert saying it could not actually create one. */
         $isNewRoom = trim((string) ($post->get('room_id') ?? '')) === '';
+        /* Adding a room, hall or hostel, is for the admins of that office's group and the
+           super admin (requireVenueScope below); staff edit rooms, they do not add them. */
+        if ($isNewRoom && !admin_is_admin()) {
+            $this->reply(403, ['ok' => false, 'error' => 'admin_only', 'message' => 'Only an administrator can add a room.']);
+        }
         $roomCode = $post->get('room_id') ?? '';
         $name = trim((string) ($post->get('name') ?? ''));
         $venueName = trim((string) ($post->get('venue') ?? ''));

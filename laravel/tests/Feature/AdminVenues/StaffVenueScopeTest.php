@@ -31,7 +31,7 @@ class StaffVenueScopeTest extends VenuesTestCase
         $before = DB::table('rooms')->count();
         $this->postForm('admin.room-save', ['room_id' => '', 'name' => 'Scope Test New', 'venue' => 'USeP Venues', 'room_type' => 'event',
             'capacity' => '10', 'fee' => '100'])
-            ->assertStatus(403)->assertJson(['error' => 'forbidden']);
+            ->assertStatus(403)->assertJson(['error' => 'admin_only']);
         $this->assertSame($before, DB::table('rooms')->count());
 
         /* their own room cannot be moved out of their venue either */

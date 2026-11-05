@@ -80,6 +80,9 @@ class VenueManagementController extends Controller
             'vmVenueRows' => $vmVenueRows,
             'vmStaffByVenue' => $vmStaffByVenue,
             'vmMyVenue' => $vmMyVenue,
+            /* who sees the Add buttons: admins, for the offices they handle (room-save checks again) */
+            'vmAddHall' => admin_is_admin() && $venuesByType['event'],
+            'vmAddHostel' => admin_is_admin() && $venuesByType['hostel'],
             'pricingScript' => $pricingScript,
         ]);
     }

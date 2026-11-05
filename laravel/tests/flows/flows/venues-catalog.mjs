@@ -43,6 +43,23 @@ export default {
       return s.admin;
     });
 
+    await step('Adds a hostel room from the hostel section: its form is fixed to the hostel', async () => {
+      const page = s.admin;
+      const name = `Flow Dorm ${ctx.uniq}`.slice(0, 60);
+      await page.goto(ctx.url('/admin/venue-management'));
+      await page.getByRole('link', { name: '+ Add Hostel Room' }).click();
+      await expect.url(page, /\/admin\/hostel-room-form$/);
+      expect.equal(await page.locator('#roomLoc').inputValue(), 'USeP Hostel', 'the fixed location');
+      await page.locator('#roomName').fill(name);
+      await page.getByRole('button', { name: 'Save Changes' }).click();
+      await modal(ctx, page, { expect: /Room created as h\d+/ });
+      await expect.url(page, /\/admin\/venue-management$/);
+      await expect.text(page, name);
+      const beds = await dbOne(`SELECT COUNT(*) AS n FROM hostel_beds b JOIN rooms r ON r.id = b.room_id WHERE r.name = ?`, [name]);
+      expect.ok(Number(beds.n) > 0, 'the new hostel room has no beds');
+      return page;
+    });
+
     await step('Adds an event room to Bahay Alumni (capacity 40, P2,500/day)', async () => {
       const page = s.admin;
       s.roomName = `Flow Room ${ctx.uniq}`.slice(0, 60);

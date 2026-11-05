@@ -320,6 +320,7 @@ function vmMaint($m, $today) {
         align-items: baseline;
         color: var(--vm-muted);
         display: flex;
+        flex-wrap: wrap;
         font-size: 0.75rem;
         font-weight: 800;
         gap: 0.5rem;
@@ -331,6 +332,12 @@ function vmMaint($m, $today) {
       .vm-section-title span {
         font-weight: 500;
         letter-spacing: 0;
+        text-transform: none;
+      }
+
+      .vm-section-title .vm-btn {
+        letter-spacing: 0;
+        margin-left: auto;
         text-transform: none;
       }
 
@@ -764,7 +771,9 @@ function vmMaint($m, $today) {
           <p>Manage locations and the rooms available under them.</p>
         </div>
         <div class="vm-actions">
+@if ($vmAddHall)
           <a class="vm-btn vm-btn-outline" href="{{ route('admin.room-form') }}">+ Add Room</a>
+@endif
         </div>
       </div>
           </div>
@@ -935,6 +944,15 @@ function vmMaint($m, $today) {
      They link to hostel-room-form.php because the FIELDS differ (cr_type,
      beds, rate/head) — split where the data differs, share the machinery.
      --------------------------------------------------------------- --}}
+@if ($hostelRooms || $vmAddHostel)
+      </div>
+      <div class="vm-section-title">Hostel rooms <span>&mdash; booked per bed</span>
+@if ($vmAddHostel)
+        <a class="vm-btn vm-btn-outline" href="{{ route('admin.hostel-room-form') }}">+ Add Hostel Room</a>
+@endif
+      </div>
+      <div class="vm-grid">
+@endif
 @php $hn = 0; @endphp
 @foreach ($hostelRooms as $room)
 @php $hn++;

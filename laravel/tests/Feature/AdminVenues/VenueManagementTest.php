@@ -29,6 +29,26 @@ class VenueManagementTest extends VenuesTestCase
             ->assertSee('const DISCOUNT_PERCENT = ', false);         // pricing.php's script, now inside the page
     }
 
+    /* Add buttons: admins only, for the offices they handle (2026-11-05). */
+    public function test_staff_see_no_add_buttons(): void
+    {
+        $this->actingAsStaff('jakemerson@gmail.com')->get(route('admin.venue-management'))->assertOk()
+            ->assertSee('Hostel Room 1')->assertDontSee('+ Add Room')->assertDontSee('+ Add Hostel Room');
+    }
+
+    public function test_the_cedu_admin_sees_both_add_buttons(): void
+    {
+        $this->actingAsAdmin('cedu.admin@gmail.com')->get(route('admin.venue-management'))->assertOk()
+            ->assertSee('+ Add Room')->assertSee('+ Add Hostel Room')
+            ->assertSee('href="' . route('admin.hostel-room-form') . '"', false);
+    }
+
+    public function test_an_admin_with_no_hostel_sees_no_hostel_button(): void
+    {
+        $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.venue-management'))->assertOk()
+            ->assertSee('+ Add Room')->assertDontSee('+ Add Hostel Room');
+    }
+
     /* Aron 2026-10-31: staff (venue 1, Bahay Alumni) see only their own venue —
        other venues' cards and rooms are not listed at all. */
     public function test_staff_see_only_their_own_venues_rooms(): void

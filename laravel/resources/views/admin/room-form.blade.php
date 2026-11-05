@@ -602,16 +602,21 @@
             <input id="roomName" class="vm-control" type="text" value="{{ $roomFormRoom ? $roomFormRoom['name'] : '' }}" placeholder="{{ $isHostel ? 'e.g. Hostel Room 1' : 'e.g. Function Hall' }}" />
           </div>
           <div class="vm-field">
+@if ($isHostel)
+            <label for="roomLoc">Location (Venue)</label>
+            <input id="roomLoc" class="vm-control" type="text" value="{{ $roomFormRoom['venue'] ?? head($rfVenues) }}" readonly title="A hostel room is always at the hostel" />
+@else
             <label>Location (Venue)</label>
-            <!-- Options come from includes/venues.php — every venue, data-driven.
+            <!-- Options come from includes/venues.php — the event venues, data-driven.
                  The summary + saved value come from rooms.venue_id via the DB
-                 overlay in includes/venue-rooms.php / hostel-rooms.php. -->
+                 overlay in includes/venue-rooms.php. -->
             <details class="vm-dd" id="roomLoc">
               <summary class="vm-dd-trigger">{{ $roomFormRoom && isset($roomFormRoom['venue']) ? $roomFormRoom['venue'] : 'Select a venue' }}</summary>
               <ul class="vm-dd-menu" aria-label="Location options">
-                {!! venueOptions($venues) !!}
+                {!! venueOptions($rfVenues) !!}
               </ul>
             </details>
+@endif
           </div>
         </div>
 @if ($rfStaff)
@@ -1157,8 +1162,12 @@
            that code is also the photo folder on disk. */
         var isNew = !VM_ROOM_ID;
         var name = document.getElementById('roomName').value.trim();
+        @if ($isHostel)
+        var venue = document.getElementById('roomLoc').value;
+        @else
         var venueTrigger = document.querySelector('#roomLoc .vm-dd-trigger');
         var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
+        @endif
         if (!name) { venusepAlert('Enter a room name.'); return; }
         if (!venue || venue === 'Select a venue') { venusepAlert('Choose a location.'); return; }
         var mtv = mtValue();

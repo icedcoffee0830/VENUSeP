@@ -32,7 +32,7 @@ class VenueSaveTest extends VenuesTestCase
             $this->postForm('admin.venue-save', ['venue_id' => '0', 'name' => 'Port Test Hall'])
                 ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden', 'message' => 'The offices are fixed: no office can be added.']);
             $this->postForm('admin.venue-save', ['name' => 'Port Test Hall', 'venue_type' => 'hostel'])->assertStatus(403);
-            $this->get(route('admin.venue-management'))->assertOk()->assertDontSee('+ Add Venue')->assertSee('+ Add Room');
+            $this->get(route('admin.venue-management'))->assertOk()->assertDontSee('+ Add Venue');
         }
         $this->assertSame($before, DB::table('venues')->count());
         $v1 = DB::table('venues')->where('id', 1)->first();

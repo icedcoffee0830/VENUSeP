@@ -447,8 +447,10 @@ class StaffHallScopeTest extends TestCase
     /* The counter's warning: the rule stays (the customer owes the office), the other hall's details do not reach the page. */
     public function test_the_counter_warning_names_no_detail_of_another_hall(): void
     {
+        /* a customer of its own: the shared one may hold other tests' overdue bookings, and only the oldest per office is named */
+        $owner = $this->makeAccount('customer')->customer_id;
         [$other] = $this->seedVenueBooking('r2', 'completed', 'overdue');
-        DB::table('bookings')->where('id', $other)->update(['total_amount' => 7654.32]);
+        DB::table('bookings')->where('id', $other)->update(['customer_id' => $owner, 'total_amount' => 7654.32]);
         $page = $this->asStaff()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk();
         $page->assertSee('Another room at Bahay Alumni')->assertDontSee('7,654.32');
         $page->assertDontSee(DB::table('rooms')->where('room_code', 'r2')->value('name'));
@@ -460,7 +462,7 @@ class StaffHallScopeTest extends TestCase
         /* an admin reads it whole, another group's office included (the counter booking's history) */
         DB::table('bookings')->where('id', $other)->update(['room_id' => $this->roomId('r5')]);
         $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.dashboard'))->assertOk();
-        $owes = BookingRules::overdueBookings(venusep_db(), null, $this->customerId())[$this->customerId()] ?? '';
+        $owes = BookingRules::overdueBookings(venusep_db(), null, $owner)[$owner] ?? '';
         $this->assertStringContainsString(' at USeP Venues, ', $owes);
     }
 

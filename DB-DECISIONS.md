@@ -939,7 +939,7 @@ Agreed with Aron on 2026-11-03 and 2026-11-04.
   all or nothing. The server refuses the rest: booking list, booking page and every action on it,
   counter, Venue Management, notifications, Dashboard and Transaction History follow it. A booking
   they made at the counter on a hall that is no longer theirs goes too. An office's own details
-  (name, description, photo) need every hall of it. On the calendar the other halls of the office are
+  (name, description, photo) need every hall of it. Staff never move a hall to another office: a covered hall moved home would stay theirs after the cover. At the counter a customer's unpaid booking on another hall reads "Another room at <office>", nothing more. On the calendar the other halls of the office are
   plain "Busy": dates only. Reports stay whole office, money included. A cover that ends removes the
   access at once. Staff with no halls can sign in and are told to ask their admin for one. Booking
   news goes to the hall's staff and the group's normal admin. Admins and the super admin: unchanged.

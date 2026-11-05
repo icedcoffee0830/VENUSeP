@@ -602,9 +602,9 @@
             <input id="roomName" class="vm-control" type="text" value="{{ $roomFormRoom ? $roomFormRoom['name'] : '' }}" placeholder="{{ $isHostel ? 'e.g. Hostel Room 1' : 'e.g. Function Hall' }}" />
           </div>
           <div class="vm-field">
-@if ($isHostel)
+@if ($rfFixedVenue)
             <label for="roomLoc">Location (Venue)</label>
-            <input id="roomLoc" class="vm-control" type="text" value="{{ $roomFormRoom['venue'] ?? head($rfVenues) }}" readonly title="A hostel room is always at the hostel" />
+            <input id="roomLoc" class="vm-control" type="text" value="{{ $roomFormRoom['venue'] ?? head($rfVenues) }}" readonly title="{{ $isHostel ? 'A hostel room is always at the hostel' : 'Only an administrator can move a room' }}" />
 @else
             <label>Location (Venue)</label>
             <!-- Options come from includes/venues.php — the event venues, data-driven.
@@ -1162,7 +1162,7 @@
            that code is also the photo folder on disk. */
         var isNew = !VM_ROOM_ID;
         var name = document.getElementById('roomName').value.trim();
-        @if ($isHostel)
+        @if ($rfFixedVenue)
         var venue = document.getElementById('roomLoc').value;
         @else
         var venueTrigger = document.querySelector('#roomLoc .vm-dd-trigger');

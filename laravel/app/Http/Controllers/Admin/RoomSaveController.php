@@ -46,7 +46,7 @@ use Symfony\Component\HttpFoundation\InputBag;
      · a new rate reaches NEW bookings only (each booking snapshots its price)
      · capacity may go down; upcoming bookings over it are named, not changed
      · beds with upcoming guests cannot be removed (refused, with the bookings)
-     · a room moves to another venue only with no upcoming live bookings
+     · a room moves to another venue only with no upcoming live bookings, and only by an admin
      · a CLOSED maintenance window names the bookings inside it — nothing is
        cancelled automatically
    ===================================================================== */
@@ -393,6 +393,12 @@ class RoomSaveController extends Controller
             $this->requireRoomScope($roomRow['id'], $roomRow['venue_id']);
             if ($roomRow['room_type'] !== $roomType) {
                 $this->reply(409, ['ok' => false, 'error' => 'wrong_type', 'message' => 'This room does not match the form that submitted it.']);
+            }
+
+            /* Staff never move a room: it would reach another office, and a covered hall moved
+               to their own office would stay theirs after the cover (trg_rooms_halls_follow_upd). */
+            if ((int) $roomRow['venue_id'] !== (int) $venueRow['id'] && !admin_is_admin()) {
+                $this->reply(403, ['ok' => false, 'error' => 'staff_move', 'message' => 'Only an administrator can move a room to another venue.']);
             }
 
             /* The venue was already resolved above — one lookup serves both paths. */

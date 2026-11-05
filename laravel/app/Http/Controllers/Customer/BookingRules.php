@@ -142,12 +142,15 @@ final class BookingRules
 
        $roomCode: only the office that room belongs to; null = every office.
        customer id => "Room at Office, Oct 1, 2026 — ₱1,800" naming that customer's oldest
-       unpaid booking per office; every such customer when $customerId is null. */
+       unpaid booking per office; every such customer when $customerId is null.
+       A staff session reads the details of its own halls only: the rule is the office's, so
+       it still hears of the rest, as "Another room at <office>" (DB-DECISIONS 28). */
     public static function overdueBookings(PDO $pdo, ?string $roomCode = null, ?int $customerId = null): array
     {
+        legacy('auth');
         try {
             $stmt = $pdo->prepare(
-                "SELECT b.customer_id, r.venue_id, r.name, v.name AS office, fn_booking_first_day(b.id) AS first_day, b.total_amount
+                "SELECT b.customer_id, b.room_id, r.venue_id, r.name, v.name AS office, fn_booking_first_day(b.id) AS first_day, b.total_amount
                    FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id
                   WHERE b.payment_status = 'overdue'"
                   . ($roomCode === null ? '' : ' AND r.venue_id = (SELECT venue_id FROM rooms WHERE room_code = :room)')
@@ -163,9 +166,11 @@ final class BookingRules
         $out = [];
         foreach ($rows as $r) {
             $amount = (float) $r['total_amount'];
-            $out[(int) $r['customer_id']][(int) $r['venue_id']] ??= $r['name'] . ' at ' . $r['office'] . ', '
-                . ($r['first_day'] ? date('M j, Y', strtotime($r['first_day'])) : '—')
-                . ' — ₱' . self::peso($amount);
+            $out[(int) $r['customer_id']][(int) $r['venue_id']] ??= !staff_sees_room($r['room_id'], $r['venue_id'])
+                ? 'Another room at ' . $r['office']
+                : $r['name'] . ' at ' . $r['office'] . ', '
+                  . ($r['first_day'] ? date('M j, Y', strtotime($r['first_day'])) : '—')
+                  . ' — ₱' . self::peso($amount);
         }
         return array_map(fn ($offices) => implode('; ', $offices), $out);
     }

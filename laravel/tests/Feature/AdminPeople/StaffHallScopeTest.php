@@ -34,6 +34,8 @@ class StaffHallScopeTest extends TestCase
     protected function tearDown(): void
     {
         DB::table('notifications')->where('id', '>', $this->lastNotification)->delete();
+        DB::table('system_receipts')->where('booking_id', '>', $this->lastBooking)->delete();
+        DB::table('payments')->where('booking_id', '>', $this->lastBooking)->delete();
         DB::table('bookings')->where('id', '>', $this->lastBooking)->delete();
         DB::table('staff_covers')->whereIn('user_id', $this->madeUserIds)->delete();
         DB::table('staff_halls')->whereIn('user_id', $this->madeUserIds)->delete();
@@ -161,17 +163,13 @@ class StaffHallScopeTest extends TestCase
     /* A real receipt: the same office's staff get it on its hall, a 404 on any other. */
     public function test_a_receipt_of_another_hall_is_refused(): void
     {
-        $r = DB::table('system_receipts as s')->join('bookings as b', 'b.id', '=', 's.booking_id')->join('rooms as r', 'r.id', '=', 'b.room_id')
-            ->where('r.room_type', 'event')->select('b.id', 'b.room_id', 'r.venue_id')->first();
-        $this->assertNotNull($r, 'the snapshot has no event receipt');
-        [, $ref] = $this->bookingRef($r->id);
-        $otherHall = (int) DB::table('rooms')->where('venue_id', $r->venue_id)->where('id', '<>', $r->room_id)->value('id');
-        $away = $this->staffWith($r->venue_id, [$otherHall]);
-        $on = $this->staffWith($r->venue_id, [$r->room_id]);
+        [, $ref] = $this->seedVenueBooking('r1', 'approved', 'await_cash', 'cash');
+        $this->act($ref, 'confirm_payment')->assertOk();
+        $away = $this->staffWith(self::BAHAY, [self::R2]);
 
         foreach (['admin.receipt', 'root.receipt-pdf'] as $page) {
             $this->asStaff($away)->get(route($page, ['booking' => $ref]))->assertNotFound();
-            $this->asStaff($on)->get(route($page, ['booking' => $ref]))->assertOk();
+            $this->asStaff()->get(route($page, ['booking' => $ref]))->assertOk();
         }
     }
 
@@ -405,5 +403,146 @@ class StaffHallScopeTest extends TestCase
         $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.calendar'))->assertOk()->assertDontSee('"title":"Busy"', false);
         $this->actingAsAdmin('admin@gmail.com')->get(route('admin.booking-requests'))->assertOk()->assertSee($ref);
         $this->actingAsAdmin('admin@gmail.com')->get(route('admin.calendar'))->assertOk()->assertDontSee('"title":"Busy"', false);
+    }
+
+    /* ---------------------------------------------------------------- attacks (phase RCHECK) */
+
+    private function roomId(string $code): int
+    {
+        return (int) DB::table('rooms')->where('room_code', $code)->value('id');
+    }
+
+    private function saveRoom(string $code, string $venue)
+    {
+        $name = DB::table('rooms')->where('room_code', $code)->value('name');
+        return $this->asStaff()->postWithToken(route('admin.room-save'), ['room_id' => $code, 'name' => $name, 'venue' => $venue, 'room_type' => 'event']);
+    }
+
+    /* A hall moved to the staff member's office would be theirs for good, the cover long over. */
+    public function test_a_covered_hall_cannot_be_carried_home(): void
+    {
+        $this->cover(self::VENUES, $this->roomId('r5'));
+        $this->saveRoom('r5', 'Bahay Alumni')->assertStatus(403)->assertJson(['error' => 'staff_move']);
+        $this->assertSame(self::VENUES, (int) DB::table('rooms')->where('room_code', 'r5')->value('venue_id'));
+        $this->assertFalse(DB::table('staff_halls')->where(['user_id' => $this->staff->id, 'room_id' => $this->roomId('r5')])->exists());
+    }
+
+    public function test_their_own_hall_cannot_be_sent_to_a_covered_office(): void
+    {
+        $this->cover(self::VENUES, null);
+        $this->saveRoom('r1', 'USeP Venues')->assertStatus(403)->assertJson(['error' => 'staff_move']);
+        $this->assertSame(self::BAHAY, (int) DB::table('rooms')->where('room_code', 'r1')->value('venue_id'));
+    }
+
+    public function test_staff_still_save_a_hall_where_it_is_and_the_form_offers_no_other_office(): void
+    {
+        $this->saveRoom('r1', 'Bahay Alumni')->assertOk();
+        $this->cover(self::VENUES, null);
+        $this->asStaff()->get(route('admin.room-form', ['id' => 'r1']))->assertOk()
+            ->assertSee('id="roomLoc" class="vm-control" type="text" value="Bahay Alumni" readonly', false)
+            ->assertDontSee('<li class="vm-dd-option">USeP Venues', false);
+    }
+
+    /* The counter's warning: the rule stays (the customer owes the office), the other hall's details do not reach the page. */
+    public function test_the_counter_warning_names_no_detail_of_another_hall(): void
+    {
+        [$other] = $this->seedVenueBooking('r2', 'completed', 'overdue');
+        DB::table('bookings')->where('id', $other)->update(['total_amount' => 7654.32]);
+        $page = $this->asStaff()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk();
+        $page->assertSee('Another room at Bahay Alumni')->assertDontSee('7,654.32');
+        $page->assertDontSee(DB::table('rooms')->where('room_code', 'r2')->value('name'));
+
+        /* their own hall keeps the details, and a customer still reads their own */
+        DB::table('bookings')->where('id', $other)->update(['room_id' => self::R1]);
+        $this->asStaff()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk()->assertSee('7,654.32');
+    }
+
+    /* The counter pages with no room, or a list for a room: the lists stay narrowed. */
+    public function test_the_counter_pages_with_no_room_hold_no_other_room(): void
+    {
+        $this->asStaff()->get(route('customer.room-reservation', ['counter' => 1]))->assertOk()
+            ->assertDontSee(DB::table('rooms')->where('room_code', 'r2')->value('name'));
+        $this->asStaff()->get(route('customer.hostel-reservation', ['counter' => 1]))->assertOk()
+            ->assertDontSee(DB::table('rooms')->where('room_code', 'h1')->value('name'));
+        $this->asStaff()->get(route('customer.room-reservation', ['counter' => 1, 'room' => ['r2']]))->assertOk()
+            ->assertDontSee(DB::table('rooms')->where('room_code', 'r2')->value('name'));
+    }
+
+    public function test_halls_taken_or_an_office_change_count_on_the_next_request(): void
+    {
+        [, $ref] = $this->seedVenueBooking('r1');
+        $page = fn () => $this->asStaff()->get(route('root.booking-details', ['booking' => $ref]));
+        $page()->assertOk();
+
+        DB::table('staff_halls')->where('user_id', $this->staff->id)->delete();
+        $page()->assertNotFound();
+        $this->act($ref, 'approve')->assertStatus(403);
+        $this->asStaff()->get(route('admin.booking-requests'))->assertDontSee($ref);
+
+        DB::table('staff_halls')->insert(['user_id' => $this->staff->id, 'room_id' => self::R1]);
+        $page()->assertOk();
+        DB::table('staff')->where('user_id', $this->staff->id)->update(['venue_id' => self::VENUES]);
+        $page()->assertNotFound();
+        $this->act($ref, 'approve')->assertStatus(403);
+    }
+
+    public function test_payment_settings_shows_staff_no_booking_counts_and_changes_nothing(): void
+    {
+        [, $ref] = $this->seedVenueBooking('r2', 'approved', 'confirmed');
+        $name = DB::table('customers')->where('id', $this->customerId())->value('full_name');
+        $gcash = DB::table('gcash_accounts')->count();
+        $refunds = DB::table('venues')->pluck('refunds_enabled', 'id');
+
+        foreach ([$this->staff, $this->staffWith(self::BAHAY, [])] as $staff) {
+            $this->asStaff($staff)->get(route('admin.payment-settings'))->assertOk()
+                ->assertDontSee('data-open', false)->assertDontSee('data-stay', false)->assertDontSee('data-rs-open', false)
+                ->assertDontSee($ref)->assertDontSee($name);
+            $this->asStaff($staff)->postWithToken(route('admin.gcash-account-save'), ['venue' => 'Bahay Alumni', 'account_name' => 'Forged', 'mobile_number' => '09170000000', 'password' => self::PASSWORD])
+                ->assertStatus(403);
+            $this->asStaff($staff)->postWithToken(route('admin.refund-switch'), ['venue_id' => (string) self::BAHAY, 'enable' => '0', 'password' => self::PASSWORD])
+                ->assertStatus(403);
+        }
+        $this->assertSame($gcash, DB::table('gcash_accounts')->count());
+        $this->assertEquals($refunds, DB::table('venues')->pluck('refunds_enabled', 'id'));
+    }
+
+    public function test_venue_cards_carry_staff_names_but_no_booking_of_another_hall(): void
+    {
+        [$other, $ref] = $this->seedVenueBooking('r2', 'approved', 'confirmed');
+        DB::table('venue_booking_details')->where('booking_id', $other)->update(['event_name' => 'Other hall secret']);
+        $colleague = DB::table('staff')->where('venue_id', self::BAHAY)->where('user_id', '<>', $this->staff->id)->value('full_name');
+        $this->asStaff()->get(route('admin.venue-management'))->assertOk()->assertSee($colleague)
+            ->assertDontSee($ref)->assertDontSee('Other hall secret')
+            ->assertDontSee(DB::table('customers')->where('id', $this->customerId())->value('full_name'));
+    }
+
+    public function test_a_cover_cannot_be_set_on_part_of_the_hostel(): void
+    {
+        $this->actingAsAdmin()->postWithToken(route('admin.staff-cover-save'), ['action' => 'cover_create', 'user_id' => $this->staff->id, 'venue_id' => self::HOSTEL,
+            'room_id' => $this->roomId('h1'), 'from' => now()->format('Y-m-d\TH:i'), 'to' => now()->addDay()->format('Y-m-d\TH:i'), 'reason' => 'test'])
+            ->assertStatus(400)->assertJson(['field' => 'room_id']);
+    }
+
+    public static function adminOnlyWrites(): array
+    {
+        return [
+            'staff-save'         => ['admin.staff-save', ['action' => 'set_active', 'user_id' => 1, 'active' => 0]],
+            'set a cover'        => ['admin.staff-cover-save', ['action' => 'cover_create']],
+            'customer block'     => ['admin.customer-save', ['action' => 'block', 'customer_id' => 1, 'venue_id' => 1, 'reason' => 'x']],
+            'office-save'        => ['admin.office-save', ['action' => 'save', 'venue_id' => self::BAHAY]],
+            'delete a room'      => ['admin.catalog-delete', ['entity' => 'room', 'room_id' => 'r1', 'confirm' => 'delete']],
+            'add a room'         => ['admin.room-save', ['room_id' => '', 'name' => 'Forged', 'venue' => 'Bahay Alumni', 'room_type' => 'event']],
+            'backup'             => ['admin.backup-action', ['action' => 'create']],
+            'faq-save'           => ['admin.faq-save', ['action' => 'save']],
+            'make a staff login' => ['root.register-submit', ['kind' => 'staff', 'venue_id' => self::BAHAY]],
+            'customer booking'   => ['customer.booking-submit', ['room' => 'r2']],
+        ];
+    }
+
+    #[DataProvider('adminOnlyWrites')]
+    public function test_a_forged_post_to_a_write_staff_do_not_have_is_refused(string $route, array $form): void
+    {
+        $status = $this->asStaff()->postWithToken(route($route), $form)->getStatusCode();
+        $this->assertContains($status, [302, 401, 403], "$route answered $status");
     }
 }

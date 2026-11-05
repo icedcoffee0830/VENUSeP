@@ -81,6 +81,7 @@ class RoomFormController extends Controller
         return view('admin.room-form', [
             'rfStaff' => $rfStaff,
             'isHostel' => $isHostel,
+            'rfFixedVenue' => $isHostel || !admin_is_admin(),   // staff never move a room (room-save refuses it)
             'roomId' => $roomId,
             'roomFormRoom' => $roomFormRoom,
             'roomFormCsrf' => csrf_token(),

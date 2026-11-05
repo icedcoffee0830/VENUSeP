@@ -38,6 +38,10 @@
   .sm-foot { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .9rem; }
   .sm-error { color: #b23a3a; font-size: .84rem; font-weight: 600; }
   .sm-error:empty { display: none; }
+  @media (max-width: 767.98px) {
+    .sm-btn, .sm-check { min-height: 44px; }
+    .sm-field select, .sm-field input { min-height: 44px; }
+  }
 </style>
 @endpush
 

@@ -291,5 +291,15 @@ export default {
       await expect.visible(page.locator('#brTabBtns .br-tab.active', { hasText: 'Overdue' }), 'back did not land on the tab');
       return page;
     });
+
+    await step('My bookings on a phone: row buttons 44px tall', async () => {
+      const page = s.customer;
+      await page.setViewportSize(PHONE);
+      await page.goto(ctx.url('/customer/booking-history'));
+      await expect.visible(page.locator('.booking-action:visible').first(), 'no row buttons');
+      expect.equal((await shortButtons(page, '.booking-action')).join() || 'none', 'none', 'buttons under 44px');
+      expect.equal(await sideways(page), false, 'sideways scroll on a phone');
+      return page;
+    });
   },
 };

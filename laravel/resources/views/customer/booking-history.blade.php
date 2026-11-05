@@ -91,6 +91,12 @@
       .booking-filter-field label { color: #f2d0cb; }
       .booking-history-panel { box-shadow: 0 18px 44px rgba(10,4,5,.28), 0 2px 6px rgba(10,4,5,.18); border-color: rgba(255,255,255,.18); }
     
+      /* phone: a row's buttons are 44px tall and share the card's width */
+      @media (max-width: 767.98px) {
+        .booking-actions { display: flex; width: 100%; }
+        .booking-action { flex: 1 1 auto; justify-content: center; height: 44px; font-size: 13.5px; }
+      }
+
       /* the active tab and the current page in the pagination: crimson, not black */
       .booking-status-tab.active { background: #a11626; border-color: #a11626; color: #ffffff; }
       .booking-pagination button.active { background: #a11626; border-color: #a11626; color: #ffffff; }

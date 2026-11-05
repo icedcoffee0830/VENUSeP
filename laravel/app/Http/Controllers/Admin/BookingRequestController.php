@@ -150,6 +150,9 @@ class BookingRequestController extends Controller
             'idStatus'  => $this->idStatus($b),
             'idLabel'   => $this->idLabel($b),
             'discountPercent' => $b['discountPercent'],
+            /* decided at approval, as the action's reply says it; null until then */
+            'discountPct' => in_array($b['reservationCode'], [\App\Support\Status::APPROVED, \App\Support\Status::COMPLETED], true)
+                ? ($b['discountAmount'] > 0 ? $b['discountPercent'] : 0) : null,
             'quotedPct' => $b['quotedDiscount'],
             'idRemovedOn' => booking_id_removed_on($b['id']),
             'writeOff'  => $b['writeOffReason'],

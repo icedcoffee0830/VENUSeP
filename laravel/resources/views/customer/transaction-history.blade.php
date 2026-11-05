@@ -170,12 +170,8 @@
           const at = parseDate(value);
           return at ? new Date(at).toLocaleDateString('en-US', year ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' }) : '';
         };
-        const chipClass = (value) => ({
-          Paid: 'green', Approved: 'green', Pending: 'amber',
-          'Payment pending': 'grey', 'Payment due': 'amber', Overdue: 'red',   /* post-pay states */
-          Unpaid: 'grey', Rejected: 'red', Refunded: 'grey', Completed: 'grey', Cancelled: 'grey',
-        }[value] || 'grey');
-        const chip = (value) => `<span class="vz-chip vz-chip-${chipClass(value)}">${esc(value)}</span>`;
+        const TONES = @json(\App\Support\Status::CHIP_TONES);
+        const chip = (value) => `<span class="vz-chip vz-chip-${TONES[value] || 'grey'}">${esc(value)}</span>`;
         const actionButtons = (row) => {
           // View — the booking and its payment, in a modal over this page
           // (includes/booking-details-modal.php, 2026-10-27). The valid ID is

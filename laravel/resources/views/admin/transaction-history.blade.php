@@ -54,12 +54,6 @@
       .th-table-wrap { padding: 14px 18px 18px; overflow-x: auto; }
 
       /* status badges — team soft-tint palette (no loud fills, no bold) */
-      .t-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
-      .t-green { background: #eaf6ef; color: #1c7a4f; }
-      .t-amber { background: #fbf1dd; color: #8a5a00; }
-      .t-red   { background: #fcecec; color: #b23a3a; }
-      .t-navy  { background: #e9eff8; color: #2b4a7e; }
-      .t-gray  { background: #eef0f2; color: #55606b; }
 
       /* row action buttons */
       .th-actions { display: inline-flex; gap: 6px; }
@@ -194,18 +188,10 @@
           return Number.isNaN(parsed) ? 0 : parsed;
         };
 
-        // status → team soft-tint badge
-        const badgeClass = (value) => ({
-          Paid: 't-green', Approved: 't-green',
-          Pending: 't-amber',
-          'Payment pending': 't-gray', 'Payment due': 't-amber', Overdue: 't-red',   /* post-pay states */
-          Rejected: 't-red',
-          Unpaid: 't-gray', Cancelled: 't-gray',
-          Refunded: 't-navy', Completed: 't-navy',
-        }[value] || 't-gray');
+        const TONES = @json(\App\Support\Status::CHIP_TONES);
         const statusBadge = (cell) => {
           const v = cell.getValue();
-          return `<span class="t-badge ${badgeClass(v)}">${v}</span>`;
+          return `<span class="vz-chip vz-chip-${TONES[v] || 'grey'}">${v}</span>`;
         };
 
         const actionButtons = (cell) => {

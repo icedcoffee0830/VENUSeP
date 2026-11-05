@@ -51,20 +51,6 @@
       .booking-amount { font-variant-numeric: tabular-nums; }
       .booking-empty-state td { text-align: center; color: var(--muted); padding: 28px; }
 
-      /* badges — team soft-tint palette */
-      .booking-badge { display: inline-flex; align-items: center; border-radius: 14px; padding: 3px 10px; font-size: 11px; font-weight: 600; line-height: 1.5; }
-      .badge-paid, .badge-approved { background: #eaf6ef; color: #1c7a4f; }
-      .badge-completed, .badge-refunded { background: #e9eff8; color: #2b4a7e; }
-      .badge-pending { background: #fbf1dd; color: #8a5a00; }
-      .badge-rejected, .badge-failed { background: #fcecec; color: #b23a3a; }
-      .badge-cancelled, .badge-unpaid { background: #eef0f2; color: #55606b; }
-      .badge-refund-requested { background: #fbf1dd; color: #8a5a00; }
-      .badge-refund-action-needed { background: #fdf3e6; color: #8a5a12; }
-      .badge-refund-denied { background: #fcecec; color: #b23a3a; }
-      /* post-pay states (DB-DECISIONS #18): waiting for the event · window open · window missed */
-      .badge-payment-pending { background: #eef0f2; color: #55606b; }
-      .badge-payment-due { background: #fbf1dd; color: #8a5a00; }
-      .badge-overdue { background: #fcecec; color: #b23a3a; }
       .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
       .booking-pay-note.is-overdue { color: #b23a3a; }
       .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); white-space: normal; }
@@ -73,7 +59,6 @@
       @media (min-width: 1280px) { .booking-actions:has(.booking-overdue-help) { display: flex; width: 11.5rem; } }
       .booking-overdue-help strong { color: #b23a3a; }
       /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
-      .badge-expired, .badge-released { background: #eef0f2; color: #55606b; }
       .booking-status-note { display: block; margin-top: 4px; max-width: 220px; font-size: 11px; line-height: 1.4; color: var(--muted); }
       /* row actions */
       .booking-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
@@ -137,7 +122,7 @@
         .booking-status-tab { flex: none; white-space: nowrap; }
       }
       /* type floor (readability): nothing on the page below 12px */
-      .booking-badge, .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }
+      .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }
       /* ---- white page (desktop + phone): the cards sit on white, no crimson wash ---- */
       body { background: #fff !important; }
       .app-main { background: #fff !important; }

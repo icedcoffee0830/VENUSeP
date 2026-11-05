@@ -53,8 +53,8 @@
       .b-amber::before { background: #d9930d; }
       .b-red   { background: #fcecec; color: #b23a3a; }
       .b-red::before   { background: #cf4a4a; }
-      .b-navy  { background: #eef1f8; color: #1f2a44; }
-      .b-navy::before  { background: #1f2a44; }
+      .b-navy  { background: #eef0f2; color: #55606b; }
+      .b-navy::before  { background: #55606b; }
 
       .br-btn { background: #ffffff; border: 1px solid var(--vm-border); border-radius: 9px; color: var(--vm-text); cursor: pointer; font-family: inherit; font-size: 0.83rem; font-weight: 600; padding: 0.5rem 0.95rem; }
       .br-btn:hover { background: var(--vm-hover); }

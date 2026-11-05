@@ -6,6 +6,20 @@ namespace App\Support;
    The full lists, with what each word means: venusep_schema.sql (reservation_statuses, payment_statuses). */
 final class Status
 {
+    /* What colour each status word's chip is (partials/chips-css): a word not listed is grey.
+       Green = done well, amber = waiting on someone, red = stopped, grey = finished or neutral. */
+    public const CHIP_TONES = [
+        'Paid' => 'green', 'Approved' => 'green',
+        'Pending' => 'amber', 'Payment due' => 'amber', 'Awaiting POS' => 'amber', 'Under review' => 'amber', 'Action needed' => 'amber',
+        'Refund requested' => 'amber', 'Refund processing' => 'amber', 'Refund - action needed' => 'amber', 'Refund - Official Receipt needed' => 'amber',
+        'Overdue' => 'red', 'Rejected' => 'red', 'Refund denied' => 'red',
+    ];
+
+    public static function chipClass(string $word): string
+    {
+        return 'vz-chip vz-chip-' . (self::CHIP_TONES[$word] ?? 'grey');
+    }
+
     /* bookings.reservation_status: where the booking itself stands.
        gcash_receipts.verdict also uses 'rejected'. */
     public const PENDING = 'pending';

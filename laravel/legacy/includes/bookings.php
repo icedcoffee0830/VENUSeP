@@ -994,7 +994,7 @@ if (!function_exists('bh_e')) {
     function bh_e($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
 }
 if (!function_exists('bh_badge')) {
-    function bh_badge($status) { return 'badge-' . strtolower(preg_replace('/[^a-zA-Z]+/', '-', $status)); }
+    function bh_badge($status) { return \App\Support\Status::chipClass((string) $status); }
 }
 
 /* Normalise a PH mobile to 11 digits starting 09, or null if it cannot be one.

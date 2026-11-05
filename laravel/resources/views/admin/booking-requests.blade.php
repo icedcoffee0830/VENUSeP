@@ -36,8 +36,8 @@
       .b-amber::before { background: #d9930d; }
       .b-red   { background: #fcecec; color: #b23a3a; }
       .b-red::before   { background: #cf4a4a; }
-      .b-navy  { background: #eef1f8; color: #1f2a44; }
-      .b-navy::before  { background: #1f2a44; }
+      .b-navy  { background: #eef0f2; color: #55606b; }
+      .b-navy::before  { background: #55606b; }
 
       /* needs-action tabs + search */
       .br-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: 0.55rem; margin-bottom: 1rem; }

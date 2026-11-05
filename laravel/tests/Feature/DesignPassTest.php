@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Support\Status;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /* Design pass items 8a to 8e: the small site-wide fixes. */
@@ -23,5 +25,28 @@ class DesignPassTest extends TestCase
             if (!str_ends_with($file->getFilename(), '.php') || $file->getFilename() === 'reports.blade.php') continue;
             $this->assertDoesNotMatchRegularExpression('/#8a857d|#8a8680|#a3a09a|[^-a-z]color: ?#(ff6b12|2f9e63)/i', file_get_contents($file->getPathname()), $file->getFilename());
         }
+    }
+
+    public function test_every_status_word_has_its_chip(): void
+    {
+        foreach (['Refund processing' => 'amber', 'Action needed' => 'amber', 'Locked' => 'grey', 'Completed' => 'grey', 'Refunded' => 'grey',
+                  'Paid' => 'green', 'Overdue' => 'red', 'Something new' => 'grey'] as $word => $tone) {
+            $this->assertSame('vz-chip vz-chip-' . $tone, Status::chipClass($word), $word);
+        }
+        $this->actingAsCustomer()->get(route('customer.booking-history'))->assertOk()->assertSee('booking-badge vz-chip vz-chip-', false);
+    }
+
+    /* The decision used to vanish on reload: the page read discountPct, the row said discountPercent. */
+    public function test_the_discount_decision_is_still_there_after_a_reload(): void
+    {
+        $booking = DB::selectOne("SELECT id, YEAR(submitted_at) AS y, discount_percent AS pct FROM bookings WHERE reservation_status = 'approved' AND discount_amount > 0 ORDER BY id LIMIT 1");
+        $this->assertNotNull($booking, 'the snapshot has no approved booking with a discount');
+        $ref = sprintf('VB-%d-%03d', $booking->y, $booking->id);
+        $this->actingAsAdmin()->get(route('admin.booking-request', ['id' => $ref]))->assertOk()
+            ->assertSee('"discountPct":' . (float) $booking->pct, false);
+
+        $rejected = DB::selectOne("SELECT id, YEAR(submitted_at) AS y FROM bookings WHERE reservation_status = 'rejected' ORDER BY id LIMIT 1");
+        $this->get(route('admin.booking-request', ['id' => sprintf('VB-%d-%03d', $rejected->y, $rejected->id)]))->assertOk()
+            ->assertSee('"discountPct":null', false);
     }
 }

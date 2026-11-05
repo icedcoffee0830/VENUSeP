@@ -818,8 +818,8 @@ tr:hover {
       .b-amber::before { background: #d9930d; }
       .b-red   { background: #fcecec; color: #b23a3a; }
       .b-red::before   { background: #cf4a4a; }
-      .b-navy  { background: #eef1f8; color: #1f2a44; }
-      .b-navy::before  { background: #1f2a44; }
+      .b-navy  { background: #eef0f2; color: #55606b; }
+      .b-navy::before  { background: #55606b; }
 
       /* urgent-first preview rows — each row is ONE link to the detail page */
       a.ad-row { display: grid; grid-template-columns: 1.15fr 0.9fr 1.6fr 14px; gap: 12px; align-items: center; padding: 12px 8px; border-top: 1px solid #eee9e2; text-decoration: none; color: inherit; }

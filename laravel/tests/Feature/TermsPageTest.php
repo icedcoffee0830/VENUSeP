@@ -23,6 +23,12 @@ class TermsPageTest extends TestCase
             ->assertSee('You will find it in My bookings. It is not an Official Receipt.')->assertDontSee('System Receipt');
     }
 
+    public function test_overdue_says_the_office_extends_the_deadline_and_online_payment_comes_back(): void
+    {
+        $this->get(route('terms'))
+            ->assertSee('It cannot be paid online until the office extends the deadline. Once they do, you can pay online again.');
+    }
+
     public function test_the_numbers_come_from_the_settings(): void
     {
         config(['venusep.max_days_ahead' => 90, 'venusep.max_unpaid' => 2]);

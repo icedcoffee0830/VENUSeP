@@ -47,7 +47,7 @@
         <li><strong>A venue at an office that does not take refund requests:</strong> you pay after your event. Payment opens the day after your last booked day, and your booking shows the date to pay by.</li>
         <li><strong>The USeP Hostel:</strong> you pay before you use the bed, by the end of your check-in day. The whole stay is paid at once. A stay still unpaid by then is released.</li>
       </ul>
-      <p>A pay-after-your-event booking still unpaid past its deadline becomes Overdue. It can no longer be paid online, so please contact the office. Until it is settled you cannot book online with that office. Other offices are not affected.</p>
+      <p>A pay-after-your-event booking still unpaid past its deadline becomes Overdue. It cannot be paid online until the office extends the deadline. Once they do, you can pay online again. Until it is settled you cannot book online with that office. Other offices are not affected.</p>
     </section>
 
     <section aria-labelledby="tc-paying">

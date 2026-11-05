@@ -272,7 +272,7 @@ function whoScreen(){
       ${label('New account')}
       <input id="bkNewName" type="text" value="${esc(b.name)}" oninput="setBookerField('name', this.value)" placeholder="Full name" aria-label="Full name" style="${inputStyle}" autocomplete="off">
       <div style="height:10px"></div>
-      <input id="bkNewEmail" type="email" inputmode="email" spellcheck="false" autocapitalize="off" value="${esc(b.email)}" oninput="setBookerField('email', this.value)" placeholder="Email address" aria-label="Email address" style="${inputStyle}" autocomplete="off">
+      <input id="bkNewEmail" type="text" inputmode="email" spellcheck="false" autocapitalize="off" value="${esc(b.email)}" oninput="setBookerField('email', this.value)" placeholder="Email address" aria-label="Email address" style="${inputStyle}" autocomplete="off">
       ${suggestion ? `<button type="button" id="bkEmailFix" onclick="setBookerField('email', ${esc(JSON.stringify(suggestion))})" style="display:block;margin-top:6px;border:none;background:none;padding:0;color:#a11626;font-size:12.5px;cursor:pointer;font-family:inherit;text-align:left">Did you mean <strong>${esc(suggestion)}</strong>? Use it</button>` : ''}
       <div style="height:10px"></div>
       <input id="bkNewPhone" type="tel" inputmode="tel" pattern="${PH_MOBILE_PATTERN}" title="09XX XXX XXXX or +63 9XX XXX XXXX" value="${esc(b.phone)}" oninput="setBookerField('phone', this.value)" placeholder="Mobile number (09XX XXX XXXX)" aria-label="Mobile number" style="${inputStyle}" autocomplete="off">

@@ -73,7 +73,11 @@ export default {
       await page.locator('#bkNewEmail').fill('msantos@usep.edu.ph');
       await page.getByRole('button', { name: 'Check the details' }).click();
       await expect.text(page, 'This person already has an account. Search for them instead.');
-      await page.locator('#bkNewEmail').fill(`${s.local}@gmial.com`);
+      // typed key by key: every keystroke redraws the form, and a type="email" box
+      // lost its caret there, so the letters came out reversed (2026-11-05)
+      await page.locator('#bkNewEmail').fill('');
+      await page.locator('#bkNewEmail').pressSequentially(`${s.local}@gmial.com`);
+      expect.equal(await page.locator('#bkNewEmail').inputValue(), `${s.local}@gmial.com`, 'the typed email came out scrambled');
       await page.locator('#bkEmailFix').click();
       expect.equal(await page.locator('#bkNewEmail').inputValue(), `${s.local}@gmail.com`, 'the suggestion was not taken');
       return page;

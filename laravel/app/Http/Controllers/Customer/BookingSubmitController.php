@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Customer;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use PDO;
 use PDOException;
 use Throwable;
 
@@ -40,6 +41,18 @@ class BookingSubmitController extends Controller
     private static function reply(int $status, array $data, array $headers = [])
     {
         return response()->json($data, $status, ['Cache-Control' => 'no-store'] + $headers);
+    }
+
+    /* The room as it is now, in the shape the booking page keeps it: name, price, capacity. */
+    private static function roomNow(PDO $pdo, array $room, string $roomCode, float $rate): array
+    {
+        $now = ['id' => $roomCode, 'name' => $room['name']];
+        if ($room['room_type'] === 'event') {
+            return $now + ['fee' => $rate, 'capacity' => (int) $room['attendee_capacity']];
+        }
+        $beds = $pdo->prepare('SELECT COUNT(*) FROM hostel_beds WHERE room_id = :r AND is_active = 1');
+        $beds->execute([':r' => $room['id']]);
+        return $now + ['rate' => $rate, 'beds' => (int) $beds->fetchColumn()];
     }
 
     public function __invoke(Request $request)
@@ -108,16 +121,8 @@ class BookingSubmitController extends Controller
         $rate  = (float) ($type === 'venue' ? $room['fee_per_day'] : $room['rate_per_head_per_night']);
         $shown = $request->post('shown_rate');
         if ($shown !== null && abs((float) $shown - $rate) >= 0.005) {
-            $fresh = ['id' => $roomCode, 'name' => $room['name']];
-            if ($type === 'venue') {
-                $fresh += ['fee' => $rate, 'capacity' => (int) $room['attendee_capacity']];
-            } else {
-                $beds = $pdo->prepare('SELECT COUNT(*) FROM hostel_beds WHERE room_id = :r AND is_active = 1');
-                $beds->execute([':r' => $room['id']]);
-                $fresh += ['rate' => $rate, 'beds' => (int) $beds->fetchColumn()];
-            }
-            return self::reply(409, ['ok' => false, 'error' => 'price_changed', 'room' => $fresh,
-                'message' => 'The price of ' . $room['name'] . ' changed to ₱' . number_format($rate, fmod($rate, 1.0) == 0.0 ? 0 : 2) . '. Please check and submit again.']);   /* = usep_peso() */
+            return self::reply(409, ['ok' => false, 'error' => 'price_changed', 'room' => self::roomNow($pdo, $room, $roomCode, $rate),
+                'message' => 'The price of ' . $room['name'] . ' changed to ₱' . BookingRules::peso($rate) . '. Please check and submit again.']);
         }
 
         $office = office_by_id($room['venue_id']);

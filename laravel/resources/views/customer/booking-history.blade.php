@@ -52,7 +52,7 @@
       .booking-empty-state td { text-align: center; color: var(--muted); padding: 28px; }
 
       /* badges — team soft-tint palette */
-      .booking-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; line-height: 1.5; }
+      .booking-badge { display: inline-flex; align-items: center; border-radius: 14px; padding: 3px 10px; font-size: 11px; font-weight: 600; line-height: 1.5; }
       .badge-paid, .badge-approved { background: #eaf6ef; color: #1c7a4f; }
       .badge-completed, .badge-refunded { background: #e9eff8; color: #2b4a7e; }
       .badge-pending { background: #fbf1dd; color: #8a5a00; }

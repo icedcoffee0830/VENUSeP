@@ -75,6 +75,12 @@ export default {
       expect.ok(s.date, 'no free date found in the next 60 days');
       ctx.note(`date ${s.date}, 9:00 AM – 1:00 PM`);
 
+      // the "Booking under" card: the photo when there is one (stood in for: this customer has none), else the initials
+      const photo = page.locator('img[width="34"]');
+      expect.equal(await photo.count(), 0, 'a photo for a customer with none');
+      await page.evaluate(() => { ACCOUNT.photo = '/logo/Logo Header 3.png'; render(); });
+      expect.equal(await photo.count(), 1, 'no photo in the Booking under card');
+      await page.evaluate(() => { ACCOUNT.photo = ''; render(); });
       await page.locator('#bk-eventName').fill(s.eventName);
       await page.locator('#bk-date').click();
       const day = page.locator(`.cal-pop button[onclick="calPick('${s.date}')"]`);

@@ -73,13 +73,14 @@
     var asks = mode === 'confirm' || mode === 'prompt';      // both have Cancel + OK
     var tone = asks ? (danger ? 'vz-danger' : '') : (opts.tone === 'ok' ? 'vz-ok' : '');
     var icon = danger ? ICONS.warning : (asks ? ICONS.question : ICONS.info);
+    var secret = opts.inputType === 'password';
     var field = mode === 'prompt'
       ? '<div class="vz-modal-field">' +
           (opts.label ? '<label class="vz-modal-label" for="vzPromptInput">' + escapeHtml(opts.label) + '</label>' : '') +
-          (opts.inputType === 'password' ? '<span class="vz-pw">' : '') +
-          '<input class="vz-modal-input" id="vzPromptInput" data-vz="input" type="' + (opts.inputType === 'password' ? 'password' : 'text') + '"' +
+          (secret ? '<span class="vz-pw">' : '') +
+          '<input class="vz-modal-input" id="vzPromptInput" data-vz="input" type="' + (secret ? 'password' : 'text') + '"' +
           ' placeholder="' + escapeHtml(opts.placeholder || '') + '" autocomplete="' + escapeHtml(opts.autocomplete || 'off') + '">' +
-          (opts.inputType === 'password' ? window.venusepEye + '</span>' : '') +
+          (secret ? window.venusepEye + '</span>' : '') +
         '</div>'
       : '';
 

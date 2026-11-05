@@ -19,6 +19,12 @@ final class BookingRules
     private const HHMM = '/^([01]\d|2[0-3]):[0-5]\d$/';   /* a real time of day, "00:00".."23:59" */
 
     /* A real calendar date in yyyy-mm-dd: the pattern alone let "2030-02-30" through. */
+    /* "1,500", or "1,500.50" with centavos: usep_peso(), which JSON replies cannot load (pricing.php prints a <script>). */
+    public static function peso(float $amount): string
+    {
+        return number_format($amount, fmod($amount, 1.0) == 0.0 ? 0 : 2);
+    }
+
     public static function isDate(string $iso): bool
     {
         return (bool) preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $iso, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
@@ -148,7 +154,7 @@ final class BookingRules
             $amount = (float) $r['total_amount'];
             $out[(int) $r['customer_id']][(int) $r['venue_id']] ??= $r['name'] . ' at ' . $r['office'] . ', '
                 . ($r['first_day'] ? date('M j, Y', strtotime($r['first_day'])) : '—')
-                . ' — ₱' . number_format($amount, fmod($amount, 1.0) == 0.0 ? 0 : 2);   /* = usep_peso() */
+                . ' — ₱' . self::peso($amount);
         }
         return array_map(fn ($offices) => implode('; ', $offices), $out);
     }

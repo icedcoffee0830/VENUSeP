@@ -17,12 +17,9 @@ Route::redirect('/customer', '/customer/venues')->name('customer.index');
    tests/Feature/PrivacyPageTest.php checks it is not linked yet: update that test then. */
 Route::view('/privacy', 'privacy')->name('privacy');
 
-/* Terms and Conditions: public, static. LINKED FROM NOWHERE until Aron says so. Then link it from:
-   - auth/customer-register.blade.php: the checkbox becomes "I agree to the Terms and Conditions and the Privacy Notice", both linked;
-   - auth/customer-login.blade.php: the same on the Google "Finish creating your account" checkbox (gsTerms);
-   - partials/booking-footer.blade.php and customer/venue-booking.blade.php (.lp-footer-bottom): beside the Privacy link.
-   Agreed then too: admin-register.blade.php loses its terms checkbox, its JS check and any server check.
-   tests/Feature/TermsPageTest.php checks it is not linked yet: update that test then. */
+/* Terms and Conditions: public, static. Linked from the customer register checkbox and the Google
+   "Finish creating your account" checkbox (gsTerms), in a new tab so a half-filled form is kept.
+   Not in any footer, and it does not link the privacy page (Aron 2026-11-05). */
 Route::view('/terms', 'terms')->name('terms');
 
 require __DIR__ . '/areas/auth.php';

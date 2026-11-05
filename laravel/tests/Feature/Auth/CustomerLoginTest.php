@@ -113,7 +113,8 @@ class CustomerLoginTest extends TestCase
         $email = 'lvtest-g' . bin2hex(random_bytes(4)) . '@test.local';
         $signup = ['sub' => 'sub-' . $email, 'email' => $email, 'name' => 'Gina Google', 'at' => time(), 'remember' => false];
         $this->withSession(['google_signup' => $signup])->get($this->url())->assertOk()
-            ->assertSee('Finish creating your account')->assertSee($email)->assertSee('value="Gina Google"', false);
+            ->assertSee('Finish creating your account')->assertSee($email)->assertSee('value="Gina Google"', false)
+            ->assertSee('<a class="auth-link" href="' . route('terms') . '" target="_blank" rel="noopener">Terms and Conditions</a>', false);
 
         $this->post($this->url(), ['google_step' => 'create', 'full_name' => '', 'contact_number' => '123'])
             ->assertSee('Enter your full name.')->assertSee('Enter a mobile number in the form 09XX XXX XXXX.')

@@ -69,7 +69,7 @@
               <small class="auth-hint" id="gsPhoneHint">09XX XXX XXXX. Used only if a GCash refund ever has to be sent to you.</small>
               <small class="validation-message" id="gsPhoneMsg" aria-live="polite">{{ $googleErrors['contact_number'] ?? '' }}</small>
             </div>
-            <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="gsTerms" name="terms" aria-describedby="gsTermsMsg" required {{ $gsTerms ? 'checked' : '' }} /><span class="form-check-label">I agree to the Terms and Conditions</span></label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="gsTerms" name="terms" aria-describedby="gsTermsMsg" required {{ $gsTerms ? 'checked' : '' }} /><span class="form-check-label">I agree to the <a class="auth-link" href="{{ route('terms') }}" target="_blank" rel="noopener">Terms and Conditions</a></span></label>
             <small class="validation-message" id="gsTermsMsg" aria-live="polite">{{ $googleErrors['terms'] ?? '' }}</small>
             <button type="submit" name="google_step" value="create" class="btn-auth">Create my account</button>
           </form>

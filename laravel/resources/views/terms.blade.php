@@ -1,6 +1,6 @@
-{{-- Terms and Conditions — public, static, no database. Linked from nowhere yet (see routes/web.php).
+{{-- Terms and Conditions — public, static, no database. Linked from the two sign-up checkboxes.
      Says only what the system really does: check a rule in the code before adding it here.
-     Same look as the privacy notice (partials/legal-page-style). --}}
+     Same look as the privacy page (partials/legal-page-style). --}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,7 +24,7 @@
     <p class="pv-draft">Draft for the VENUSeP project. These terms have not yet been reviewed by the USeP offices.</p>
 
     <h1>Terms and Conditions</h1>
-    <p class="pv-lead">The rules for booking a venue or a hostel bed through VENUSeP, in plain words. For how we handle your personal information, read the <a href="{{ route('privacy') }}">Privacy notice</a>.</p>
+    <p class="pv-lead">The rules for booking a venue or a hostel bed through VENUSeP, in plain words.</p>
     <a class="pv-back" href="{{ route('customer.venues') . (counter_mode() ? '?counter=1' : '') }}">&larr; Back to venue booking</a>
 
     <section aria-labelledby="tc-booking">
@@ -91,7 +91,7 @@
       <ul>
         <li>Every online booking needs a valid ID. Staff use it to confirm who you are and whether the USeP discount applies.</li>
         <li>At the counter, staff look at your ID in person.</li>
-        <li>Your uploaded ID is removed once all processes for the booking are finished. The <a href="{{ route('privacy') }}">Privacy notice</a> explains this.</li>
+        <li>Your uploaded ID is removed once all processes for the booking are finished.</li>
       </ul>
     </section>
 

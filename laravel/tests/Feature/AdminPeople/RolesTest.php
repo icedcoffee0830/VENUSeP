@@ -281,6 +281,34 @@ class RolesTest extends TestCase
         }
     }
 
+    /* A copy of the database made with the server default (general_ci, HANDOFF 8): migration 17's
+       procedure must still work there, or every booking's notification would fail. */
+    public function test_booking_notifications_work_on_a_database_with_another_default_collation(): void
+    {
+        preg_match('/^DROP PROCEDURE IF EXISTS sp_notify_venue_staff\$\$\R(.*?^END)\$\$/ms',
+            (string) file_get_contents(dirname(base_path()) . '/venusep_migration_17.sql'), $m);
+        $this->assertNotEmpty($m, 'the procedure is in migration 17');
+        $db = DB::getDatabaseName();
+        $this->assertStringStartsWith('venusep_laravel_test', $db);
+        $recreate = function (string $collation) use ($db, $m) {
+            DB::statement("ALTER DATABASE `$db` CHARACTER SET utf8mb4 COLLATE $collation");
+            DB::unprepared('DROP PROCEDURE IF EXISTS sp_notify_venue_staff');
+            DB::unprepared($m[1]);
+        };
+
+        $b = $this->bookingAt(self::BAHAY);
+        $before = (int) DB::table('notifications')->max('id');
+        try {
+            $recreate('utf8mb4_general_ci');
+            DB::statement('CALL sp_notify_venue_staff(?, ?, NULL, NULL)', [$b['id'], 'new_request']);
+        } finally {
+            $recreate('utf8mb4_unicode_ci');
+        }
+        $to = DB::table('notifications as n')->join('users as u', 'u.id', '=', 'n.user_id')->where('n.id', '>', $before)->pluck('u.email')->all();
+        DB::table('notifications')->where('id', '>', $before)->delete();
+        $this->assertContains('francishubero@gmail.com', $to);
+    }
+
     public function test_two_office_staff_may_sign_in_on_either_cedu_card(): void
     {
         $two = $this->staffAt(self::VENUES, true);

@@ -200,27 +200,27 @@ DELIMITER $$
 
 -- A booking's news: that office's staff (a CEDU staff member ticked for both
 -- offices gets both) and its group's normal admins. Never the super admin.
+-- No string variable: one takes the database's default collation, and on a copy made with
+-- the server default (general_ci) comparing it to a column would stop every booking.
 DROP PROCEDURE IF EXISTS sp_notify_venue_staff$$
 CREATE PROCEDURE sp_notify_venue_staff (
     IN p_booking_id BIGINT UNSIGNED, IN p_kind VARCHAR(40),
     IN p_actor_user_id BIGINT UNSIGNED, IN p_detail TEXT
 )
 BEGIN
-    DECLARE v_venue BIGINT UNSIGNED;
-    DECLARE v_group VARCHAR(20);
-    SELECT r.venue_id, v.office_group INTO v_venue, v_group
-      FROM bookings b JOIN rooms r ON r.id = b.room_id JOIN venues v ON v.id = r.venue_id
-     WHERE b.id = p_booking_id;
     INSERT INTO notifications (user_id, kind, booking_id, actor_user_id, detail)
     SELECT u.id, p_kind, p_booking_id, p_actor_user_id, p_detail
-      FROM users u
+      FROM bookings b
+      JOIN rooms r ON r.id = b.room_id
+      JOIN venues v ON v.id = r.venue_id
+      JOIN users u
       LEFT JOIN staff s ON s.user_id = u.id
       LEFT JOIN venues mine ON mine.id = s.venue_id
-     WHERE u.is_active = 1 AND u.id <> COALESCE(p_actor_user_id, 0)
-       AND ((u.account_type = 'admin' AND u.is_super_admin = 0 AND u.office_group = v_group)
+     WHERE b.id = p_booking_id AND u.is_active = 1 AND u.id <> COALESCE(p_actor_user_id, 0)
+       AND ((u.account_type = 'admin' AND u.is_super_admin = 0 AND u.office_group = v.office_group)
             OR (u.account_type = 'staff'
-                AND (s.venue_id = v_venue
-                     OR (s.both_cedu_offices = 1 AND mine.office_group = 'cedu' AND v_group = 'cedu'))));
+                AND (s.venue_id = v.id
+                     OR (s.both_cedu_offices = 1 AND mine.office_group = 'cedu' AND v.office_group = 'cedu'))));
 END$$
 
 -- Is this customer blocked right now at this room's office? The one copy of the rule:

@@ -23,6 +23,14 @@ class VenueBookingController extends Controller
         extract(legacy('pricing'));
         $isUsep = usep_is_account($customerContact['email']);
 
+        /* An office the customer is blocked at is not listed (the modal says why): DB-DECISIONS 28 */
+        $lpBlocked = BookingRules::blockedOfficeNames();
+        $venueRooms = array_values(array_filter($venueRooms, fn ($r) => !in_array($r['venue'], $lpBlocked, true)));
+        $lpHostelBlocked = in_array($HOSTEL_VENUE, $lpBlocked, true);
+        if ($lpHostelBlocked) {
+            $hostelRooms = [];
+        }
+
         $lpVenueNames = array_values(array_unique(array_column($venueRooms, 'venue')));
         /* COUNTER MODE (staff booking for a walk-in): every link keeps counter=1, and
            the links that only mean something to a signed-in customer — My bookings,
@@ -30,7 +38,7 @@ class VenueBookingController extends Controller
         $lpCounter = counter_mode();
         /* The lists above are already narrowed to a staff session's offices (staff_sees_venue);
            the hostel card and section follow the same rule (DB-DECISIONS 28). */
-        $lpShowHostel = office_hostel_shown();
+        $lpShowHostel = office_hostel_shown() && !$lpHostelBlocked;
         $lpNoOffice = $lpCounter && staff_venue_scope() === [];
         $lpCount = count($lpVenueNames) + ($lpShowHostel ? 1 : 0);
         /* "Alumni halls, university venues and hostel beds", for the places shown only */
@@ -79,7 +87,6 @@ class VenueBookingController extends Controller
             'lpRefundOff'   => array_column(array_filter($lpOffices, fn ($o) => !$o['refunds']), 'name'),
             'lpCounter'     => $lpCounter,
             'overdueNotice' => BookingRules::overdueNoticeForPage(),   /* an Overdue booking blocks new ones at its office (2026-11-01) */
-            'blockNotices'  => BookingRules::blockNoticesForPage(),   /* blocked at an office (DB-DECISIONS 28) */
             'lpQ'           => $lpCounter ? '?counter=1' : '',
         ]);
     }

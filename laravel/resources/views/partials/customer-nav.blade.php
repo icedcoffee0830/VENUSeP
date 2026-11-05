@@ -8,3 +8,4 @@
     navCounterHasOwnBar  true on room-reservation (it renders its own counter bar)
 --}}
 @php extract(legacy('auth', 'customer-bookings', 'venue-rooms', 'hostel-rooms'), EXTR_SKIP); include base_path('legacy/includes/customer-nav.php'); @endphp
+@include('partials.block-modal')

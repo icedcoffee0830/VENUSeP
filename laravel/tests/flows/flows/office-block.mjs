@@ -6,7 +6,7 @@
 const BAHAY_ADMIN = 'francishubero@gmail.com';
 const CUSTOMER = 'customer@gmail.com';
 const REASON = 'Flow test: left the hall damaged';
-const NOTICE = "You can't make new bookings at Bahay Alumni right now. Please contact the office.";
+const NOTICE = "You can't book at Bahay Alumni right now. Please contact the office.";
 
 /* the shared venusepPrompt/venusepAlert modal (assets/js/confirm-modal.js) */
 async function modal(ctx, page, { expect: re, fill, ok } = {}) {
@@ -53,9 +53,29 @@ export default {
       return page;
     });
 
-    await step('The customer sees the notice and the office contact on a Bahay room, not the reason', async () => {
+    await step('After sign-in a modal tells the customer once, and Bahay Alumni is gone from the listings', async () => {
       const page = s.customer = await ctx.loginCustomer(CUSTOMER);
+      const modal = page.locator('#blockModal');
+      await expect.visible(modal, 'no modal after sign-in');
+      expect.match(await modal.textContent(), /You can't book at Bahay Alumni right now\. Please contact the office\./, 'the modal');
+      const office = await dbOne(`SELECT contact_email FROM venues WHERE id = 1`);
+      expect.match(await modal.textContent(), new RegExp(office.contact_email.replace('.', '\\.')), 'the modal has the contact details');
+      expect.ok(!(await page.content()).includes(REASON), 'the reason reached the page');
+      await modal.getByRole('button', { name: 'OK' }).click();
+      expect.ok(!(await modal.isVisible()), 'OK did not close the modal');
+      expect.equal(await page.locator('a[href*="room-reservation?room=r1"]').count(), 0, 'a Bahay room card on the landing page');
+      expect.equal(await page.locator('a[href$="#venue-bahay-alumni"]').count(), 0, 'a Bahay link in the nav');
+      expect.ok(await page.locator('a[href*="room-reservation?room=r5"]').count() > 0, 'USeP Venues went too');
+      await page.reload();
+      expect.equal(await page.locator('#blockModal').count(), 0, 'the modal came back in the same session');
+      return page;
+    });
+
+    await step('The customer sees the notice and the office contact on a Bahay room, not the reason', async () => {
+      const page = s.customer;
       await page.goto(ctx.url('/customer/room-reservation?room=r1'));
+      await expect.visible(page.locator('#blockModal'), 'no modal on a direct link');
+      await page.locator('#blockModal').getByRole('button', { name: 'OK' }).click();
       await expect.text(page, NOTICE);
       const office = await dbOne(`SELECT contact_phone, contact_email FROM venues WHERE id = 1`);
       await expect.text(page, office.contact_email);
@@ -63,11 +83,23 @@ export default {
       return page;
     });
 
+    await step('On a phone the modal fits the screen and the page keeps its width', async () => {
+      const page = s.customer;
+      await page.setViewportSize({ width: 360, height: 700 });
+      await page.reload();
+      const box = await page.locator('#blockModal').boundingBox();
+      expect.ok(box && box.x >= 0 && box.x + box.width <= 360 && box.y >= 0 && box.y + box.height <= 700, 'the modal runs off the screen: ' + JSON.stringify(box));
+      await page.keyboard.press('Escape');
+      expect.ok(!(await page.locator('#blockModal').isVisible()), 'Esc did not close the modal');
+      await page.setViewportSize({ width: 1280, height: 900 });
+      return page;
+    });
+
     await step('Another office is not affected', async () => {
       const page = s.customer;
       await page.goto(ctx.url('/customer/room-reservation?room=r5'));
       await page.waitForLoadState('load');
-      expect.equal(await page.getByText("You can't make new bookings at").count(), 0, 'a notice on a USeP Venues room');
+      expect.equal(await page.getByText("You can't book at").count(), 0, 'a notice on a USeP Venues room');
       return page;
     });
 

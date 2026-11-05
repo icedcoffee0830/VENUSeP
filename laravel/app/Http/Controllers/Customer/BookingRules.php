@@ -177,21 +177,48 @@ final class BookingRules
         if ($office === null || BlockQueries::findActive($customerId, $venueId) === null) {
             return null;
         }
-        return ['message' => "You can't make new bookings at " . $office['name'] . ' right now. Please contact the office.',
+        return ['message' => "You can't book at " . $office['name'] . ' right now. Please contact the office.',
                 'contact' => office_contact_line($office)];
     }
 
-    /* For a booking page: the signed-in customer's notices, never at the counter.
-       $room: the room on the page; the landing page has none and lists every office. */
-    public static function blockNoticesForPage(mixed $room = null): array
+    /* For a booking page: the notice when the signed-in customer is blocked at this room's
+       office, never at the counter. A direct link is the only way there: the office is hidden. */
+    public static function blockNoticesForPage(mixed $room): array
+    {
+        if (counter_mode() || !customer_logged_in() || !is_string($room)) {
+            return [];
+        }
+        legacy('offices');
+        $venueId = office_of_room($room)['id'] ?? null;
+        $notice = $venueId === null ? null : self::blockNotice((int) session('customer_id'), (int) $venueId);
+        return $notice ? [$notice] : [];
+    }
+
+    /* The offices the signed-in customer is blocked at, by name: hidden from their booking
+       listings (Aron 2026-11-05). Staff at the counter still see every office. */
+    public static function blockedOfficeNames(): array
+    {
+        if (counter_mode() || !customer_logged_in()) {
+            return [];
+        }
+        legacy('offices');
+        return array_map(fn ($v) => office_by_id($v)['name'] ?? '', BlockQueries::activeOfficeIds((int) session('customer_id')));
+    }
+
+    /* The block modal's notices on this page: each blocked office once per session, and the
+       page's own office every time (a direct link). $room: the page's ?room=. */
+    public static function blockModalNotices(mixed $room): array
     {
         if (counter_mode() || !customer_logged_in()) {
             return [];
         }
         legacy('offices');
         $customerId = (int) session('customer_id');
-        $venueIds = is_string($room) ? array_filter([office_of_room($room)['id'] ?? null]) : BlockQueries::activeOfficeIds($customerId);
-        return array_values(array_filter(array_map(fn ($v) => self::blockNotice($customerId, (int) $v), $venueIds)));
+        $here = is_string($room) ? (office_of_room($room)['id'] ?? null) : null;
+        $told = session('block_modal_told', []);
+        $show = array_filter(BlockQueries::activeOfficeIds($customerId), fn ($v) => $v === $here || !in_array($v, $told, true));
+        session(['block_modal_told' => array_values(array_unique(array_merge($told, $show)))]);
+        return array_values(array_filter(array_map(fn ($v) => self::blockNotice($customerId, $v), $show)));
     }
 
     /* For the counter's "who" step: the customers blocked at THIS room's office, id => true. */

@@ -76,7 +76,7 @@ class OfficeBlockTest extends TestCase
     {
         $this->block();
         $res = $this->submit()->assertStatus(409)->assertJson(['ok' => false, 'error' => 'blocked']);
-        $this->assertStringStartsWith("You can't make new bookings at USeP Venues right now. Please contact the office. USeP Venues: ", $res->json('message'));
+        $this->assertStringStartsWith("You can't book at USeP Venues right now. Please contact the office. USeP Venues: ", $res->json('message'));
         $this->assertStringContainsString('usep.venues@example.com', $res->json('message'));
         $this->assertStringNotContainsString('Secret', $res->json('message'));
         $this->submit('r1')->assertStatus(400)->assertJson(['message' => 'A valid ID is required to submit a booking.']);
@@ -85,10 +85,9 @@ class OfficeBlockTest extends TestCase
     public function test_the_booking_pages_say_so_up_front_with_the_contact_info(): void
     {
         $this->block();
-        $notice = "You can't make new bookings at USeP Venues right now. Please contact the office.";
+        $notice = "You can't book at USeP Venues right now. Please contact the office.";
         $this->actingAsCustomer(self::EMAIL)->get(route('customer.room-reservation', ['room' => 'r5']))->assertOk()
             ->assertSee($notice)->assertSee('usep.venues@example.com')->assertDontSee('Secret reason');
-        $this->get(route('customer.venues'))->assertOk()->assertSee($notice);
         $this->get(route('customer.room-reservation', ['room' => 'r1']))->assertOk()->assertDontSee($notice);
     }
 

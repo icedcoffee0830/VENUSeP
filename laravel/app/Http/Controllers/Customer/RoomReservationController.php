@@ -48,7 +48,9 @@ class RoomReservationController extends Controller
                 break;
             }
         }
-        $mrOthers = array_values(array_filter($venueRooms, function ($r) use ($mrCurrent) { return $r['id'] !== $mrCurrent; }));
+        /* never a room of an office the customer is blocked at */
+        $mrBlocked = BookingRules::blockedOfficeNames();
+        $mrOthers = array_values(array_filter($venueRooms, function ($r) use ($mrCurrent, $mrBlocked) { return $r['id'] !== $mrCurrent && !in_array($r['venue'], $mrBlocked, true); }));
         if ($mrHere) {
             usort($mrOthers, function ($a, $b) use ($mrHere) { return ($b['venue'] === $mrHere['venue']) - ($a['venue'] === $mrHere['venue']); });
         }

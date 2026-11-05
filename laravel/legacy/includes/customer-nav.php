@@ -61,6 +61,8 @@ $navLinks = array_merge($navLinks, [
 if (!office_hostel_shown()) {                                           /* counter mode: another office's hostel (DB-DECISIONS 28) */
   $navLinks = array_values(array_filter($navLinks, function ($l) { return $l[0] !== 'hostel'; }));
 }
+$navBlocked = \App\Http\Controllers\Customer\BookingRules::blockedOfficeNames();   /* offices this customer is blocked at are not listed */
+$navLinks = array_values(array_filter($navLinks, function ($l) use ($navBlocked) { return !in_array($l[2], $navBlocked, true); }));
 if (!$navAuthed) {                                                      /* a guest has no bookings to show */
   $navLinks = array_values(array_filter($navLinks, function ($l) { return $l[0] !== 'bookings'; }));
 }

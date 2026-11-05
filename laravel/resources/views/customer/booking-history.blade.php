@@ -133,6 +133,7 @@
         .booking-empty-state td::before { display: none; }
         .booking-history-filters { grid-template-columns: 1fr 1fr; }
         .booking-status-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+        .booking-status-tab { flex: none; white-space: nowrap; }
       }
       /* type floor (readability): nothing on the page below 12px */
       .booking-badge, .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }

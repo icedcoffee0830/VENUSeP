@@ -121,7 +121,7 @@ export default {
       await row.locator('.btn-cust-fix-email').click();
       await modal(ctx, page, { expect: /never signed into/, fill: `${s.local}.fixed@gmail.com`, ok: 'Next' });
       await modal(ctx, page, { expect: /The reason is kept/, fill: 'Flow test: one letter off', ok: 'Fix email' });
-      await modal(ctx, page, { expect: /Email corrected/ });
+      await expect.text(page, /Email corrected/);
       await expect.visible(page.locator('.tabulator-row', { hasText: `${s.local}.fixed@gmail.com` }), 'the corrected email is not listed');
       const f = await dbOne(`SELECT old_email, new_email, reason FROM customer_email_fixes WHERE customer_id = ?`, [s.customerId]);
       expect.ok(f && f.new_email === `${s.local}.fixed@gmail.com` && f.reason === 'Flow test: one letter off', 'the correction row: ' + JSON.stringify(f));

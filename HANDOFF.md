@@ -771,3 +771,13 @@ Decision: memory `venusep-teammate-bugs-2026-11-05`, item 11. **All of it is in 
 - Not watched by the check (not on Aron's list): the booking detail page, Transaction History (both sides), Calendar.
 - Not run in a browser: setting a first password and Google disconnect on the customer profile (they need a Google account); they use the same redraw as the rest of that section.
 - Tests: `LiveCheckTest` (new), `FaqManagementTest` (JSON answers), flow `live-updates` (new). Every flow that waited for a page load now waits for the `part=1` reply. No full PHPUnit, `venusep:check` or full flows run in this phase, by Aron's rule; that is the round at the end of all phases.
+
+### 15d. Privacy notice page (branch `privacy-page`, 2026-11-05, no migration)
+- `/privacy` (route name `privacy`, `Route::view` in `routes/web.php`, view `resources/views/privacy.blade.php`): static, public, no database. Content from memory `venusep-privacy-page-plan`; it opens with "Draft for the VENUSeP project. This notice has not yet been reviewed by the USeP University Data Privacy Office."
+- **Linked from nowhere, on purpose.** When Aron says "put it in", link it from:
+  1. `partials/booking-footer.blade.php`: the "Privacy" link in `.bk-footer-bottom` (now points to the FAQ);
+  2. `customer/venue-booking.blade.php` (landing page): the `.lp-footer-bottom` row (it has only "Booking & cancellation policy" now; add a Privacy link beside it);
+  3. `auth/customer-register.blade.php`: the "I agree to the Terms and Conditions" checkbox;
+  4. `auth/customer-login.blade.php`: the Google "Finish creating your account" terms checkbox (`gsTerms`).
+  Then drop `test_no_page_links_to_it_yet` in `tests/Feature/PrivacyPageTest.php`.
+- The name has no `admin.`/`customer.`/`root.` prefix, so `venusep:check` does not request it; `PrivacyPageTest` covers it.

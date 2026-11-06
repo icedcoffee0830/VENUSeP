@@ -17,7 +17,7 @@ abstract class TestCase extends BaseTestCase
     {
         $html = $response->getContent();
         if (is_string($html) && str_contains((string) $response->headers->get('Content-Type'), 'html')) {
-            $file = fn (array $m) => (string) @file_get_contents(public_path($m[1]));
+            $file = fn (array $m) => file_get_contents(public_path($m[1]));   // a linked file that is missing fails the test
             $html = preg_replace_callback('~<script src="[^"]*?/(assets/js/(?!two-factor)[^"?]+\.js)\?v=\d+"[^>]*></script>~',
                 fn ($m) => $m[0] . '<script>' . $file($m) . '</script>', $html);
             $html = preg_replace_callback('~<link rel="stylesheet" href="[^"]*?/(assets/css/[^"?]+\.css)\?v=\d+"[^>]*>~',

@@ -23,6 +23,7 @@ class CalendarTest extends TestCase
             ->assertSee('<title>VENUSeP | Calendar</title>', false)
             ->assertSee('class="calendar-page"', false)
             ->assertSee('calendarEventsJson: [{', false)
+            ->assertSee('events: adminCalendarPage.calendarEventsJson', false)
             ->assertSee('fullcalendar@6.1.20', false);
     }
 

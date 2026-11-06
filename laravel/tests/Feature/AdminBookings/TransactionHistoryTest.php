@@ -40,7 +40,9 @@ class TransactionHistoryTest extends TestCase
         $this->actingAsStaff()->get(route('admin.transaction-history'))->assertOk()
             ->assertSee('Transaction History')
             ->assertSee('transactionRowsJson: [{', false)
+            ->assertSee('const rows = adminTransactionsPage.transactionRowsJson;', false)
             ->assertSee('receiptUrl: ' . json_encode(route('admin.receipt')), false)
+            ->assertSee('${adminTransactionsPage.receiptUrl}?booking=', false)
             ->assertSee('window.openBookingDetails', false)
             ->assertSee(json_encode(route('root.booking-details') . '?booking='), false)
             // on an admin page the modal's "Transaction Receipt" is the staff receipt page

@@ -59,6 +59,7 @@ class TransactionHistoryTest extends TestCase
     public function test_a_customer_with_no_bookings_gets_an_empty_ledger(): void
     {
         $this->actingAsCustomer('nikkaarena@gmail.com')->get(route('customer.transaction-history'))
-            ->assertOk()->assertSee('transactionRowsJson: [],', false);
+            ->assertOk()->assertSee('transactionRowsJson: [],', false)
+            ->assertSee('const rows = transactionHistoryPage.transactionRowsJson;', false);
     }
 }

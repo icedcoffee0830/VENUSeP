@@ -23,8 +23,9 @@ class DesignPassTest extends TestCase
         $files = new \AppendIterator();
         $files->append(new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(resource_path('views'))));
         $files->append(new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(public_path('assets/css'))));
+        $files->append(new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(public_path('assets/js'))));
         foreach ($files as $file) {
-            if (!preg_match('/\.(php|css)$/', $file->getFilename()) || $file->getFilename() === 'reports.blade.php') continue;
+            if (!preg_match('/\.(php|css|js)$/', $file->getFilename()) || $file->getFilename() === 'reports.blade.php') continue;
             $this->assertDoesNotMatchRegularExpression('/#8a857d|#8a8680|#a3a09a|[^-a-z]color: ?#(ff6b12|2f9e63)/i', file_get_contents($file->getPathname()), $file->getFilename());
         }
     }

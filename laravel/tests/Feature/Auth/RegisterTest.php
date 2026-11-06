@@ -38,6 +38,7 @@ class RegisterTest extends TestCase
             ->assertSee('Create your account')
             ->assertSee(json_encode(route('root.register-submit')), false)
             ->assertSee('csrf: "' . self::TOKEN . '"', false)
+            ->assertSee('const CSRF = customerRegisterPage.csrf;', false)
             ->assertSee('data-redirect="' . route('customer.customer-login') . '"', false)
             ->assertDontSee('Sign up with Google');
     }

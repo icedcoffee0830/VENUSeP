@@ -25,6 +25,7 @@ class CalendarTest extends TestCase
             ->assertSee('class="calendar-page"', false)
             ->assertSee('My Calendar')->assertSee('Your venue bookings at a glance')
             ->assertSee('fullcalendar@6.1.20', false)
+            ->assertSee('events: customerCalendarPage.calendarEventsJson', false)
             ->assertSee('Brent Cajipoe');                                      /* header chip */
 
         preg_match('/calendarEventsJson: (\[.*?\]),\n/s', $res->getContent(), $m);

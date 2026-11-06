@@ -24,7 +24,7 @@ class DisabledCustomerTest extends TestCase
     {
         $c = $this->makeAccount('customer', ['active' => 0]);
         $this->post($this->url(), ['email' => $c->email, 'password' => self::PASSWORD])
-            ->assertOk()->assertSee(self::NOTICE)->assertSee('venusepAlert(', false)
+            ->assertOk()->assertSee(self::NOTICE)->assertSee("venusepAlert('" . self::NOTICE, false)
             ->assertDontSee('Invalid email or password.')
             ->assertSessionMissing('user_id');
     }

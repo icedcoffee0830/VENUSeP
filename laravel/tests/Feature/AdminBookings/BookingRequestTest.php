@@ -27,7 +27,7 @@ class BookingRequestTest extends TestCase
             ->assertSee('function gcStore', false)                     // the GCash engine
             ->assertSee('bookingActionUrl: ' . json_encode(route('admin.booking-action')), false)
             ->assertSee('fetch(bookingRequestPage.bookingActionUrl', false)
-            ->assertSee('_token: CSRF', false)
+            ->assertSee('{ _token: CSRF, booking: cur.id, action: action }', false)   // the page's own call: the bell's file has a _token too
             ->assertSee(asset('assets/js/confirm-modal.js'), false)
             ->assertDontSee("fetch('booking-", false)
             ->assertDontSee('../document-view.php', false);

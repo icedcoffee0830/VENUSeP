@@ -31,7 +31,8 @@ laravel/
   resources/views/layouts/customer.blade.php  header + sidebar (portal=customer)
   resources/views/<area>/...                  page views
   routes/web.php         only `require`s the area files below
-  routes/areas/<area>.php  ONE file per area — you edit ONLY your area's file
+  routes/areas/<area>.php  ONE file per area of the site: staff-bookings (was abook), admin-settings (admina),
+                           admin-people (adminb), customer-account (cacct), customer-booking (cbook), admin-venues (venues), auth
   public/assets, public/logo  copies of ../assets and ../logo
 ```
 

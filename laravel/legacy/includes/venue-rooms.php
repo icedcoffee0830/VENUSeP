@@ -6,7 +6,7 @@
 
    Included by:
      RoomReservationController      (json_encode'd into the booking page)
-     VenueBookingController (the landing list)
+     VenuesController (the landing list)
      VenueManagementController         (the room cards)
 
    WHY ONE SOURCE: these rooms used to be hand-written SEPARATELY on every

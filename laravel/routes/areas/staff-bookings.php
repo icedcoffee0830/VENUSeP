@@ -5,9 +5,8 @@ use App\Http\Controllers\Admin;
 use App\Http\Controllers\PendingController;
 use Illuminate\Support\Facades\Route;
 
-/* Area: abook — see the ownership table in LARAVEL-PORT.md.
-   Every route below starts as a PendingController placeholder (501 "not ported yet").
-   Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
+/* The staff booking pages, calendar, receipts and the ledger; plus the pages customers and staff share.
+   Keep every URL and route name: links, emails and bookmarks use them. */
 
 Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
 Route::get('/admin/booking-request', Admin\BookingRequestController::class)->middleware('staff')->name('admin.booking-request');

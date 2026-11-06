@@ -6,7 +6,7 @@
 
    Included by:
      HostelReservationController    (json_encode'd into the booking page)
-     VenueBookingController (the landing list)
+     VenuesController (the landing list)
      VenueManagementController         (the room cards)
 
    ---------------------------------------------------------------------

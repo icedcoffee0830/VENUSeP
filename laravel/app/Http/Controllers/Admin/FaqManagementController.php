@@ -21,7 +21,7 @@ use PDOException;
          move    : id, dir=up|down   (swap sort_order with the neighbour)
    Guards: route middleware `staff` (admin or staff) + Laravel's CSRF check.
    ===================================================================== */
-class FaqController
+class FaqManagementController
 {
     private const NOTES = [
         'added'    => ['ok',  'Question added. Customers can see it on the FAQ page now.'],

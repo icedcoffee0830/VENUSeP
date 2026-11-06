@@ -3,8 +3,8 @@
 use App\Http\Controllers\Auth;
 use Illuminate\Support\Facades\Route;
 
-/* Area: auth — see the ownership table in LARAVEL-PORT.md.
-   All ported (each route was a PendingController placeholder). KEEP the name and the URL: other areas link to it. */
+/* Signing in and out, registering, forgot password, Google, profiles. Keep every URL and route name:
+   links, emails and Google's callback use them. */
 
 Route::match(['get', 'post'], '/admin/admin-login', Auth\AdminLoginController::class)->name('admin.admin-login');
 Route::match(['get', 'post'], '/admin/logout', [Auth\LogoutController::class, 'admin'])->name('admin.logout');

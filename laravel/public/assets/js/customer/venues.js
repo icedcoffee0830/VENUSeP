@@ -1,4 +1,4 @@
-/* Script for resources/views/customer/venue-booking.blade.php. */
+/* Script for resources/views/customer/venues.blade.php. */
   (function () {
     /* No GSAP (CDN down) or reduced-motion: leave everything visible and stop. */
     if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return;

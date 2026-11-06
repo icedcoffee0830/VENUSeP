@@ -1,5 +1,5 @@
 /* =====================================================================
-   LIST PAGES: the pieces they share. Pair: partials/list-page-css.blade.php.
+   LIST PAGES: the pieces they share. Pair: public/assets/css/list-page.css.
 
    venusepPager(noun)   Tabulator options for the one-line pager:
                         "1–7 of 7 people   ‹ ›   Rows 10".

@@ -6,7 +6,7 @@ namespace App\Support;
    The full lists, with what each word means: venusep_schema.sql (reservation_statuses, payment_statuses). */
 final class Status
 {
-    /* What colour each status word's chip is (partials/chips-css): a word not listed is grey.
+    /* What colour each status word's chip is (public/assets/css/chips.css): a word not listed is grey.
        Green = done well, amber = waiting on someone, red = stopped, grey = finished or neutral. */
     public const CHIP_TONES = [
         'Paid' => 'green', 'Approved' => 'green',

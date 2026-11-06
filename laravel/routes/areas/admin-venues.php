@@ -11,8 +11,7 @@ use App\Http\Controllers\Admin\VenuePhotoApiController;
 use App\Http\Controllers\Admin\VenueSaveController;
 use Illuminate\Support\Facades\Route;
 
-/* Area: venues — see the ownership table in LARAVEL-PORT.md.
-   Every page of this area is ported; KEEP the names and URLs: other areas link to them. */
+/* Venue Management: venues, rooms, photos. Keep every URL and route name: links and bookmarks use them. */
 
 Route::get('/admin/venue-management', VenueManagementController::class)->middleware('staff')->name('admin.venue-management');
 Route::get('/admin/venue-form', VenueFormController::class)->middleware('staff')->name('admin.venue-form');

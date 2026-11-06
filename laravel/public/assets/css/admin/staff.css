@@ -1,4 +1,4 @@
-/* Styles for resources/views/admin/staff-management.blade.php. */
+/* Styles for resources/views/admin/staff.blade.php. */
 .sm-halls-names { flex: 1 1 0; color: #6e6a64; font-size: 12.5px; }
 .sm-halls-count { flex: none; border-radius: 999px; }
 @media (max-width: 767.98px) {

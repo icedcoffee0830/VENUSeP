@@ -1,8 +1,8 @@
-/* Script for resources/views/admin/staff-management.blade.php. */
+/* Script for resources/views/admin/staff.blade.php. */
     document.addEventListener('DOMContentLoaded', () => {
       /* The real staff-side accounts, from `users` + `staff`. */
       const data = Live.data('sm-rows');
-      const venues = staffManagementPage.smVenues;
+      const venues = staffPage.smVenues;
       /* No "Unassigned" (2026-10-27): every staff member handles exactly one
          venue, and staff-save.php refuses an empty one. The list holds only the
          offices this admin may move staff to (DB-DECISIONS 28). */
@@ -26,7 +26,7 @@
          admin. Those checks live there and not here — this is a convenience,
          not a boundary. */
       const staffAction = function (body, onOk) {
-        return Live.post(staffManagementPage.staffSaveUrl, body).then(function (res) {
+        return Live.post(staffPage.staffSaveUrl, body).then(function (res) {
           if (!res.ok) { venusepAlert(res.message || 'Nothing was changed.'); return false; }
           if (typeof onOk === 'function') onOk(res);
           return true;
@@ -85,7 +85,7 @@
         body.append('password', pw);
         staffAction(body, function (res) {
           venusepAlert(res.message, { tone: 'ok', title: 'Handed over' })
-            .then(function () { window.location.href = staffManagementPage.adminLoginUrl; });
+            .then(function () { window.location.href = staffPage.adminLoginUrl; });
         });
       };
 

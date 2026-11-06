@@ -8,7 +8,7 @@
    Included by:
      BookingHistoryController     (the history table)
      RefundRequestController      (the refund form looks a booking up)
-     VenueBookingController, faq.php, the booking pages
+     VenuesController, faq.php, the booking pages
                                       ($customerContact — who is signed in)
 
    WHY IT IS STILL ITS OWN FILE: several pages want "the person using this

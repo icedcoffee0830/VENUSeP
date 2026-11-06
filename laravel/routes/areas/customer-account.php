@@ -4,9 +4,8 @@ use App\Http\Controllers\Customer;
 use App\Http\Controllers\PendingController;
 use Illuminate\Support\Facades\Route;
 
-/* Area: cacct — see the ownership table in LARAVEL-PORT.md.
-   Every route below starts as a PendingController placeholder (501 "not ported yet").
-   Port a page -> replace its line here. KEEP the name and the URL: other areas link to it. */
+/* The customer's bookings, payments, refunds, receipts and FAQ. Keep every URL and route name:
+   links, emails and bookmarks use them. */
 
 Route::get('/customer/booking-history', Customer\BookingHistoryController::class)->middleware('customer')->name('customer.booking-history');
 Route::get('/customer/pay', Customer\PayController::class)->middleware('customer')->name('customer.pay');

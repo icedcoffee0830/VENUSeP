@@ -7,9 +7,9 @@
    Included by:
      Customer/FaqController              (the ACTIVE rows each office's refund
                                     switch shows, per section: faq_row_for)
-     Admin/FaqController      (every row, with a preview switch:
+     Admin/FaqManagementController      (every row, with a preview switch:
                                     "as customers see it with refunds ON / OFF")
-     Admin/FaqController            (the only writer)
+     Admin/FaqManagementController            (the only writer)
 
    Two kinds of rows, one table:
      built-in  (is_builtin = 1) — shipped with the system, seeded from

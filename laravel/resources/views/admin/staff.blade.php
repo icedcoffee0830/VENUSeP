@@ -15,7 +15,7 @@
 @push('styles')
   <link rel="stylesheet" href="{{ asset_stamped('assets/css/people-shell.css') }}" />
   <link rel="stylesheet" href="{{ asset_stamped('assets/css/list-page.css') }}" />
-  <link rel="stylesheet" href="{{ asset_stamped('assets/css/admin/staff-management.css') }}" />
+  <link rel="stylesheet" href="{{ asset_stamped('assets/css/admin/staff.css') }}" />
   <link rel="stylesheet" href="{{ asset_stamped('assets/css/tabulator-pager.css') }}" />
 @endpush
 
@@ -77,12 +77,12 @@
   <script src="{{ asset_stamped('assets/js/list-page.js') }}"></script>
   @fragment('sm-rows')<script type="application/json" data-live="sm-rows">{!! json_encode($smRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
   <script>
-  /* Values from PHP for assets/js/admin/staff-management.js */
-  var staffManagementPage = {
+  /* Values from PHP for assets/js/admin/staff.js */
+  var staffPage = {
     smVenues: {!! json_encode($smVenues, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!},
     staffSaveUrl: @json(route('admin.staff-save')),
     adminLoginUrl: @json(route('admin.admin-login')),
   };
 </script>
-<script src="{{ asset_stamped('assets/js/admin/staff-management.js') }}"></script>
+<script src="{{ asset_stamped('assets/js/admin/staff.js') }}"></script>
 @endpush

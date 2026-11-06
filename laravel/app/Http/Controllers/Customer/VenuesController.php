@@ -12,7 +12,7 @@ use App\Http\Controllers\Controller;
    Venue Management. Who is looking + the discount rule decide whether a USeP
    account sees its price with the full price crossed out (a PREVIEW: the ID
    decides the discount at approval — legacy pricing.php). */
-class VenueBookingController extends Controller
+class VenuesController extends Controller
 {
     use CapturesLegacyOutput;
 
@@ -59,7 +59,7 @@ class VenueBookingController extends Controller
 
         $lpOffices = array_values(array_filter(office_all(), fn ($o) => staff_sees_venue($o['id'])));
 
-        return view('customer.venue-booking', [
+        return view('customer.venues', [
             'venueRooms'         => $venueRooms,
             'hostelRooms'        => $hostelRooms,
             'HOSTEL_VENUE'       => $HOSTEL_VENUE,

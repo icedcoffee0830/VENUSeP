@@ -1,6 +1,6 @@
 {{-- The PUBLIC landing page (was customer/venusep_venue_booking.php) — standalone, with the
-     shared browse-mode top bar. Data: Customer\VenueBookingController. --}}
-@use('App\Http\Controllers\Customer\VenueBookingController', 'LP')
+     shared browse-mode top bar. Data: Customer\VenuesController. --}}
+@use('App\Http\Controllers\Customer\VenuesController', 'LP')
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ asset_stamped('assets/css/customer/venue-booking.css') }}" />
+  <link rel="stylesheet" href="{{ asset_stamped('assets/css/customer/venues.css') }}" />
 </head>
 <body>
 <script>document.body.classList.add('js');</script>{{-- stays here: it must run before the first paint --}}
@@ -436,6 +436,6 @@
      is complete without it: numbers already show their final value. -->
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
-<script src="{{ asset_stamped('assets/js/customer/venue-booking.js') }}"></script>
+<script src="{{ asset_stamped('assets/js/customer/venues.js') }}"></script>
 </body>
 </html>

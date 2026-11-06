@@ -3,13 +3,10 @@
 use App\Http\Controllers\Admin;
 use Illuminate\Support\Facades\Route;
 
-/* Area: admina — see the ownership table in LARAVEL-PORT.md.
-   Every route below starts as a PendingController placeholder (501 "not ported yet").
-   Port a page -> replace its line here. KEEP the name and the URL: other areas link to it.
-
-   The JSON endpoints guard themselves (their own 401/403/400 JSON, in the old
-   order) and check the CSRF token themselves (Admin\Concerns\JsonEndpoint), so
-   they skip the redirecting middleware and Laravel's 419. */
+/* Dashboard, reports, notifications, backup, payment and office settings, activity. Keep every URL
+   and route name: links, emails and bookmarks use them.
+   The JSON endpoints guard themselves (their own 401/403/400 JSON) and check the CSRF token
+   themselves (Admin\Concerns\JsonEndpoint), so they skip the redirecting middleware and Laravel's 419. */
 
 Route::get('/admin/dashboard', Admin\DashboardController::class)->middleware('staff')->name('admin.dashboard');
 Route::get('/admin/reports', Admin\ReportsController::class)->middleware('staff')->name('admin.reports');

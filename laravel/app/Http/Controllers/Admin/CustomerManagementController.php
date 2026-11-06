@@ -33,7 +33,7 @@ use PDOException;
      fix_email, customer_id, email, reason: correct a counter account's wrong email
        (mayFixEmail(); kept in customer_email_fixes; the welcome email goes to the new address).
    ===================================================================== */
-class CustomerController
+class CustomerManagementController
 {
     public function index()
     {

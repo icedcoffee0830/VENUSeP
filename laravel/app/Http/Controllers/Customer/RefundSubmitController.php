@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\BookingQueries;
 use App\Queries\RefundQueries;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -54,6 +55,9 @@ class RefundSubmitController
         }
 
         /* Scoped to the session customer. */
+        if (!BookingQueries::waitForTurn($id)) {
+            return self::reply(409, ['ok' => false, 'message' => 'Someone else is working on this booking. Reload the page and try again.']);
+        }
         $booking = RefundQueries::findForCustomer($id, (int) session('customer_id'));
         if (!$booking) {
             return self::reply(404, ['ok' => false, 'message' => 'That booking was not found.']);

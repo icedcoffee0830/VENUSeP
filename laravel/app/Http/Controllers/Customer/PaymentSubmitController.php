@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\BookingQueries;
 use App\Queries\PaymentQueries;
 use App\Support\Status;
 use Illuminate\Http\Request;
@@ -67,6 +68,9 @@ class PaymentSubmitController
         venusep_expire_due_bookings();
 
         /* The booking must be THIS customer's — scoped by customer_id. */
+        if (!BookingQueries::waitForTurn($id)) {
+            return self::reply(409, ['ok' => false, 'message' => 'Someone else is working on this booking. Reload the page and try again.']);
+        }
         $booking = PaymentQueries::findForCustomer($id, (int) session('customer_id'));
         if (!$booking) {
             return self::reply(404, ['ok' => false, 'message' => 'That booking was not found.']);

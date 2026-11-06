@@ -84,6 +84,9 @@ class BookingActionController extends Controller
         /* Apply the deadline rules first, so staff act on what the booking IS now. */
         venusep_expire_due_bookings();
 
+        if (!BookingQueries::waitForTurn($bookingId)) {
+            $this->reply(409, ['ok' => false, 'message' => 'Someone else is working on this booking. Reload it and try again.']);
+        }
         $bk = BookingQueries::findForStaffAction($bookingId);
         if (!$bk) {
             $this->reply(404, ['ok' => false, 'message' => 'That booking no longer exists.']);

@@ -42,6 +42,19 @@ class BookingQueries
 
     use SavesWithHistory;
 
+    /* One action on a booking at a time. Actions check, then save: two people at the same moment
+       could both pass the check, and cash would be recorded twice. The second one waits here and
+       then reads what the first left. False after 5 seconds. A named lock, not a row lock: the
+       saves open and close their own transactions. It ends with the request. */
+    public static function waitForTurn(int $id): bool
+    {
+        $got = (int) DB::selectOne("SELECT GET_LOCK(CONCAT(DATABASE(), '.booking.', ?), 5) AS got", [$id])->got === 1;
+        if ($got) {
+            app()->terminating(fn () => DB::selectOne("SELECT RELEASE_LOCK(CONCAT(DATABASE(), '.booking.', ?)) AS done", [$id]));
+        }
+        return $got;
+    }
+
     /* The booking a staff action is about, as it is right now, or null. */
     public static function findForStaffAction(int $id): ?array
     {

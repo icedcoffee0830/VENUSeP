@@ -13,7 +13,7 @@ class CalendarController extends Controller
 {
     public function __invoke()
     {
-        extract(legacy('customer-bookings'));
+        $customerContact = legacy('customer-bookings')['customerContact'];   // set in customer-bookings.php
 
         $calendarEvents = calendar_events($customerContact['id']);
 

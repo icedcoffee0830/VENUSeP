@@ -41,7 +41,10 @@ class FaqController
 
     public function index(Request $request)
     {
-        extract(legacy('faqs', 'offices'));   // $DISCOUNT_PERCENT, $POSTPAY_GRACE_DAYS, $HOSTEL_RATES, $HOSTEL_CR_LABEL
+        $legacy = legacy('faqs', 'offices');
+        $DISCOUNT_PERCENT = $legacy['DISCOUNT_PERCENT'];      // set in pricing.php
+        $POSTPAY_GRACE_DAYS = $legacy['POSTPAY_GRACE_DAYS'];  // set in refund-policy.php
+        $HOSTEL_CR_LABEL = $legacy['HOSTEL_CR_LABEL'];        // set in hostel-rooms.php
         /* one refund switch per office (DB-DECISIONS 28): the preview starts on the state every
            office is in, or on Everything while they differ */
         $fqSwitches = array_column(office_all(), 'refunds', 'name');

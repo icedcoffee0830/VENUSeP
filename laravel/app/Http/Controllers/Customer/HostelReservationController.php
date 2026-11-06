@@ -17,11 +17,19 @@ class HostelReservationController extends Controller
 
     public function __invoke(Request $request)
     {
-        extract(legacy('auth', 'documents', 'hostel-rooms', 'room-photos', 'payment-settings', 'customer-bookings'));
+        legacy('auth', 'documents', 'hostel-rooms', 'room-photos', 'payment-settings', 'customer-bookings');
         $pricingJs = self::legacyOutput('pricing');          /* USeP discount rate + the account check */
         $checkerJs = self::legacyOutput('gcash-checker');
         $counterBookerJs = self::legacyOutput('counter-booker');
-        extract(legacy('pricing'));
+        $legacy = legacy('pricing');
+        $hostelRooms = $legacy['hostelRooms'];             // these four: set in hostel-rooms.php
+        $HOSTEL_VENUE = $legacy['HOSTEL_VENUE'];
+        $HOSTEL_RATES = $legacy['HOSTEL_RATES'];
+        $HOSTEL_CR_LABEL = $legacy['HOSTEL_CR_LABEL'];
+        $gcAccounts = $legacy['gcAccounts'];               // set in payment-settings.php
+        $customerContact = $legacy['customerContact'];     // set in customer-bookings.php
+        $REFUNDS_ENABLED = $legacy['REFUNDS_ENABLED'];     // set in refund-policy.php
+        $DISCOUNT_PERCENT = $legacy['DISCOUNT_PERCENT'];   // set in pricing.php
 
         /* "More rooms" — the other hostel rooms, same CR type first, four at most. */
         $room = $request->query('room');

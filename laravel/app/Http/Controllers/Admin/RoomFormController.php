@@ -22,14 +22,20 @@ class RoomFormController extends Controller
     public function __invoke(Request $request, bool $isHostel = false)
     {
         /* a DISABLED room can be edited too (Venue Management links to it) */
-        extract($isHostel
+        $legacy = $isHostel
             ? legacy(['hrIncludeInactive' => true], 'venues', 'room-photos', 'hostel-rooms', 'amenities')
-            : legacy(['vrIncludeInactive' => true], 'venues', 'room-photos', 'venue-rooms', 'amenities'));
+            : legacy(['vrIncludeInactive' => true], 'venues', 'room-photos', 'venue-rooms', 'amenities');
+        $rooms = $isHostel ? $legacy['hostelRooms'] : $legacy['venueRooms'];   // set in hostel-rooms.php / venue-rooms.php
+        $venuesByType = $legacy['venuesByType'];                               // set in venues.php
+        $AMENITY_GROUPS = $legacy['AMENITY_GROUPS'];                           // these four: set in amenities.php
+        $AMENITY_GROUPS_EVENT = $legacy['AMENITY_GROUPS_EVENT'];
+        $AMENITY_GROUPS_HOSTEL = $legacy['AMENITY_GROUPS_HOSTEL'];
+        $AMENITY_LABELS = $legacy['AMENITY_LABELS'];
 
         $roomId = $request->query('id') ?? '';
         $roomFormRoom = null;
         if (rp_room_id_valid($roomId)) {
-            foreach ($isHostel ? $hostelRooms : $venueRooms as $r) {
+            foreach ($rooms as $r) {
                 if ($r['id'] === $roomId) { $roomFormRoom = $r; break; }
             }
         }

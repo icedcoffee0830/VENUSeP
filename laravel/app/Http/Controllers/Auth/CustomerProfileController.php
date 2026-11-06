@@ -10,7 +10,7 @@ class CustomerProfileController
 {
     public function __invoke()
     {
-        extract(legacy('auth', 'customer-bookings', 'google-auth', 'two-factor', 'two-factor-views'));
+        $customerContact = legacy('auth', 'customer-bookings', 'google-auth', 'two-factor', 'two-factor-views')['customerContact'];   // set in customer-bookings.php
 
         $cpRow = [];
         try {

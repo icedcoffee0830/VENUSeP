@@ -140,7 +140,11 @@ class RoomSaveController extends Controller
         $this->requirePost($request);
         $this->requireStaffJson();
 
-        extract(legacy('db', 'amenities', 'bookings'));   /* amenity_keys_clean(), $AMENITY_GROUPS*, booking_reference() */
+        /* amenity_keys_clean() and the three lists below: amenities.php. booking_reference(): bookings.php. */
+        $legacy = legacy('db', 'amenities', 'bookings');
+        $AMENITY_GROUPS = $legacy['AMENITY_GROUPS'];
+        $AMENITY_GROUPS_EVENT = $legacy['AMENITY_GROUPS_EVENT'];
+        $AMENITY_GROUPS_HOSTEL = $legacy['AMENITY_GROUPS_HOSTEL'];
         $post = $request->request;
         $actor = (int) session('user_id');
 

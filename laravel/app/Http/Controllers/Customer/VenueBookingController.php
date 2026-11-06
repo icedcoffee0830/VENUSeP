@@ -18,9 +18,16 @@ class VenueBookingController extends Controller
 
     public function __invoke()
     {
-        extract(legacy('auth', 'offices', 'venue-rooms', 'hostel-rooms', 'room-photos', 'venue-photos', 'customer-bookings'));
+        legacy('auth', 'offices', 'venue-rooms', 'hostel-rooms', 'room-photos', 'venue-photos', 'customer-bookings');
         self::legacyOutput('pricing');   /* PHP helpers now; the old page captured its JS block and never printed it */
-        extract(legacy('pricing'));
+        $legacy = legacy('pricing');
+        $customerContact = $legacy['customerContact'];         // set in customer-bookings.php
+        $venueRooms = $legacy['venueRooms'];                   // set in venue-rooms.php
+        $hostelRooms = $legacy['hostelRooms'];                 // these three: set in hostel-rooms.php
+        $HOSTEL_VENUE = $legacy['HOSTEL_VENUE'];
+        $HOSTEL_CR_LABEL = $legacy['HOSTEL_CR_LABEL'];
+        $DISCOUNT_PERCENT = $legacy['DISCOUNT_PERCENT'];       // set in pricing.php
+        $POSTPAY_GRACE_DAYS = $legacy['POSTPAY_GRACE_DAYS'];   // set in refund-policy.php
         $isUsep = usep_is_account($customerContact['email']);
 
         /* An office the customer is blocked at is not listed (the strip and the modal say why): DB-DECISIONS 28 */

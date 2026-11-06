@@ -39,9 +39,9 @@
 require_once __DIR__ . '/db.php';
 /* Laravel: through legacy(), so the files' variables reach the registry (and
    this file's scope) — a bare include here would hide them from later callers. */
-extract(legacy('hostel-rooms'));                                               /* $HOSTEL_RATES, $HOSTEL_CR_LABEL */
-ob_start(); extract(legacy('pricing')); ob_end_clean();                        /* $DISCOUNT_PERCENT (its JS block is not needed here) */
-extract(legacy('refund-policy'));                                              /* $REFUNDS_ENABLED, $POSTPAY_GRACE_DAYS */
+legacy('hostel-rooms');                                                        /* $HOSTEL_RATES, $HOSTEL_CR_LABEL */
+ob_start(); legacy('pricing'); ob_end_clean();                                 /* $DISCOUNT_PERCENT (its JS block is not needed here) */
+legacy('refund-policy');                                                       /* $REFUNDS_ENABLED, $POSTPAY_GRACE_DAYS */
 
 /* [section_key => label], in display order. Empty when the DB is unreachable. */
 function faq_sections()
@@ -115,8 +115,10 @@ function faq_row_for(array $row, array $offices): ?string
 function faq_placeholders()
 {
     /* Laravel: those files' variables live in legacy()'s registry, not in globals */
-    extract(array_intersect_key(legacy('hostel-rooms', 'refund-policy'),
-        array_flip(['DISCOUNT_PERCENT', 'POSTPAY_GRACE_DAYS', 'HOSTEL_RATES', 'HOSTEL_CR_LABEL'])));
+    $legacy = legacy('hostel-rooms', 'refund-policy');
+    $POSTPAY_GRACE_DAYS = $legacy['POSTPAY_GRACE_DAYS'];
+    $HOSTEL_RATES = $legacy['HOSTEL_RATES'];
+    $HOSTEL_CR_LABEL = $legacy['HOSTEL_CR_LABEL'];
     /* usep_peso()'s rule (pricing.php — not loaded here, it prints a <script>):
        centavos only when there are any, so 350.50 is "₱350.50" and 350 is "₱350" */
     $peso = function ($n) { return '&#8369;' . number_format((float) $n, fmod((float) $n, 1.0) == 0.0 ? 0 : 2); };

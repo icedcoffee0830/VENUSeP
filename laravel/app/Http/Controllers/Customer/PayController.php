@@ -20,7 +20,10 @@ class PayController
 {
     public function __invoke(Request $request)
     {
-        extract(legacy('customer-bookings', 'payment-settings', 'offices'));
+        $legacy = legacy('customer-bookings', 'payment-settings', 'offices');
+        $customerBookings = $legacy['customerBookings'];   // these two: set in customer-bookings.php
+        $customerContact = $legacy['customerContact'];
+        $gcAccounts = $legacy['gcAccounts'];               // set in payment-settings.php
 
         $payRef = (string) $request->query('booking', '');
         /* Scoped to THIS customer's own bookings: typing another

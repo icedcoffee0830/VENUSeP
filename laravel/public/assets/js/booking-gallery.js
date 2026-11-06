@@ -1,3 +1,4 @@
+/* The photo viewer of the booking pages. */
 /* The photo viewer (Aron 2026-11-05): dark, full screen, the whole photo as big as it fits.
    ✕, Esc or a tap on the dark area closes it; arrows, swipe and the arrow keys change the photo.
    No zoom. The 360° tour stays separate. A native <dialog>: it keeps focus inside and hands it back. */

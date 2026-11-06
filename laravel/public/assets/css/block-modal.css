@@ -1,0 +1,2 @@
+/* Styles for resources/views/partials/block-modal.blade.php. */
+#blockModal::backdrop { background: rgba(28, 27, 25, .55); }

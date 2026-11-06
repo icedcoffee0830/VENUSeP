@@ -1,0 +1,497 @@
+/* Styles for resources/views/admin/room-form.blade.php. */
+
+      /*
+        Room form (Add / Edit) page UI CSS
+        Self-contained. Blank fields = Add, pre-filled = Edit.
+      */
+      :root {
+        --vm-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --vm-page-bg: #ffffff;
+        --vm-border: #e5e5e5;
+        --vm-text: #1f1e1e;
+        --vm-muted: #606a75;
+        --vm-hover: #ebebeb;
+        --vm-strip: #f4f4f4;
+        --vm-dark: #1f1e1e;
+        --vm-radius: 10px;
+        --vm-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+        --vm-shadow-hover: 0 8px 24px rgba(16, 24, 40, 0.12);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        background: var(--vm-page-bg);
+        color: var(--vm-text);
+        color-scheme: light;
+        font-family: var(--vm-font);
+        margin: 0;
+      }
+
+      .vm-page {
+        margin: 0;
+        padding: 22px 0 0; /* 22px + 4px from .app-content = 26px top; sides owned by .container-fluid */
+        width: 100%;
+      }
+
+      .vm-back {
+        align-items: center;
+        color: var(--vm-muted);
+        display: inline-flex;
+        font-size: 0.85rem;
+        font-weight: 600;
+        gap: 0.4rem;
+        margin-bottom: 1.25rem;
+        text-decoration: none;
+      }
+
+      .vm-back:hover { color: var(--vm-text); }
+
+      .vm-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        margin: 0 0 0.25rem;
+      }
+
+      .vm-subtitle {
+        color: var(--vm-muted);
+        font-size: 0.85rem;
+        margin: 0 0 1.75rem;
+      }
+
+      .vm-panel {
+        background: #ffffff;
+        border: 1px solid var(--vm-border);
+        border-radius: var(--vm-radius);
+        box-shadow: var(--vm-shadow);
+        padding: 1.5rem;
+      }
+
+      /* Gallery, matched to the customer UI layout: big 360 tile on the left,
+         two stacked photos on the right, thumbnail strip underneath */
+      .vm-gallery {
+        display: grid;
+        gap: 8px;
+        /* every tile is a square: 400x400 main + two 196x196 stacked */
+        grid-template-columns: 400px 196px;
+        grid-template-rows: 196px 196px;
+        max-width: 100%;
+        position: relative;
+        width: 604px;
+      }
+
+      .vm-shot {
+        align-items: center;
+        border-radius: 8px;
+        color: #b7bfc9;
+        display: flex;
+        justify-content: center;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .vm-gallery .vm-shot:nth-child(1) {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        background: linear-gradient(135deg, #eef1f5, #dfe4ea);
+      }
+      .vm-gallery .vm-shot:nth-child(2) { background: linear-gradient(135deg, #f3eee9, #e6ddd3); }
+      .vm-gallery .vm-shot:nth-child(3) { background: linear-gradient(135deg, #e9eef3, #d5e0ea); }
+
+      .vm-thumbs {
+        display: grid;
+        gap: 8px;
+        /* 2 side shots + 3 thumbs = 5 tiles total, matching the 5-photo cap
+           (ROOM_PHOTO_MAX_COUNT) — no tile is ever left with nothing to show. */
+        grid-template-columns: repeat(3, 1fr);
+        margin-top: 8px;
+        max-width: 100%;
+        width: 604px;
+      }
+      .vm-thumbs .vm-shot { aspect-ratio: 1 / 1; border-radius: 10px; }
+
+      /* Top section: pictures + Amenities on the left, primary fields +
+         At a glance on the right, separated by a vertical hairline;
+         stacks on narrow screens */
+      .vm-top {
+        display: grid;
+        gap: 1.75rem;
+        grid-template-columns: 604px minmax(0, 1fr);
+      }
+
+      .vm-top-fields {
+        border-left: 1px solid var(--vm-border);
+        padding-left: 1.75rem;
+      }
+
+      @media (max-width: 1280px) {
+        .vm-top { grid-template-columns: 1fr; }
+        .vm-top-fields { border-left: 0; border-top: 1px solid var(--vm-border); padding-left: 0; padding-top: 1.5rem; }
+      }
+      .vm-thumbs .vm-shot:nth-child(1) { background: linear-gradient(135deg, #eef3ee, #d9e6da); }
+      .vm-thumbs .vm-shot:nth-child(2) { background: linear-gradient(135deg, #f3eef1, #e6d5de); }
+      .vm-thumbs .vm-shot:nth-child(3) { background: linear-gradient(135deg, #eaf0f3, #d5e2ea); }
+      .vm-thumbs .vm-shot:nth-child(4) { background: linear-gradient(135deg, #f2efe8, #e4dccf); }
+      .vm-thumbs .vm-shot:nth-child(5) { background: linear-gradient(135deg, #eef3f0, #dbe7df); }
+
+      .vm-edit-photos {
+        align-items: center;
+        background: rgba(31, 30, 30, 0.85);
+        border: 0;
+        border-radius: 999px;
+        bottom: 10px;
+        color: #ffffff;
+        cursor: pointer;
+        display: inline-flex;
+        font-family: inherit;
+        font-size: 0.78rem;
+        font-weight: 600;
+        gap: 0.35rem;
+        padding: 0.4rem 0.8rem;
+        position: absolute;
+        right: 10px;
+      }
+
+      .vm-divider {
+        border: 0;
+        border-top: 1px solid var(--vm-border);
+        margin: 1.5rem 0;
+      }
+
+      /* Fields */
+      .vm-row {
+        display: grid;
+        gap: 1.1rem;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .vm-row-3 {
+        display: grid;
+        gap: 1.1rem;
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .vm-field { margin-bottom: 1.1rem; }
+
+      /* Maintenance section (replaced the Availability Status dropdown) */
+      .vm-mt-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: .6rem;
+        font-size: .9rem;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: .2rem;
+      }
+      .vm-mt-toggle input { width: 16px; height: 16px; accent-color: #1f1e1e; cursor: pointer; }
+      .vm-mt-body { margin-top: 1.1rem; }
+      .vm-mt-tiers { display: grid; gap: .6rem; grid-template-columns: 1fr 1fr; }
+      .vm-mt-tier {
+        display: flex;
+        align-items: flex-start;
+        gap: .6rem;
+        border: 1px solid var(--vm-border);
+        border-radius: 10px;
+        padding: .7rem .8rem;
+        cursor: pointer;
+        transition: border-color .15s, background .15s;
+      }
+      .vm-mt-tier:hover { background: #fbfbfa; }
+      .vm-mt-tier:has(input:checked) { border-color: #1f1e1e; background: #fbfbfa; }
+      .vm-mt-tier input { margin-top: .15rem; accent-color: #1f1e1e; cursor: pointer; }
+      .vm-mt-tier span { display: block; }
+      .vm-mt-tier strong { display: block; font-size: .85rem; font-weight: 650; }
+      .vm-mt-tier em { display: block; font-style: normal; font-size: .76rem; line-height: 1.45; color: #6e6a64; margin-top: .15rem; }
+      .vm-mt-indef {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        font-size: .78rem;
+        color: #6b675f;
+        margin-top: .45rem;
+        cursor: pointer;
+      }
+      .vm-mt-indef input { accent-color: #1f1e1e; cursor: pointer; }
+      .vm-mt-echo {
+        border: 1px solid var(--vm-border);
+        border-radius: 10px;
+        padding: .75rem .85rem;
+        font-size: .8rem;
+        line-height: 1.5;
+        color: #6b675f;
+      }
+      .vm-mt-echo b { color: #1f1e1e; font-weight: 650; }
+      .vm-mt-echo .vm-mt-warn { color: #8a5a12; }
+      @media (max-width: 700px) { .vm-mt-tiers { grid-template-columns: 1fr; } }
+
+      .vm-field label {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-bottom: 0.4rem;
+      }
+
+      .vm-control {
+        background: #ffffff;
+        border: 1px solid var(--vm-border);
+        border-radius: 8px;
+        color: var(--vm-text);
+        font-family: inherit;
+        font-size: 0.9rem;
+        padding: 0.6rem 0.8rem;
+        width: 100%;
+      }
+
+      .vm-control:focus {
+        border-color: #bdbdbd;
+        outline: 0;
+      }
+
+      /* At-a-glance / Amenities pools (multi-select icon chips) */
+      .vm-section-head {
+        font-size: 1rem;
+        font-weight: 700;
+        margin: 0 0 0.25rem;
+      }
+
+      .vm-hint {
+        color: var(--vm-muted);
+        font-size: 0.82rem;
+        margin: 0 0 0.9rem;
+      }
+
+      .vm-poolgrid {
+        display: grid;
+        gap: 0.55rem;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      }
+
+      .vm-chip {
+        align-items: center;
+        background: #ffffff;
+        border: 1px solid var(--vm-border);
+        border-radius: 8px;
+        color: var(--vm-muted);
+        cursor: pointer;
+        display: flex;
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 400;
+        gap: 0.55rem;
+        padding: 0.55rem 0.7rem;
+        text-align: left;
+        transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+      }
+
+      .vm-chip svg { flex: none; }
+
+      .vm-chip:hover {
+        background: var(--vm-hover);
+        border-color: #cfcac2;
+      }
+
+      .vm-chip.selected {
+        background: #eef7f1;
+        border-color: #d3ebe0;
+        box-shadow: none;
+        color: #3a9b6e;
+        font-weight: 400;
+      }
+
+      .vm-chip .vm-chip-check {
+        margin-left: auto;
+        opacity: 0;
+      }
+
+      .vm-chip.selected .vm-chip-check { opacity: 1; }
+
+      /* 360 panorama controls (overlaid on the main gallery tile) */
+      .vm-pano-tools-abs {
+        bottom: 10px;
+        display: flex;
+        gap: 6px;
+        left: 10px;
+        position: absolute;
+        z-index: 5;
+      }
+
+      .vm-pano-btn {
+        cursor: pointer;
+        position: static;
+      }
+
+      .vm-pano-btn input { display: none; }
+
+      /* Photo gallery manager (lightbox) */
+      .vm-galbig {
+        align-items: center;
+        aspect-ratio: 16 / 9;
+        background: var(--vm-strip);
+        border-radius: 12px;
+        display: flex;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .vm-galempty { color: #9a958c; font-size: 0.9rem; }
+
+      .vm-galgrid {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        margin-top: 14px;
+      }
+
+      .vm-galthumb {
+        aspect-ratio: 4 / 3;
+        background: var(--vm-strip);
+        border: 2px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        overflow: hidden;
+        padding: 0;
+        position: relative;
+      }
+
+      .vm-galthumb.sel { border-color: var(--vm-dark); }
+
+      .vm-galfeat {
+        background: var(--vm-dark);
+        border-radius: 5px;
+        bottom: 5px;
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 700;
+        left: 5px;
+        padding: 2px 6px;
+        position: absolute;
+      }
+
+      /* Custom dropdowns styled exactly like the calendar "Date" sort dropdown */
+      .vm-dd {
+        position: relative;
+        width: 100%;
+      }
+
+      .vm-dd-trigger {
+        align-items: center;
+        background-color: #ffffff;
+        background-image:
+          linear-gradient(45deg, transparent 50%, var(--vm-text) 50%),
+          linear-gradient(135deg, var(--vm-text) 50%, transparent 50%);
+        background-position:
+          calc(100% - 18px) 50%,
+          calc(100% - 13px) 50%;
+        background-repeat: no-repeat;
+        background-size: 5px 5px, 5px 5px;
+        border: 1px solid var(--vm-border);
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+        color: var(--vm-text);
+        cursor: pointer;
+        display: flex;
+        font-size: 0.9rem;
+        font-weight: 700;
+        list-style: none;
+        padding: 0.6rem 2.2rem 0.6rem 0.8rem;
+        transition:
+          background-color 0.18s ease,
+          border-color 0.18s ease,
+          box-shadow 0.18s ease;
+      }
+
+      .vm-dd-trigger::-webkit-details-marker {
+        display: none;
+      }
+
+      .vm-dd-trigger:hover,
+      .vm-dd-trigger:focus {
+        background-color: var(--vm-hover);
+        border-color: #cfcac2;
+        outline: 0;
+      }
+
+      .vm-dd-menu {
+        background: #ffffff;
+        border: 1px solid var(--vm-border);
+        border-radius: 8px;
+        box-shadow: 0 6px 18px rgba(16, 24, 40, 0.14);
+        left: 0;
+        list-style: none;
+        margin: 0.35rem 0 0;
+        overflow: hidden;
+        padding: 0;
+        position: absolute;
+        right: 0;
+        top: 100%;
+        z-index: 20;
+      }
+
+      .vm-dd-option {
+        color: var(--vm-text);
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 0.55rem 0.8rem;
+      }
+
+      .vm-dd-option:hover {
+        background: var(--vm-hover);
+      }
+
+      /* Footer */
+      .vm-form-foot {
+        display: flex;
+        gap: 0.6rem;
+        justify-content: flex-end;
+        margin-top: 1.75rem;
+      }
+
+      /* under the images the divider already provides the spacing */
+      .vm-top-media .vm-form-foot { margin-top: 0; }
+
+      .vm-btn {
+        border: 1px solid var(--vm-border);
+        border-radius: 8px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.875rem;
+        font-weight: 700;
+        min-height: 2.375rem;
+        padding: 0 1.3rem;
+        text-decoration: none;
+        transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+      }
+
+      .vm-btn-outline {
+        align-items: center;
+        background: #ffffff;
+        color: var(--vm-text);
+        display: inline-flex;
+      }
+
+      .vm-btn-outline:hover { background: var(--vm-hover); }
+
+      .vm-btn-primary {
+        background: var(--vm-dark);
+        border-color: var(--vm-dark);
+        color: #ffffff;
+      }
+
+      .vm-btn-primary:hover {
+        box-shadow: var(--vm-shadow-hover);
+        transform: translateY(-1px);
+      }
+
+      @media (max-width: 560px) {
+        .vm-row, .vm-row-3 { grid-template-columns: 1fr; }
+        .vm-gallery { grid-template-columns: 240px 116px; grid-template-rows: 116px 116px; width: 364px; }
+        .vm-thumbs { width: 364px; }
+      }
+    
+      /* below desktop width the gallery fits the panel instead of pushing the form off-screen */
+      @media (max-width: 1280px) { .vm-top { grid-template-columns: minmax(0, 1fr); } }
+      @media (max-width: 900px) {
+        .vm-gallery { width: 100%; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+        .vm-thumbs { width: 100%; }
+      }
+      .vm-photo-btn { min-height: 32px; }

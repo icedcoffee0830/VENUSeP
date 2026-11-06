@@ -68,66 +68,7 @@ if (!$navAuthed) {                                                      /* a gue
   $navLinks = array_values(array_filter($navLinks, function ($l) { return $l[0] !== 'bookings'; }));
 }
 ?>
-<style>
-  /* nav styles live HERE so every page gets them with the include */
-  .cn-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 60; border-bottom: 1px solid transparent;
-    transition: background 480ms cubic-bezier(.16,1,.3,1), border-color 480ms cubic-bezier(.16,1,.3,1), box-shadow 480ms cubic-bezier(.16,1,.3,1); }
-  .cn-nav.solid { background: linear-gradient(100deg, rgba(138,18,34,.97) 0%, rgba(58,12,20,.97) 52%, rgba(18,8,10,.97) 100%);
-    border-bottom-color: rgba(255,255,255,.14); box-shadow: 0 10px 30px rgba(10,4,5,.3); backdrop-filter: blur(12px); }
-  .cn-nav.is-static { position: sticky; }            /* solid pages: the bar scrolls with the page flow, not over it */
-  .cn-wrap { max-width: 1240px; margin: 0 auto; padding: 0 28px; height: 84px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-  .cn-nav.is-static .cn-wrap { height: 76px; }
-  .cn-logo img { height: 25px; width: auto; display: block; filter: invert(1); }
-  .cn-links { display: flex; align-items: center; gap: 28px; }
-  .cn-links a { position: relative; font-size: 14px; font-weight: 600; letter-spacing: .01em; color: #fff; text-decoration: none; }
-  .cn-links a::after { content: ""; position: absolute; left: 0; right: 0; bottom: -7px; height: 2px;
-    background: currentColor; transform: scaleX(0); transform-origin: left; transition: transform 240ms cubic-bezier(.22,.61,.36,1); }
-  .cn-links a:hover::after, .cn-links a.is-here::after { transform: scaleX(1); }
-  .cn-links a.is-here { color: #ffd166; }
-  .cn-user { display: inline-flex; align-items: center; gap: 11px; padding: 7px 17px 7px 7px; border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.32); background: rgba(255,255,255,.1); min-height: 48px; color: #fff; text-decoration: none; }
-  .cn-user:hover { color: #fff; background: rgba(255,255,255,.18); }
-  .cn-avatar { width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #1d1214;
-    display: grid; place-items: center; font-size: 12.5px; font-weight: 700; }
-  img.cn-avatar { object-fit: cover; }
-  .cn-name { font-size: 13.5px; font-weight: 700; }
-  /* guest: Log in (text) + Sign up (pill) where the chip would be; customer: chip + Log out */
-  .cn-auth { display: inline-flex; align-items: center; gap: 14px; }
-  .cn-login { font-size: 14px; font-weight: 600; color: #fff; text-decoration: none; }
-  .cn-login:hover { color: #ffd166; }
-  .cn-signup { display: inline-flex; align-items: center; min-height: 42px; padding: 0 20px; border-radius: 999px; background: #fff; color: #a11626; font-size: 14px; font-weight: 700; text-decoration: none; transition: background 200ms, color 200ms; }
-  .cn-signup:hover { background: #ffd166; color: #120809; }
-  .cn-logout { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.75); text-decoration: none; }
-  .cn-logout:hover { color: #ffd166; }
-  /* the counter-mode "back to admin" pill — a real button, not text crammed
-     next to the "Counter" chip, so it reads clearly against the busy hero/demo-
-     banner background */
-  .cn-leave { display: inline-flex; align-items: center; min-height: 38px; padding: 0 16px; border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.12); color: #fff; font-size: 13px; font-weight: 700;
-    text-decoration: none; white-space: nowrap; transition: background 200ms, color 200ms; }
-  .cn-leave:hover { background: #ffd166; color: #120809; border-color: #ffd166; }
-  .cn-burger { display: none; width: 44px; height: 44px; place-items: center; border-radius: 12px;
-    border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); cursor: pointer; }
-  .cn-menu { display: none; }
-  @media (max-width: 720px) { .cn-leave { display: none; } }   /* the menu has the same link */
-  /* the burger takes over where the full set of links stops fitting */
-  @media (max-width: 900px) {
-    .cn-wrap, .cn-nav.is-static .cn-wrap { padding: 0 18px; height: 72px; }
-    .cn-links, .cn-name, .cn-logout { display: none; }
-    /* guest on a phone: "Log in" (outlined) beside "Sign up" (white pill), so
-       the login is one tap without opening the menu */
-    .cn-auth { gap: 8px; }
-    .cn-login { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.55); font-size: 13px; }
-    .cn-signup { min-height: 36px; padding: 0 14px; font-size: 13px; }
-    .cn-burger { display: grid; }
-    .cn-user { padding: 0; border: 0; background: transparent; min-height: 0; }
-    .cn-logo img { height: 21px; }
-    /* the phone menu: the same links, dropped under the bar */
-    .cn-menu.open { display: grid; gap: 4px; padding: 10px 18px 16px; background: rgba(18,8,10,.98); border-top: 1px solid rgba(255,255,255,.1); }
-    .cn-menu a { display: block; padding: 12px 14px; border-radius: 12px; font-size: 15px; font-weight: 600; color: #fff; text-decoration: none; }
-    .cn-menu a:hover, .cn-menu a.is-here { background: rgba(255,255,255,.1); }
-  }
-</style>
+<link rel="stylesheet" href="<?php echo asset_stamped('assets/css/customer-nav.css'); ?>" />
 <header class="cn-nav<?php echo $navMode === 'hero' ? '' : ' solid is-static'; ?>" id="cnNav">
   <div class="cn-wrap">
     <a class="cn-logo" href="<?php echo route('customer.venues') . $navCounterQ; ?>" title="Back to the landing page"><img src="<?php echo asset('logo/Logo Header 3.png'); ?>" alt="VENUSeP"></a>
@@ -191,13 +132,5 @@ if (!$navAuthed) {                                                      /* a gue
   </nav>
 </header>
 <?php if ($navMode === 'hero'): ?>
-<script>
-  /* hero mode: transparent over the hero, crimson once you scroll past it */
-  (function () {
-    var nav = document.getElementById('cnNav');
-    function paint() { nav.classList.toggle('solid', window.scrollY > 90); }
-    window.addEventListener('scroll', paint, { passive: true });
-    paint();
-  })();
-</script>
+<script src="<?php echo asset_stamped('assets/js/customer-nav.js'); ?>"></script>
 <?php endif; ?>

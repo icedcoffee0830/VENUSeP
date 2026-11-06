@@ -53,33 +53,7 @@
       default => !str_starts_with($i[0], '#') || session('account_type') === 'admin',
   });
 @endphp
-<style>
-  /* crimson to black, continuous with the header. */
-  aside.sidebar{position:fixed!important;left:0!important;top:0!important;width:235px!important;min-width:235px!important;height:100vh!important;color:#fff!important;z-index:1035!important;overflow-y:auto!important;border-right:1px solid rgba(255,255,255,.1)!important;box-shadow:none!important;transform:none!important;padding:0!important;margin:0!important;
-    background:linear-gradient(180deg,#8a1222 0%,#3c0c14 42%,#120809 100%)!important;transition:transform 320ms cubic-bezier(.16,1,.3,1)!important}
-  aside.sidebar .logo{height:58px;display:flex;align-items:center;justify-content:center;padding:14px 20px;background:transparent;border-bottom:1px solid rgba(255,255,255,.12)}
-  aside.sidebar .logo img{display:block;max-width:150px;max-height:36px;width:auto;height:auto;filter:invert(1)}
-  aside.sidebar .menu{list-style:none;padding:16px 12px;margin:0}
-  aside.sidebar .menu li{margin:0 0 6px;padding:0;list-style:none}
-  aside.sidebar .menu a{display:flex;align-items:center;gap:14px;height:44px;padding:0 14px;color:#f2d0cb!important;background:transparent;text-decoration:none;border-radius:12px;border:1px solid transparent;font-size:14px;font-weight:600;transition:background 180ms ease,color 180ms ease}
-  aside.sidebar .menu a:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}
-  aside.sidebar .menu a.active{background:rgba(255,255,255,.14)!important;border:1px solid rgba(255,255,255,.18)!important;color:#fff!important}
-  aside.sidebar .menu a.active i{color:#ffd166}
-  aside.sidebar .menu i{width:20px;text-align:center;font-size:18px;color:inherit}
-  aside.sidebar .menu span{font-size:14px}
-  aside.sidebar .menu li:last-child{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}
-  /* the staff side: grouped and tighter, so every link fits a 768px-tall laptop; a count for what waits */
-  aside.sidebar.grouped .menu{padding:10px 8px 14px}
-  aside.sidebar.grouped .menu li{margin:0 0 2px}
-  aside.sidebar.grouped .menu a{gap:8px;height:34px;padding:0 8px;white-space:nowrap}
-  aside.sidebar.grouped .menu i{width:18px;font-size:17px}
-  aside.sidebar.grouped .menu span{font-size:13px}
-  aside.sidebar.grouped .menu li:last-child{margin-top:8px;padding-top:8px}
-  aside.sidebar .menu li.grp{margin:10px 0 2px;padding:0 8px;color:#dac5c3;font-size:12px;font-weight:600;letter-spacing:.02em}
-  aside.sidebar .menu span.cnt{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:20px;height:20px;margin-left:auto;padding:0 5px;border-radius:999px;background:#ffd166;color:#3a0c14;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
-  aside.sidebar .menu span.cnt[hidden]{display:none}
-  @media (max-width:767.98px){aside.sidebar{transform:translateX(-100%)!important;will-change:transform}aside.sidebar.grouped .menu a{height:44px}}   /* will-change: the slide runs on the GPU */
-</style>
+<link rel="stylesheet" href="{{ asset_stamped('assets/css/sidebar.css') }}" />
 <aside class="sidebar{{ $portal === 'customer' ? '' : ' grouped' }}" id="hdSidebar">
   <div class="logo"><img src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP logo" /></div>
   <ul class="menu">

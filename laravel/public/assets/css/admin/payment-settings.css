@@ -1,0 +1,134 @@
+/* Styles for resources/views/admin/payment-settings.blade.php. */
+
+      .app-content-header { padding: 26px 0 0; }              /* 26px top, same as other pages (this page's [0] block) */
+
+      :root {
+        --ps-border: #e5e5e5;
+        --ps-muted: #6b675f;
+        --ps-text: #1c1b19;
+        --ps-dark: #1f1e1e;
+        --ps-warn: #8a5a12;
+        --ps-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      }
+      .ps-header { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: 1.4rem; }
+      .ps-heading h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.25rem; }
+      .ps-heading p { color: var(--ps-muted); font-size: 0.88rem; margin: 0; }
+
+      /* the "why this matters" note — a plain hairline panel, not a tint box */
+      .ps-why {
+        border: 1px solid var(--ps-border);
+        border-radius: 12px;
+        color: var(--ps-muted);
+        font-size: 0.82rem;
+        line-height: 1.6;
+        margin-bottom: 1.4rem;
+        max-width: 780px;
+        padding: 0.85rem 1rem;
+      }
+      .ps-why strong { color: var(--ps-text); font-weight: 650; }
+
+      .ps-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+
+      .ps-card {
+        background: #fff;
+        border: 1px solid var(--ps-border);
+        border-radius: 14px;
+        box-shadow: var(--ps-shadow);
+        display: flex;
+        flex-direction: column;
+        padding: 1.1rem 1.15rem 1rem;
+      }
+      .ps-venue { align-items: center; display: flex; gap: 0.55rem; margin-bottom: 0.15rem; }
+      .ps-venue h2 { font-size: 1rem; font-weight: 680; letter-spacing: -0.01em; margin: 0; }
+      .ps-kind {
+        border: 1px solid var(--ps-border);
+        border-radius: 999px;
+        color: var(--ps-muted);
+        font-size: 0.68rem;
+        font-weight: 600;
+        padding: 0.12rem 0.5rem;
+      }
+      .ps-note { color: var(--ps-muted); font-size: 0.76rem; line-height: 1.55; margin: 0.35rem 0 0.9rem; }
+
+      /* label-over-value, open — no grey filled boxes */
+      .ps-kv { border-top: 1px solid #f0efec; padding: 0.6rem 0; }
+      .ps-kv .k { color: #a5a19a; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+      .ps-kv .v { color: var(--ps-text); font-size: 0.95rem; font-weight: 640; margin-top: 0.15rem; }
+      .ps-kv .v.mono { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+      .ps-kv .v:empty::before { color: var(--ps-muted); content: 'Not set'; font-weight: 500; }   /* a venue with no account yet; Edit starts from an empty field */
+
+      .ps-control {
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 0.9rem;
+        height: 38px;
+        margin-top: 0.2rem;
+        padding: 0 0.6rem;
+        width: 100%;
+      }
+      .ps-control:focus { outline: 2px solid rgba(31, 42, 68, 0.35); outline-offset: 0; }
+      .ps-err { color: #b23a3a; font-size: 0.72rem; margin-top: 0.3rem; }
+
+      .ps-foot { align-items: center; display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.9rem; padding-top: 0.8rem; border-top: 1px solid #f0efec; }
+      .ps-btn {
+        background: #fff;
+        border: 1px solid var(--ps-border);
+        border-radius: 9px;
+        color: var(--ps-text);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding: 0.45rem 0.85rem;
+        text-decoration: none;
+      }
+      .ps-btn:hover { background: #fbfbfa; }
+      .ps-btn-primary { background: var(--ps-dark); border-color: var(--ps-dark); color: #fff; }
+      .ps-btn-primary:hover { background: #343333; }
+
+      /* what changing this number actually does — asked, not decorated */
+      .ps-effect { align-items: flex-start; display: flex; gap: 0.5rem; font-size: 0.74rem; color: var(--ps-muted); line-height: 1.5; margin-top: 0.55rem; }
+      .ps-effect::before { background: var(--ps-warn); border-radius: 50%; content: ''; flex: none; height: 6px; margin-top: 0.35rem; width: 6px; }
+      .ps-saved { color: #1c7a4f; font-size: 0.74rem; font-weight: 600; margin-right: auto; }
+
+      /* ---- refund switch card — same hairline look as the GCash cards ---- */
+      .rs-card { background: #fff; border: 1px solid var(--ps-border); border-radius: 14px; box-shadow: var(--ps-shadow); margin-bottom: 1.4rem; max-width: 780px; padding: 1.1rem 1.15rem 1rem; }
+      .rs-top { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 0.9rem; justify-content: space-between; }
+      .rs-title { align-items: center; display: flex; flex-wrap: wrap; gap: 0.55rem; }
+      .rs-title h2 { font-size: 1rem; font-weight: 680; letter-spacing: -0.01em; margin: 0; }
+      .rs-pill { border-radius: 999px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; padding: 0.16rem 0.55rem; }
+      .rs-pill-on { background: #e7f5ee; color: #1c7a4f; }
+      .rs-pill-off { background: #efeeec; color: #4a463f; }
+      .rs-state { color: var(--ps-text); font-size: 0.86rem; line-height: 1.55; margin: 0.35rem 0 0; max-width: 58ch; }
+      .rs-lock { align-items: center; color: var(--ps-muted); display: inline-flex; font-size: 0.78rem; font-weight: 600; gap: 0.4rem; }
+      .rs-btn-on { background: #1c7a4f; border-color: #1c7a4f; color: #fff; }
+      .rs-btn-on:hover { background: #166340; }
+      .rs-rules { color: var(--ps-muted); font-size: 0.76rem; line-height: 1.55; margin: 0.8rem 0 0; padding-left: 1.05rem; }
+      .rs-meta { border-top: 1px solid #f0efec; color: #a5a19a; font-size: 0.74rem; margin-top: 0.8rem; padding-top: 0.6rem; }
+      .rs-meta strong { color: var(--ps-muted); font-weight: 600; }
+      .rs-flash { align-items: center; color: #1c7a4f; display: flex; font-size: 0.8rem; font-weight: 600; gap: 0.4rem; margin-bottom: 0.6rem; }
+      .rs-error { color: #b23a3a; }
+      /* one row per office (DB-DECISIONS 28) */
+      .rs-office { align-items: flex-start; border-top: 1px solid #f0efec; display: flex; flex-wrap: wrap; gap: 0.9rem; justify-content: space-between; margin-top: 0.85rem; padding-top: 0.85rem; }
+      .rs-office h3 { font-size: 0.92rem; font-weight: 650; margin: 0; }
+      .rs-office .rs-meta { border-top: 0; margin-top: 0.35rem; padding-top: 0; }
+
+      /* ---- the warning + password window ---- */
+      .rs-backdrop { align-items: center; background: rgba(15, 12, 10, 0.5); display: flex; inset: 0; justify-content: center; padding: 16px; position: fixed; z-index: 2000; }
+      .rs-backdrop[hidden], .rs-msg[hidden] { display: none; }   /* display:flex would otherwise beat the hidden attribute */
+      .rs-modal { background: #fff; border-radius: 16px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3); max-height: calc(100vh - 32px); max-width: 480px; overflow-y: auto; width: 100%; }
+      .rs-modal-head { align-items: flex-start; border-bottom: 1px solid #f0efec; display: flex; gap: 0.7rem; padding: 1.1rem 1.2rem 0.9rem; }
+      .rs-modal-head i { color: #c2540a; flex: none; font-size: 1.3rem; line-height: 1.2; }
+      .rs-modal-head h3 { font-size: 1.02rem; font-weight: 700; margin: 0; }
+      .rs-modal-head p { color: var(--ps-muted); font-size: 0.8rem; margin: 0.2rem 0 0; }
+      .rs-modal-body { padding: 0.9rem 1.2rem 0; }
+      .rs-list { font-size: 0.84rem; line-height: 1.55; margin: 0 0 1rem; padding-left: 1.1rem; }
+      .rs-list li { margin-bottom: 0.45rem; }
+      .rs-pw-label { display: block; font-size: 0.78rem; font-weight: 650; margin-bottom: 0.1rem; }
+      .rs-msg { border-radius: 8px; font-size: 0.78rem; line-height: 1.45; margin-top: 0.55rem; padding: 0.5rem 0.65rem; }
+      .rs-msg-bad { background: #fcecec; color: #b23a3a; }
+      .rs-msg-lock { background: #fdf3e6; color: #8a5a12; }
+      .rs-modal-foot { border-top: 1px solid #f0efec; display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; padding: 0.8rem 1.2rem; }
+      .rs-modal-foot .ps-btn[disabled] { cursor: not-allowed; opacity: 0.5; }

@@ -1,0 +1,8 @@
+/* Styles for resources/views/admin/transaction-history.blade.php. */
+
+      /* the lines of this page's old [0] shell block that differ from the admin shell */
+      :root {
+        --venusep-border: #e5e5e5;
+        --venusep-muted: #606a75;
+        --venusep-text: #1f1e1e;
+      }

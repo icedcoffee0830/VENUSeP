@@ -1,3 +1,4 @@
+/* The GCash receipt panel of the booking pages. */
 function receiptPanelHtml(){
   const o=state.ocr;
   const fileInput=`<input type="file" id="gcFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="checkReceipt(this)">`;

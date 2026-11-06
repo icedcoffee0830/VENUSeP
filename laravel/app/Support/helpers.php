@@ -52,6 +52,15 @@ if (!function_exists('legacy')) {
     }
 }
 
+/* The link to a file in public/, stamped with the time it was saved, so a save and a
+   refresh always shows the change (the browser never reuses an old copy). */
+if (!function_exists('asset_stamped')) {
+    function asset_stamped(string $path): string
+    {
+        return asset($path) . '?v=' . filemtime(public_path($path));
+    }
+}
+
 /* A page view; with ?part=1 only its @fragment parts, for public/assets/js/live.js. */
 if (!function_exists('live_view')) {
     function live_view(string $name, array $data = [])

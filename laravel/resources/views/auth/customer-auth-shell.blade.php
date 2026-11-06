@@ -27,7 +27,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
-    <link rel="stylesheet" href="{{ asset('assets/css/customer-auth.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/customer-auth.css') }}" />
   </head>
   <body class="customer-login-page">
     <main class="auth-split">
@@ -50,20 +50,6 @@
         </div>
       </section>
     </main>
-    <script>
-      /* show / hide a password, same as the login page */
-      document.querySelectorAll('[data-password-toggle]').forEach(function (toggle) {
-        toggle.addEventListener('click', function () {
-          const input = document.getElementById(toggle.dataset.passwordToggle);
-          if (!input) return;
-          const show = input.type === 'password';
-          input.type = show ? 'text' : 'password';
-          toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-          toggle.setAttribute('aria-pressed', show ? 'true' : 'false');
-          const icon = toggle.querySelector('i');
-          if (icon) { icon.classList.toggle('bi-eye', !show); icon.classList.toggle('bi-eye-slash', show); }
-        });
-      });
-    </script>
+    <script src="{{ asset_stamped('assets/js/auth/customer-auth-shell.js') }}"></script>
   </body>
 </html>

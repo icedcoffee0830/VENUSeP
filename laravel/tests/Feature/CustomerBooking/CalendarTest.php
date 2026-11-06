@@ -27,7 +27,7 @@ class CalendarTest extends TestCase
             ->assertSee('fullcalendar@6.1.20', false)
             ->assertSee('Brent Cajipoe');                                      /* header chip */
 
-        preg_match('/events: (\[.*?\]),\n/s', $res->getContent(), $m);
+        preg_match('/calendarEventsJson: (\[.*?\]),\n/s', $res->getContent(), $m);
         $events = json_decode($m[1], true);
         $this->assertIsArray($events);
         $mine = DB::table('bookings')->where('customer_id', 1)->count();

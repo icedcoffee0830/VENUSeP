@@ -1,5 +1,5 @@
-{{-- THE ONE STATUS CHIP SET, on every shell page: a word on a soft tint. Green = done well, amber =
-     waiting on someone, red = stopped, grey = finished or neutral. --}}
+/* THE ONE STATUS CHIP SET, on every shell page: a word on a soft tint. Green = done well, amber =
+     waiting on someone, red = stopped, grey = finished or neutral. */
       .vz-chip { display: inline-flex; align-items: center; gap: .35rem; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
       .vz-chip-green { background: #eaf6ef; color: #1c7a4f; }
       .vz-chip-amber { background: #fdf3e6; color: #8a5a12; }

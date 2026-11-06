@@ -1,0 +1,25 @@
+/* Styles for legacy/includes/notification-bell.php. */
+
+  .nb-wrap{position:relative;display:inline-flex}
+  .nb-bell{position:relative;width:38px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);transition:background 180ms ease;padding:0}
+  .nb-bell:hover,.nb-bell[aria-expanded="true"]{background:rgba(255,255,255,.2)}
+  .nb-nav .nb-bell{width:36px;height:34px;border-radius:999px}
+  .nb-count{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#ffd166;color:#3a0c14;font:700 11px/18px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #3a0c14}
+  .nb-panel{position:absolute;top:calc(100% + 10px);right:0;z-index:1100;width:min(370px,calc(100vw - 16px));max-height:min(480px,calc(100vh - 90px));overflow:auto;background:#fff;color:#1c1b19;border-radius:14px;box-shadow:0 18px 50px rgba(10,4,5,.35);border:1px solid rgba(0,0,0,.08);font-family:Inter,system-ui,sans-serif;text-align:left}
+  .nb-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #f0efec;position:sticky;top:0;background:#fff}
+  .nb-head b{font-size:14px}
+  .nb-all{background:none;border:none;color:#a11626;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;padding:0}
+  .nb-item{display:flex;gap:10px;align-items:flex-start;width:100%;padding:11px 14px;border:none;border-bottom:1px solid #f4f2ef;background:#fff;text-align:left;cursor:pointer;font:inherit;color:inherit}
+  .nb-item:hover{background:#faf8f6}
+  .nb-item .nb-dot{flex:none;width:8px;height:8px;border-radius:999px;margin-top:6px;background:transparent}
+  .nb-item.is-unread{background:#fdf6f6}
+  .nb-item.is-unread .nb-dot{background:#a11626}
+  .nb-item.is-unread .nb-text{font-weight:650;color:#1c1b19}
+  .nb-text{display:block;font-size:13px;line-height:1.45;color:#4a463f}
+  .nb-ago{display:block;font-size:11.5px;color:#6e6a64;margin-top:2px}
+  .nb-remind{background:#fdf7ee}
+  .nb-remind .nb-dot{background:#d9930d}
+  .nb-remind .nb-text{color:#7a4d0f}
+  .nb-empty{padding:26px 14px;text-align:center;font-size:13px;color:#6e6a64}
+  @media (max-width:767.98px){.nb-panel{position:fixed;top:62px;right:8px}}
+  @media print{.nb-wrap{display:none!important}}

@@ -39,12 +39,13 @@ class TransactionHistoryTest extends TestCase
     {
         $this->actingAsStaff()->get(route('admin.transaction-history'))->assertOk()
             ->assertSee('Transaction History')
-            ->assertSee('const rows = [{', false)
-            ->assertSee(route('admin.receipt') . '?booking=', false)
+            ->assertSee('transactionRowsJson: [{', false)
+            ->assertSee('receiptUrl: ' . json_encode(route('admin.receipt')), false)
             ->assertSee('window.openBookingDetails', false)
             ->assertSee(json_encode(route('root.booking-details') . '?booking='), false)
             // on an admin page the modal's "Transaction Receipt" is the staff receipt page
-            ->assertSee('href="' . route('admin.receipt') . '?booking=${encodeURIComponent(d.reference)}">Transaction Receipt', false)
+            ->assertSee('bdmReceiptUrl: ' . json_encode(route('admin.receipt')), false)
+            ->assertSee('href="${bookingDetailsModal.bdmReceiptUrl}?booking=${encodeURIComponent(d.reference)}">Transaction Receipt', false)
             ->assertSee(asset('assets/js/table-page-size.js'), false);
     }
 
@@ -56,7 +57,7 @@ class TransactionHistoryTest extends TestCase
     /* The ledger's rows, read back out of the page, and the options of one filter. */
     private function rows($page): array
     {
-        preg_match('/const rows = (\[.*\]);/', $page->getContent(), $m);
+        preg_match('/transactionRowsJson: (\[.*\]),/', $page->getContent(), $m);
         return json_decode($m[1], true);
     }
 

@@ -1,0 +1,40 @@
+/* Styles for resources/views/customer/pay.blade.php. */
+
+      @media (max-width: 767.98px) { .container-fluid { padding-inline: 16px; } }
+
+      :root { --crimson: #a11626; --crimson-deep: #7d0f1e; --ink: #1d1214; --soft: #6e6a64; --line: #ece9e4; }
+      /* white page, like Booking History (this page is its sub-page) — not the crimson account backdrop */
+      body { background: #fff !important; }
+      .app-main { background: #fff !important; }
+      .pay-wrap { max-width: 720px; margin: 0 auto; padding-top: 22px; }
+      /* the only way out on a phone: the tab bar is off on this page */
+      .pay-nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px; margin-bottom: 14px; }
+      .pay-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; font-weight: 600; color: #4a4440; text-decoration: none; }
+      .pay-back:hover { color: var(--crimson); }
+      .pay-title { margin: 0 0 4px; font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+      .pay-sub { margin: 0 0 18px; color: var(--soft); font-size: 13.5px; }
+      .pay-card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin-bottom: 16px; }
+      .pay-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 18px; }
+      .pay-k { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6a64; margin-bottom: 3px; }
+      .pay-v { font-size: 14px; font-weight: 640; color: #1c1b19; overflow-wrap: anywhere; }
+      .pay-amount { font-size: 30px; font-weight: 780; letter-spacing: -.02em; color: var(--crimson); }
+      .pay-note { display: flex; gap: 10px; align-items: flex-start; border-radius: 12px; padding: 13px 15px; margin-bottom: 16px; font-size: 13px; line-height: 1.55; }
+      .pay-note strong { display: block; font-size: 14px; margin-bottom: 2px; }
+      .pay-note .bi { font-size: 17px; flex: none; margin-top: 1px; }
+      .pay-note.is-ok   { background: #f2faf5; border: 1px solid #d4ebdd; color: #1c7a4f; }
+      .pay-note.is-warn { background: #fdf7ee; border: 1px solid #f3e3c8; color: #8a5a12; }
+      .pay-note.is-info { background: #f5f7fb; border: 1px solid #dfe4ef; color: #34405a; }
+      .pay-note.is-bad  { background: #fdf2f2; border: 1px solid #f2d8d8; color: #b23a3a; }
+      .pay-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+      .pay-method { border: 1.5px solid rgba(0,0,0,.12); background: #fff; border-radius: 12px; padding: 12px 14px; cursor: pointer; text-align: left; font: inherit; }
+      .pay-method.is-on { border-color: var(--crimson); background: #f9f3f3; }
+      .pay-method b { display: block; font-size: 14px; color: #1c1b19; }
+      .pay-method span { display: block; font-size: 12px; color: #6e6a64; margin-top: 2px; }
+      .pay-btn { width: 100%; height: 50px; border: none; border-radius: 12px; background: var(--crimson); color: #fff; font: 700 15px Inter, system-ui, sans-serif; cursor: pointer; margin-top: 16px; }
+      .pay-btn:hover { background: var(--crimson-deep); }
+      .pay-btn[disabled] { background: #b7b3ab; cursor: not-allowed; }
+      .pay-err { margin-top: 10px; color: #b23a3a; font-size: 13px; font-weight: 600; }
+      .pay-small { font-size: 12.5px; color: #6e6a64; margin-top: 9px; text-align: center; }
+      .pay-agree { display: flex; gap: 9px; align-items: flex-start; margin: 14px 0 10px; cursor: pointer; font-size: 12.5px; color: #4a463f; line-height: 1.5; }
+      .pay-agree input { width: 15px; height: 15px; margin-top: 2px; accent-color: var(--crimson); flex: none; }
+      @media (max-width: 520px) { .pay-methods { grid-template-columns: 1fr; } .pay-amount { font-size: 26px; } }

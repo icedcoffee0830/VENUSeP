@@ -1,0 +1,18 @@
+/* Styles for resources/views/layouts/shell.blade.php. */
+
+      :root {
+        --black: #1f1e1e; --border: #e5e5e5; --muted: #606a75;
+        --venusep-sidebar-width: 235px; --venusep-header-height: 58px;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body { background: #fff; color: var(--black); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; overflow-x: hidden; }
+      .app-main { margin-left: var(--venusep-sidebar-width); padding-top: var(--venusep-header-height); min-height: 100vh; background: #fff; }
+      .container-fluid { width: 100%; padding-inline: 30px; }
+      .app-content { padding: 0.25rem 0 3rem; }
+      @media (max-width: 767.98px) {
+        :root { --venusep-sidebar-width: 0px; --venusep-header-height: 56px; }
+        .sidebar { transform: translateX(-100%); }
+        .app-header { left: 0; }
+        .app-main { margin-left: 0; }
+      }

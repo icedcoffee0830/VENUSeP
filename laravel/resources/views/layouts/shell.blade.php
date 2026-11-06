@@ -13,7 +13,7 @@
     @section('content')  everything that was inside .app-wrapper after the sidebar
                      (normally <main class="app-main">...</main>)
     @push('body-end')    markup that sat after .app-wrapper (modals, toasts)
-    @push('scripts')     the page's <script> blocks, in their old order
+    @push('scripts')     the page's script tags, in their old order
 --}}
 <!DOCTYPE html>
 <html lang="en">
@@ -34,64 +34,11 @@
     @stack('head')
 
     @if ($portal === 'customer')
-    <style>
-      :root {
-        --black: #1f1e1e; --border: #e5e5e5; --muted: #606a75;
-        --venusep-sidebar-width: 235px; --venusep-header-height: 58px;
-      }
-      * { box-sizing: border-box; }
-      html, body { margin: 0; min-height: 100%; }
-      body { background: #fff; color: var(--black); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; overflow-x: hidden; }
-      .app-main { margin-left: var(--venusep-sidebar-width); padding-top: var(--venusep-header-height); min-height: 100vh; background: #fff; }
-      .container-fluid { width: 100%; padding-inline: 30px; }
-      .app-content { padding: 0.25rem 0 3rem; }
-      @media (max-width: 767.98px) {
-        :root { --venusep-sidebar-width: 0px; --venusep-header-height: 56px; }
-        .sidebar { transform: translateX(-100%); }
-        .app-header { left: 0; }
-        .app-main { margin-left: 0; }
-      }
-    </style>
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/shell-customer.css') }}" />
     @else
-    <style>
-      :root {
-        --venusep-black: #1f1e1e;
-        --venusep-cream: #ffffff;
-        --venusep-border: #ddd7ce;
-        --venusep-text: #050505;
-        --venusep-sidebar-width: 235px;
-        --venusep-header-height: 58px;
-      }
-      * { box-sizing: border-box; }
-      html, body { margin: 0; min-height: 100%; }
-      body {
-        background: #fff;
-        color: var(--venusep-text);
-        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        overflow-x: hidden;
-      }
-      /* main content area sits right of the sidebar, below the header */
-      .app-main {
-        margin-left: var(--venusep-sidebar-width);
-        padding-top: var(--venusep-header-height);
-        min-height: 100vh;
-        background: #fff;
-      }
-      .container-fluid { width: 100%; padding-inline: 30px; } /* uniform content inset — 30px sides on every admin page */
-      .app-content-header { padding: 1.3rem 0 0; }
-      .app-content { padding: 0.25rem 0 3rem; }
-      @media (max-width: 767.98px) {
-        :root { --venusep-sidebar-width: 0px; --venusep-header-height: 56px; }
-        .sidebar { transform: translateX(-100%); }
-        .app-header { left: 0; }
-        .app-main { margin-left: 0; }
-        .user-name { display: none; }
-      }
-    </style>
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/shell-admin.css') }}" />
     @endif
-    <style>
-@include('partials.chips-css')
-    </style>
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/chips.css') }}" />
     @stack('styles')
   </head>
   <body @hasSection('body-class') class="@yield('body-class')" @endif>

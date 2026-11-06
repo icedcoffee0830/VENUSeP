@@ -1,3 +1,14 @@
+  /* Motion for the booking flow — two parts, both skipped when GSAP is missing
+     or the user prefers reduced motion.
+
+     (1) Each SCREEN pops in when you move to it (detail -> review -> pending ->
+         payment -> done): its blocks rise and fade in with a stagger, and each
+         block keeps a scroll trigger after that, so scrolling up and down
+         replays the pop. render() also fires on every keystroke and date pick;
+         those re-arm the blocks silently — nothing moves under your hands.
+     (2) The static parts below the flow (More rooms, footer) reveal on scroll
+         exactly as on the landing page, and replay up and down. */
+  function bookingMotion(pageMotion) {
     if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return;
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     gsap.registerPlugin(ScrollTrigger);
@@ -68,3 +79,5 @@
     /* PHONE CTA BAR. On a phone the booking form sits below the photos and the
        description; this bar keeps "Reserve" one tap away and hides itself once
        the form is on screen. Detail screen only; nothing on desktop. */
+    pageMotion(EASE);
+  }

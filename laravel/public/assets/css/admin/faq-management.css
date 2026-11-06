@@ -1,0 +1,104 @@
+/* Styles for resources/views/admin/faq-management.blade.php. */
+
+      .app-content-header { padding: 26px 0 0; }
+
+      :root { --fq-border: #e5e5e5; --fq-muted: #6b675f; --fq-text: #1c1b19; --fq-crimson: #a11626; --fq-crimson-lo: #7d0f1e; --fq-shadow: 0 1px 2px rgba(15,23,42,.04); }
+      .fq-header { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; justify-content: space-between; margin-bottom: 1.2rem; }
+      .fq-heading h1 { margin: 0 0 4px; font-size: 1.55rem; font-weight: 700; letter-spacing: -.01em; }
+      .fq-heading p { margin: 0; color: var(--fq-muted); font-size: .9rem; max-width: 72ch; }
+      .fq-flash { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-radius: 10px; font-size: .88rem; font-weight: 600; margin-bottom: 1rem; }
+      .fq-flash.ok  { background: #eaf6ef; color: #1c7a4f; }
+      .fq-flash.bad { background: #fcecec; color: #b23a3a; }
+      .fq-card { background: #fff; border: 1px solid var(--fq-border); border-radius: 14px; box-shadow: var(--fq-shadow); margin-bottom: 1.1rem; }
+      .fq-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--fq-border); flex-wrap: wrap; }
+      .fq-card-head h2 { margin: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; }
+      .fq-card-head h2 small { font-weight: 600; color: var(--fq-muted); font-size: .8rem; margin-left: 8px; }
+      .fq-num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: #fbe9ec; color: var(--fq-crimson); font-size: .75rem; font-weight: 700; margin-right: 10px; }
+      /* the preview switch */
+      .fq-preview { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; }
+      .fq-preview-label { font-size: .86rem; font-weight: 700; }
+      .fq-preview-label small { display: block; font-weight: 500; color: var(--fq-muted); font-size: .78rem; margin-top: 2px; }
+      .fq-seg { display: inline-flex; border: 1px solid var(--fq-border); border-radius: 999px; padding: 3px; background: #faf9f7; margin-left: auto; }
+      .fq-seg button { border: 0; background: transparent; font: inherit; font-size: .82rem; font-weight: 700; padding: 7px 16px; border-radius: 999px; cursor: pointer; color: var(--fq-muted); }
+      .fq-seg button.active { background: var(--fq-crimson); color: #fff; }
+      .fq-seg button .fq-live { font-weight: 500; opacity: .8; font-size: .74rem; margin-left: 4px; }
+      /* forms */
+      .fq-form { display: grid; grid-template-columns: 220px 220px 1fr; gap: 12px 14px; padding: 16px 18px; }
+      .fq-form label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fq-muted); margin-bottom: 5px; }
+      .fq-form .fq-full { grid-column: 1 / -1; }
+      .fq-input, .fq-select, .fq-textarea { width: 100%; border: 1px solid #d7d7d7; border-radius: 10px; background: #fff; font: inherit; font-size: .9rem; color: var(--fq-text); padding: 10px 12px; }
+      .fq-textarea { min-height: 120px; resize: vertical; line-height: 1.55; }
+      /* the answer editor: what you see is what customers get */
+      .fq-editor { min-height: 120px; border: 1px solid #d7d7d7; border-radius: 10px; background: #fff; padding: 10px 12px; font-size: .9rem; line-height: 1.6; color: var(--fq-text); outline: 0; overflow-wrap: anywhere; }
+      .fq-editor:focus { border-color: var(--fq-crimson); box-shadow: 0 0 0 3px rgba(161,22,38,.12); }
+      .fq-editor:empty::before { content: attr(data-placeholder); color: #a9a39b; }
+      .fq-editor p, .fq-editor div { margin: 0 0 8px; }
+      .fq-editor p:last-child, .fq-editor div:last-child { margin-bottom: 0; }
+      .fq-editor ul { margin: 0 0 8px; padding-left: 22px; }
+      .fq-editor a { color: var(--fq-crimson); text-decoration: underline; }
+      .fq-editor .fq-token { display: inline-block; padding: 0 7px; border-radius: 6px; background: #fbe9ec; color: var(--fq-crimson); font-weight: 700; font-size: .84em; line-height: 1.7; border: 1px solid rgba(161,22,38,.2); cursor: default; user-select: all; }
+      .fq-editor .fq-token::after { content: " \21BB"; font-weight: 400; opacity: .6; font-size: .8em; }
+      .fq-form.is-invalid .fq-editor { border-color: #b23a3a; }
+      .fq-editor-err { grid-column: 1 / -1; display: none; color: #b23a3a; font-size: .8rem; margin-top: -6px; }
+      .fq-form.is-invalid .fq-editor-err { display: block; }
+      .fq-input:focus, .fq-select:focus, .fq-textarea:focus { outline: 0; border-color: var(--fq-crimson); box-shadow: 0 0 0 3px rgba(161,22,38,.12); }
+      .fq-actions { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .fq-hint { font-size: .78rem; color: var(--fq-muted); margin-left: auto; }
+      .fq-help { grid-column: 1 / -1; font-size: .8rem; color: var(--fq-muted); line-height: 1.6; }
+      /* the answer toolbar */
+      .fq-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+      .fq-tb { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--fq-border); border-radius: 8px; background: #fff; font: inherit; font-size: .8rem; font-weight: 600; color: var(--fq-text); cursor: pointer; }
+      .fq-tb:hover { border-color: var(--fq-crimson); color: var(--fq-crimson); }
+      .fq-tb.is-on { background: var(--fq-crimson); border-color: var(--fq-crimson); color: #fff; }   /* the caret is inside bold / a list */
+      .fq-tb i { font-size: 1rem; }
+      .fq-tb-caret { font-size: .7rem !important; margin-left: 2px; }
+      .fq-tb-menu { position: relative; }
+      .fq-tb-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 280px; background: #fff; border: 1px solid var(--fq-border); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.12); padding: 6px; display: none; }
+      .fq-tb-menu.open .fq-tb-list { display: block; }
+      .fq-tb-list button { display: block; width: 100%; text-align: left; border: 0; background: transparent; font: inherit; font-size: .84rem; font-weight: 600; color: var(--fq-text); padding: 8px 10px; border-radius: 7px; cursor: pointer; }
+      .fq-tb-list button:hover { background: #fbe9ec; color: var(--fq-crimson); }
+      .fq-tb-list button small { display: block; font-weight: 500; color: var(--fq-muted); font-size: .74rem; }
+      .fq-btn { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 15px; border-radius: 10px; border: 1px solid var(--fq-border); background: #fff; color: var(--fq-text); font: inherit; font-size: .84rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+      .fq-btn:hover { border-color: #bdb7ac; }
+      .fq-btn:disabled { opacity: .4; cursor: default; }
+      .fq-btn-primary { background: var(--fq-crimson); border-color: var(--fq-crimson); color: #fff; }
+      .fq-btn-primary:hover { background: var(--fq-crimson-lo); border-color: var(--fq-crimson-lo); }
+      .fq-btn-sm { height: 32px; padding: 0 11px; font-size: .78rem; }
+      .fq-btn-danger { color: #b23a3a; }
+      .fq-btn-danger:hover { background: #fcecec; border-color: #f1c5c5; }
+      /* rows */
+      .fq-row { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--fq-border); }
+      .fq-row:last-child { border-bottom: 0; }
+      .fq-row.is-hidden .fq-q, .fq-row.is-hidden .fq-a { opacity: .55; }
+      .fq-row.is-off { display: none; }                       /* filtered out by the preview switch */
+      .fq-q { font-weight: 700; font-size: .95rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .fq-a { color: #4a463f; font-size: .86rem; line-height: 1.6; margin: 4px 0 0; }
+      .fq-a p, .fq-a div { margin: 0 0 6px; }
+      .fq-a ul { margin: 4px 0 6px; padding-left: 20px; }
+      .fq-a a { color: var(--fq-crimson); }
+      .fq-meta { font-size: .74rem; color: #9a958c; margin-top: 4px; }
+      .fq-badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; background: #eef0f2; color: #55606b; }
+      .fq-badge.builtin { background: #f2eee9; color: #6b5e4e; }
+      .fq-badge.added { background: #eaf6ef; color: #1c7a4f; }
+      .fq-badge.on  { background: #fdf3e6; color: #8a5a12; }
+      .fq-badge.off { background: #fbe9ec; color: var(--fq-crimson); }
+      .fq-badge.changed { background: #e9eff8; color: #2b4a7e; }
+      .fq-tools { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+      .fq-tools form { margin: 0; }
+      .fq-edit { grid-column: 1 / -1; display: none; border-top: 1px dashed var(--fq-border); margin-top: 6px; }
+      .fq-row.is-editing .fq-edit { display: grid; }
+      .fq-row.is-editing .fq-tools, .fq-row.is-editing .fq-a, .fq-row.is-editing .fq-meta { display: none; }
+      .fq-empty { padding: 18px; color: var(--fq-muted); font-size: .86rem; }
+      .fq-off { padding: 14px 18px; background: #fcecec; color: #b23a3a; border-radius: 12px; font-size: .88rem; margin-bottom: 1rem; }
+      /* delete modal */
+      .fq-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(18,8,10,.55); backdrop-filter: blur(3px); }
+      .fq-modal.open { display: flex; }
+      .fq-dialog { width: 100%; max-width: 440px; background: #fff; border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.35); padding: 26px 26px 22px; }
+      .fq-dialog-icon { width: 46px; height: 46px; border-radius: 999px; background: #fcecec; color: #b23a3a; display: grid; place-items: center; font-size: 1.3rem; margin-bottom: 14px; }
+      .fq-dialog h3 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
+      .fq-dialog p { margin: 0; color: var(--fq-muted); font-size: .88rem; line-height: 1.55; }
+      .fq-dialog-q { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--fq-border); border-radius: 10px; font-size: .86rem; font-weight: 600; color: var(--fq-text); }
+      .fq-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+      .fq-btn-delete { background: #b23a3a; border-color: #b23a3a; color: #fff; }
+      .fq-btn-delete:hover { background: #8f2c2c; border-color: #8f2c2c; }
+      @media (max-width: 900px) { .fq-form { grid-template-columns: 1fr; } .fq-row { grid-template-columns: 1fr; } .fq-tools { justify-content: flex-start; } .fq-seg { margin-left: 0; } }

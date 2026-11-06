@@ -1,0 +1,8 @@
+/* Styles for resources/views/customer/faq.blade.php. */
+
+  :root { --venusep-sidebar-width: 235px; --venusep-header-height: 58px; }
+  .app-main { margin-left: var(--venusep-sidebar-width); padding-top: var(--venusep-header-height); min-height: 100vh; position: relative; z-index: 1; }
+  .app-main > main { padding: 64px 0 90px; }
+  .app-main .fq-toc { top: 88px; }
+  .app-main .fq-section { scroll-margin-top: 90px; }
+  @media (max-width: 767.98px) { .app-main { margin-left: 0; } .app-main > main { padding: 44px 0 64px; } }

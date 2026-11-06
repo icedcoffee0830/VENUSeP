@@ -25,7 +25,8 @@ class BookingRequestTest extends TestCase
             ->assertSee('"VB-2026-190":{"id":"VB-2026-190"', false)
             ->assertSee('const DISCOUNT_PERCENT = 20;', false)          // pricing.php's script
             ->assertSee('function gcStore', false)                     // the GCash engine
-            ->assertSee('fetch(' . json_encode(route('admin.booking-action')), false)
+            ->assertSee('bookingActionUrl: ' . json_encode(route('admin.booking-action')), false)
+            ->assertSee('fetch(bookingRequestPage.bookingActionUrl', false)
             ->assertSee('_token: CSRF', false)
             ->assertSee(asset('assets/js/confirm-modal.js'), false)
             ->assertDontSee("fetch('booking-", false)

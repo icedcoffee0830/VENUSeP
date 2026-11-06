@@ -1,0 +1,35 @@
+/* Styles for resources/views/partials/staff-covers.blade.php. */
+
+  .sm-list { width: 100%; border-collapse: collapse; font-size: .84rem; min-width: 640px; }
+  .sm-list th { text-align: left; font-size: .74rem; font-weight: 650; color: #606a75; padding: .55rem .7rem; border-bottom: 1px solid var(--venusep-border); }
+  .sm-list td { padding: .55rem .7rem; border-top: 1px solid #f0efec; vertical-align: top; line-height: 1.45; overflow-wrap: anywhere; }
+  .sm-scroll { overflow-x: auto; }
+  .sm-empty { margin: 0; padding: .9rem 0; color: #606a75; font-size: .85rem; }
+  .sm-note { display: block; color: #606a75; font-size: .78rem; }
+  .sm-actions { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .sm-btn { min-height: 32px; padding: .3rem .75rem; border: 1px solid #d5d0c8; border-radius: 999px; background: #fff; color: #1f1e1e; font: inherit; font-size: .76rem; font-weight: 600; cursor: pointer; }
+  .sm-btn:hover { background: #f8f7f5; }
+  .sm-btn:focus-visible, .sm-dlg :focus-visible { outline: 2px solid #1d1b1b; outline-offset: 2px; }
+  .sm-btn-no { border-color: #e3c3c3; color: #b23a3a; }
+  .sm-btn-main { border-color: #a11626; background: #a11626; color: #fff; }
+  .sm-btn-main:hover { background: #7d0f1e; }
+  .sm-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .sm-hall-note { margin-left: auto; color: #6e6a64; font-size: .76rem; font-weight: 400; }
+  .sm-check.is-warn .sm-hall-note { color: #8a5a12; font-weight: 600; }
+  .sm-dlg .sm-warn { margin: .5rem 0 0; color: #8a5a12; font-weight: 600; }
+  .sm-warn:empty { display: none; }
+  .sm-dlg { width: min(460px, calc(100vw - 32px)); overscroll-behavior: contain; padding: 1.25rem; border: 0; border-radius: 12px; color: #1f1e1e; }
+  .sm-dlg::backdrop { background: rgba(0, 0, 0, .45); }
+  .sm-dlg h3 { margin: 0 0 .25rem; font-size: 1.05rem; font-weight: 700; }
+  .sm-dlg p { margin: 0 0 .75rem; color: #606a75; font-size: .84rem; }
+  .sm-field { display: block; margin-bottom: .75rem; font-size: .84rem; font-weight: 600; }
+  .sm-field select, .sm-field input, .sm-field textarea { display: block; width: 100%; min-height: 36px; margin-top: .25rem; padding: .35rem .5rem; border: 1px solid var(--venusep-border); border-radius: 8px; background: #fff; font: inherit; font-weight: 400; }
+  .sm-field[hidden] { display: none; }
+  .sm-check { display: flex; align-items: center; gap: .5rem; min-height: 32px; font-size: .88rem; cursor: pointer; }
+  .sm-foot { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .9rem; }
+  .sm-error { color: #b23a3a; font-size: .84rem; font-weight: 600; }
+  .sm-error:empty { display: none; }
+  @media (max-width: 767.98px) {
+    .sm-btn, .sm-check { min-height: 44px; }
+    .sm-field select, .sm-field input { min-height: 44px; }
+  }

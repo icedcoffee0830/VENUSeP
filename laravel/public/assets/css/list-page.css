@@ -1,5 +1,5 @@
-{{-- The admin list pages (Staff, Customers): heading, section tabs, labelled filters, quiet row
-     buttons, the Tabulator look, and one card per row on a phone. Pair: assets/js/list-page.js. --}}
+/* The admin list pages (Staff, Customers): heading, section tabs, labelled filters, quiet row
+     buttons, the Tabulator look, and one card per row on a phone. Pair: assets/js/list-page.js. */
 .app-main { margin-left: var(--venusep-sidebar-width) !important; padding-top: var(--venusep-header-height) !important; width: calc(100vw - var(--venusep-sidebar-width)) !important; min-height: 100vh; }
 .staff-content { min-height: calc(100vh - var(--venusep-header-height)); padding: 26px 30px 40px !important; color: #1f1e1e; }
 .staff-content .container-fluid { padding: 0; }

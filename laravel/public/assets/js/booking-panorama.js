@@ -1,3 +1,4 @@
+/* The 360 viewer of the booking pages. */
 /* One calibrated viewer for any box. CALIBRATION: the viewer assumes a full
    sphere (360 x 180, a 2:1 image). Our panoramas are iPhone sweeps — much
    wider than tall — so shown as a sphere they get squeezed into a narrow
@@ -90,4 +91,3 @@ function mountGallery(){
   /* a drag that ends over a tile must not count as a tap on it: 360° tour or photo */
   t.addEventListener('click',function(e){ if(moved){ e.preventDefault(); e.stopPropagation(); } },true);
 }
-

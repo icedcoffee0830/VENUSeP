@@ -1,0 +1,10 @@
+/* Styles for resources/views/admin/customer-management.blade.php. */
+.cm-bookings { color: #a11626; font-weight: 600; text-decoration: none; }
+.cm-bookings:hover { text-decoration: underline; }
+.cm-flag { display: inline-flex; align-items: center; gap: 5px; color: #8a5a12; font-size: 12px; font-weight: 600; }
+.lp-stack .vz-chip { white-space: normal; }
+@media (max-width: 767.98px) {
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="bookings"]::before { content: "Bookings"; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="lastLogin"]::before { content: "Activity"; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="status"]::before { content: "Status"; }
+}

@@ -1,0 +1,28 @@
+/* Styles for resources/views/customer/hostel-reservation.blade.php. */
+
+  *{box-sizing:border-box}
+  body{margin:0;background:#f4f3f0;color:#1c1b19;font-family:'Inter',system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#a11626;text-decoration:none}
+  a:hover{color:#7d0f1e}
+  input,select,button,textarea{font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:2px solid rgba(161,22,38,.35);outline-offset:0}
+  ::placeholder{color:#a5a19a}
+  button{appearance:none}
+  /* custom date-picker dropdown (booking panel) — same look as the venue page */
+  .cal-pop{position:absolute;top:calc(100% + 6px);z-index:70;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.14);padding:12px;width:274px}
+  .cal-nav{width:28px;height:28px;border:none;background:none;border-radius:8px;cursor:pointer;color:#5c584f;font-size:15px;line-height:1}
+  .cal-nav:hover:not(:disabled){background:#f0eeea}
+  .cal-nav:disabled{color:#c6c2ba;cursor:default}
+  .cal-day{width:32px;height:32px;border:none;background:none;border-radius:999px;display:flex;align-items:center;justify-content:center;font:500 12.5px 'Inter',system-ui,sans-serif;color:#1c1b19;cursor:pointer;padding:0}
+  .cal-day:hover:not(:disabled){background:#eef0f4}
+  .cal-day:disabled{color:#c6c2ba;text-decoration:line-through;cursor:default;background:none}
+  .cal-day.out{color:#c6c2ba}
+  .cal-day.today:not(.sel){box-shadow:inset 0 0 0 1.5px #b9c0d0}
+  .cal-day.sel,.cal-day.sel:hover{background:#a11626;color:#fff;font-weight:650}
+  /* bed roster rows */
+  .bed-row{display:grid;grid-template-columns:22px 1fr 92px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid rgba(0,0,0,.06)}
+  .bed-no{font-size:12.5px;font-weight:650;color:#a5a19a;text-align:center}
+  .bed-name{height:36px;border:1px solid rgba(0,0,0,.14);border-radius:9px;padding:0 10px;font-size:13px;background:#fff;width:100%}
+  .g-seg{display:flex;border:1px solid rgba(0,0,0,.14);border-radius:9px;overflow:hidden;height:36px;background:#fff}
+  .g-seg button{flex:1;border:none;background:none;font-size:12px;font-weight:600;color:#6e6a64;cursor:pointer;padding:0}
+  .g-seg button.on{background:#a11626;color:#fff}

@@ -3,30 +3,7 @@
 @section('active', 'Office Settings')
 
 @push('styles')
-    <style>
-      .os-page { max-width: 980px; margin: 0 auto; padding: 1.25rem 0 3rem; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1f1e1e; }
-      .os-title { font-size: 1.5rem; font-weight: 700; margin: 0 0 .25rem; }
-      .os-sub { color: #606a75; font-size: .9rem; margin: 0 0 1.25rem; }
-      .os-card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 1.1rem 1.2rem; margin-bottom: 1.25rem; }
-      .os-card h2 { font-size: 1.1rem; font-weight: 680; margin: 0 0 .9rem; }
-      .os-card h3 { font-size: .85rem; font-weight: 650; margin: 1.1rem 0 .5rem; }
-      .os-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .8rem; }
-      .os-field label { display: block; font-size: .78rem; font-weight: 600; margin-bottom: .25rem; }
-      .os-field small { display: block; color: #606a75; font-size: .72rem; margin-top: .2rem; line-height: 1.4; }
-      .os-field input { width: 100%; height: 40px; border: 1px solid #d8d4cc; border-radius: 8px; padding: 0 .6rem; font: inherit; font-size: .88rem; }
-      .os-days { display: flex; flex-wrap: wrap; gap: .4rem .9rem; }
-      .os-days label { display: inline-flex; align-items: center; gap: .35rem; font-size: .84rem; min-height: 32px; cursor: pointer; }
-      .os-row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-top: .9rem; }
-      .os-btn { height: 40px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1f1e1e; background: #1f1e1e; color: #fff; font: inherit; font-size: .84rem; font-weight: 600; cursor: pointer; }
-      .os-btn-line { background: #fff; color: #1f1e1e; }
-      .os-btn[disabled] { opacity: .5; cursor: not-allowed; }
-      .os-msg { font-size: .8rem; line-height: 1.5; }
-      .os-msg.bad { color: #b23a3a; }
-      .os-msg.ok { color: #1c7a4f; }
-      .os-list { list-style: none; margin: 0; padding: 0; font-size: .82rem; }
-      .os-list li { display: flex; gap: .7rem; align-items: center; justify-content: space-between; padding: .45rem 0; border-top: 1px solid #f0efec; flex-wrap: wrap; }
-      .os-muted { color: #606a75; font-size: .78rem; }
-    </style>
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/admin/office-settings.css') }}" />
 @endpush
 
 @section('content')
@@ -111,34 +88,8 @@
 
 @push('scripts')
     <script>
-      const OS_URL = {!! json_encode(route('admin.office-save')) !!};
-      async function osSend(form, action) {
-        const msg = form.querySelector('.os-msg');
-        const btn = form.querySelector('button[type=submit]');
-        const body = new FormData(form);
-        body.append('venue_id', form.closest('[data-office]').dataset.office);
-        body.append('action', action);
-        btn.disabled = true;
-        const out = await Live.post(OS_URL, body);
-        btn.disabled = false;
-        msg.className = 'os-msg ' + (out.ok ? 'ok' : 'bad');
-        msg.textContent = out.message || 'Nothing was changed.';
-        if (!out.ok) return;
-        /* the form keeps what was just saved; a closure is added, so that form starts over */
-        if (action === 'save') form.elements.reason.value = ''; else form.reset();
-        Live.refresh();
-      }
-      function osSave(e, form) { e.preventDefault(); osSend(form, 'save'); return false; }
-      function osClose(e, form) { e.preventDefault(); osSend(form, 'closure_add'); return false; }
-      async function osRemove(venue, id, btn) {
-        if (!(await venusepConfirm('Customers can book these dates again.', { title: 'Remove this closure?', okLabel: 'Remove' }))) return;
-        const body = new FormData();
-        body.append('venue_id', venue); body.append('action', 'closure_remove'); body.append('closure_id', id);
-        btn.disabled = true;
-        const out = await Live.post(OS_URL, body);
-        if (out.ok) { Live.say(out.message || 'Saved.'); Live.refresh(); return; }
-        btn.disabled = false;
-        venusepAlert(out.message || 'Nothing was changed.');
-      }
-    </script>
+  /* Values from PHP for assets/js/admin/office-settings.js */
+  const OS_URL = {!! json_encode(route('admin.office-save')) !!};
+</script>
+<script src="{{ asset_stamped('assets/js/admin/office-settings.js') }}"></script>
 @endpush

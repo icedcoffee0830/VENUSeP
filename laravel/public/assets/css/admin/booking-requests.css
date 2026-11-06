@@ -1,0 +1,87 @@
+/* Styles for resources/views/admin/booking-requests.blade.php. */
+
+      /*
+        Booking Requests — staff queue (mockup)
+        Self-contained page CSS following the team redesign style.
+      */
+      :root {
+        --vm-border: #e5e5e5;
+        --vm-text: #1f1e1e;
+        --vm-muted: #606a75;
+        --vm-hover: #ebebeb;
+        --vm-strip: #f4f4f4;
+        --vm-dark: #1f1e1e;
+        --vm-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        --vm-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      }
+
+      .app-main { background: #ffffff; font-family: var(--vm-font); }
+
+      .br-page { color: var(--vm-text); padding: 22px 0 0; width: 100%; } /* 22px + 4px from .app-content = 26px top, sides owned by .container-fluid */
+      .br-title { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.2rem; }
+      .br-subtitle { color: var(--vm-muted); font-size: 0.86rem; margin: 0 0 1.3rem; }
+
+      /* status badges — dot style, matches booking-request.php */
+      .br-badge { border: 1px solid transparent; border-radius: 999px; display: inline-flex; align-items: center; gap: 0.38rem; font-size: 0.72rem; font-weight: 400; padding: 0.28rem 0.66rem; white-space: nowrap; }
+      .br-badge::before { border-radius: 999px; content: ''; height: 6px; width: 6px; }
+      .b-gray  { background: #ffffff; border-color: var(--vm-border); color: #6b675f; }
+      .b-gray::before  { background: #b9b5ad; }
+      .b-green { background: #eaf6ef; color: #1c7a4f; }
+      .b-green::before { background: #2f9e63; }
+      .b-amber { background: #fdf3e6; color: #8a5a12; }
+      .b-amber::before { background: #d9930d; }
+      .b-red   { background: #fcecec; color: #b23a3a; }
+      .b-red::before   { background: #cf4a4a; }
+      .b-navy  { background: #eef0f2; color: #55606b; }
+      .b-navy::before  { background: #55606b; }
+
+      /* needs-action tabs + search */
+      .br-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: 0.55rem; margin-bottom: 1rem; }
+      .br-tab { background: #ffffff; border: 1px solid var(--vm-border); border-radius: 999px; color: var(--vm-muted); cursor: pointer; font-family: inherit; font-size: 0.8rem; font-weight: 600; padding: 0.42rem 0.85rem; }
+      .br-tab:hover { background: var(--vm-hover); }
+      .br-tab .n { background: var(--vm-strip); border-radius: 999px; font-size: 0.7rem; margin-left: 0.35rem; padding: 0.05rem 0.42rem; }
+      .br-tab.active { background: var(--vm-dark); border-color: var(--vm-dark); color: #ffffff; }
+      .br-tab.active .n { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
+      .br-search { border: 1px solid var(--vm-border); border-radius: 9px; font-family: inherit; font-size: 0.84rem; height: 38px; margin-left: auto; padding: 0 0.8rem; width: 260px; }
+      .br-search:focus { outline: 2px solid rgba(31, 30, 30, 0.25); }
+
+      /* the queue list */
+      .br-card { background: #ffffff; border: 1px solid var(--vm-border); border-radius: 14px; box-shadow: var(--vm-shadow); }
+      .br-list { overflow: hidden; }
+      .br-hd, .br-row { align-items: center; display: grid; gap: 0.9rem; grid-template-columns: 1.9fr 1.5fr 1.1fr 1.1fr 1.55fr 1.5fr 22px; padding: 0.75rem 1.1rem; }
+      .br-hd { border-bottom: 1px solid var(--vm-border); color: var(--vm-muted); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+      .br-row { border-bottom: 1px solid #f0efec; color: inherit; cursor: pointer; text-decoration: none; }
+      .br-row:hover { background: #fafaf9; }
+      .br-row:last-child { border-bottom: none; }
+      .r-id { color: var(--vm-muted); font-size: 0.72rem; }
+      .r-name { font-size: 0.88rem; font-weight: 600; }
+      .r-sub { color: var(--vm-muted); font-size: 0.75rem; margin-top: 0.1rem; }
+      .r-main { font-size: 0.84rem; font-weight: 500; }
+      .r-act { color: var(--vm-muted); font-size: 0.76rem; line-height: 1.4; }
+      .r-act.warn { color: #8a5a12; font-weight: 600; }
+      .r-act.late { color: #b23a3a; font-weight: 600; }
+      .r-chev { color: #c9c5bd; font-size: 1.05rem; }
+
+      /* pagination — deliberately the same control as the Transaction History
+         table (Tabulator's footer), down to the page-size choices and the
+         button styling. The queue is a list of links rather than a table, so
+         it cannot BE that table, but it should not behave like a different
+         product either. 157 rows on one endless page was the complaint. */
+      .br-foot { align-items: center; background: #faf9f7; border-bottom: 1px solid var(--vm-border); display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; padding: 0.6rem 1.1rem; }
+      .br-foot[hidden] { display: none; }
+      .br-pagesize { align-items: center; color: var(--vm-muted); display: flex; font-size: 0.76rem; gap: 0.4rem; }
+      .br-pagesize select { border: 1px solid #d7d7d7; border-radius: 7px; background: #fff; color: #1f1e1e; font-family: inherit; font-size: 0.78rem; padding: 0.2rem 0.4rem; }
+      .br-pages { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+      .br-pbtn { background: #fff; border: 1px solid #d7d7d7; border-radius: 7px; color: #1f1e1e; cursor: pointer; font-family: inherit; font-size: 0.76rem; min-width: 30px; padding: 0.25rem 0.5rem; }
+      .br-pbtn:hover:not(:disabled) { background: #f4f2ee; }
+      .br-pbtn.active { background: var(--vm-dark); border-color: var(--vm-dark); color: #fff; }
+      .br-pbtn:disabled { cursor: not-allowed; opacity: 0.45; }
+      .br-shown { color: var(--vm-muted); font-size: 0.76rem; }
+
+      @media (max-width: 1000px) {
+        .br-hd, .br-row { grid-template-columns: 1.9fr 1.55fr 22px; }
+        .hide-md { display: none; }
+        .br-search { margin-left: 0; width: 100%; }
+      }
+    
+      .br-pagesize select { min-height: 32px; }

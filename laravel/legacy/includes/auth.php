@@ -1,6 +1,7 @@
 <?php
+/* Holds: who is signed in, and the checks for customers, staff and admins. */
 /* =====================================================================
-   AUTH — Laravel version of the old includes/auth.php.
+   AUTH — Laravel version of the old auth.php.
 
    Same function names and the same rules, so the legacy includes that call
    them (customer-bookings.php, customer-nav.php, notification-bell.php, ...)
@@ -21,13 +22,6 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 
 require_once __DIR__ . '/two-factor.php';   /* tfa_required_for(), tfa_status() */
 require_once __DIR__ . '/db.php';
-
-/* The old function started the PHP session and applied the 2FA gate. Laravel
-   starts the session itself and the gate is the EnforceTwoFactor middleware,
-   so this is a no-op kept for callers. */
-function venusep_session_start()
-{
-}
 
 /* True the first time $key is seen in THIS request (a static would last the
    whole PHP process — many requests in a test run). */

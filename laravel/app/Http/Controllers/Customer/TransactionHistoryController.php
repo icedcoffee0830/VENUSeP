@@ -12,7 +12,7 @@ class TransactionHistoryController
 {
     public function __invoke()
     {
-        extract(legacy('customer-bookings'));
+        $customerContact = legacy('customer-bookings')['customerContact'];   // set in customer-bookings.php
 
         $transactionRows = transaction_rows($customerContact['id']);
 

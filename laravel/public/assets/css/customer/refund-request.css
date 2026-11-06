@@ -1,0 +1,117 @@
+/* Styles for resources/views/customer/refund-request.blade.php. */
+
+      .rr-page { padding: 22px 0 0; }
+      .rr-back { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); text-decoration: none; margin-bottom: 12px; }
+      .rr-back:hover { color: var(--black); }
+      .rr-page > h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+      .rr-lede { color: var(--muted); font-size: 13px; margin: 4px 0 20px; max-width: 86ch; line-height: 1.6; }
+
+      .rr-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+      .rr-card { border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+      .rr-card-head { padding: 15px 18px 13px; border-bottom: 1px solid #f2efe9; }
+      .rr-card-head h2 { margin: 0; font-size: 14.5px; font-weight: 650; }
+      .rr-card-head p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+      .rr-card-body { padding: 18px; }
+      /* Wide screens: the form's OWN sections split into two columns so the card
+         fills the width instead of running down the page as one long ribbon.
+         Reason + explanation on the left, documents + the consequences on the
+         right. Collapses back to a single column below 1180px. */
+      .rr-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 26px; align-items: start; }
+      .rr-col > .rr-section:last-child { margin-bottom: 0; }
+      @media (max-width: 1180px) {
+        .rr-cols { grid-template-columns: minmax(0, 1fr); }
+        .rr-col > .rr-section:last-child { margin-bottom: 20px; }
+      }
+
+      .rr-section { margin-bottom: 20px; }
+      .rr-section:last-child { margin-bottom: 0; }
+      .rr-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #6b6258; margin-bottom: 7px; }
+      .rr-req::after { content: " *"; color: #b23a3a; }
+      .rr-control { width: 100%; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; font: inherit; font-size: 13px; color: var(--black); padding: 10px 11px; }
+      .rr-control:focus { outline: none; border-color: var(--black); }
+      textarea.rr-control { min-height: 108px; resize: vertical; line-height: 1.55; }
+      .rr-hint { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); }
+
+      .rr-docs { display: grid; gap: 8px; }
+      .rr-doc { display: flex; align-items: center; gap: 10px; border: 1px solid #e6e2da; border-radius: 10px; padding: 11px 12px; }
+      .rr-doc > i { font-size: 15px; color: var(--muted); flex: none; }
+      .rr-doc-txt { min-width: 0; flex: 1; }
+      .rr-doc-txt b { display: block; font-size: 12.5px; font-weight: 640; }
+      .rr-doc-txt small { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+      .rr-file { flex: none; max-width: 178px; font-size: 11.5px; }
+      .rr-doc[data-filled="1"] { border-color: #bfe0cd; background: #f6fbf8; }
+      .rr-doc[data-filled="1"] > i { color: #1c7a4f; }
+
+      .rr-warn { display: flex; gap: 10px; padding: 13px; border: 1px solid #f0d9b8; background: #fdf7ec; border-radius: 10px; }
+      .rr-warn i { color: #8a5a00; font-size: 15px; flex: none; }
+      .rr-warn p { margin: 0; font-size: 12.5px; line-height: 1.6; color: #5d4a26; }
+      .rr-check { display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; line-height: 1.55; cursor: pointer; }
+      .rr-check input { margin-top: 2px; flex: none; }
+      /* "I do not have this yet" — only on the Official Receipt row. Ticking it
+         lets the request be filed; it never lets the refund be paid. */
+      .rr-later { display: flex; gap: 7px; align-items: flex-start; margin-top: 7px; font-size: 11.5px; line-height: 1.45; color: var(--muted); cursor: pointer; }
+      .rr-later input { margin: 2px 0 0; flex: none; }
+      .rr-doc[data-optional="1"][data-pending="1"] { border-color: #e2d9c4; background: #fdfaf3; }
+      .rr-doc[data-optional="1"][data-pending="1"] > i { color: #8a5a00; }
+      /* the post-submit notice is information, not a warning — calmer than the
+         amber alert this used to be, because nothing is being taken away now. */
+      .rr-warn-calm { border-color: #cddbe8; background: #f4f8fc; }
+      .rr-warn-calm i { color: #2b4a7e; }
+      .rr-warn-calm p { color: #2f4257; }
+      .rr-error { margin: 0 0 16px; padding: 11px 13px; border-radius: 9px; background: #fcecec; color: #b23a3a; font-size: 12.5px; line-height: 1.5; display: none; }
+      .rr-error[open] { display: block; }
+
+      .rr-actions { display: flex; gap: 8px; justify-content: flex-end; padding: 15px 18px; border-top: 1px solid #f2efe9; }
+      .rr-btn { height: 38px; padding: 0 16px; border-radius: 9px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font: inherit; font-size: 13px; font-weight: 640; text-decoration: none; display: inline-flex; align-items: center; cursor: pointer; }
+      .rr-btn:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .rr-btn-primary { background: var(--black); border-color: var(--black); color: #fff; }
+      .rr-btn-primary:hover { background: #332f2f; border-color: #332f2f; }
+
+      /* summary aside */
+      .rr-aside { position: sticky; top: calc(var(--venusep-header-height) + 20px); }
+      .rr-kv { padding: 11px 0; border-bottom: 1px solid #f2efe9; }
+      .rr-kv:last-of-type { border-bottom: 0; }
+      .rr-kv span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6a64; margin-bottom: 3px; }
+      .rr-kv strong { font-size: 13.5px; font-weight: 640; }
+      .rr-total { margin-top: 6px; padding: 13px 14px; background: #faf9f7; border: 1px solid #f0ece4; border-radius: 10px; }
+      .rr-total span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6a64; margin-bottom: 3px; }
+      .rr-total b { font-size: 24px; font-weight: 760; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+      .rr-total small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+
+      /* refusal + confirmation */
+      .rr-panel { max-width: 620px; border: 1px solid var(--border); border-radius: 12px; padding: 30px 26px; text-align: center; }
+      .rr-panel i { font-size: 34px; }
+      .rr-panel h2 { margin: 12px 0 8px; font-size: 17px; font-weight: 680; }
+      .rr-panel p { margin: 0 auto 18px; max-width: 46ch; font-size: 13px; line-height: 1.65; color: var(--muted); }
+      .rr-panel-bad i { color: #b23a3a; }
+      .rr-panel-good i { color: #1c7a4f; }
+      .rr-panel-info i { color: #2b4a7e; }
+
+      @media (max-width: 900px) { .rr-grid { grid-template-columns: minmax(0, 1fr); } .rr-aside { position: static; } }
+      @media (max-width: 560px) { .rr-doc { flex-wrap: wrap; } .rr-file { max-width: none; width: 100%; } }
+    
+      /* on the crimson page background (painted by includes/header.php): light text, cards that float */
+      .rr-page > h1 { color: #fff; }
+      .rr-page > p { color: #e9d0cd; }
+      .rr-back { color: #f2d0cb; }
+      .rr-back:hover { color: #fff; }
+      .rr-card { box-shadow: 0 18px 44px rgba(10,4,5,.28), 0 2px 6px rgba(10,4,5,.18); border-color: rgba(255,255,255,.18); }
+    
+      /* primary button: crimson, not black */
+      .rr-btn-primary { background: #a11626; border-color: #a11626; color: #ffffff; }
+      .rr-btn-primary:hover { background: #7d0f1e; border-color: #7d0f1e; color: #ffffff; }
+          /* type floor (readability): nothing on the page below 12px */
+      .rr-label, .rr-hint, .rr-doc-txt small, .rr-file, .rr-later, .rr-kv span, .rr-total span, .rr-total small { font-size: 12px; }
+          /* ---- phone: white page, cards edge to edge — the details get the width.
+         (Desktop keeps the crimson gradient behind the white cards.) ---- */
+      @media (max-width: 767.98px) {
+        body { background: #fff !important; }
+        .app-main { background: #fff !important; }
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+        .rr-page > h1 { color: #1f1e1e; }
+        .rr-page > p { color: #6e6a64; }
+        .rr-back { color: #6e6a64; }
+        .rr-card { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+        .rr-back { color: #a11626; }
+      }

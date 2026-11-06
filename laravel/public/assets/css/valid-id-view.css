@@ -1,0 +1,49 @@
+/* Styles for resources/views/valid-id-view.blade.php. */
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: #f4f2ef; color: #1c1b19; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  /* top bar — the app's crimson-to-black */
+  .vi-bar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px; padding: 0 20px; height: 60px;
+            background: linear-gradient(100deg, #8a1222 0%, #3a0c14 52%, #120809 100%); color: #fff; box-shadow: 0 6px 20px rgba(10,4,5,.2); }
+  .vi-bar .vi-logo { height: 22px; display: block; filter: invert(1); }   /* white, as in the other top bars */
+  .vi-sep { width: 1px; height: 24px; background: rgba(255,255,255,.22); }
+  .vi-bar h1 { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .vi-bar h1 small { display: block; font-size: 12px; font-weight: 500; color: #f2d0cb; margin-top: 1px; }
+  .vi-bar .vi-grow { flex: 1; }
+  .vi-btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25);
+            background: rgba(255,255,255,.1); color: #fff; font: 600 13px Inter, system-ui, sans-serif; text-decoration: none; cursor: pointer; white-space: nowrap; }
+  .vi-btn:hover { background: rgba(255,255,255,.2); }
+  .vi-btn.vi-light { background: #fff; color: #1d1214; border-color: #fff; }
+  .vi-btn.vi-light:hover { background: #f2ece9; }
+  /* page */
+  .vi-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; padding: 18px 20px 28px; max-width: 1400px; margin: 0 auto; }
+  .vi-stage { position: relative; background: #1d1a19; border-radius: 16px; min-height: calc(100vh - 106px); overflow: auto; display: flex; align-items: center; justify-content: center; padding: 22px; }
+  .vi-stage img { display: block; max-width: 100%; max-height: calc(100vh - 150px); border-radius: 6px; box-shadow: 0 18px 50px rgba(0,0,0,.45); transition: transform .25s ease; cursor: zoom-in; background: #fff; }
+  .vi-stage.is-actual { align-items: flex-start; justify-content: flex-start; }
+  .vi-stage.is-actual img { max-width: none; max-height: none; cursor: zoom-out; }
+  .vi-stage iframe { width: 100%; height: calc(100vh - 150px); border: 0; border-radius: 8px; background: #fff; }
+  .vi-tools { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; z-index: 2; }
+  .vi-tool { width: 38px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); background: rgba(20,18,17,.7); color: #fff; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .vi-tool:hover { background: rgba(60,55,52,.85); }
+  .vi-missing { color: #d9d3cc; text-align: center; font-size: 14px; line-height: 1.6; max-width: 340px; }
+  .vi-missing i { display: block; font-size: 34px; margin-bottom: 10px; color: #6e6a64; }
+  /* side card */
+  .vi-card { background: #fff; border: 1px solid #ebe7e2; border-radius: 16px; padding: 18px; align-self: start; position: sticky; top: 78px; }
+  .vi-card h2 { margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #6e6a64; }
+  .vi-card h2 + .vi-row { border-top: 0; }
+  .vi-row { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0; border-top: 1px solid #f2efeb; font-size: 13px; }
+  .vi-row span:first-child { color: #6e6a64; flex: none; }
+  .vi-row span:last-child { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+  .vi-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 650; }
+  .vi-tag.ok { background: #e8f2ec; color: #1c7a4f; } .vi-tag.warn { background: #fdf3e6; color: #8a5a12; } .vi-tag.bad { background: #fcecec; color: #b23a3a; }
+  .vi-block + .vi-block { margin-top: 18px; padding-top: 16px; border-top: 1px solid #ebe7e2; }
+  .vi-note { margin: 14px 0 0; font-size: 12px; color: #6e6a64; line-height: 1.55; }
+  @media (max-width: 860px) {
+    .vi-main { grid-template-columns: 1fr; padding: 12px 12px 22px; }
+    .vi-stage { min-height: 60vh; }
+    .vi-stage img { max-height: 70vh; }
+    .vi-card { position: static; }
+    .vi-bar { padding: 0 12px; gap: 10px; }
+    .vi-bar .vi-logo, .vi-sep, .vi-hide-sm { display: none; }
+  }

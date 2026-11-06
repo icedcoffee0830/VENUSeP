@@ -50,7 +50,7 @@ class CounterCustomerController
     /* These JSON routes have no `staff` middleware, so nothing else re-reads the
        account: the SESSION says staff, the DATABASE decides. staff_session_heal()
        ends a suspended (or 2FA-reset) account's session by throwing its redirect;
-       here that is a "no". Also used by CustomerController::save(). */
+       here that is a "no". Also used by CustomerManagementController::save(). */
     public static function staffStillActive(): bool
     {
         try {

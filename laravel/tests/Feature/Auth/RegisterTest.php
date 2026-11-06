@@ -37,7 +37,8 @@ class RegisterTest extends TestCase
         $this->withSession(['_token' => self::TOKEN])->get(route('customer.customer-register'))->assertOk()
             ->assertSee('Create your account')
             ->assertSee(json_encode(route('root.register-submit')), false)
-            ->assertSee('const CSRF = "' . self::TOKEN . '"', false)
+            ->assertSee('csrf: "' . self::TOKEN . '"', false)
+            ->assertSee('const CSRF = customerRegisterPage.csrf;', false)
             ->assertSee('data-redirect="' . route('customer.customer-login') . '"', false)
             ->assertDontSee('Sign up with Google');
     }

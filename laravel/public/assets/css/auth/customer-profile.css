@@ -1,0 +1,125 @@
+/* Styles for resources/views/auth/customer-profile.blade.php. */
+
+      :root { --danger: #b23a3a; --ok: #1c7a4f; }
+
+      .profile-container { padding: 22px 0 0; } /* 26px effective top, matches other pages */
+      .profile-page-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+      .profile-page-header p { color: var(--muted); font-size: 13px; margin: 4px 0 20px; }
+
+      .profile-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+
+      /* summary card */
+      .profile-summary { background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04); padding: 24px 20px; text-align: center; }
+      .profile-summary .profile-avatar { width: 84px; height: 84px; margin: 0 auto 14px; border-radius: 50%; background: var(--black); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 800; }
+      .profile-summary h2 { font-size: 1.1rem; font-weight: 800; margin: 0; }
+      .profile-role { color: var(--muted); font-size: .85rem; margin: 2px 0 10px; }
+      .profile-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; background: #eaf6ef; color: var(--ok); font-size: 11px; font-weight: 600; }
+      .profile-meta { text-align: left; margin: 18px 0 16px; padding: 16px 0 0; border-top: 1px solid #f0efec; display: grid; gap: 12px; }
+      .profile-meta div { display: grid; gap: 2px; }
+      .profile-meta dt { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+      .profile-meta dd { margin: 0; font-size: .86rem; word-break: break-word; }
+
+      /* right column sections */
+      .profile-details { display: grid; gap: 16px; }
+      .profile-section { background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04); padding: 20px 22px; }
+      .profile-section-header h2 { font-size: 1rem; font-weight: 700; margin: 0; }
+      .profile-section-header p { color: var(--muted); font-size: .82rem; margin: 3px 0 16px; }
+
+      .profile-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+      .profile-form-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .profile-form-group.full-width { grid-column: 1 / -1; }
+      .profile-form-group label { font-size: .8rem; font-weight: 700; }
+
+      .form-control { width: 100%; min-height: 42px; padding: 10px 13px; border: 1px solid #d7d7d7; border-radius: 10px; font: inherit; font-size: .9rem; background: #fff; color: var(--black); }
+      .form-control:focus { outline: none; border-color: var(--black); box-shadow: 0 0 0 3px rgba(31,30,30,.08); }
+      .profile-form-group.is-invalid .form-control,
+      .profile-form-group.is-invalid .input-group { border-color: var(--danger); }
+
+      /* password field with icon + toggle */
+      .input-group { display: flex; align-items: center; border: 1px solid #d7d7d7; border-radius: 10px; background: #fff; overflow: hidden; }
+      .input-group:focus-within { border-color: var(--black); box-shadow: 0 0 0 3px rgba(31,30,30,.08); }
+      .input-group-text { display: inline-flex; align-items: center; justify-content: center; width: 40px; align-self: stretch; color: var(--muted); }
+      .input-group .form-control { border: 0; border-radius: 0; box-shadow: none; }
+      .profile-password-toggle { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 12px; align-self: stretch; }
+
+      .profile-validation { min-height: 1em; color: var(--danger); font-size: .72rem; }
+      .profile-success { display: block; margin-top: 10px; color: var(--ok); font-size: .82rem; font-weight: 600; }
+
+      .profile-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+      .btn-profile { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 10px 18px; border-radius: 10px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font: inherit; font-size: .84rem; font-weight: 700; cursor: pointer; text-decoration: none; transition: .18s; }
+      .btn-profile:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .btn-profile-primary { background: var(--black); border-color: var(--black); color: #fff; }
+      .btn-profile-primary:hover { background: #000; border-color: #000; }
+      .btn-profile-danger { color: var(--danger); border-color: #e4b1b1; }
+      .btn-profile[disabled] { opacity: .5; cursor: not-allowed; }
+
+      .form-check-input { width: 16px; height: 16px; accent-color: var(--black); flex: none; }
+
+      .account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+      .account-faq { display: none; }   /* phones: the tab bar has no FAQ tab, so it is here (desktop has it in the header) */
+      @media (max-width: 767.98px) { .account-faq { display: inline-flex; } .account-actions .btn-profile { min-height: 44px; } }
+
+      /* ways of signing in (#23): password + Google, then the controls for each */
+      .signin-notice { margin: 0 0 14px; padding: 10px 13px; border-radius: 10px; background: #fcf6f4; border: 1px solid #efe0db; color: #4a4440; font-size: .84rem; line-height: 1.5; }
+      .signin-methods { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+      .signin-methods li { display: flex; align-items: center; gap: 10px; font-size: .88rem; }
+      .signin-methods li > svg, .signin-methods li > .bi { width: 16px; height: 16px; flex: none; color: var(--muted); }
+      .signin-methods .signin-name { flex: 1; font-weight: 600; }
+      .signin-state { font-size: .76rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #f1efeb; color: var(--muted); }
+      .signin-state.is-on { background: #e7f4ec; color: #1c7a4f; }
+      .signin-note { color: var(--muted); font-size: .84rem; margin: 0 0 4px; line-height: 1.5; }
+      .signin-google { margin-top: 20px; padding-top: 18px; border-top: 1px solid #efebe6; }
+      .signin-google h3 { font-size: .9rem; font-weight: 700; margin: 0 0 4px; }
+      .btn-profile svg { width: 16px; height: 16px; flex: none; }
+      .google-confirm { margin-top: 12px; max-width: 420px; }
+      .google-confirm[hidden], .btn-profile[hidden] { display: none; }   /* .btn-profile's inline-flex would otherwise win over [hidden] */
+
+      @media (max-width: 960px) {
+        .profile-layout { grid-template-columns: 1fr; }
+        .profile-form-grid { grid-template-columns: 1fr; }
+      }
+    
+      /* ==================================================================
+         LIGHT GLASS. The page behind the cards is the crimson gradient
+         (painted by includes/header.php). Cards are near-white but not
+         solid: they blur what is behind them, so a hint of the crimson
+         bleeds through and the edge glows — while the content inside stays
+         dark-on-light, the readable choice for long forms and tables.
+         Only colours change here — no layout, no markup.
+         ================================================================== */
+      .profile-page-header h1 { color: #fff; }
+      .profile-page-header p { color: #e9d0cd; }
+
+      .profile-summary, .profile-section {
+        background: rgba(255,255,255,.90);
+        -webkit-backdrop-filter: blur(18px) saturate(1.15); backdrop-filter: blur(18px) saturate(1.15);
+        border: 1px solid rgba(255,255,255,.6);
+        box-shadow: 0 18px 44px rgba(10,4,5,.30), inset 0 1px 0 rgba(255,255,255,.9);
+      }
+      .profile-meta { border-top-color: rgba(31,30,30,.1); }
+
+      /* fields: white on the tinted card, crimson focus */
+      .form-control, .input-group { background: #fff; border-color: #dccfcc; }
+      .form-control:focus, .input-group:focus-within { border-color: #a11626; box-shadow: 0 0 0 3px rgba(161,22,38,.14); }
+      .form-check-input { accent-color: #a11626; }
+
+      /* avatar + primary buttons: crimson */
+      .profile-summary .profile-avatar { background: #a11626; color: #fff; box-shadow: 0 8px 20px rgba(138,18,34,.3); }
+      .btn-profile { background: rgba(255,255,255,.7); }
+      .btn-profile:hover { background: #fff; border-color: #c9b9b6; }
+      .btn-profile.btn-profile-primary { background: #a11626; border-color: #a11626; color: #fff; }
+      .btn-profile.btn-profile-primary:hover { background: #7d0f1e; border-color: #7d0f1e; }
+          /* type floor (readability): nothing on the page below 12px */
+      .profile-meta dt { font-size: 12px; }
+          /* ---- white page (desktop + phone): the cards sit on white, no crimson wash ---- */
+      body { background: #fff !important; }
+      .app-main { background: #fff !important; }
+      .profile-page-header h1 { color: #1f1e1e; }
+      .profile-page-header p { color: #6e6a64; }
+      .profile-summary, .profile-section { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      .profile-summary, .profile-section { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+      /* phone: cards edge to edge — the details get the width */
+      @media (max-width: 767.98px) {
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+      }

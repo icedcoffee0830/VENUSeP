@@ -20,8 +20,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" crossorigin="anonymous" />
-    <link rel="stylesheet" href="{{ asset('assets/css/two-factor.css') }}" />
-    <link rel="stylesheet" href="{{ asset('assets/css/customer-auth.css') }}" />   <!-- the auth page look, shared with forgot/reset password -->
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/two-factor.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/customer-auth.css') }}" />   <!-- the auth page look, shared with forgot/reset password -->
   </head>
   <body class="customer-login-page">
     <main class="auth-split">
@@ -119,100 +119,22 @@
       </section>
     </main>
     @if ($tfaView !== 'password')
-    <script src="{{ asset('assets/js/two-factor.js') }}"></script>
+    <script src="{{ asset_stamped('assets/js/two-factor.js') }}"></script>
     @endif
     @if ($accountDisabled)
     {{-- Bug 2: the site's own alert modal; the notice in the card stays after it is closed --}}
-    <link rel="stylesheet" href="{{ asset('assets/css/confirm-modal.css') }}" />
-    <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
-    <script>
-      venusepAlert('This account has been disabled, so it can’t sign in. If you think this is a mistake, contact the venue office.', { title: 'Account disabled' });
-    </script>
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/confirm-modal.css') }}" />
+    <script src="{{ asset_stamped('assets/js/confirm-modal.js') }}"></script>
+<script src="{{ asset_stamped('assets/js/auth/customer-login-disabled.js') }}"></script>
     @endif
 
     <!-- Client-side validation; authentication is performed server-side by PHP. -->
     <script>
-      document.addEventListener('DOMContentLoaded', function () {
-        const setMessage = function (id, message) {
-          const el = document.getElementById(id);
-          if (el) el.textContent = message;
-        };
-
-        const setFieldState = function (field, messageId, message) {
-          if (!field) return;
-          let target = field;
-          if (field.type !== 'checkbox') target = field.closest('.input-group');
-          if (target) target.classList.toggle('is-invalid', Boolean(message));
-          field.setAttribute('aria-invalid', message ? 'true' : 'false');
-          setMessage(messageId, message);
-        };
-
-        document.querySelectorAll('[data-password-toggle]').forEach(function (toggle) {
-          toggle.addEventListener('click', function () {
-            const input = document.getElementById(toggle.dataset.passwordToggle);
-            if (!input) return;
-
-            const show = input.type === 'password';
-            input.type = show ? 'text' : 'password';
-            toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-            toggle.setAttribute('aria-pressed', show ? 'true' : 'false');
-
-            const icon = toggle.querySelector('i');
-            if (icon) {
-              icon.classList.toggle('bi-eye', !show);
-              icon.classList.toggle('bi-eye-slash', show);
-            }
-          });
-        });
-
-        /* "Remember me" applies to Google sign-in too: the box sits in the password
-           form, so carry its state onto the Google link when it is clicked. */
-        const googleSignIn = document.getElementById('googleSignIn');
-        const rememberBox = document.getElementById('rememberCustomer');
-        if (googleSignIn && rememberBox) {
-          googleSignIn.addEventListener('click', function () {
-            googleSignIn.href = @json(route('customer.google-start')) + (rememberBox.checked ? '?remember=1' : '');
-          });
-        }
-
-        const form = document.getElementById('customerLoginForm');
-        if (!form) return;
-
-        form.querySelectorAll('input').forEach(function (field) {
-          field.addEventListener(field.type === 'checkbox' ? 'change' : 'input', function () {
-            const messageId = field.name === 'email'
-              ? 'emailValidation'
-              : field.name === 'password'
-                ? 'passwordValidation'
-                : null;
-
-            if (messageId) setFieldState(field, messageId, '');
-          });
-        });
-
-        form.addEventListener('submit', function (event) {
-          const email = form.querySelector('[name="email"]');
-          const password = form.querySelector('[name="password"]');
-          let hasError = false;
-
-          const passwordError = password.value ? '' : 'Please enter your password.';
-          setFieldState(password, 'passwordValidation', passwordError);
-          hasError = hasError || Boolean(passwordError);
-
-          const emailError = email.value.trim() && email.checkValidity()
-            ? ''
-            : 'Please enter a valid email address.';
-          setFieldState(email, 'emailValidation', emailError);
-          hasError = hasError || Boolean(emailError);
-
-          if (hasError) {
-            event.preventDefault();
-            const firstInvalid = form.querySelector('[aria-invalid="true"]');
-            if (firstInvalid) firstInvalid.focus();
-          }
-          // If valid, allow the browser to POST to this PHP page.
-        });
-      });
-    </script>
+  /* Values from PHP for assets/js/auth/customer-login.js */
+  var customerLoginPage = {
+    googleStartUrl: @json(route('customer.google-start')),
+  };
+</script>
+    <script src="{{ asset_stamped('assets/js/auth/customer-login.js') }}"></script>
   </body>
 </html>

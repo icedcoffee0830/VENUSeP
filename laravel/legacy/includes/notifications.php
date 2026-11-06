@@ -1,4 +1,5 @@
 <?php
+/* Holds: writing and reading in-app notifications. */
 /* =====================================================================
    IN-APP NOTIFICATIONS (decided 2026-10-28, migration 12, DB-DECISIONS #27)
 
@@ -7,7 +8,7 @@
      - trg_booking_timeline_notify   every booking status change
      - notify_new_request()          a new online request (booking-submit)
      - notify_account_event()        staff/admin account events
-   and READ by the bell (includes/notification-bell.php) through
+   and READ by the bell (notification-bell.php) through
    notifications.php. The words are made HERE, from kind + booking, when the
    bell is shown — nothing stored is phrasing, so it can change freely.
 

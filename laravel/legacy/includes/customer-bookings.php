@@ -1,13 +1,14 @@
 <?php
+/* Holds: the signed-in customer's contact details and own bookings ($customerContact, $customerBookings). */
 /* =====================================================================
    CUSTOMER BOOKINGS — the logged-in customer's own bookings and contact
-   details. A thin wrapper over includes/bookings.php, which is the one
+   details. A thin wrapper over bookings.php, which is the one
    read path both portals share.
 
    Included by:
-     customer/booking-history.php     (the history table)
-     customer/refund-request.php      (the refund form looks a booking up)
-     customer/venusep_venue_booking.php, faq.php, the booking pages
+     BookingHistoryController     (the history table)
+     RefundRequestController      (the refund form looks a booking up)
+     VenuesController, faq.php, the booking pages
                                       ($customerContact — who is signed in)
 
    WHY IT IS STILL ITS OWN FILE: several pages want "the person using this

@@ -106,12 +106,12 @@ class StaffController
             $smVenues = [];
         }
 
-        return live_view('admin.staff-management', ['smRows' => $smRows, 'smVenues' => $smVenues, 'smCover' => StaffCoverController::pageData()]);
+        return live_view('admin.staff', ['smRows' => $smRows, 'smVenues' => $smVenues, 'smCover' => StaffCoverController::pageData()]);
     }
 
     public function register()
     {
-        extract(legacy('venues'));   // $venuesById: only the offices this admin handles
+        $venuesById = legacy('venues')['venuesById'];   // set in venues.php: only the offices this admin handles
 
         return view('admin.admin-register', ['venuesById' => $venuesById, 'canCreateAdmin' => admin_is_super()]);
     }

@@ -1,17 +1,18 @@
 <?php
+/* Holds: Sign in with Google for customers. */
 /* =====================================================================
    SIGN IN WITH GOOGLE — customers only (DB-DECISIONS #23).
 
    THE FLOW
-     customer/google-start.php     makes a one-time state, nonce and PKCE
+     GoogleController::start     makes a one-time state, nonce and PKCE
                                    verifier, keeps them in the session, and
                                    sends the browser to Google.
-     customer/google-callback.php  Google sends the browser back with a
+     GoogleController::callback  Google sends the browser back with a
                                    one-time code. We swap it for the
                                    person's identity, server to server, then
                                    decide what that identity may do
                                    (google_resolve()).
-     customer/customer-login.php   finishes: the normal session, the
+     CustomerLoginController   finishes: the normal session, the
                                    two-step code if they turned it on, or the
                                    one-time "finish your account" screen for a
                                    brand-new customer.
@@ -224,7 +225,7 @@ function google_exchange_code(string $code, string $verifier, array $cfg): array
 }
 
 /* Null when the claims are acceptable, otherwise the reason (for the log only).
-   Pure, so tests/google_auth_test.php can try every way it should refuse. */
+   Pure, so tests/Feature/Auth/GoogleSignInTest.php can try every way it should refuse. */
 function google_check_claims(array $c, string $clientId, string $nonce, int $now): ?string
 {
     if (!in_array($c['iss'] ?? null, GOOGLE_ISSUERS, true)) {

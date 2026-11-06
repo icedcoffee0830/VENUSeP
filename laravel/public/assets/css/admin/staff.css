@@ -1,0 +1,14 @@
+/* Styles for resources/views/admin/staff.blade.php. */
+.sm-halls-names { flex: 1 1 0; color: #6e6a64; font-size: 12.5px; }
+.sm-halls-count { flex: none; border-radius: 999px; }
+@media (max-width: 767.98px) {
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="role"] { grid-column: 2; grid-row: 1; justify-self: end; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="venueId"] { grid-column: 1; grid-row: 2; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="status"] { grid-column: 2; grid-row: 2; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="hallNames"] { order: 5; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="actions"] { order: 6; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="venueId"]::before { content: "Office"; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="hallNames"]::before { content: "Halls"; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="status"]::before { content: "Status"; }
+  .sm-halls-count { flex: none; min-height: 44px; }
+}

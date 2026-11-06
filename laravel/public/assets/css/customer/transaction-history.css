@@ -1,0 +1,70 @@
+/* Styles for resources/views/customer/transaction-history.blade.php. */
+      body, .app-main { background: #fff !important; }
+      .th-page { padding: 26px 0 40px; color: #1f1e1e; }
+      .th-head-acts { display: flex; gap: 8px; flex: none; }
+      .th-tool { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 15px; border: 1px solid #ddd7ce; border-radius: 10px; background: #fff; color: #1f1e1e; font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
+      .th-tool:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .th-panel { background: #fff; border: 1px solid #e5e5e5; border-radius: 14px; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); overflow: hidden; }
+
+      .th-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .th-act { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: #1f1e1e; font: inherit; font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer; }
+      .th-act:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .th-act.is-receipt { border-color: rgba(161, 22, 38, .35); color: #a11626; }
+      .th-act.is-disabled { opacity: .5; cursor: not-allowed; }
+      .th-chips { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+      .th-chips .vz-chip { white-space: normal; }
+      .th-amount { width: 100%; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+      .th-amount .lp-sub { font-weight: 400; }
+      .th-card { display: none; }
+
+      /* the filters: a row of boxes on a desktop, a bottom sheet on a phone (one set of controls) */
+      .th-sheet-head, .th-sheet-dl { display: none; }
+      .th-link { padding: 0; border: 0; background: none; color: #a11626; font: inherit; font-weight: 600; cursor: pointer; }
+      @media (min-width: 768px) {
+        .th-sheet, .th-sheet-foot, .th-two { display: contents; }
+        #thShow { display: none; }
+        .th-sheet .lp-field { flex: 0 1 112px; }
+        .th-two .lp-field { flex-basis: 124px; }
+        #reset-transaction-filters { padding: 0 11px; }
+        .lp-tools .lp-search { flex: 1 1 150px; }
+      }
+      @media (max-width: 767.98px) {
+        .container-fluid { padding-inline: 12px; }
+        .th-page { padding-top: 16px; }
+        .th-head-acts { display: none; }
+        .th-panel { border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
+        .lp-tools { flex-wrap: nowrap; padding: 0 0 10px; border-bottom: 0; }
+        .lp-table .tabulator-footer { padding: 0 0 10px; border: 0; }
+        .lp-table .tabulator-footer.tabulator-footer { border-bottom: 0; }
+        .lp-table .tabulator-footer .vz-ps { display: none; }
+        .th-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: #a11626; color: #fff; font-size: 12px; }
+        .th-count[hidden] { display: none; }
+
+        .th-sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: none; max-height: 88vh; margin: 0; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); overflow: auto; overscroll-behavior: contain; border: 0; border-radius: 18px 18px 0 0; background: #fff; color: #1f1e1e; }
+        .th-sheet::backdrop { background: rgba(10, 4, 5, .45); }
+        .th-sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .th-sheet-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+        .th-sheet-head button { width: 44px; height: 44px; border: 0; background: none; color: #6e6a64; font-size: 20px; cursor: pointer; }
+        .th-sheet .lp-field { display: flex; flex: none; margin-bottom: 14px; }
+        .th-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .th-sheet-foot { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 4px; }
+        .th-sheet-foot .th-tool { justify-content: center; height: 48px; font-size: 15px; }
+        #thShow { border-color: #a11626; background: #a11626; color: #fff; }
+        .th-sheet-dl { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; padding-top: 4px; border-top: 1px solid #f0efec; color: #6e6a64; font-size: 13.5px; }
+        .th-sheet-dl .th-link { min-height: 44px; }
+
+        /* one card per payment, like My bookings */
+        #transaction-history-table .tabulator-row { display: block; margin-bottom: 10px; padding: 0; border: 0; }
+        #transaction-history-table .tabulator-row .tabulator-cell { display: none; }
+        .th-card { display: block; padding: 14px; border: 1px solid #e5e5e5; border-radius: 14px; background: #fff; }
+        .th-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .th-card-top .vz-chip { flex: none; }
+        .th-ven { min-width: 0; color: #1f1e1e; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+        .th-ref { margin-top: 2px; color: #6e6a64; font-size: 12.5px; }
+        .th-money { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 10px; }
+        .th-money b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .th-money span { color: #6e6a64; font-size: 13px; text-align: right; }
+        .th-bk { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: #6e6a64; font-size: 13px; }
+        .th-card .th-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+        .th-card .th-act { height: 44px; padding: 0 6px; font-size: 13.5px; }
+      }

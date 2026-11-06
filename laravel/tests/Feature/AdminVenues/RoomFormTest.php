@@ -22,7 +22,8 @@ class RoomFormTest extends VenuesTestCase
             ->assertSee('pannellum.js', false)
             ->assertSee('admin\\/room-save', false)
             ->assertSee('admin\\/room-photos-api', false)
-            ->assertSee('var AMENITY_POOL = [{"group":"Audio-visual"', false)
+            ->assertSee('rfPool: [{"group":"Audio-visual"', false)
+            ->assertSee('var AMENITY_POOL = roomFormPage.rfPool;', false)
             ->assertDontSee('"group":"Hostel"', false);
     }
 

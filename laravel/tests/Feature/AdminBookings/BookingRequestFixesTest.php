@@ -84,7 +84,8 @@ class BookingRequestFixesTest extends TestCase
         $this->get(route('admin.booking-requests'))->assertOk()
             ->assertSee('"id":"' . $hostelRef . '"', false)->assertSee('"pay":"paid_cash","payLabel":"Paid at the front desk"', false)
             ->assertSee("r.pay === 'paid_cash' ? esc(r.payLabel)", false);
-        $this->page($hostelRef)->assertSee("cur.pay === 'paid_cash') return \"Paid at the front desk\";", false);
+        $this->page($hostelRef)->assertSee('hostelPaidCashLabel: "Paid at the front desk"', false)
+            ->assertSee("cur.pay === 'paid_cash') return bookingRequestPage.hostelPaidCashLabel;", false);
     }
 
     /* Bug 9: a paid stay could be checked in days before its check-in date. */

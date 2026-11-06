@@ -1,0 +1,7 @@
+/* Styles for resources/views/auth/customer-register.blade.php. */
+
+      /* register only: on a phone the long form scrolls the page and starts at the top */
+      @media (max-width: 860px) {
+        html, body { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .auth-panel { justify-content: flex-start; padding: 16px 20px max(48px, env(safe-area-inset-bottom)); }
+      }

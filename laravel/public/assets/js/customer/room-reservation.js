@@ -1,0 +1,1646 @@
+/* Script for resources/views/customer/room-reservation.blade.php. */
+/* ============================================================
+   USeP Room Reservation — customer booking UI
+   Plain HTML + vanilla JS (static front-end mockup).
+   Supports MULTI-DAY reservations (start date → end date).
+   ============================================================ */
+
+/* ---------- data ---------- */
+/* "Now" is the real clock at page load (matches the live PHP app). The 12-hour
+   advance rule and the earliest selectable date are both measured from here. */
+const NOW = new Date();
+const TODAY = isoOf(NOW);
+
+/* Each office's own lead time (Office Settings), online and at the counter. */
+function leadMsFor(room){ return (room && room.office ? room.office.lead : 12) * 3600000; }
+function leadHours(){ return Math.round(leadMsFor(getRoom()) / 3600000); }
+
+/* [SIM] Sample equirectangular panorama (swap for real per-room images later). */
+const SAMPLE_PANO = 'https://pannellum.org/images/alma.jpg';
+
+/* [SIM] Business GCash account the receipt must be sent to. Mirrors the checker's
+   admin "Payment Settings" (kept identical to C:\xamp5\htdocs\gcash-checker
+   settings.json so the same sample receipts verify here). In the real app this
+   comes from the admin Payment Settings / database, not a hard-coded constant. */
+/* the GCash accounts now come from includes/payment-settings.php as
+   GCASH_ACCOUNTS (see the include block above); gcAccount() picks the right one
+   for the booked room's venue, and both the checker and the payment screen use
+   it — one source, so they cannot disagree. */
+
+/* [SIM] Where walk-in / cash payments are made. PLACEHOLDER — the real payment
+   location hasn't been decided yet; swap these strings when it is. */
+const CASH_PAY = {
+  office:'USeP Cashier — Venue Reservations Window',
+  address:'Ground Floor, Administration Building, USeP Obrero Campus, Davao City',
+  hours:'Mon–Fri · 8:00 AM – 5:00 PM',
+};
+
+
+
+/* ROOMS is defined at the top of the page from includes/venue-rooms.php — the ONE
+   shared source, so the booking page, the landing page and admin Venue Management
+   cannot disagree about what exists. Rooms have NO `status` field:
+   "Available"/"Occupied" were only ever `booked[]` wearing a word; closures live
+   in `maintenance`. The real app SELECTs these from the database. */
+
+/* ---------- state ---------- */
+/* entry: the landing page (venusep_venue_booking.php) links here as
+   room-reservation.php?room=r1 … r8. An unknown or missing room id sends
+   the visitor back to the landing page. */
+const ROOM_PARAM = new URLSearchParams(location.search).get('room');
+const ROOM_OK = ROOMS.some(r=>r.id===ROOM_PARAM);
+if(!ROOM_OK) location.replace(roomReservationPage.venuesUrl);
+
+/* booker0 — who a COUNTER booking is for — lives in includes/counter-booker.php */
+
+let state = {
+  screen: 'detail',                                                   // detail | who | review | pending | payment | done
+  booker: Object.assign({}, booker0),
+  roomId: ROOM_OK ? ROOM_PARAM : ROOMS[0].id,   // fallback only renders while the redirect above happens
+  tab: 'overview',                                                    // overview | details | availability | policies
+  // start/end are the default hours (used for single-day and as the seed for new
+  // days); times{} holds per-day overrides for multi-day bookings, keyed by date.
+  booking: { eventName:'', date:'', dateEnd:'', start:'', end:'', attendees:'', times:{} },
+  payMethod: 'gcash',                                                // 'gcash' | 'cash' (walk-in, pay at the venue office)
+  affiliated: isUsepAccount(ACCOUNT.email) ? true : null,           // USeP-affiliated CLAIM. Pre-selected for a USeP account (a preview — the ID decides); null = not chosen yet
+  idFile: null,                                                      // uploaded valid ID: null | {name, url} — required to submit
+  approved: false,                                                   // staff approved the ID + reservation (pre-pay: payment unlocked)
+  eventOver: false,                                                  // post-pay only: the event has ended, so payment is open
+  agreeExact: false,                                                 // EXACT-amount disclaimer ticked?
+  agreeNoRefund: false,                                              // "non-refundable" ticked? (required only while refunds are OFF)
+  ocr: null,                                                         // receipt check: null | {phase:'reading'|'done', pct, pass, fileName, thumb, rec}
+  reference: 'USEP-' + Math.floor(100000 + Math.random()*900000),
+  cal: null,                                                         // open date picker: null | {field:'date'|'dateEnd', month:'YYYY-MM'}
+  timeDd: null,                                                      // open time dropdown: null | field id
+  modal: null,                                                       // null | 'lead' (12-h rule) | {type:'clash', day, soft}
+  warnedClash: null,                                                 // last clash already shown as a modal (don't re-nag)
+};
+
+/* ---------- helpers ---------- */
+/* "1,500" for whole pesos, "1,500.50" with centavos — never "1,500.5" (= usep_peso() in pricing.php) */
+function peso(n){ const v=Math.round(Number(n)*100)/100; return '₱' + v.toLocaleString('en-PH', v%1 ? {minimumFractionDigits:2, maximumFractionDigits:2} : {maximumFractionDigits:0}); }
+function toMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; }
+function fmtTime(t){ if(!t) return ''; let [h,m]=t.split(':').map(Number); const ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+String(m).padStart(2,'0')+' '+ap; }
+function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
+function dayCount(d1,d2){ if(!d1) return 0; if(!d2||d2===d1) return 1; const a=new Date(d1+'T00:00:00'), b=new Date(d2+'T00:00:00'); const n=Math.round((b-a)/86400000)+1; return n>0?n:0; }
+function fmtRange(d1,d2){ if(!d1) return '—'; if(!d2||d2===d1) return fmtDate(d1); const a=new Date(d1+'T00:00:00'), b=new Date(d2+'T00:00:00'); return a.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' – '+b.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function getRoom(){ return ROOMS.find(r=>r.id===state.roomId) || null; }
+function initials(name){ return name.split(' ').map(w=>w[0]).slice(0,2).join(''); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function svgUsers(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`; }
+function svgCalendar(s){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#6e6a64"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; }
+function svgClock(s){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#6e6a64"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`; }
+function svgCaret(s){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#a5a19a;margin-left:auto"><polyline points="6 9 12 15 18 9"/></svg>`; }
+
+/* line icons for amenities, matched by keyword to our event-venue scope */
+const AMENITY_ICONS = (function(){
+  const w='width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+  const S=(inner)=>`<svg ${w}>${inner}</svg>`;
+  return {
+    monitor:S('<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>'),
+    speaker:S('<rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><line x1="12" y1="6" x2="12.01" y2="6"/>'),
+    mic:S('<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>'),
+    wifi:S('<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>'),
+    wind:S('<path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M12.59 19.41A2 2 0 1 0 14 16H2"/><path d="M17.73 7.73A2.5 2.5 0 1 1 19.5 12H2"/>'),
+    chair:S('<path d="M5 19h14"/><path d="M6 19v2"/><path d="M18 19v2"/><path d="M6 15V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v9"/><path d="M6 12h12"/>'),
+    table:S('<rect x="3" y="7" width="18" height="4" rx="1"/><line x1="6" y1="11" x2="6" y2="18"/><line x1="18" y1="11" x2="18" y2="18"/>'),
+    stage:S('<rect x="3" y="4" width="18" height="11" rx="1"/><line x1="12" y1="15" x2="12" y2="19"/><line x1="8" y1="19" x2="16" y2="19"/>'),
+    bulb:S('<path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/>'),
+    power:S('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
+    board:S('<rect x="3" y="3" width="18" height="14" rx="1"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="7" y1="21" x2="17" y2="21"/>'),
+    coffee:S('<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>'),
+    camera:S('<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>'),
+    door:S('<path d="M3 21h18"/><path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17"/><circle cx="15" cy="12" r="1"/>'),
+    check:S('<polyline points="20 6 9 17 4 12"/>'),
+  };
+})();
+function amenityIcon(label){
+  const t=String(label).toLowerCase();
+  const has=(...ks)=>ks.some(k=>t.includes(k));
+  let k='check';
+  if(has('projector','screen',' tv','tv ','tv/','hdmi','led','backdrop','wall-mounted')) k='monitor';
+  else if(has('sound','pa system','surround','speaker','audio')) k='speaker';
+  else if(has('mic','microphone')) k='mic';
+  else if(has('wi-fi','wifi','internet')) k='wifi';
+  else if(has('air-condition','air condition','aircon','conditioned','open-air','outdoor')) k='wind';
+  else if(has('light')) k='bulb';
+  else if(has('stage','podium','riser','modular')) k='stage';
+  else if(has('chair','seating','seat','bleacher','theater','layout','u-shape')) k='chair';
+  else if(has('table')) k='table';
+  else if(has('power','outlet','catering')) k='power';
+  else if(has('whiteboard','board')) k='board';
+  else if(has('coffee','pantry','restaurant','food','snack')) k='coffee';
+  else if(has('camera','video')) k='camera';
+  else if(has('gate','entry','entrance','load-in','access','backstage','room')) k='door';
+  return AMENITY_ICONS[k];
+}
+function isoOf(dt){ return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
+
+/* every ISO date in the inclusive range [d1, d2] */
+function rangeDates(d1,d2){
+  if(!d1) return [];
+  const end = d2 || d1;
+  if(end < d1) return [];
+  const out=[]; let cur=new Date(d1+'T00:00:00'); const last=new Date(end+'T00:00:00');
+  while(cur<=last && out.length<183){ out.push(isoOf(cur)); cur.setDate(cur.getDate()+1); }
+  return out;
+}
+
+/* the hours for one day: a per-day override if set, else the default start/end */
+function dayTime(dateStr){
+  const t=state.booking.times[dateStr];
+  return { start:(t&&t.start!=null?t.start:state.booking.start)||'', end:(t&&t.end!=null?t.end:state.booking.end)||'' };
+}
+
+/* ---------- maintenance ----------
+   A room carries at most ONE window (or null):
+       { from:'ISO', until:'ISO'|null, reason:'…', blocks:true|false }
+   `until:null` = INDEFINITE. That means no END date — not "no date": staff still
+   set a review date so the room can't be closed and forgotten (admin side).
+   `blocks:true`  = HARD   — the room cannot be booked on those dates.
+   `blocks:false` = MEDIUM — still fully bookable; the window is a DISCLOSURE and
+                    must NEVER reach isDayBlocked(). Two tiers, one shape.
+   ISO dates compare as strings, same as everywhere else in this file. */
+function maintCovers(m,ds){ return !!m && ds>=m.from && (m.until==null || ds<=m.until); }  // covers THIS date? → the gate
+function maintLive(m){ return !!m && (m.until==null || m.until>=TODAY); }                  // still relevant at all? → the chip
+function maintUntilLabel(m){ return m.until ? 'Until '+fmtDate(m.until) : 'No set return date'; }
+
+/* A day is BLOCKED when nothing at all can be booked on it: HARD maintenance.
+   Returns null when the day is open, otherwise the REASON — so the status card
+   and the modal read the answer instead of each re-deriving it.
+   An existing booking does NOT block the day any more (2026-10-27): other
+   hours stay bookable as long as they keep the cleanup gap — see clashesOn(). */
+function dayBlock(ds){
+  const r=getRoom(); if(!r) return null;
+  const closedWhy=officeClosure(r,ds);
+  if(closedWhy) return { why:'maintenance', m:{ reason:closedWhy, blocks:true } };
+  if(maintCovers(r.maintenance,ds) && r.maintenance.blocks) return { why:'maintenance', m:r.maintenance };
+  return null;
+}
+function isDayBlocked(ds){ return !!dayBlock(ds); }
+
+/* ---------- same day, different time ----------
+   The bookings already on a date, and which of them a chosen start–end would
+   come too close to. Too close = within VENUE_GAP_MIN minutes, before or after
+   — the same test sp_add_venue_slot() runs, so what this page accepts the
+   database accepts. */
+const DAY_OPEN = toMin(PAGE_OFFICE ? PAGE_OFFICE.opens : '07:00'), DAY_CLOSE = toMin(PAGE_OFFICE ? PAGE_OFFICE.closes : '22:00');   // the hours the time pickers offer
+function bookedOn(ds){ const r=getRoom(); return r ? r.booked.filter(b=>b.date===ds) : []; }
+function clashesOn(ds, start, end){
+  const s=toMin(start), e=toMin(end);
+  if(s===null || e===null) return [];
+  return bookedOn(ds).filter(b => s < toMin(b.end)+VENUE_GAP_MIN && e+VENUE_GAP_MIN > toMin(b.start));
+}
+function minToT(m){ return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+function gapWords(){ return VENUE_GAP_MIN%60===0 ? (VENUE_GAP_MIN/60)+'-hour' : VENUE_GAP_MIN+'-minute'; }
+function takenLabel(slots){ return slots.map(k=>fmtTime(k.start)+' – '+fmtTime(k.end)).join(', '); }
+/* the windows still open on a date, gap included, e.g. "10:00 AM – 10:00 PM" */
+function freeWindows(ds){
+  let free=[[DAY_OPEN, DAY_CLOSE]];
+  bookedOn(ds).forEach(function(b){
+    const lo=toMin(b.start)-VENUE_GAP_MIN, hi=toMin(b.end)+VENUE_GAP_MIN;
+    const next=[];
+    free.forEach(function(w){
+      if(hi<=w[0] || lo>=w[1]){ next.push(w); return; }
+      if(lo>w[0]) next.push([w[0], lo]);
+      if(hi<w[1]) next.push([hi, w[1]]);
+    });
+    free=next;
+  });
+  return free.filter(w=>w[1]-w[0]>=30).map(w=>fmtTime(minToT(w[0]))+' – '+fmtTime(minToT(w[1])));
+}
+/* one sentence for a date that already has bookings */
+function partlyBookedNote(ds){
+  const taken=bookedOn(ds); if(!taken.length) return '';
+  const free=freeWindows(ds);
+  return 'Already booked '+takenLabel(taken)+'. Bookings keep a '+gapWords()+' gap for cleanup, so '
+    +(free.length ? 'you can book '+free.join(' or ')+'.' : 'nothing else fits that day.');
+}
+
+/* the dates the customer is actually booking: the range minus unavailable days
+   — those are excluded automatically, so a Jul 17–20 pick with Jul 18 taken
+   books Jul 17 + 19 + 20 around it. */
+function activeDates(){
+  return rangeDates(state.booking.date, state.booking.dateEnd||state.booking.date).filter(ds=>!isDayBlocked(ds));
+}
+
+/* the earliest reservation moment: first ACTIVE day at its start time (or null) */
+function earliestStart(){
+  const dates=activeDates();
+  if(!dates.length) return null;
+  const t=dayTime(dates[0]);
+  if(!t.start) return null;
+  const dt=new Date(dates[0]+'T'+t.start+':00');
+  return isNaN(dt.getTime()) ? null : dt;
+}
+/* the advance-booking rule: earliest start must be at least `leadMsFor()` from
+   now. Zero for USeP Venues (see leadMsFor) — same-day is fine as long as the
+   slot is still in the future. */
+function isTooSoon(){ const dt=earliestStart(); return dt!=null && (dt-NOW) < leadMsFor(getRoom()); }
+function earliestAllowed(){ return new Date(NOW.getTime()+leadMsFor(getRoom())); }
+
+/* true when every day in the range shares the same start/end hours */
+function sameHoursEveryDay(dates){
+  if(dates.length<2) return true;
+  const a=dayTime(dates[0]);
+  return dates.every(ds=>{ const t=dayTime(ds); return t.start===a.start && t.end===a.end; });
+}
+
+/* Availability, checked per day: each day carries its own hours (dayTime), so a
+   day clashes if a booked slot on that same date overlaps that day's window.
+   Dates are ISO so they compare as strings. */
+function slotStatus(){
+  const r=getRoom(); const {date,dateEnd}=state.booking;
+  if(!r||!date) return { show:false };
+  const end2 = dateEnd || date;
+  if(end2 < date) return { show:true, ok:false, badRange:true };
+  const allDates=rangeDates(date,end2);
+  const dates=allDates.filter(ds=>!isDayBlocked(ds));              // booked OR closed dates are excluded automatically
+  if(!dates.length) return { show:true, ok:false, allBlocked:true, why:(dayBlock(allDates[0])||{}).why, allDates };
+
+  // find the first day whose hours are incomplete or out of order (for a precise message)
+  let anyInput=false, badDay=null, badReason='';
+  for(const ds of dates){
+    const t=dayTime(ds);
+    if(t.start||t.end) anyInput=true;
+    if(badDay) continue;
+    if(!t.start||!t.end){ badDay=ds; badReason='missing'; continue; }
+    const s=toMin(t.start), e=toMin(t.end);
+    if(s===null||e===null){ badDay=ds; badReason='missing'; }
+    else if(e<=s){ badDay=ds; badReason='order'; }
+  }
+  if(!anyInput) return { show:false };
+  if(badDay)   return { show:true, ok:false, invalid:true, badDay, badReason, date, dateEnd:end2, dates };
+
+  /* the hours each day asks for must keep the cleanup gap from that day's
+     existing bookings — the first day that doesn't is the one to fix */
+  for(const ds of dates){
+    const t=dayTime(ds), c=clashesOn(ds, t.start, t.end);
+    if(c.length) return { show:true, ok:false, clash:true, clashDay:ds, clashSlots:c, date, dateEnd:end2, dates };
+  }
+
+  // closed dates were already excluded above, and no day clashes
+  return { show:true, ok:true, date, dateEnd:end2, dates, allDates };
+}
+
+/* first unavailable day in the chosen range — used for the "this date is not
+   available" modal right after the dates are picked */
+function firstBlockedDayInRange(){
+  const {date,dateEnd}=state.booking;
+  for(const ds of rangeDates(date, dateEnd||date)){
+    if(isDayBlocked(ds)) return { day:ds };
+  }
+  return null;
+}
+
+/* Open the "this date is not available" modal once when the picked range
+   contains an unavailable day. A multi-day range books AROUND it (the day is
+   excluded automatically); a single unavailable date simply can't be reserved. */
+function maybeWarnClash(){
+  if(state.modal==='lead') return;                                   // 12-h rule modal wins
+  const info=firstBlockedDayInRange();
+  if(info){
+    if(state.warnedClash!==info.day){ state.warnedClash=info.day; state.modal={type:'clash', day:info.day}; }
+    return;
+  }
+  state.warnedClash=null;
+  if(state.modal && state.modal.type==='clash') state.modal=null;
+}
+
+/* Everything the booking panel + review/confirm screens derive from state. */
+function derive(){
+  const R=getRoom();
+  const b=state.booking;
+  const allDates=rangeDates(b.date, b.dateEnd||b.date);
+  const actDates=activeDates();                       // same filter as everywhere else — never a second copy
+  const days=Math.max(1, actDates.length);            // billable days = available days only
+  const excluded=allDates.length-actDates.length;     // booked or closed days, excluded automatically
+  /* Pricing. totalFee is the DISCOUNTED total on purpose: DB-DECISIONS #2 says
+     the system computes the discounted price and the checker validates THAT, so
+     every screen and gcExpectedCentavos() downstream stays correct without
+     knowing the discount exists. roomPrice/discountAmount ride along for display
+     and are what a booking would snapshot. */
+  const roomPrice=R ? R.fee*days : 0;
+  const pr=priceWithDiscount(roomPrice, state.affiliated);
+  const totalFee=pr.total, discountPercent=pr.discountPercent, discountAmount=pr.discountAmount;
+
+  const sr=slotStatus();
+  /* counted from the dates: rangeDates stops at the longest booking */
+  const tooLong=!!(b.date && b.dateEnd && (Date.parse(b.dateEnd)-Date.parse(b.date))/864e5+1>MAX_DAYS);
+  const multi = allDates.length>1;                    // the range spans several days (per-day editor shows)
+
+  /* precise wording for an incomplete/out-of-order day */
+  let badDayLabel='', badFix='';
+  if(sr.show && sr.invalid){
+    const i=sr.dates.indexOf(sr.badDay);
+    const dl=new Date(sr.badDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    badDayLabel = (multi ? ('Day '+(i+1)+' (') : '') + dl + (multi ? ')' : '');
+    badFix = sr.badReason==='missing' ? 'add both a start and end time' : 'set the end time later than the start time';
+  }
+
+  /* Advance-booking rule (mirrors Booking_Refined): the earliest reservation
+     start — the first day at its start time — must be at least leadMsFor(R)
+     from now. USeP Venues has none of this (same-day is fine), so its wording
+     below just says "book a time that hasn't passed yet". */
+  const tooSoon = sr.show && !sr.badRange && !sr.invalid && isTooSoon();
+  const sameDayOk = R && leadMsFor(R)===0;
+
+  /* status card: neutral surface + a small colored dot (amber = fix something,
+     green = good to go) — calmer than the old solid red/green boxes */
+  let slot={show:false};
+  if(tooLong){
+    slot={show:true,dot:'#d9930d',title:'A booking can cover at most '+MAX_DAYS+' days',detail:'Pick an earlier end date to continue.'};
+  } else if(sr.show){
+    if(sr.badRange){
+      slot={show:true,dot:'#d9930d',title:'End date must be on or after the start date',detail:'Adjust your reservation dates to check availability.'};
+    } else if(sr.allBlocked){
+      slot={show:true,dot:'#d9930d',title: multi?'These dates are not available':'This date is not available',
+        detail: sr.why==='maintenance' ? 'The room is closed on these dates — please pick different dates.'
+                                       : 'Not available — please pick different dates.'};
+    } else if(sr.clash){
+      const cl=new Date(sr.clashDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      slot={show:true,dot:'#d9930d',
+        title:(multi?cl+': ':'')+'Too close to another booking',
+        detail:partlyBookedNote(sr.clashDay)};
+    } else if(sr.invalid){
+      let title;
+      if(multi) title = badDayLabel+(sr.badReason==='missing'?' needs its hours set':' ends before it starts');
+      else title = sr.badReason==='missing' ? 'Add a start and end time' : 'End time must be after start time';
+      slot={show:true,dot:'#d9930d',
+        title,
+        detail: 'Please '+badFix+' for '+(multi?badDayLabel:'this booking')+'.'};
+    } else if(tooSoon){
+      slot = sameDayOk
+        ? {show:true,dot:'#d9930d',title:'That time has already passed today',detail:'Pick a start time later today, or a future date.'}
+        : {show:true,dot:'#d9930d',title:'Too soon — book at least '+leadHours()+' hours ahead',detail:'Reservations must start at least '+leadHours()+' hours from now. Pick a later date or start time.'};
+    } else if(sr.ok){
+      let timeLbl;
+      if(sr.dates.length<2){ const t=dayTime(sr.dates[0]); timeLbl=fmtTime(t.start)+' – '+fmtTime(t.end); }
+      else if(sameHoursEveryDay(sr.dates)){ const t=dayTime(sr.dates[0]); timeLbl='daily, '+fmtTime(t.start)+' – '+fmtTime(t.end); }
+      else { timeLbl='custom hours per day'; }
+      const exclNote = excluded>0 ? (' · '+excluded+' unavailable day'+(excluded>1?'s':'')+' excluded') : '';
+      slot={show:true,dot:'#2f9e63',title: multi?'These dates are available':'This slot is available',detail:fmtRange(sr.date,sr.dateEnd)+' · '+timeLbl+exclNote};
+    }
+  }
+
+  const ba=parseInt(b.attendees,10);
+  const over=R && !isNaN(ba) && ba>R.capacity;
+
+  const bEnd=b.dateEnd||b.date;
+  const dateOk=b.date && bEnd && bEnd>=b.date;
+  const slotFree=sr.show && sr.ok && !tooSoon;
+  const ready=R && b.eventName && dateOk && !tooLong && slotFree && !isNaN(ba) && ba>0 && !over;
+
+  let hint='';
+  if(tooLong) hint='A booking can cover at most '+MAX_DAYS+' days';
+  else if(!b.eventName) hint='Enter an event name to continue';
+  else if(!dateOk) hint='Pick valid reservation dates';
+  else if(sr.show && sr.badRange) hint='End date must be on or after the start date';
+  else if(sr.show && sr.allBlocked) hint = sr.why==='maintenance' ? 'Closed on these dates — pick different dates' : 'These dates are already booked — pick different ones';
+  else if(sr.show && sr.invalid) hint= (multi?badDayLabel+': ':'')+badFix;
+  else if(sr.show && sr.clash) hint='Pick hours that keep a '+gapWords()+' gap from the existing booking';
+  else if(!sr.show) hint='Set the hours to check availability';
+  else if(tooSoon) hint = sameDayOk ? 'Pick a start time that hasn\'t passed yet today' : 'Bookings must be made at least '+leadHours()+' hours in advance';
+  else if(isNaN(ba)||ba<=0) hint='Enter the number of attendees';
+
+  return { R, b, days, multi, excluded, allDates, dates:sr.dates||actDates, totalFee, roomPrice, discountPercent, discountAmount, slot, over, ready, hint };
+}
+
+/* ---------- actions ---------- */
+function setState(patch){ Object.assign(state, patch); render(); }
+function setBooking(key,val){
+  // choosing a start date auto-fills / bumps the end date so the range stays valid
+  if(key==='date' && (!state.booking.dateEnd || state.booking.dateEnd < val)) state.booking.dateEnd=val;
+  state.booking[key]=val;
+  // 12-hour rule: if the chosen date/time is too soon, explain it and clear the
+  // offending input so they re-pick; otherwise dismiss any open explainer
+  if(key==='date'||key==='start'){
+    if(isTooSoon()){
+      state.modal='lead';
+      if(key==='date'){ state.booking.date=''; state.booking.dateEnd=''; }
+      else state.booking.start='';
+    } else if(state.modal==='lead') state.modal=null;
+  }
+  if(key==='date'||key==='dateEnd') maybeWarnClash();
+  render();
+}
+function setDayTime(dateStr,key,val){
+  const cur=state.booking.times[dateStr]||{};
+  state.booking.times={ ...state.booking.times, [dateStr]:{ ...cur, [key]:val } };
+  const dates=activeDates();
+  if(key==='start' && dates[0]===dateStr){                                     // only day 1 affects the rule
+    if(isTooSoon()){
+      state.modal='lead';
+      const c=state.booking.times[dateStr]||{};
+      state.booking.times={ ...state.booking.times, [dateStr]:{ ...c, start:'' } };   // clear day 1's start
+    } else if(state.modal==='lead') state.modal=null;
+  }
+  render();
+}
+function openLeadModal(){ state.modal='lead'; render(); }
+function closeModal(){ state.modal=null; render(); }
+
+/* ---------- custom date-picker (booking panel) ---------- */
+function openCal(field){
+  state.timeDd=null;
+  if(state.cal && state.cal.field===field){ state.cal=null; render(); return; }   // toggle
+  const cur=state.booking[field] || state.booking.date || TODAY;
+  state.cal={ field, month: cur.slice(0,7) };
+  render();
+}
+/* time dropdowns share one open-state slot, keyed by the field's id */
+function toggleTimeDd(id){ state.cal=null; state.timeDd = state.timeDd===id ? null : id; render(); }
+function closeTimeDd(){ if(state.timeDd){ state.timeDd=null; render(); } }
+function closeCal(){ if(state.cal){ state.cal=null; render(); } }
+function calNav(dir){
+  if(!state.cal) return;
+  const [y,m]=state.cal.month.split('-').map(Number);
+  const d=new Date(y, m-1+dir, 1);
+  state.cal.month=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  render();
+}
+function calPick(iso){
+  if(!state.cal) return;
+  const f=state.cal.field;
+  state.cal=null;
+  // picking a start date past the current end date drags the end date along
+  if(f==='date' && state.booking.dateEnd && state.booking.dateEnd<iso) state.booking.dateEnd=iso;
+  setBooking(f, iso);                                 // runs the 12-h + booked-date checks
+}
+function calDateLabel(iso){
+  return iso ? new Date(iso+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+}
+/* the dropdown itself: month header, S–S row, 6x7 day grid. Past days and
+   already-booked days are struck through and unclickable. */
+function calHtml(field){
+  if(!state.cal || state.cal.field!==field) return '';
+  const [y,m]=state.cal.month.split('-').map(Number);
+  const first=new Date(y, m-1, 1);
+  const monthLabel=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const min = field==='dateEnd' ? (state.booking.date||TODAY) : TODAY;
+  const sel = state.booking[field]||'';
+  const R=getRoom();
+  let cells='';
+  const cur=new Date(y, m-1, 1-first.getDay());       // back up to the Sunday on/before the 1st
+  for(let i=0;i<42;i++){
+    const iso=isoOf(cur);
+    const inMonth=cur.getMonth()===m-1;
+    /* a booked day stays pickable — other hours can still be booked
+       (2026-10-27); it is marked, and says what is taken */
+    const taken=R ? R.booked.filter(k=>k.date===iso) : [];
+    const off=iso<min || iso>LAST_DAY;
+    const cls='cal-day'+(inMonth?'':' out')+(iso===sel?' sel':'')+(iso===TODAY?' today':'')+(taken.length&&!off?' part':'');
+    cells+=off
+      ? `<button type="button" class="${cls}" disabled>${cur.getDate()}</button>`
+      : `<button type="button" class="${cls}" onclick="calPick('${iso}')"${taken.length?` title="Partly booked: ${esc(takenLabel(taken))}"`:''}>${cur.getDate()}</button>`;
+    cur.setDate(cur.getDate()+1);
+  }
+  return `
+  <div onclick="closeCal()" style="position:fixed;inset:0;z-index:69"></div>
+  <div class="cal-pop" style="${field==='dateEnd'?'right:0':'left:0'}" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <button type="button" class="cal-nav" aria-label="Previous month" onclick="calNav(-1)">‹</button>
+      <span style="font-size:13.5px;font-weight:650;color:#1c1b19">${monthLabel}</span>
+      <button type="button" class="cal-nav" aria-label="Next month" ${state.cal.month>=LAST_DAY.slice(0,7)?'disabled':''} onclick="calNav(1)">›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);justify-items:center;margin-bottom:4px">
+      ${['S','M','T','W','T','F','S'].map(d=>`<span style="font-size:12px;font-weight:600;color:#a5a19a;width:32px;text-align:center">${d}</span>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;justify-items:center">${cells}</div>
+    <div style="font-size:12px;color:#77736c;margin-top:6px;text-align:center">Bookable up to ${calDateLabel(LAST_DAY)}</div>
+  </div>`;
+}
+
+/* ---------- 360 panorama (opened from the photo strip's "360° tour" button) + photo gallery lightbox ---------- */
+/* Photo gallery lightbox — view-only for customers, mounted outside #app.
+   Shows the room's real uploaded photos (R.photoUrls); falls back to the
+   numbered gradient placeholders when the room has none yet. */
+function applyTimeToAll(){
+  const dates=activeDates();
+  if(!dates.length) return;
+  const t=dayTime(dates[0]);                 // use the first available day's hours as the default...
+  state.booking.start=t.start; state.booking.end=t.end;
+  state.booking.times={};                     // ...and clear overrides so every day inherits them
+  render();
+}
+/* header logo + "← All rooms" go back to the landing page (room browsing lives there now) */
+function goHome(){ location.href=roomReservationPage.venuesUrl; }
+function setTab(k){ state.tab=k; render(); }
+/* At the counter the room and dates are settled with the customer first, then
+   we ask who it is for — so the "who" step sits between detail and review. */
+function goReview(){ if(derive().ready){ state.screen = COUNTER ? 'who' : 'review'; window.scrollTo(0,0); render(); } }
+
+/* ---------- counter: who is this booking for ----------
+   setBookerMode(), searchCustomers(), verifyBooker(), counterBookerReady(),
+   goFromWho(), whoScreen() and counterBar() live in includes/counter-booker.php,
+   shared with the hostel page (2026-10-27). */
+function backToDetail(){ state.screen='detail'; window.scrollTo(0,0); render(); }
+function backToPending(){ state.screen='pending'; window.scrollTo(0,0); render(); }
+
+/* ---------- approve-first flow ----------
+   The request is submitted WITH a valid ID. Staff approve the ID and the
+   reservation together; only then does the payment step unlock. */
+function uploadId(input){
+  const f=input.files && input.files[0];
+  input.value='';
+  if(!f) return;
+  /* over the cap: refused here with the same words, no shrinking (2026-10-30) */
+  if(f.size > UPLOAD_MAX_MB*1048576){ state.submitError='This file is over '+UPLOAD_MAX_MB+' MB. Choose a smaller photo or a screenshot.'; render(); return; }
+  state.submitError=null;
+  if(state.idFile){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
+  /* The File itself is kept, not just a preview URL: submitRequest() has to
+     actually upload it. It used to hold only {name, url}, which was all a
+     mockup needed — the object URL shows the thumbnail, the File is what
+     goes to the server. */
+  state.idFile={ name:f.name, url:URL.createObjectURL(f), file:f };
+  render();
+}
+/* The affiliation CLAIM. Changing it re-prices instantly, so the customer sees
+   what the discount is worth before deciding which ID to upload. */
+function setAffiliation(v){ state.affiliated = v; render(); }
+function removeId(){
+  if(state.idFile){ try{ URL.revokeObjectURL(state.idFile.url); }catch(e){} }
+  state.idFile=null; render();
+}
+/* While refunds are OFF, the customer must acknowledge the booking is final
+   before it is made — the policy is agreed at booking time, not at payment. */
+/* COUNTER: no ID file is uploaded, and affiliation was answered on the "who"
+   step — so what has to be true is that the booker is settled. The
+   non-refundable acknowledgement still applies: the customer is standing
+   there and can agree to it. */
+function canSubmitRequest(){
+  if(COUNTER) return counterBookerReady() && (REFUNDS_ENABLED || state.agreeNoRefund);
+  return !!state.idFile && state.affiliated !== null && (REFUNDS_ENABLED || state.agreeNoRefund);
+}
+function toggleAgreeNoRefund(el){ state.agreeNoRefund=!!el.checked; render(); }
+/* Submit the booking FOR REAL. The screen no longer advances on its own: it
+   advances when the server has a row, so a customer is never shown a reference
+   for a booking that does not exist.
+
+   The server re-checks everything sent here — the price from the room's own
+   rate, the slot through sp_add_venue_slot(). These checks stay because they
+   give a fast, friendly message, not because they are trusted. */
+let submitting = false;
+async function submitRequest(){
+  /* affiliation is a required choice, exactly like the ID upload — the price
+     depends on it, so it cannot be left unanswered */
+  if(submitting || !derive().ready || !canSubmitRequest() || state.affiliated===null) return;
+  const d = derive();
+
+  /* Per-day hours, keyed by date: a multi-day booking can run different hours
+     each day, which is why times live per DAY and not on the booking header. */
+  const times = {};
+  d.dates.forEach(function(ds){ const t = dayTime(ds); times[ds] = { start:t.start, end:t.end }; });
+
+  const fd = new FormData();
+  fd.append('csrf', CSRF);
+  fd.append('_token', CSRF);   /* Laravel's CSRF field */
+  fd.append('type', 'venue');
+  fd.append('room', state.roomId);
+  fd.append('event_name', state.booking.eventName);
+  fd.append('organization', state.booking.organization||'');
+  fd.append('date_start', state.booking.date);
+  fd.append('date_end', state.booking.dateEnd || state.booking.date);
+  fd.append('attendees', state.booking.attendees);
+  fd.append('times', JSON.stringify(times));
+  fd.append('affiliated', state.affiliated ? '1' : '0');
+  fd.append('method', state.payMethod);
+  fd.append('agree_no_refund', state.agreeNoRefund ? '1' : '0');
+  fd.append('shown_rate', String(getRoom().fee));   /* a price changed meanwhile is refused (409 price_changed) */
+
+  /* COUNTER: who it is for travels with the booking, and no ID file does. The
+     server re-checks every one of these — that the customer id exists, that
+     its password was proved in THIS staff session, that the phone is a real
+     mobile — because a page is never the thing that decides who a booking
+     belongs to. */
+  if(COUNTER){
+    const b = state.booker;
+    fd.append('booker_mode', b.mode);
+    if(b.mode==='account'){ fd.append('customer_id', b.customerId); fd.append('id_identity', b.idIdentity ? '1' : '0'); }
+    else { fd.append('walkin_name', b.name.trim()); fd.append('walkin_phone', cleanPhone(b.phone) || ''); fd.append('walkin_address', b.address.trim()); fd.append('walkin_email', b.noEmail ? '' : b.email.trim()); fd.append('walkin_no_email', b.noEmail ? '1' : '0'); }
+    fd.append('id_checked', b.idChecked ? '1' : '0');
+    fd.append('usep_id', b.usepId ? '1' : '0');
+  } else {
+    fd.append('id_document', state.idFile.file, state.idFile.name);
+  }
+
+  submitting = true; render();
+  try{
+    const res = await fetch(COUNTER ? roomReservationPage.bookingCreateUrl : roomReservationPage.bookingSubmitUrl, { method:'POST', body:fd, credentials:'same-origin' });
+    const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
+    if(!out.ok){
+      submitting = false;
+      if(out.room) Object.assign(getRoom(), out.room);   /* price_changed: redraw with the room as it is now */
+      state.submitError = out.message || 'Your booking was not submitted.';
+      render();
+      return;
+    }
+    /* The reference now comes from the database, which owns booking identity —
+       it used to be a random number the page made up for itself. */
+    state.reference = out.reference;
+    state.bookingDbId = out.bookingId;
+    state.submitError = null;
+    state.submitted = true;                  // the form is gone for good — browser Back now leaves the flow
+    /* COUNTER: there is nothing to wait for. Staff ARE the approver, so the
+       booking came back already approved and the next thing anyone needs is
+       the reference and the booking itself. */
+    state.screen = COUNTER ? 'done' : 'pending';
+    if(COUNTER) state.counterResult = out;
+    window.scrollTo(0,0);
+  }catch(e){
+    state.submitError = 'Could not reach the server, so your booking was not submitted.';
+  }
+  submitting = false;
+  render();
+}
+
+/* This booking's payment timing — the shared rule (payPolicyFor, from
+   includes/refund-policy.php) applied to the dates being typed. */
+function payByInfo(){ return payPolicyFor(state.booking.date, state.booking.dateEnd||state.booking.date); }
+/* The one-line "when do I pay" sentence, used wherever the deadline is shown. */
+function payWhenText(){
+  const pb=payByInfo();
+  if(pb.policy==='prepay') return pb.late ? 'Once approved, pay <strong>'+pb.label+'</strong>' : 'Once approved, pay by <strong>'+pb.label+'</strong> (1 day before your event)';
+  return 'Payment opens the day after your event — pay by <strong>'+pb.label+'</strong>. It cannot be paid earlier';
+}
+
+/* ============================================================
+   GCASH RECEIPT CHECKER — the engine now lives in the shared include
+   includes/gcash-checker.php (loaded above), because the hostel pays into
+   a DIFFERENT GCash account and two copies of a checker drift apart:
+   fix a matcher in one, the other keeps silently auto-rejecting good
+   receipts as "receiver mismatch". One engine, account passed in.
+
+   The include calls back into the two things only this page knows:
+   what is owed, and which booking it is for.
+   ============================================================ */
+/* Which account THIS booking's money must land in. Bahay Alumni and USeP Venues
+   are different accounts, and this one page serves both — so it depends on the
+   room, and the checker asks for it at verdict time rather than being handed a
+   page-level constant. */
+function gcAccount(){
+  const r=getRoom();
+  return (r && GCASH_ACCOUNTS[r.venue]) || { name:'', number:'' };
+}
+function gcExpectedCentavos(){ return Math.round(bookingRows().d.totalFee*100); }   // venue: fee x billable days
+function gcBookingRef(){ return state.reference; }
+function toggleAgreeExact(el){ state.agreeExact=!!el.checked; render(); }
+function setPayMethod(m){ state.payMethod=m; render(); }
+/* Record the payment FOR REAL. The screen advances on the server's answer, so
+   a customer is never told a receipt was accepted that was never stored.
+
+   The verdict shown here is recomputed server-side against the booking's own
+   total and the venue's own GCash account — this page's OCR runs in the
+   browser and is a claim, not evidence. Duplicate references and duplicate
+   images are refused by UNIQUE indexes that hold across EVERY booking, which
+   the old localStorage store could never do: it was per-browser and forgot
+   everything the moment you switched machines. */
+let paying = false;
+async function confirmBooking(){
+  if(paying) return;
+  const cash = state.payMethod === 'cash';
+  if(!cash && !receiptOk()) return;
+
+  const fd = new FormData();
+  fd.append('csrf', CSRF);
+  fd.append('_token', CSRF);   /* Laravel's CSRF field */
+  fd.append('booking', state.reference);
+  fd.append('method', cash ? 'cash' : 'gcash');
+  if(!cash){
+    const rec = state.ocr.rec, p = rec.parsed || {};
+    fd.append('receipt', state.ocr.file, state.ocr.fileName || 'receipt.jpg');
+    fd.append('ref', p.ref || '');
+    fd.append('receiver_name', p.receiverNameMasked || p.receiverNameShort || '');
+    fd.append('receiver_number', p.receiverNumber || '');
+    fd.append('amount_centavos', p.effAmountC != null ? p.effAmountC : '');
+    fd.append('receipt_datetime', p.datetime || '');
+    fd.append('confidence', rec.confidence != null ? rec.confidence : '');
+    fd.append('flags', JSON.stringify(rec.flags || []));
+    fd.append('text_excerpt', rec.textExcerpt || '');
+  }
+
+  paying = true; render();
+  try{
+    const res = await fetch(roomReservationPage.paymentSubmitUrl, { method:'POST', body:fd, credentials:'same-origin' });
+    const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
+    if(!out.ok){
+      paying = false;
+      state.payError = out.message || 'Your payment was not recorded.';
+      /* A server-side rejection outranks the browser's verdict — it is the one
+         that checked against the real amount and the real account. */
+      if(out.verdict === 'rejected' && state.ocr && state.ocr.rec){
+        state.ocr.rec.status = 'rejected';
+        state.ocr.rec.reasons = (state.ocr.rec.reasons || []).concat(['server_rejected']);
+      }
+      render(); return;
+    }
+    state.payError = null;
+    state.paymentVerdict = out.verdict || null;
+    state.screen = 'done';
+    window.scrollTo(0,0);
+  }catch(e){
+    state.payError = 'Could not reach the server, so your payment was not recorded.';
+  }
+  paying = false; render();
+}
+/* "Browse more rooms" — back to the landing page (it links here again with ?room=) */
+function restart(){ location.href=roomReservationPage.venuesUrl; }
+
+/* ---------- shared bits ---------- */
+function header(){ return ''; }   /* the nav bar is static now: includes/customer-nav.php, above #app */
+
+const PHOTO_TILE = 'background:#e9e7e2;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px);display:flex;align-items:center;justify-content:center';
+
+/* A hero gallery tile: a real uploaded photo (R.photoUrls[i]) if one exists
+   at that index, else the placeholder pattern + "room photo" label. `inner`
+   is extra HTML appended inside the tile (e.g. the "+N photos" overlay). */
+function heroTile(R,i,extraStyle,inner){
+  const url=(R.photoUrls||[])[i];
+  extraStyle=extraStyle||''; inner=inner||'';
+  if(url) return `<button type="button" onclick="openGallery(${i})" aria-label="Open ${esc(R.name)} photos" style="border:0;padding:0;cursor:pointer;background-size:cover;background-position:center;background-image:url('${url}');${extraStyle}">${inner}</button>`;
+  return `<div style="${PHOTO_TILE};${extraStyle}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>${inner}</div>`;
+}
+
+/* The maintenance chip — DERIVED from the window, never stored, and shown only
+   while the window is still live. No window = no chip: an ordinary room says
+   nothing, which is all "Available" ever meant. Note the chip is about the room
+   TODAY; whether a PICKED DATE is bookable is a different question, answered
+   per-date by dayBlock(). That split is the whole point — a closure has dates,
+   so it can't be collapsed into one label on the room. */
+/* MEDIUM maintenance never blocks, so nothing else in the flow will ever mention
+   it — this is its ONLY route to the customer, and it has to land before they
+   pay. HARD needs nothing here: dayBlock() already stops the booking and says why. */
+function maintDisclosure(R){
+  const m=R.maintenance;
+  if(!maintLive(m) || m.blocks) return '';
+  const when = TODAY>=m.from ? (m.until ? 'until '+fmtDate(m.until) : 'until further notice')
+                             : (m.until ? fmtRange(m.from,m.until)  : 'from '+fmtDate(m.from));
+  // same neutral-surface + colored-dot card as the slot status below it — they
+  // are siblings, so they should read as siblings
+  return `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;margin-bottom:12px;background:#fff;border:1px solid rgba(0,0,0,.09)">
+      <span style="width:8px;height:8px;border-radius:999px;background:#d9930d;margin-top:5px;flex:none"></span>
+      <div>
+        <div style="font-size:13.5px;font-weight:650;color:#1c1b19">Partial maintenance ${esc(when)}</div>
+        <div style="font-size:12.5px;color:#7a766f;margin-top:1px">${esc(m.reason)}. The room is still open and bookable — we just want you to know before you reserve.</div>
+      </div>
+    </div>`;
+}
+
+function maintChip(R){
+  const m=R.maintenance; if(!maintLive(m)) return '';
+  const started=TODAY>=m.from;
+  const tone=m.blocks?{bg:'#f6e4e4',fg:'#b23a3a'}:{bg:'#f4ecd6',fg:'#8a6d1f'};
+  const head=m.blocks?'Closed for maintenance':'Partial maintenance';
+  let when;
+  if(!started)     when = m.until ? fmtRange(m.from,m.until) : 'from '+fmtDate(m.from);
+  else if(m.until) when = 'until '+fmtDate(m.until);
+  else             when = 'no set return date';
+  return `<span title="${esc(m.reason)}" style="padding:4px 11px;border-radius:999px;font-size:12.5px;background:${tone.bg};color:${tone.fg}">${esc(head+' · '+when)}</span>`;
+}
+
+/* ---------- screen: DETAIL + BOOKING PANEL ---------- */
+function detailScreen(){
+  const d=derive();
+  const R=d.R; if(!R) return '';
+  const b=state.booking;
+
+  /* tabs */
+  const tabDefs=[['overview','Overview'],['availability','Availability'],['policies','Policies']];
+  const tabs=tabDefs.map(([k,label])=>`
+    <button onclick="setTab('${k}')" style="background:none;border:none;padding:12px 14px;font-size:14px;font-weight:${state.tab===k?680:550};color:${state.tab===k?'#1c1b19':'#6e6a64'};border-bottom:2px solid ${state.tab===k?'#a11626':'transparent'};cursor:pointer;margin-bottom:-1px">${label}</button>`).join('');
+
+  /* tab content */
+  let content='';
+  if(state.tab==='overview'){
+    const sw='fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+    const I={
+      tag:`<svg width="19" height="19" viewBox="0 0 24 24" ${sw}><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.4"/></svg>`,
+      clock:`<svg width="19" height="19" viewBox="0 0 24 24" ${sw}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+      star:`<svg width="19" height="19" viewBox="0 0 24 24" ${sw}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+      food:`<svg width="19" height="19" viewBox="0 0 24 24" ${sw}><path d="M12 5a7 7 0 0 0-7 7v3h14v-3a7 7 0 0 0-7-7z"/><line x1="12" y1="3" x2="12" y2="5"/><line x1="2" y1="19" x2="22" y2="19"/></svg>`,
+      access:`<svg width="19" height="19" viewBox="0 0 24 24" ${sw}><circle cx="16" cy="4" r="1"/><path d="m18 19 1-7-6 1"/><path d="m5 8 3-3 5.5 3-2.36 3.5"/><path d="M4.24 14.5a5 5 0 0 0 6.88 6"/><path d="M13.76 17.5a5 5 0 0 0-6.88-6"/></svg>`,
+    };
+    // Capacity & location are already in the title row, so keep only non-redundant facts here
+    const facts=[
+      /* USeP account: crossed-out full price + USeP price with a short "20% off" tag */
+      { icon:I.tag,    text:'Reservation fee: '+peso(R.fee)+' per day',
+        html: isUsepAccount(ACCOUNT.email) && priceWithDiscount(R.fee,true).discountAmount>0
+          ? 'Reservation fee: <s style="color:#a5a19a">'+peso(R.fee)+'</s> <strong style="color:#1c7a4f">'+peso(priceWithDiscount(R.fee,true).total)+'</strong> per day <span style="font-size:12px;color:#1c7a4f">· '+DISCOUNT_PERCENT+'% off</span>'
+          : null },
+      { icon:I.clock,  text:'Bookable hours: 7 AM – 10 PM daily' },
+      { icon:I.star,   text:'Best for: '+R.bestFor },
+      { icon:I.food,   text:'Catering: '+R.catering },
+      { icon:I.access, text:'Accessibility: '+R.accessible },
+    ];
+    const row=(icon,label,html)=>`<div style="display:flex;align-items:flex-start;gap:11px;font-size:14px;line-height:1.45;color:#1c1b19"><span style="color:#3a372f;flex:none;display:flex;margin-top:1px">${icon}</span>${html!=null?html:esc(label)}</div>`;
+    const factRows=facts.map(f=>row(f.icon,f.text,f.html)).join('');
+    const amenityRows=R.amenities.map(a=>row(amenityIcon(a),a)).join('');
+    content=`
+      <p style="margin:0 0 28px;font-size:15.5px;line-height:1.7;color:#3a372f;max-width:70ch">${esc(R.description)}</p>
+      <h3 style="margin:0 0 16px;font-size:16px;font-weight:660">At a glance</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:15px 28px;margin-bottom:34px">${factRows}</div>
+      <h3 style="margin:0 0 16px;font-size:16px;font-weight:660">Amenities</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:16px 28px">${amenityRows}</div>`;
+  } else if(state.tab==='availability'){
+    const list = R.booked.length
+      ? R.booked.map(x=>({d:fmtDate(x.date), t:fmtTime(x.start)+' – '+fmtTime(x.end)}))
+      : [{d:'No current bookings', t:'This room is open'}];
+    content=`
+      <h3 style="margin:0 0 6px;font-size:16px;font-weight:660">Availability</h3>
+      <p style="margin:0 0 22px;font-size:13.5px;color:#7a766f;max-width:70ch">Bookable hours are 7:00 AM – 10:00 PM daily. The times listed below are already booked. The rest of those days is still open, as long as your booking keeps a <strong>${gapWords()} gap</strong> before and after for cleanup. Pick your dates and time in the booking panel to check a specific slot.</p>
+      <div style="font-size:12.5px;font-weight:600;color:#7a766f;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Existing bookings for this room</div>
+      ${list.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:13.5px;max-width:520px"><span style="color:#3a372f">${esc(x.d)}</span><span style="color:#6e6a64">${esc(x.t)}</span></div>`).join('')}`;
+  } else {
+    const policy=(title,body)=>`<div style="padding:18px 0;border-top:1px solid rgba(0,0,0,.08)"><div style="font-weight:640;font-size:14px;margin-bottom:5px">${title}</div><p style="margin:0;font-size:13.5px;line-height:1.6;color:#4a463f;max-width:70ch">${body}</p></div>`;
+    content=`
+      <h3 style="margin:0 0 4px;font-size:16px;font-weight:660">Reservation policies</h3>
+      ${leadMsFor(R)===0
+        ? policy('Booking window','This room can be booked <strong>the same day</strong> — your start time just has to be later than right now, with enough of the day left before the <strong>10:00 PM</strong> closing time for your event. A date that already has a reservation can still be booked at <strong>other times</strong>, keeping a <strong>'+gapWords()+' gap</strong> before and after each booking for cleanup. You pay the day rate for each day you book.')
+        : policy('Booking window','Reservations must be made <strong>at least '+leadHours()+' hours in advance</strong> — your start time cannot be within '+leadHours()+' hours of booking. A date that already has a reservation can still be booked at <strong>other times</strong>, keeping a <strong>'+gapWords()+' gap</strong> before and after each booking for cleanup. You pay the day rate for each day you book.')}
+      ${policy('Valid ID & approval','Every booking request must include a photo of a <strong>valid ID</strong> (USeP or government-issued). Your reservation stays <strong>pending</strong> — and payment stays locked — until staff approve both the ID and the reservation.')}
+      ${PAY_POLICY.prepay
+        ? policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')
+        : policy('Payment — GCash or cash (after your event)','You pay <strong>after the event</strong>, not before: payment opens and is due <strong>the day after your last booked day</strong>. Pay online through GCash (send the <strong>exact amount</strong> shown — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment cannot be made earlier. A booking left unpaid is marked <strong>overdue</strong>; it can still be paid, but overdue accounts may not be able to book again until settled.')}
+      ${!REFUNDS_ENABLED
+        ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your date, room and details before you submit and pay. If USeP has to close or cancel your venue, the venue office will offer you a <strong>replacement room or a new date</strong> instead.')
+        : policy('Refunds','A refund needs the VENUSeP Transaction Receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
+      ${policy('Confirmation','After you pay, staff verify the payment — the GCash reference in the business account, or the cashier record — and give the final confirmation. You are notified at each step.')}`;
+  }
+
+  /* range note under the date pickers */
+  let rangeNote;
+  if(b.date && d.allDates.length>0) rangeNote = d.multi ? ('Multi-day reservation · '+d.days+(d.excluded?(' of '+d.allDates.length):'')+' day'+(d.days>1?'s':'')+' — set the hours for each day below') : 'Single-day reservation';
+  else rangeNote = 'Choose a start date; set an end date for multi-day bookings.';
+
+  /* time section: one start/end for a single day, or a per-day schedule for
+     multi-day. Each field is a dropdown of half-hour slots within the bookable
+     window (7:00 AM – 10:00 PM), displayed in 12-hour AM/PM format. */
+  /* ds + kind ('start'|'end'): grey out the times that fall inside another
+     booking or its cleanup gap on that date — they can never work */
+  const timeInput = (id,val,onchg,ds,kind)=>{
+    const open=state.timeDd===id;
+    let opts='';
+    if(open){
+      const taken=ds ? bookedOn(ds) : [];
+      for(let vm=DAY_OPEN;vm<=DAY_CLOSE;vm+=30){
+        const v=String(Math.floor(vm/60)).padStart(2,'0')+':'+String(vm%60).padStart(2,'0');
+        const hit=taken.find(b=>{
+          const lo=toMin(b.start)-VENUE_GAP_MIN, hi=toMin(b.end)+VENUE_GAP_MIN;
+          return kind==='end' ? (vm>lo && vm<=hi) : (vm>=lo && vm<hi);
+        });
+        opts+= hit
+          ? `<button type="button" class="tt-opt" disabled title="Too close to the ${esc(fmtTime(hit.start)+' – '+fmtTime(hit.end))} booking" style="opacity:.35;cursor:not-allowed;text-decoration:line-through">${fmtTime(v)}</button>`
+          : `<button type="button" class="tt-opt${v===val?' sel':''}" onclick="state.timeDd=null;${onchg.replace('this.value',"'"+v+"'")}">${fmtTime(v)}</button>`;
+      }
+    }
+    return `<div style="position:relative;min-width:0">
+      <button id="${id}" type="button" onclick="toggleTimeDd('${id}')" style="display:flex;align-items:center;gap:7px;width:100%;height:42px;padding:0 10px;border:1px solid rgba(0,0,0,.12);border-radius:10px;font-size:13.5px;background:#fff;cursor:pointer;color:${val?'#1c1b19':'#a5a19a'}">
+        ${svgClock(15)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${val?fmtTime(val):''}</span>${svgCaret(11)}
+      </button>
+      ${open?`<div onclick="closeTimeDd()" style="position:fixed;inset:0;z-index:69"></div><div class="tt-pop" onclick="event.stopPropagation()">${opts}</div>`:''}
+    </div>`;
+  };
+  let timeSection;
+  if(d.multi){
+    let n=0;
+    const rows=d.allDates.map(ds=>{
+      const lbl=new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      /* a closed day (HARD maintenance) is left out; a partly booked one keeps
+         its pickers and says what is taken (2026-10-27) */
+      if(isDayBlocked(ds)){
+        return `<div class="bk-day-row bk-day-off" style="display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">${lbl}</span>
+          <span style="height:42px;display:flex;align-items:center;padding:0 11px;border:1px dashed rgba(0,0,0,.14);border-radius:9px;font-size:12px;color:#a5a19a;background:#fff">Not available — closed</span>
+        </div>`;
+      }
+      const taken=bookedOn(ds);
+      n++;
+      const t=dayTime(ds);
+      return `<div class="bk-day-row" style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;align-items:center;margin-bottom:${taken.length?'2px':'8px'}">
+        <span style="font-size:12px;font-weight:600;color:#f2d0cb">Day ${n}<div style="font-size:12px;font-weight:500;color:#d5b8b5">${lbl}</div></span>
+        ${timeInput('bk-t-'+ds+'-s',t.start,"setDayTime('"+ds+"','start',this.value)",ds,'start')}
+        ${timeInput('bk-t-'+ds+'-e',t.end,"setDayTime('"+ds+"','end',this.value)",ds,'end')}
+      </div>${taken.length?`<div style="font-size:11.5px;color:#f6d79a;margin:0 0 8px 96px;line-height:1.45">Booked ${esc(takenLabel(taken))} · keep a ${gapWords()} gap</div>`:''}`;
+    }).join('');
+    timeSection=`
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">Hours per day</span>
+          <button onclick="applyTimeToAll()" style="background:none;border:none;padding:0;font-size:12.5px;font-weight:600;color:#fff;text-decoration:underline;cursor:pointer">Apply Day 1 to all</button>
+        </div>
+        <div class="bk-day-row" style="display:grid;grid-template-columns:88px 1fr 1fr;gap:8px;margin-bottom:4px">
+          <span></span><span style="font-size:12px;color:#d5b8b5">Start</span><span style="font-size:12px;color:#d5b8b5">End</span>
+        </div>
+        ${rows}
+        ${d.excluded?`<div style="font-size:12px;color:#d5b8b5;margin-top:2px">Closed days are left out automatically — you only book and pay for the available days.</div>`:''}
+      </div>`;
+  } else {
+    timeSection=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <label style="display:flex;flex-direction:column;gap:5px">
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">Start time</span>
+          ${timeInput('bk-start',b.start,"setBooking('start',this.value)",b.date,'start')}
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px">
+          <span style="font-size:12px;font-weight:600;color:#f2d0cb">End time</span>
+          ${timeInput('bk-end',b.end,"setBooking('end',this.value)",b.date,'end')}
+        </label>
+      </div>
+      ${b.date && bookedOn(b.date).length && !slotStatus().clash ? `<div style="font-size:12px;color:#f6d79a;line-height:1.5;margin:-4px 0 12px">${esc(partlyBookedNote(b.date))}</div>` : ''}`;
+  }
+
+  const slot = d.slot.show ? `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;margin-bottom:12px;background:#fff;border:1px solid rgba(0,0,0,.09)">
+      <span style="width:8px;height:8px;border-radius:999px;background:${d.slot.dot};margin-top:5px;flex:none"></span>
+      <div>
+        <div style="font-size:13.5px;font-weight:650;color:#1c1b19">${d.slot.title}</div>
+        <div style="font-size:12.5px;color:#7a766f;margin-top:1px">${d.slot.detail}</div>
+      </div>
+    </div>` : '';
+
+  const capacityWarn = d.over ? `<div style="font-size:12px;color:#ffd166;margin-bottom:10px;line-height:1.4">Exceeds this room's capacity of ${R.capacity}. You can continue, but staff may reject an over-capacity booking.</div>` : '';
+
+  const feeNote = d.days>1 ? `<span style="display:block;font-size:12px;color:#d5b8b5;margin-top:1px">${peso(R.fee)} × ${d.days} days</span>` : '';
+
+  /* photo strip — swipe / drag only. Real uploaded photos, or one placeholder tile
+     when the room has none yet (never a made-up count). */
+  const photos=(R.photoUrls||[]).filter(Boolean);
+  const total=photos.length+1;                       // the 360° tour is always the first slide
+  const solo=total===1?' solo':'';
+  const tour=`<button type="button" class="bk-gal-slide bk-gal-360s${solo}" onclick="openRoomPano()" aria-label="Open the 360° tour of ${esc(R.name)}" style="background-image:url('${esc(R.panorama||SAMPLE_PANO)}')">
+      <span class="bk-360-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>
+      <strong>360° tour</strong><small>Tap to look around</small></button>`;
+  const slides = tour + photos.map((u,i)=>`<button type="button" class="bk-gal-slide bk-gal-photo" onclick="openGallery(${i})" aria-label="Open ${esc(R.name)} photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></button>`).join('');
+  const gallery = `
+      <div class="bk-gal">
+        <div class="bk-gal-track" tabindex="0" aria-label="${esc(R.name)} — 360° tour and photos, swipe to browse">${slides}</div>
+        ${total>1?`<span class="bk-gal-pill bk-gal-count"><span class="bk-gal-idx">1</span>&nbsp;/&nbsp;${total}</span><div class="bk-gal-dots">${Array.from({length:total},(_,i)=>`<i${i?'':' class="on"'}></i>`).join('')}</div>`:''}
+      </div>`;
+
+  const LBL='font-size:12px;font-weight:600;color:#f2d0cb';
+  return `
+  <main style="max-width:1180px;margin:0 auto;padding:20px 24px 72px">
+    <a onclick="goHome()" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:16px">← All rooms</a>
+
+    ${gallery}
+
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;margin:0 2px 26px">
+      <div style="flex:1;min-width:240px">
+        <h1 style="margin:0 0 6px;font-size:27px;font-weight:700;letter-spacing:-.015em">${esc(R.name)}</h1>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;font-size:14px;color:#4a463f">
+          <span>${esc(R.venue)}</span>
+          <span style="display:inline-flex;align-items:center;gap:6px" title="Up to ${R.capacity} guests">${svgUsers(17)}${R.capacity}</span>
+          ${maintChip(R)}
+        </div>
+      </div>
+    </div>
+
+    <div class="bk-cols">
+    <!-- LEFT -->
+    <div style="min-width:0">
+      <div style="display:flex;gap:4px;border-bottom:1px solid rgba(0,0,0,.1);overflow-x:auto;scrollbar-width:none">${tabs}</div>
+      <div style="margin-top:24px">${content}</div>
+    </div>
+
+    <!-- RIGHT: booking panel -->
+    <aside class="bk-aside">
+      <div class="bk-panel">
+        <span class="bk-eyebrow">Book this room</span>
+        <div style="font-size:20px;font-weight:750;letter-spacing:-.01em;margin-bottom:4px">Reserve this room</div>
+        <div style="font-size:12.5px;line-height:1.55;color:#e9d0cd;margin-bottom:18px">${leadMsFor(R)===0
+          ? 'Pick your dates &amp; time to check the slot. This room can be booked the same day, as long as the time hasn&rsquo;t passed yet and still fits before 10:00 PM.'
+          : 'Pick your dates &amp; time to check the slot. Bookings must start at least '+leadHours()+' hours from now. <a onclick="openLeadModal()" style="font-weight:600;cursor:pointer;white-space:nowrap">Why?</a>'}</div>
+        ${maintDisclosure(R)}
+
+        <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
+          <span style="${LBL}">Event name</span>
+          <input id="bk-eventName" type="text" value="${esc(b.eventName)}" oninput="setBooking('eventName',this.value)" placeholder="e.g. CIC Research Colloquium" style="height:42px;padding:0 11px;border:1px solid transparent;border-radius:10px;font-size:14px;color:#1c1b19">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
+          <span style="${LBL}">Booking for an organization? (optional)</span>
+          <input id="bk-organization" type="text" maxlength="190" value="${esc(b.organization||'')}" oninput="state.booking.organization=this.value" placeholder="e.g. CIC Student Council. It goes on your receipt." style="height:42px;border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:0 12px;font-size:14px;font-family:inherit;background:#fff">
+        </label>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
+          <div style="display:flex;flex-direction:column;gap:5px;position:relative">
+            <span style="${LBL}">Start date</span>
+            <button id="bk-date" type="button" onclick="openCal('date')" style="display:flex;align-items:center;gap:7px;height:42px;padding:0 10px;border:1px solid transparent;border-radius:10px;font-size:13.5px;background:#fff;cursor:pointer;color:#1c1b19">${svgCalendar(15)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.date?calDateLabel(b.date):''}</span>${svgCaret(11)}</button>
+            ${calHtml('date')}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;position:relative">
+            <span style="${LBL}">End date</span>
+            <button id="bk-dateEnd" type="button" onclick="openCal('dateEnd')" style="display:flex;align-items:center;gap:7px;height:42px;padding:0 10px;border:1px solid transparent;border-radius:10px;font-size:13.5px;background:#fff;cursor:pointer;color:#1c1b19">${svgCalendar(15)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.dateEnd?calDateLabel(b.dateEnd):''}</span>${svgCaret(11)}</button>
+            ${calHtml('dateEnd')}
+          </div>
+        </div>
+        <div style="font-size:12.5px;color:#d5b8b5;margin-bottom:12px">${rangeNote}</div>
+
+        ${timeSection}
+
+        ${slot}
+
+        <label style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">
+          <span style="${LBL}">Number of attendees</span>
+          <input id="bk-attendees" type="text" inputmode="numeric" value="${esc(b.attendees)}" oninput="setBooking('attendees',this.value.replace(/\D/g,''))" placeholder="e.g. 50" style="height:42px;padding:0 11px;border:1px solid ${d.over?'#ffd166':'transparent'};border-radius:10px;font-size:14px;color:#1c1b19">
+        </label>
+        ${capacityWarn}
+        <div style="height:6px"></div>
+
+        <div style="border-top:1px solid rgba(255,255,255,.16);padding-top:14px;margin-bottom:12px">
+          <div style="${LBL};margin-bottom:8px">Booking under</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:2px 0">
+            ${ACCOUNT.photo
+              ? `<img src="${esc(ACCOUNT.photo)}" alt="" width="34" height="34" style="width:34px;height:34px;flex:none;border-radius:999px;object-fit:cover;background:#fff">`
+              : `<div style="width:34px;height:34px;flex:none;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#8a1222">${esc(initials(ACCOUNT.name))}</div>`}
+            <div style="line-height:1.3;min-width:0">
+              <div style="font-size:13.5px;font-weight:640;color:#fff">${esc(ACCOUNT.name)}</div>
+              <div style="font-size:12px;color:#d5b8b5;overflow-wrap:anywhere">${esc(ACCOUNT.email)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+          <span style="font-size:13px;color:#e9d0cd">Reservation fee${feeNote}</span>
+          <span style="font-size:20px;font-weight:750;color:#fff">${peso(d.roomPrice)}</span>
+        </div>
+        ${d.discountAmount>0?`
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:8px">
+          <span style="font-size:13px;color:#8ee6b8">USeP discount &minus;${d.discountPercent}%<span style="display:block;font-size:12px;color:#d5b8b5;margin-top:1px">applied once staff check your USeP ID</span></span>
+          <span style="font-size:17px;font-weight:700;color:#8ee6b8">&minus;${peso(d.discountAmount)}</span>
+        </div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:9px;margin-top:8px;margin-bottom:12px;border-top:1px solid rgba(255,255,255,.16)">
+          <span style="font-size:13px;font-weight:640;color:#f2d0cb">Total to pay</span>
+          <span style="font-size:21px;font-weight:750;color:#fff">${peso(d.totalFee)}</span>
+        </div>`:''}
+
+        <button class="bk-go ${d.ready?'on':'off'}" onclick="goReview()" ${d.ready?'':'disabled'}>Continue — review &amp; submit request</button>
+        ${(!d.ready && d.hint)?`<div style="font-size:12.5px;color:#d5b8b5;text-align:center;margin-top:10px">${d.hint}</div>`:`<div style="font-size:12.5px;color:#d5b8b5;text-align:center;margin-top:10px">You'll attach a valid ID next · payment opens after staff approval</div>`}
+      </div>
+    </aside>
+    </div>
+  </main>`;
+}
+
+/* rows shared by review + confirmation */
+function bookingRows(){
+  const d=derive(); const R=d.R; const b=state.booking;
+  const bookerName=ACCOUNT.name;
+  const bookerType='USeP account';
+  const bookerContact=ACCOUNT.phone+' · '+ACCOUNT.email;
+  const rangeLabel=fmtRange(b.date,b.dateEnd);
+  const daysLabel=(d.days>1?(d.days+' days'):'1 day')
+    +(d.excluded?(' · '+d.excluded+' unavailable'):'')
+    +(d.days>1?(' ('+peso(R?R.fee:0)+'/day)'):'');
+  let n=0;
+  const schedule=d.allDates.map(ds=>{
+    if(isDayBlocked(ds)) return { skipped:true, day:'', date:fmtDate(ds), time:'Not available' };
+    n++; const t=dayTime(ds);
+    return { day:'Day '+n, date:fmtDate(ds), time:(t.start&&t.end)?(fmtTime(t.start)+' – '+fmtTime(t.end)):'—' };
+  });
+  const sameHours=sameHoursEveryDay(d.dates);
+  const first=schedule.find(s=>!s.skipped)||{time:'—'};
+  const timeLabel = d.dates.length>1 ? (sameHours ? ('daily, '+first.time) : 'custom hours per day') : first.time;
+  return { d, R, b, bookerName, bookerType, bookerContact, rangeLabel, daysLabel, timeLabel, schedule, sameHours };
+}
+
+/* per-day schedule list, shown on review + confirmation for multi-day bookings */
+function scheduleHtml(x){
+  if(!x.d.multi) return '';
+  return `
+    <div style="margin:12px 0 2px">
+      <div style="font-size:12px;font-weight:600;color:#a5a19a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">Daily schedule</div>
+      <div>
+        ${x.schedule.map((s,i)=>{
+          const line=i?'border-top:1px solid rgba(0,0,0,.06);':'';
+          return s.skipped
+            ? `<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;${line}font-size:13px"><span style="color:#a5a19a"><s>${esc(s.date)}</s></span><span style="font-weight:500;color:#a5a19a">${esc(s.time)}</span></div>`
+            : `<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;${line}font-size:13px"><span style="color:#5c584f">${s.day} · ${esc(s.date)}</span><span style="font-weight:600;color:#1c1b19">${esc(s.time)}</span></div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+/* A bar nobody can miss. This screen looks exactly like the customer site —
+   which is the point — so it has to say out loud that it is not one, or a staff
+   member will eventually take a booking on it thinking they are signed in as
+   somebody. It names the staff member for the same reason. */
+/* ---------- screen: REVIEW ---------- */
+function reviewScreen(){
+  const x=bookingRows(); const R=x.R; if(!R) return '';
+  /* key-value blocks (same visual language as the payment card) — left-aligned
+     label-over-value cells instead of a long label…value ping-pong list */
+  const blk=(label,value,span)=>`<div style="min-width:0;${span?'grid-column:1 / -1;':''}"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+  const blocks=[
+    blk('Event name', esc(x.b.eventName||'—')),
+    blk('Attendees', esc(x.b.attendees||'—')+(x.d.over?' <span style="color:#8a5a12;font-weight:600">· over capacity</span>':'')),
+    blk(x.d.days>1?'Dates':'Date', esc(x.rangeLabel)),
+    blk(x.d.days>1?'Time (daily)':'Time', esc(x.timeLabel)),
+    blk('Duration', esc(x.daysLabel)),
+    blk('Booked by ('+esc(x.bookerType)+')', esc(x.bookerName)),
+    blk('Contact', esc(x.bookerContact), true),
+  ].join('');
+  const step=(n,active,done)=>`<span style="width:26px;height:26px;border-radius:999px;background:${done?'#1c7a4f':active?'#a11626':'#e7e4de'};color:${(active||done)?'#fff':'#6e6a64'};font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">${n}</span>`;
+  return `
+  <main style="max-width:720px;margin:0 auto;padding:26px 24px 72px">
+    <a onclick="backToDetail()" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:16px">← Back to room</a>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <div style="display:flex;gap:6px">${step(1,true,false)}${step(2,false,false)}${step(3,false,false)}</div>
+      <span style="font-size:12.5px;color:#6e6a64;font-weight:600">Step 1 of 3 · Review &amp; submit</span>
+    </div>
+    <h1 style="margin:0 0 18px;font-size:24px;font-weight:700;letter-spacing:-.01em">Review your reservation</h1>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
+      <div style="display:flex;gap:14px;align-items:center;padding:16px;border-bottom:1px solid rgba(0,0,0,.07)">
+        ${heroTile(R,0,'width:72px;height:72px;border-radius:12px;flex:none')}
+        <div>
+          <div style="font-size:17px;font-weight:680">${esc(R.name)}</div>
+          <div style="font-size:13px;color:#6e6a64;margin-top:3px">${esc(R.venue)} · Up to ${R.capacity} people</div>
+        </div>
+      </div>
+      <div style="padding:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">${blocks}</div>
+        ${scheduleHtml(x)}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 16px;border-top:1px solid rgba(0,0,0,.07)">
+        <span style="font-size:13.5px;font-weight:600;color:#4a463f">${x.d.discountAmount>0?'Total to pay':'Reservation fee'} <span style="font-weight:500;color:#6e6a64">· GCash or cash at the venue</span></span>
+        <span style="font-size:20px;font-weight:750;letter-spacing:-.01em">${peso(x.d.totalFee)}</span>
+      </div>
+      ${x.d.discountAmount>0?`
+      <div style="padding:0 16px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13px;line-height:1.4;color:#6e6a64">
+          <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
+          <span style="flex:none;color:#1c7a4f;font-weight:650">&minus;${peso(x.d.discountAmount)}</span>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed rgba(0,0,0,.12);font-size:12.5px;color:#6e6a64;line-height:1.6">Provisional &mdash; staff confirm the discount when they check your USeP ID. Payment only opens after that, so this figure is settled before you pay anything.</div>
+      </div>`:''}
+    </div>
+
+    <!-- USeP AFFILIATION. A claim, not a grant: staff confirm it from the ID
+         before payment unlocks, so the discount below is shown as provisional.
+         The account's email is displayed as SUPPORTING EVIDENCE only — nothing
+         verifies it at registration, so it can never decide a price on its own
+         (see includes/pricing.php).
+         COUNTER: hidden. The question was already answered on the "who is this
+         for" step, by a staff member holding the actual ID — asking it twice
+         would invite two different answers on one booking. -->
+    ${COUNTER?'':`
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+      <div style="font-size:14px;font-weight:660;margin-bottom:3px">USeP affiliation <span style="color:#b23a3a">*</span></div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:11px">USeP students, faculty, employees and alumni get <strong>${DISCOUNT_PERCENT}% off</strong>. Staff confirm this from your ID before you pay.</div>
+      ${[[true,'I am USeP-affiliated','Student, faculty or employee &mdash; upload your <strong>USeP ID</strong> below'],
+         [false,'Not affiliated','Upload any valid government-issued ID below']].map(function(o){
+        const on = state.affiliated === o[0];
+        return `<div onclick="setAffiliation(${o[0]})" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid ${on?'#a11626':'rgba(0,0,0,.14)'};background:${on?'#f4f7fc':'#fff'};border-radius:11px;padding:12px 13px;margin-bottom:8px;cursor:pointer">
+            <span style="flex:none;width:17px;height:17px;border-radius:999px;border:2px solid ${on?'#a11626':'#c3bfb8'};margin-top:1px;display:flex;align-items:center;justify-content:center">
+              ${on?`<span style="width:8px;height:8px;border-radius:999px;background:#a11626"></span>`:''}</span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:13.5px;font-weight:640;color:#1c1b19">${o[1]}</span>
+              <span style="display:block;font-size:12.5px;color:#6e6a64;margin-top:2px">${o[2]}</span>
+            </span>
+          </div>`;
+      }).join('')}
+      ${isUsepAccount(ACCOUNT.email)?`
+      <div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#4f7a63;background:#f2faf5;border:1px solid #d4ebdd;border-radius:9px;padding:9px 11px">
+        <span>&#10003;</span><span>You are signed in with a USeP address (<strong>${esc(ACCOUNT.email)}</strong>). Staff see this, but they still check your ID &mdash; it is the ID that decides the discount.</span>
+      </div>`:''}
+    </div>`}
+
+    ${COUNTER?`
+    <!-- COUNTER: there is no upload. The staff member looked at the ID, and
+         that is what is recorded — with their name against it, on the booking's
+         own history. Nothing about a walk-in's identity is stored as a file. -->
+    <div style="background:#fff;border:1px solid #d4ebdd;border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+      <div style="font-size:14px;font-weight:660;margin-bottom:3px">Identity</div>
+      <div style="font-size:13px;color:#1c7a4f;line-height:1.6">
+        &check; Valid ID checked in person by <strong>${esc(COUNTER_STAFF)}</strong>${state.booker.usepId?' &middot; <strong>USeP ID</strong>, discount applied':''}<br>
+        ${state.booker.mode==='account'
+          ? counterAccountLine()
+          : '&middot; Walk-in with no account &mdash; <strong>'+esc(state.booker.name)+'</strong> &middot; '+esc(state.booker.phone)}
+      </div>
+    </div>`:`
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
+      <div style="font-size:14px;font-weight:660;margin-bottom:3px">Valid ID <span style="color:#b23a3a">*</span></div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:11px">Staff verify your identity before approving the reservation. USeP ID or any government-issued ID.</div>
+      <input type="file" id="idFileInput" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadId(this)">
+      ${state.idFile?`
+      <div style="display:flex;align-items:center;gap:12px;border:1px solid #d4ebdd;background:#f2faf5;border-radius:11px;padding:11px 13px">
+        <img src="${state.idFile.url}" alt="ID" style="width:58px;height:38px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,.1);flex:none">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:#1c7a4f;overflow-wrap:anywhere">${esc(state.idFile.name)}</div>
+          <div style="font-size:12.5px;color:#4f7a63">Reviewed by staff together with your reservation</div>
+        </div>
+        <button onclick="removeId()" style="flex:none;background:none;border:none;color:#6e6a64;font-size:12.5px;font-weight:600;cursor:pointer">Remove</button>
+      </div>`:`
+      <div onclick="document.getElementById('idFileInput').click()" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:22px 14px;text-align:center;cursor:pointer;background:#fff">
+        <div style="font-size:13.5px;font-weight:600;color:#4a463f">Upload a photo of your valid ID</div>
+        <div style="font-size:12.5px;color:#a5a19a;margin-top:3px">PNG or JPG · up to ${UPLOAD_MAX_MB} MB · make sure the name and photo are readable</div>
+      </div>`}
+    </div>`}
+
+    ${REFUNDS_ENABLED?'':`
+    <div style="background:#fff;border:1px solid ${state.agreeNoRefund?'#d4ebdd':'#f0d9b8'};border-radius:16px;padding:16px;margin-top:14px">
+      <div style="font-size:14px;font-weight:660;margin-bottom:3px">Non-refundable booking <span style="color:#b23a3a">*</span></div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:11px;line-height:1.55">USeP does not give refunds. Once you pay, this booking is final. If USeP has to close or cancel the venue, you will be offered a replacement room or a new date instead.</div>
+      <label style="display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.55;color:#1c1b19;cursor:pointer">
+        <input type="checkbox" id="agreeNoRefund" ${state.agreeNoRefund?'checked':''} onchange="toggleAgreeNoRefund(this)" style="width:15px;height:15px;margin-top:2px;flex:none;accent-color:#a11626">
+        <span>I understand this booking is <strong>non-refundable</strong> once paid.</span>
+      </label>
+    </div>`}
+
+    <!-- the server's refusal (slot just taken, ID not accepted...) — it used to be set and never drawn -->
+    ${state.submitError?`<div role="alert" style="margin-top:14px;background:#fdf2f2;border:1px solid #f2d8d8;color:#b23a3a;border-radius:11px;padding:11px 13px;font-size:13px;line-height:1.5">${esc(state.submitError)}</div>`:''}
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <button onclick="backToDetail()" ${submitting?'disabled':''} style="flex:none;height:48px;padding:0 20px;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;font-size:14px;font-weight:640;cursor:${submitting?'not-allowed':'pointer'};opacity:${submitting?'.6':'1'}">Edit details</button>
+      <button onclick="submitRequest()" ${(canSubmitRequest()&&!submitting)?'':'disabled'} style="flex:1;height:48px;border:none;border-radius:11px;background:${(canSubmitRequest()&&!submitting)?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:680;cursor:${(canSubmitRequest()&&!submitting)?'pointer':'not-allowed'};opacity:${canSubmitRequest()?'1':'.85'}">${submitting?'Submitting&hellip;':(COUNTER?'Create booking &mdash; approved':'Submit booking request')}</button>
+    </div>
+    ${(!COUNTER && !state.idFile)?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Upload a valid ID to submit your request</div>'
+      :!canSubmitRequest()?'<div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">Tick that you understand the booking is non-refundable to submit your request</div>':''}
+    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:8px">${COUNTER
+      ? 'You are the approver, so this is created already approved and payment opens immediately. '+(PAY_POLICY.prepay
+          ? 'Take the payment at the counter, or leave it for the customer to pay.'
+          : 'Payment opens <strong>after the event</strong> — due <strong>'+payByInfo().label+'</strong>, the day after it; overdue after '+payByInfo().overdueAfter+'.')
+      : PAY_POLICY.prepay
+        ? 'Payment opens after staff approve your ID and reservation — pay via GCash or cash, at least 1 day before your event.'
+        : 'Staff approve your ID and reservation first. Payment opens only <strong>after your event</strong> — pay via GCash or cash by <strong>'+payByInfo().label+'</strong>, the day after it.'}</div>
+  </main>`;
+}
+
+/* ---------- screen: PENDING APPROVAL ---------- */
+/* After submitting (with ID), the request waits for staff to approve BOTH the
+   ID and the reservation. Payment stays locked until then. */
+function pendingScreen(){
+  const x=bookingRows(); const R=x.R; if(!R) return '';
+  const pb=payByInfo();
+  const st=(label,status,bg,fg)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(0,0,0,.06)">
+      <span style="font-size:13.5px;color:#4a463f">${label}</span>
+      <span style="padding:4px 11px;border-radius:999px;font-size:12px;background:${bg};color:${fg}">${status}</span>
+    </div>`;
+  return `
+  <main style="max-width:600px;margin:0 auto;padding:44px 24px 72px;text-align:center">
+    <div style="width:46px;height:46px;border-radius:999px;background:${state.approved?'#e9f5ef':'#fbeee0'};display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+      ${state.approved
+        ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1c7a4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+        : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8a5a12" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'}
+    </div>
+    <h1 style="margin:0 0 8px;font-size:25px;font-weight:720;letter-spacing:-.01em">${state.approved?'Approved — payment opens after your event':'Request submitted — awaiting approval'}</h1>
+    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">${state.approved
+      ? 'Your ID and reservation are approved and the slot is yours. Nothing to pay yet — payment opens the day after your event; pay by <strong>'+pb.label+'</strong>.'
+      : PAY_POLICY.prepay
+        ? 'A venue coordinator will review your <strong>ID and reservation</strong>. Once both are approved, the payment step unlocks — you\'ll pay via GCash or cash at the venue.'
+        : 'A venue coordinator will review your <strong>ID and reservation</strong>. Once both are approved your slot is confirmed. You pay <strong>after the event</strong> — via GCash or cash, by <strong>'+pb.label+'</strong>, the day after it.'}</p>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:4px 18px;margin-top:24px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
+      ${state.approved ? st('Reservation request','Approved','#e9f5ef','#1c7a4f') : st('Reservation request','Pending staff review','#fdf3e6','#8a5a12')}
+      ${state.approved ? st('Valid ID ('+esc(state.idFile?state.idFile.name:'submitted')+')','Approved','#e9f5ef','#1c7a4f') : st('Valid ID ('+esc(state.idFile?state.idFile.name:'submitted')+')','Under review','#fdf3e6','#8a5a12')}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0">
+        <span style="font-size:13.5px;color:#4a463f">Payment</span>
+        <span style="padding:4px 11px;border-radius:999px;font-size:12px;background:#fff;border:1px solid rgba(0,0,0,.14);color:#6b675f">${state.approved?'Opens '+pb.opensLabel:'Locked until approval'}</span>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;text-align:left">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Reference</div><div style="font-size:13.5px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Room</div><div style="font-size:13.5px;font-weight:640">${esc(R.name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${x.d.days>1?'Dates':'Date'}</div><div style="font-size:13.5px;font-weight:640">${esc(x.rangeLabel)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${PAY_POLICY.prepay?'Fee (pay after approval)':'Fee (pay after your event)'}</div><div style="font-size:13.5px;font-weight:640">${peso(x.d.totalFee)}</div></div>
+      </div>
+      <div style="font-size:12px;color:#6e6a64;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">${payWhenText()}${PAY_POLICY.prepay?' — unpaid reservations may be released after the deadline.':'. Bookings not paid by then are marked overdue.'}</div>
+    </div>
+
+        <!-- Live system: a real coordinator does this, and the request is already
+         in their queue. Say where to watch for it rather than leaving the
+         screen looking like it stops here. -->
+    <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px 16px;margin-top:18px;text-align:left;background:#fff">
+      <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the venue coordinators now. You will see the decision on this booking in <a href="${roomReservationPage.bookingHistoryUrl}" style="color:#1f1e1e;font-weight:640">My Bookings</a>, and payment unlocks there once it is approved.</div>
+    </div>
+
+    <button onclick="restart()" style="background:none;border:none;color:#6e6a64;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse more rooms</button>
+  </main>`;
+}
+
+/* ---------- screen: PAYMENT ---------- */
+/* The receipt panel has three phases: upload zone → OCR progress → verdict card. */
+
+function paymentScreen(){
+  const x=bookingRows(); const R=x.R; if(!R) return '';
+  const cash=state.payMethod==='cash';
+  const paid=cash?true:receiptOk();
+
+  /* payment method selector — GCash (online) or cash (walk-in at the office) */
+  const methodCard=(m,title,sub)=>{
+    const on=state.payMethod===m;
+    return `<div onclick="setPayMethod('${m}')" style="border:1.5px solid ${on?'#a11626':'rgba(0,0,0,.12)'};background:${on?'#f2f4f9':'#fff'};border-radius:12px;padding:13px 14px;cursor:pointer">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:15px;height:15px;border-radius:999px;border:1.5px solid ${on?'#a11626':'#b7b3ab'};display:flex;align-items:center;justify-content:center;flex:none">${on?'<span style="width:7px;height:7px;border-radius:999px;background:#a11626"></span>':''}</span>
+        <span style="font-size:14px;font-weight:680;color:#1c1b19">${title}</span>
+      </div>
+      <div style="font-size:12px;color:#6e6a64;margin-top:3px;padding-left:23px">${sub}</div>
+    </div>`;
+  };
+
+  const gcashBody=`
+    <div style="display:flex;gap:12px;background:#fdf7ee;border:1px solid #f3e3c8;border-radius:12px;padding:15px 16px;margin-bottom:18px">
+      <div>
+        <div style="font-size:14.5px;color:#8a5a12">Always send the EXACT amount — not more, not less.</div>
+        <div style="font-size:13px;color:#8a5a12;opacity:.9;margin-top:2px">Payments with an incorrect amount are automatically rejected.</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
+        <div>
+          <div style="font-size:12.5px;color:#6e6a64">Amount to send</div>
+          <div style="font-size:30px;font-weight:780;letter-spacing:-.02em;color:#a11626">${peso(x.d.totalFee)}</div>
+        </div>
+        <div style="width:60px;height:60px;border-radius:14px;background:#0a6cf0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750;text-align:center;line-height:1.1">GCash</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin:16px 0;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">GCash account name</div><div style="font-size:14px;font-weight:640">${esc(gcAccount().name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">GCash number <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#6e6a64">· ${esc(R.venue)}</span></div><div style="font-size:14px;font-weight:640">${esc(gcAccount().number.replace(/^(\d{4})(\d{3})(\d{4})$/,'$1 $2 $3'))}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Reference to include</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
+      </div>
+
+      <div style="margin-top:4px">
+        <div style="font-size:12.5px;font-weight:600;color:#5c584f;margin-bottom:7px">Upload GCash receipt</div>
+        <label style="display:flex;gap:9px;align-items:flex-start;margin:0 0 10px;cursor:pointer">
+          <input type="checkbox" id="agreeExact" ${state.agreeExact?'checked':''} onchange="toggleAgreeExact(this)" style="width:15px;height:15px;margin-top:2px;accent-color:#a11626">
+          <span style="font-size:12.5px;color:#4a463f;line-height:1.5">I understand I must send the <strong>exact amount &mdash; ${peso(x.d.totalFee)}</strong>. A different amount is not confirmed automatically; a coordinator has to review it, which delays my booking.</span>
+        </label>
+        ${receiptPanelHtml()}
+      </div>
+    </div>`;
+
+  const cashBody=`
+    <div style="display:flex;gap:12px;background:#f5f7fb;border:1px solid #dfe4ef;border-radius:12px;padding:15px 16px;margin-bottom:18px">
+      <div>
+        <div style="font-size:14.5px;color:#a11626">Pay in cash at the venue office.</div>
+        <div style="font-size:13px;color:#a11626;opacity:.85;margin-top:2px">Your reservation is held while payment is pending — it is confirmed once the cashier records your payment.</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
+        <div>
+          <div style="font-size:12.5px;color:#6e6a64">Amount to pay</div>
+          <div style="font-size:30px;font-weight:780;letter-spacing:-.02em;color:#a11626">${peso(x.d.totalFee)}</div>
+        </div>
+        <div style="width:60px;height:60px;border-radius:14px;background:#a11626;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750;text-align:center;line-height:1.1">Cash</div>
+      </div>
+
+      <div style="margin:16px 0">
+        <div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Where to pay</div>
+        <div style="font-size:15px;font-weight:680;color:#1c1b19">${esc(CASH_PAY.office)}</div>
+        <div style="font-size:13px;color:#4a463f;margin-top:3px">${esc(CASH_PAY.address)}</div>
+        <div style="font-size:12.5px;color:#6e6a64;margin-top:3px">${esc(CASH_PAY.hours)}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin-bottom:16px">
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Quote your reference</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
+      </div>
+
+      <div style="font-size:12.5px;color:#4a463f;line-height:1.7;border-top:1px solid rgba(0,0,0,.07);padding-top:13px">Bring your booking reference and a valid ID. ${PAY_POLICY.prepay?'Pay <strong>before your event date</strong> — unpaid reservations may be released.':'Pay by <strong>'+payByInfo().label+'</strong> — after that the booking is marked overdue.'} You will receive the official transaction receipt at the counter; keep it${REFUNDS_ENABLED?' (it is required for any refund)':''}.</div>
+    </div>`;
+
+  return `
+  <main style="max-width:720px;margin:0 auto;padding:26px 24px 72px">
+    <a onclick="backToPending()" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:16px">← Back to request status</a>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <div style="display:flex;gap:6px">
+        <span style="width:26px;height:26px;border-radius:999px;background:#1c7a4f;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">1</span>
+        <span style="width:26px;height:26px;border-radius:999px;background:#a11626;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span>
+        <span style="width:26px;height:26px;border-radius:999px;background:#e7e4de;color:#6e6a64;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span>
+      </div>
+      <span style="font-size:12.5px;color:#6e6a64;font-weight:600">Step 2 of 3 · Payment</span>
+    </div>
+    <h1 style="margin:0 0 18px;font-size:24px;font-weight:700;letter-spacing:-.01em">${cash?'Pay at the venue':'Pay with GCash'}</h1>
+
+    <div style="display:flex;gap:10px;align-items:flex-start;background:#f2faf5;border:1px solid #d4ebdd;border-radius:12px;padding:13px 15px;margin-bottom:18px">
+      <span style="width:8px;height:8px;border-radius:999px;background:#2f9e63;margin-top:5px;flex:none"></span>
+      <div>
+        <div style="font-size:13.5px;color:#1c7a4f">${PAY_POLICY.prepay?'Request approved — payment unlocked':'Your event is over — payment is open'}</div>
+        <div style="font-size:12.5px;color:#1c7a4f;opacity:.85;margin-top:1px">${PAY_POLICY.prepay
+          ? 'Your ID and reservation were approved. Pay '+(payByInfo().late?payByInfo().label:'by '+payByInfo().label+' (1 day before your event)')+' to secure the slot.'
+          : 'Pay by <strong>'+payByInfo().label+'</strong>, the day after your event. After that the booking is marked overdue.'}</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">
+      ${methodCard('gcash','GCash','Send online, then upload your receipt — verified instantly')}
+      ${methodCard('cash','Cash — walk-in','Reserve now, pay in person at the venue office')}
+    </div>
+
+    ${cash?cashBody:gcashBody}
+
+    <button onclick="confirmBooking()" ${paid?'':'disabled'} style="width:100%;height:50px;border:none;border-radius:12px;background:${paid?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:700;cursor:${paid?'pointer':'not-allowed'};opacity:${paid?'1':'.85'};margin-top:20px">${cash?'Submit reservation — pay at the office':'Submit payment &amp; reservation'}</button>
+    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:9px">${cash?'Your booking stays pending until the cashier records your payment.':'Your booking will be pending staff confirmation after submission.'} Need help? <a href="${roomReservationPage.faqUrl}${roomReservationPage.counterQuery}" target="_blank" rel="noopener" style="cursor:pointer;color:#a11626;font-weight:600;text-decoration:underline">Check the FAQ</a>${cash?'':' · <a onclick="clearGcashHistory()" style="cursor:pointer;color:#6e6a64;text-decoration:underline">Reset receipt history (demo)</a>'}</div>
+  </main>`;
+}
+
+/* ---------- screen: CONFIRMATION ---------- */
+/* ---------- screen: DONE (counter mode) ----------
+   What staff need next, in order: the reference to read out, what the customer
+   owes and when, and a way into the booking itself to take the payment. */
+function counterDoneScreen(x){
+  const r = state.counterResult || {};
+  const blk=(label,value)=>`<div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+  return `
+  <main style="max-width:620px;margin:0 auto;padding:40px 18px 80px;text-align:center">
+    <div style="width:54px;height:54px;border-radius:999px;background:#eaf6ef;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#1c7a4f">&check;</div>
+    <h1 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px">Booking created and approved</h1>
+    <p style="margin:0 auto;max-width:440px;font-size:14.5px;line-height:1.6;color:#4a463f">Read the reference out to the customer. The slot is held in their name.</p>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:18px;margin-top:22px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
+        ${blk('Reference', esc(state.reference))}
+        ${blk('Booked for', esc(state.booker.name))}
+        ${blk('Room', esc(x.R.name))}
+        ${blk(x.d.days>1?'Dates':'Date', esc(x.rangeLabel))}
+        ${blk('Total', peso(x.d.total))}
+        ${blk('Pay by', esc(r.payBy || '—') + (r.overdueAfter ? '<div style="font-size:12px;font-weight:500;color:#6e6a64">Overdue after '+esc(r.overdueAfter)+'</div>' : ''))}
+      </div>
+      <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:12px;font-size:12.5px;color:#6e6a64;line-height:1.6">
+        ${state.booker.mode==='walkin'
+          ? 'No account, so this can only be paid <strong>at the counter</strong> and refunded by staff. It will not appear in anyone&rsquo;s My Bookings.'
+          : 'Linked to <strong>'+esc(state.booker.name)+'</strong>&rsquo;s account &mdash; they can also pay online from My Bookings.'}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap">
+      <a href="${roomReservationPage.bookingRequestUrl}?id=${encodeURIComponent(state.reference)}" style="flex:1;min-width:180px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:680;text-decoration:none">Open the booking &mdash; take payment</a>
+      <a href="${roomReservationPage.roomReservationUrl}?room=${encodeURIComponent(state.roomId)}&counter=1" style="flex:none;height:48px;padding:0 20px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;color:#1c1b19;font-size:14px;font-weight:640;text-decoration:none">Another booking</a>
+    </div>
+    <a href="${roomReservationPage.dashboardUrl}" style="display:inline-block;margin-top:16px;color:#6e6a64;font-size:13px;font-weight:600">Back to the dashboard</a>
+  </main>`;
+}
+
+function doneScreen(){
+  const x=bookingRows(); const R=x.R; if(!R) return '';
+  /* COUNTER: a different ending. The customer flow arrives here having PAID;
+     a counter booking arrives here having been APPROVED, with payment still to
+     come. Showing them the customer's "thank you, you have paid" screen would
+     be a lie told to the person who just made the booking. */
+  if(COUNTER) return counterDoneScreen(x);
+  const cash=state.payMethod==='cash';
+  const rec=!cash && state.ocr && state.ocr.rec;
+  const review=!!(rec&&rec.status==='manual_review');
+  const rows=[
+    { label:'Reference', value:state.reference },
+    { label:'Payment method', value:cash?'Cash — walk-in':'GCash' },
+    ...(cash?[{ label:'Pay at', value:CASH_PAY.office }]:[{ label:'GCash ref no.', value:(rec&&(rec.parsed.refDisplay||rec.parsed.ref))||'—' }]),
+    { label:'Room', value:R.name },
+    { label:'Event', value:x.b.eventName||'—' },
+    { label:x.d.days>1?'Dates':'Date', value:x.rangeLabel },
+    { label:x.d.days>1?'Time (daily)':'Time', value:x.timeLabel },
+    { label:'Duration', value:x.daysLabel },
+    { label:'Attendees', value:x.b.attendees||'—' },
+    { label:'Booked by', value:x.bookerName },
+    { label:cash?'Amount due':'Amount paid', value:peso(x.d.totalFee) },
+  ];
+  const bodyCopy = cash
+    ? (PAY_POLICY.prepay
+      ? 'Your booking request was received and the slot is held. Pay <strong>'+peso(x.d.totalFee)+' in cash</strong> at '+esc(CASH_PAY.office)+' — quote your reference at the counter. The reservation is confirmed once the cashier records your payment.'
+      : 'Pay <strong>'+peso(x.d.totalFee)+' in cash</strong> at '+esc(CASH_PAY.office)+' by <strong>'+payByInfo().label+'</strong> — quote your reference at the counter. Your booking is settled once the cashier records your payment.')
+    : (review
+      ? 'Your booking request was received, but some receipt details could not be verified automatically. A venue coordinator will <strong>manually review your receipt</strong> before confirming.'
+      : 'Your payment and booking request were received. This reservation is <strong>pending staff confirmation</strong> — a venue coordinator will confirm the payment in GCash and approve it shortly.');
+  const pill = cash
+    ? { bg:'#fdf3e6', fg:'#8a5a12', t:PAY_POLICY.prepay?'Reservation held — awaiting cash payment':'Awaiting cash payment' }
+    : (review
+      ? { bg:'#fdf3e6', fg:'#8a5a12', t:'Receipt under manual review' }
+      : { bg:'#e9f5ef', fg:'#1c7a4f', t:'Payment recorded — pending staff confirmation' });
+  return `
+  <main style="max-width:600px;margin:0 auto;padding:52px 24px 72px;text-align:center">
+    <h1 style="margin:0 0 8px;font-size:26px;font-weight:720;letter-spacing:-.01em">${PAY_POLICY.prepay?'Reservation submitted':(cash?'Cash payment pending':'Payment submitted')}</h1>
+    <p style="margin:0 auto 6px;max-width:440px;font-size:15px;line-height:1.6;color:#4a463f">${bodyCopy}</p>
+    <div style="display:inline-block;margin:16px auto 0;padding:8px 16px;border-radius:999px;background:${pill.bg};color:${pill.fg};font-size:13px">Status: ${pill.t}</div>
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:6px 18px 8px;margin-top:26px;text-align:left">
+      ${rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.06)"><span style="font-size:13.5px;color:#6e6a64">${r.label}</span><span style="font-size:13.5px;font-weight:600;text-align:right">${esc(r.value)}</span></div>`).join('')}
+      ${scheduleHtml(x)}
+    </div>
+
+    <div style="font-size:12.5px;color:#6e6a64;line-height:1.6;margin-top:16px">${!REFUNDS_ENABLED
+      ? (cash
+        ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter as your proof of payment. This booking is non-refundable.'
+        : 'Keep your GCash receipt and this reference number as your proof of payment. This booking is non-refundable.')
+      : cash
+      ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the VENUSeP Transaction Receipt and the Official Receipt.'
+      : 'Keep your GCash receipt and this reference number. A refund request needs the VENUSeP Transaction Receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
+
+    <button onclick="restart()" style="height:48px;padding:0 26px;border:none;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:660;cursor:pointer;margin-top:24px">Browse more rooms</button>
+  </main>`;
+}
+
+/* ---------- modals: 12-hour rule + booked-date clash ---------- */
+function modalHtml(){
+  if(state.modal && state.modal.type==='clash') return clashModalHtml();
+  if(state.modal!=='lead') return '';
+  const R=getRoom();
+  const sameDayOk = R && leadMsFor(R)===0;
+  const e=earliestAllowed();
+  const hhmm=String(e.getHours()).padStart(2,'0')+':'+String(e.getMinutes()).padStart(2,'0');
+  const when=e.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})+' · '+fmtTime(hhmm);
+  return `
+  <div onclick="closeModal()" style="position:fixed;inset:0;background:rgba(20,18,15,.45);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100">
+    <div onclick="event.stopPropagation()" role="dialog" aria-modal="true" style="background:#fff;border-radius:20px;max-width:380px;width:100%;padding:28px 26px 24px;box-shadow:0 24px 70px rgba(0,0,0,.26);text-align:center">
+      <div style="width:46px;height:46px;border-radius:999px;background:#eef0f5;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a11626" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <div style="font-size:17px;font-weight:720;letter-spacing:-.01em;margin-bottom:6px">${sameDayOk ? 'Pick a time that hasn&rsquo;t passed yet' : 'Book at least '+leadHours()+' hours ahead'}</div>
+      <p style="margin:0 auto 16px;font-size:13.5px;line-height:1.6;color:#7a766f;max-width:32ch">${sameDayOk
+        ? 'This room can be booked the same day — but the time you picked is already behind the current time.'
+        : 'Venue staff need time to prepare — reservations must start at least <strong style="color:#4a463f">'+leadHours()+' hours from now</strong>. The time you picked is too soon.'}</p>
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px 14px;margin-bottom:18px">
+        <div style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">Earliest start</div>
+        <div style="font-size:15px;font-weight:680;color:#a11626">${when}</div>
+      </div>
+      <button onclick="closeModal()" style="width:100%;height:46px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14px;font-weight:650;cursor:pointer">Pick a later time</button>
+    </div>
+  </div>`;
+}
+
+/* the "this specific date is not available" modal. Two reasons a date can be
+   unavailable — already booked, or closed for maintenance — and dayBlock() says
+   which, so this never re-derives it. In a multi-day range the day is excluded
+   automatically (Jul 17–20 with Jul 18 taken books Jul 17 + 19 + 20 around it);
+   a single unavailable date simply can't be booked. */
+function clashModalHtml(){
+  const m=state.modal; const R=getRoom(); if(!R) return '';
+  const blk=dayBlock(m.day); if(!blk) return '';
+  const maint = blk.why==='maintenance';
+  const dl=fmtDate(m.day);
+  const multi=rangeDates(state.booking.date, state.booking.dateEnd||state.booking.date).length>1;
+  const why = maint ? 'The room is <strong>closed</strong> on that date'
+                    : 'That date already has a reservation, so it is <strong>not available</strong>';
+  const body = multi
+    ? why+'. It has been left out of your booking automatically — you are only reserving the remaining available days (and only paying for those).'
+    : why+'. Please pick a different date.';
+  const boxLabel = maint ? 'Maintenance' : ('Existing booking'+(blk.slots.length>1?'s':''));
+  const boxValue = maint ? maintUntilLabel(blk.m)
+                         : blk.slots.map(s=>fmtTime(s.start)+' – '+fmtTime(s.end)).join(' and ');
+  const boxNote  = maint ? blk.m.reason : '';
+  const okLabel = multi ? 'OK — book the other days' : 'Got it — I\'ll pick another date';
+  return `
+  <div onclick="closeModal()" style="position:fixed;inset:0;background:rgba(20,18,15,.45);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100">
+    <div onclick="event.stopPropagation()" role="dialog" aria-modal="true" style="background:#fff;border-radius:20px;max-width:380px;width:100%;padding:28px 26px 24px;box-shadow:0 24px 70px rgba(0,0,0,.26);text-align:center">
+      <div style="width:46px;height:46px;border-radius:999px;background:#fbeee0;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8a5a12" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </div>
+      <div style="font-size:17px;font-weight:720;letter-spacing:-.01em;margin-bottom:6px">${dl} is not available</div>
+      <p style="margin:0 auto 16px;font-size:13.5px;line-height:1.6;color:#7a766f;max-width:34ch">${body}</p>
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px 14px;margin-bottom:18px">
+        <div style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">${boxLabel}</div>
+        <div style="font-size:15px;font-weight:680;color:#a11626">${esc(boxValue)||'—'}</div>
+        ${boxNote?`<div style="font-size:12px;color:#6e6a64;margin-top:3px">${esc(boxNote)}</div>`:''}
+      </div>
+      <button onclick="closeModal()" style="width:100%;height:46px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14px;font-weight:650;cursor:pointer">${okLabel}</button>
+    </div>
+  </div>`;
+}
+
+/* ---------- render (with focus/caret preservation) ---------- */
+function currentScreen(){
+  switch(state.screen){
+    case 'detail':  return detailScreen();
+    case 'who':     return whoScreen();
+    case 'review':  return reviewScreen();
+    case 'pending': return pendingScreen();
+    case 'payment': return paymentScreen();
+    case 'done':    return doneScreen();
+    default:        return detailScreen();   // entry screen (browsing lives on the landing page)
+  }
+}
+
+function render(){
+  const active=document.activeElement;
+  const id=active && active.id;
+  const selStart=active && active.selectionStart;
+  const selEnd=active && active.selectionEnd;
+
+  document.getElementById('app').innerHTML =
+    `<div style="min-height:100vh;background:#fff">${COUNTER?counterBar():''}${header()}${currentScreen()}</div>${modalHtml()}`;
+
+  // don't pull focus back to an input while the modal is open
+  if(id && !state.modal){
+    const el=document.getElementById(id);
+    if(el){
+      el.focus();
+      try{
+        if(selStart!=null) el.setSelectionRange(selStart,selEnd);
+        // inputs that can't report a selection (e.g. type=number) land at the
+        // start after focus — push the caret to the end instead
+        else if(typeof el.value==='string') el.setSelectionRange(el.value.length,el.value.length);
+      }catch(e){}
+    }
+  }
+
+  mountGallery();   // put the photo strip back where the swipe left it
+}
+
+render();

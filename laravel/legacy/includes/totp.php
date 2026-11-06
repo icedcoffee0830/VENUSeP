@@ -1,4 +1,5 @@
 <?php
+/* Holds: the maths behind the six-digit sign-in codes. */
 /* =====================================================================
    TOTP (RFC 6238) — the maths behind Google Authenticator codes.
 
@@ -6,8 +7,8 @@
    and cut it down to 6 digits; if the two numbers match, the person has the
    phone that scanned the secret. No Google account or API is involved — any
    TOTP app works. Pure functions: no database, no session, so
-   tests/totp_test.php can check them against the RFC's own test vectors.
-   The account side (lockout, recovery codes) is includes/two-factor.php.
+   a test can check them against the RFC's own test vectors.
+   The account side (lockout, recovery codes) is two-factor.php.
    ===================================================================== */
 
 const TOTP_PERIOD   = 30;

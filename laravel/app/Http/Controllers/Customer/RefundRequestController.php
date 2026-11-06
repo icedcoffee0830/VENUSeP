@@ -26,7 +26,9 @@ class RefundRequestController
 {
     public function __invoke(Request $request)
     {
-        extract(legacy('customer-bookings'));
+        $legacy = legacy('customer-bookings');
+        $customerBookings = $legacy['customerBookings'];   // these two: set in customer-bookings.php
+        $customerContact = $legacy['customerContact'];
 
         /* is_string matters: ?booking[]=x is a hostile shape, never cast it. */
         $rawRef = $request->query('booking');

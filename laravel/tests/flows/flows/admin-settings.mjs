@@ -352,7 +352,7 @@ export default {
         const body = (await res.text().catch(() => '')).slice(0, 200);
         const alert = await page.locator('.vz-modal .vz-modal-message').last().textContent().catch(() => '');
         ctx.fail(`APP BUG — Suspend did nothing: POST /admin/staff-save answered HTTP ${res.status()} ${body}; the page says "${alert}".`
-          + (/"error":"csrf"/.test(body) ? ' (staff-management.blade.php sends its token only as the old "csrf" field; Laravel\'s CSRF middleware reads "_token" / X-CSRF-TOKEN.)' : ''));
+          + (/"error":"csrf"/.test(body) ? ' (staff.blade.php sends its token only as the old "csrf" field; Laravel\'s CSRF middleware reads "_token" / X-CSRF-TOKEN.)' : ''));
       }
       if (!(await reloaded)) ctx.fail('the staff page did not reload after Suspend');
       await page.locator('#table-filter').fill(s.newEmail);

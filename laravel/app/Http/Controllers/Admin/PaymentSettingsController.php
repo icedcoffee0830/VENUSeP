@@ -17,7 +17,7 @@ class PaymentSettingsController
         /* The ONE source of the GCash accounts. This page is the screen that edits it. */
         /* EVERY booking, not the signed-in person's: the OFF warning counts how many
            bookings keep their refund right, a question about the whole system. */
-        extract(legacy('payment-settings', 'bookings'));   // $gcAccounts, $POSTPAY_GRACE_DAYS
+        $gcAccounts = legacy('payment-settings', 'bookings')['gcAccounts'];   // set in payment-settings.php
 
         /* The refund switch, one per office (DB-DECISIONS 28): a row for each office this
            person sees. Empty = the database is unreachable. */

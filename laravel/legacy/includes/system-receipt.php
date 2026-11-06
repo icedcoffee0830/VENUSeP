@@ -1,9 +1,10 @@
 <?php
+/* Holds: issuing, reading and drawing the VENUSeP System Receipt. */
 /* =====================================================================
    VENUSeP SYSTEM RECEIPT (DB-DECISIONS #22) — issue, read, and draw.
 
    One receipt per CONFIRMED payment, issued the moment staff confirm it
-   (admin/booking-action.php). It is not the Official Receipt — that comes
+   (BookingActionController). It is not the Official Receipt — that comes
    from the University Cashier and is out of scope.
 
    FROZEN CONTENTS. receipt_issue() copies what the receipt says into
@@ -64,8 +65,8 @@ function receipt_issue(int $bookingId, int $actorUserId): ?int
 
 /* Money landed: mark the booking paid, settle its payment row and issue its
    System Receipt. Runs inside the CALLER's transaction — staff confirming a
-   payment (admin/booking-action.php), and the hostel counter, where the stay
-   is only recorded once the cash is taken (admin/booking-create.php,
+   payment (BookingActionController), and the hostel counter, where the stay
+   is only recorded once the cash is taken (BookingCreateController,
    2026-10-27). $asCash = staff took cash in hand, whatever method the booking
    had: a pay-to-use guest may arrive and pay cash at the desk.
    Returns the receipt id (null only if no confirmed payment came of it). */

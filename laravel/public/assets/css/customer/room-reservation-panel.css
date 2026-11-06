@@ -1,0 +1,42 @@
+/* Room booking page: the rules that must load after booking-panel.css. */
+  .bk-panel input,.bk-panel button[id^="bk-"]{border-color:transparent!important;background:#fff}
+  @media (max-width:720px){
+    .bk-panel button[id^="bk-"]{height:46px!important;font-size:14px!important}
+    /* multi-day hours: a narrower "Day 1" column so both times fit a phone */
+    .bk-day-row{grid-template-columns:62px 1fr 1fr!important;gap:6px!important}
+    .bk-day-row.bk-day-off{grid-template-columns:62px 1fr!important}
+    .bk-panel button[id^="bk-t-"] svg:first-child{display:none}
+  }
+  .bk-more-free{margin-top:13px;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,209,102,.16);border:1px solid rgba(255,209,102,.42);color:#ffd166}
+  .bk-more-free i{width:6px;height:6px;border-radius:50%;background:#ffd166;display:block}
+  .bk-more-free.is-none{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.17);color:#bda4a2}
+  .bk-more-free.is-none i{background:#96807e}
+  .bk-more-free.is-closed{background:rgba(178,58,58,.26);border-color:rgba(255,123,138,.4);color:#ff9aa6}
+  .bk-more-free.is-closed i{background:#ff7b8a}
+  .bk-more-alt{margin:22px 0 0;font-size:13px;color:#d5b8b5}
+  .bk-more-alt a{color:#fff;font-weight:600}
+  .bk-footer{border-top:1px solid rgba(255,255,255,.12)}
+  @media (max-width:1080px){.bk-more-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:720px){.bk-more-wrap{padding:40px 18px 36px}.bk-more-head{flex-direction:column;align-items:flex-start}.bk-more-grid{grid-template-columns:1fr;gap:10px}.bk-more h2{font-size:26px}
+    /* phone: compact "More rooms" cards — photo left, text right (same as the landing page) */
+    .bk-more-card{display:grid;grid-template-columns:112px minmax(0,1fr);border-radius:16px}
+    .bk-more-ph{aspect-ratio:auto;height:100%;min-height:118px}
+    .bk-more-tag{display:none}
+    /* the badge sits top-left of the small tile on one line, word only */
+    .bk-more-badge{top:8px;left:8px;right:auto;padding:4px 9px;font-size:12px;white-space:nowrap}
+    .bk-more-why{display:none}
+    .bk-more-body{padding:14px 16px;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px}
+    .bk-more-body h3{font-size:15px;line-height:1.3}
+    .bk-more-meta,.bk-more-price{margin:0}
+    .bk-more-status{display:block;margin:0;font-size:12px;font-weight:700;line-height:1.4;color:#d5b8b5}
+    .bk-more-status.is-closed{color:#ffd166}
+    .bk-more-price{margin-top:2px}
+    /* phone: a sticky bar so the booking form (below the description) is one tap away */
+    .bk-cta{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+      background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid rgba(0,0,0,.1);box-shadow:0 -8px 24px rgba(0,0,0,.08);transform:translateY(110%);transition:transform 260ms cubic-bezier(.16,1,.3,1)}
+    .bk-cta.show{transform:none}
+    .bk-cta-price{font-size:13px;color:#4a463f;line-height:1.3;min-width:0}
+    .bk-cta-price strong{display:block;font-family:Archivo,Inter,sans-serif;font-size:17px;font-weight:800;color:#1c1b19}
+    .bk-cta-btn{flex:none;height:44px;padding:0 18px;border:0;border-radius:12px;background:#a11626;color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+    body.bk-cta-on{padding-bottom:72px}
+  }

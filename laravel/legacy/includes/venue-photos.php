@@ -1,4 +1,5 @@
 <?php
+/* Holds: the one cover photo of each venue. */
 /* =====================================================================
    VENUE PHOTOS — one cover photo per venue (venues.cover_photo), unlike
    a room's gallery + 360°. The "Edit Venue" form only ever showed a
@@ -6,7 +7,7 @@
    instead of reusing room_media (which is keyed to a room, not a venue,
    and supports a gallery this UI never asked for).
 
-   Reuses rp_validate_image() from includes/room-photos.php — same image
+   Reuses rp_validate_image() from room-photos.php — same image
    rules (real image, allowed extension, 7 MB cap), one file at a time.
    ===================================================================== */
 

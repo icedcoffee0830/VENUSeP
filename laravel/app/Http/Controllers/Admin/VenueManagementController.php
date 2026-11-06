@@ -31,11 +31,16 @@ class VenueManagementController extends Controller
            when loaded; the old page printed it before <!DOCTYPE>. Captured here and
            printed in the page head instead of ahead of the response headers. */
         ob_start();
-        extract(legacy(
+        $legacy = legacy(
             ['vrIncludeInactive' => true, 'hrIncludeInactive' => true],
             'venues', 'venue-rooms', 'hostel-rooms', 'room-photos', 'venue-photos', 'pricing'
-        ));
+        );
         $pricingScript = ob_get_clean();
+        $venuesByType = $legacy['venuesByType'];          // set in venues.php
+        $venueRooms = $legacy['venueRooms'];              // set in venue-rooms.php
+        $hostelRooms = $legacy['hostelRooms'];            // these two: set in hostel-rooms.php
+        $HOSTEL_CR_LABEL = $legacy['HOSTEL_CR_LABEL'];
+        $DISCOUNT_PERCENT = $legacy['DISCOUNT_PERCENT'];  // set in pricing.php
 
         /* The sections start from venues, not rooms: a new venue has no rooms yet and still belongs here. */
         $vmVenueRows = venusep_db_or_fail()->query(

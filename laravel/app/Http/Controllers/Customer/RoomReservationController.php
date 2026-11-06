@@ -19,11 +19,16 @@ class RoomReservationController extends Controller
     {
         /* The GCash account per venue (payment-settings), the rooms (venue-rooms),
            their photos (room-photos), who is looking (customer-bookings). */
-        extract(legacy('auth', 'documents', 'payment-settings', 'venue-rooms', 'room-photos', 'customer-bookings'));
+        legacy('auth', 'documents', 'payment-settings', 'venue-rooms', 'room-photos', 'customer-bookings');
         $pricingJs = self::legacyOutput('pricing');          /* USeP discount rate + the account check */
         $checkerJs = self::legacyOutput('gcash-checker');
         $counterBookerJs = self::legacyOutput('counter-booker');
-        extract(legacy('pricing'));
+        $legacy = legacy('pricing');
+        $venueRooms = $legacy['venueRooms'];               // set in venue-rooms.php
+        $gcAccounts = $legacy['gcAccounts'];               // set in payment-settings.php
+        $customerContact = $legacy['customerContact'];     // set in customer-bookings.php
+        $REFUNDS_ENABLED = $legacy['REFUNDS_ENABLED'];     // set in refund-policy.php
+        $DISCOUNT_PERCENT = $legacy['DISCOUNT_PERCENT'];   // set in pricing.php
         /* legacy refund-policy.php's payment_policy_js() reads $GLOBALS['REFUNDS_ENABLED'];
            legacy() loads files inside a function, so publish it before calling. */
         $GLOBALS['REFUNDS_ENABLED'] = $REFUNDS_ENABLED;

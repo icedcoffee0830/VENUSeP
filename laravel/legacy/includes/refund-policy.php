@@ -1,4 +1,5 @@
 <?php
+/* Holds: the refund switch and the payment timing rules ($REFUNDS_ENABLED, $POSTPAY_GRACE_DAYS). */
 /* =====================================================================
    REFUND POLICY — does an office take refund requests?
    ONE SWITCH PER OFFICE (DB-DECISIONS 28, 2026-11-04): venues.refunds_enabled,
@@ -6,9 +7,9 @@
    Payment Settings (RefundSwitchController).
 
    Included by:
-     includes/customer-bookings.php  (so every page that knows the customer's
+     customer-bookings.php  (so every page that knows the customer's
                                       bookings also knows the policy)
-     admin/payment-settings.php      (the switch itself)
+     PaymentSettingsController      (the switch itself)
 
    DECIDED 2026-09-16 (USeP does not do refunds), per office since 2026-11-04:
      · DEFAULT OFF. Bahay Alumni and USeP Venues: ON = pay before + refunds,

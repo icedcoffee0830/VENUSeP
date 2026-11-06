@@ -1,0 +1,25 @@
+<?php
+
+use App\Http\Controllers;
+use App\Http\Controllers\Admin;
+use App\Http\Controllers\PendingController;
+use Illuminate\Support\Facades\Route;
+
+/* The staff booking pages, calendar, receipts and the ledger; plus the pages customers and staff share.
+   Keep every URL and route name: links, emails and bookmarks use them. */
+
+Route::get('/admin/booking-requests', Admin\BookingRequestsController::class)->middleware('staff')->name('admin.booking-requests');
+Route::get('/admin/booking-request', Admin\BookingRequestController::class)->middleware('staff')->name('admin.booking-request');
+/* The staff JSON endpoints answer 401 / 403 JSON themselves (no redirecting middleware). */
+Route::match(['get', 'post'], '/admin/booking-action', Admin\BookingActionController::class)->name('admin.booking-action');
+Route::match(['get', 'post'], '/admin/booking-create', Admin\BookingCreateController::class)->name('admin.booking-create');
+Route::match(['get', 'post'], '/admin/booking-emails', Admin\BookingEmailsController::class)->name('admin.booking-emails');
+Route::get('/admin/calendar', Admin\CalendarController::class)->middleware('staff')->name('admin.calendar');
+Route::get('/admin/receipt', Admin\ReceiptController::class)->middleware('staff')->name('admin.receipt');
+Route::get('/admin/transaction-history', Admin\TransactionHistoryController::class)->middleware('staff')->name('admin.transaction-history');
+/* Used by customers AND staff: each answers a 404 (never a redirect, never 403) to anyone else. */
+Route::get('/booking-details', Controllers\BookingDetailsController::class)->name('root.booking-details');
+Route::get('/document-view', Controllers\DocumentViewController::class)->name('root.document-view');
+Route::get('/valid-id-view', Controllers\ValidIdViewController::class)->name('root.valid-id-view');
+/* The 30-second check of every signed-in page (public/assets/js/live.js). Guards itself (JSON 401). */
+Route::get('/live-check', Controllers\LiveCheckController::class)->name('root.live-check');

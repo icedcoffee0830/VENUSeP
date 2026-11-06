@@ -1,0 +1,136 @@
+/* Styles for resources/views/customer/booking-history.blade.php. */
+
+      .booking-history-container { padding: 22px 0 0; }
+      .booking-history-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+      .booking-history-header p { color: var(--muted); font-size: 13px; margin: 4px 0 16px; }
+
+      /* status tabs */
+      .booking-status-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+      .booking-status-tab { height: 34px; padding: 0 14px; border: 1px solid #d7d7d7; border-radius: 999px; background: #fff; color: #55606b; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: .18s; }
+      .booking-status-tab:hover { background: #f4f2ee; }
+      .booking-status-tab.active { background: var(--black); border-color: var(--black); color: #fff; }
+
+      /* filters */
+      .booking-history-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 12px; align-items: end; margin-bottom: 16px; }
+      .booking-filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+      .booking-filter-field label { font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
+      .booking-history-filters .form-control, .booking-history-filters .form-select { height: 36px; padding: 0 11px; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; font: inherit; font-size: 13px; color: var(--black); }
+      .booking-history-filters .form-control:focus, .booking-history-filters .form-select:focus { outline: none; border-color: var(--black); }
+
+      /* toolbar buttons */
+      .booking-toolbar-button { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 13px; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; color: var(--black); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: .18s; }
+      .booking-toolbar-button:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .booking-toolbar-button i { color: var(--muted); }
+      .booking-reset-button { align-self: end; }
+
+      /* panel + table */
+      .booking-history-panel { background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04); overflow: hidden; }
+      .booking-history-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 15px 18px; border-bottom: 1px solid #f0efec; }
+      .booking-history-panel-header h2 { font-size: 14.5px; font-weight: 650; margin: 0; }
+      .booking-history-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+      .booking-table-scroll { overflow-x: auto; }
+      .booking-history-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+      .booking-history-table th, .booking-history-table td { padding: 11px 8px; text-align: left; border-bottom: 1px solid #f2efe9; font-size: 13px; }
+      .booking-history-table th { background: #faf9f7; }
+      /* long names and notes wrap, so nine columns fit the panel with no sideways scroll */
+      .booking-history-table td.booking-id, .booking-history-table td.booking-amount { white-space: nowrap; }
+      .sortable-heading { border: 0; background: transparent; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #6b6258; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; padding: 0; }
+      .sortable-heading::after { content: "\F282"; font-family: "bootstrap-icons"; font-size: 10px; opacity: .3; }
+      .sortable-heading[data-direction="asc"]::after { content: "\F235"; opacity: .8; }
+      .sortable-heading[data-direction="desc"]::after { content: "\F229"; opacity: .8; }
+      .booking-history-table tbody tr:hover { background: #faf9f7; }
+      .booking-history-table .vz-chip { border-radius: 14px; white-space: normal; }
+      .booking-amount { font-variant-numeric: tabular-nums; }
+      .booking-empty-state td { text-align: center; color: var(--muted); padding: 28px; }
+
+      .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
+      .booking-pay-note.is-overdue { color: #b23a3a; }
+      .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); white-space: normal; }
+      .booking-overdue-help { flex-basis: 100%; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; white-space: normal; }
+      /* desktop: the notice gets a fixed width and wraps there, with the buttons below it */
+      @media (min-width: 1280px) { .booking-actions:has(.booking-overdue-help) { display: flex; width: 11.5rem; } }
+      .booking-overdue-help strong { color: #b23a3a; }
+      /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
+      .booking-status-note { display: block; margin-top: 4px; max-width: 220px; font-size: 11px; line-height: 1.4; color: var(--muted); }
+      /* row actions */
+      .booking-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+      .booking-action { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
+      .booking-action:hover { background: #f4f2ee; border-color: #c9c2b6; }
+      .booking-action[disabled] { opacity: .5; cursor: not-allowed; }
+      .booking-action-receipt { border-color: rgba(161,22,38,.35); color: #a11626; }
+      .booking-action-receipt:hover { background: #fcf6f4; border-color: #a11626; }
+      /* the one action that moves a booking forward, so it is the filled one */
+      .booking-action-pay { background: #a11626; border-color: #a11626; color: #fff; }
+      .booking-action-pay:hover { background: #7d0f1e; border-color: #7d0f1e; }
+
+      /* footer / pagination */
+      .booking-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid #e7e2db; }
+      .booking-entries-control { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 8px; }
+      .booking-entries-select { height: 32px; border: 1px solid #d7d7d7; border-radius: 8px; padding: 0 8px; font: inherit; font-size: 12.5px; }
+      .booking-table-info { font-size: 12.5px; color: var(--muted); margin: 0; }
+      .booking-pagination { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+      .booking-pagination button { min-width: 32px; height: 32px; border: 1px solid #d7d7d7; border-radius: 8px; background: #fff; color: var(--black); font: inherit; font-size: 12.5px; cursor: pointer; }
+      .booking-pagination button:hover:not(:disabled) { background: #f4f2ee; }
+      .booking-pagination button.active { background: var(--black); border-color: var(--black); color: #fff; }
+      .booking-pagination button:disabled { opacity: .4; cursor: not-allowed; }
+
+      @media (max-width: 1100px) { .booking-history-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .booking-reset-button { grid-column: 1 / -1; } }
+    
+      /* on the crimson page background (painted by includes/header.php): light text, cards that float */
+      .booking-history-header h1 { color: #fff; }
+      .booking-history-header p { color: #e9d0cd; }
+      .booking-filter-field label { color: #f2d0cb; }
+      .booking-history-panel { box-shadow: 0 18px 44px rgba(10,4,5,.28), 0 2px 6px rgba(10,4,5,.18); border-color: rgba(255,255,255,.18); }
+    
+      /* phone: a row's buttons are 44px tall and share the card's width */
+      @media (max-width: 767.98px) {
+        .booking-actions { display: flex; width: 100%; }
+        .booking-action { flex: 1 1 auto; justify-content: center; height: 44px; font-size: 13.5px; }
+      }
+
+      /* the active tab and the current page in the pagination: crimson, not black */
+      .booking-status-tab.active { background: #a11626; border-color: #a11626; color: #ffffff; }
+      .booking-pagination button.active { background: #a11626; border-color: #a11626; color: #ffffff; }
+      /* ---- phone: the 9-column table becomes one card per booking. Each cell
+         shows its column name (data-label) in front, the header row is hidden,
+         and the id + status sit on the first line. The sorting/filtering
+         script is untouched — it still works on the same rows. ---- */
+      /* nine columns need about 1245px: below 1280 each booking is a card, phone or laptop */
+      @media (max-width: 1279.98px) {
+        .booking-history-table { min-width: 0; }
+        .booking-history-table thead { display: none; }
+        .booking-history-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 14px 16px; border-bottom: 1px solid #ece8e1; }
+        /* the filters hide rows with the hidden attribute; "display: grid" above would beat it */
+        .booking-history-table tbody tr[hidden] { display: none; }
+        .booking-history-table tbody tr:hover { background: transparent; }
+        .booking-history-table td { display: block; padding: 0; border: 0; white-space: normal; font-size: 13px; }
+        .booking-history-table td::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+        .booking-history-table td.booking-id { grid-column: 1; }
+        .booking-history-table td.booking-id::before { display: none; }
+        .booking-history-table td.booking-id strong { font-size: 15px; }
+        .booking-history-table td[data-label="Status"] { grid-column: 2; grid-row: 1; justify-self: end; }
+        .booking-history-table td[data-label="Status"]::before { display: none; }
+        .booking-history-table td[data-label="Event"] { grid-column: 1 / -1; }
+        .booking-history-table td.booking-actions-cell { grid-column: 1 / -1; margin-top: 4px; }
+        .booking-history-table td.booking-actions-cell::before { display: none; }
+        .booking-empty-state td { grid-column: 1 / -1; }
+        .booking-empty-state td::before { display: none; }
+        .booking-history-filters { grid-template-columns: 1fr 1fr; }
+        .booking-status-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+        .booking-status-tab { flex: none; white-space: nowrap; }
+      }
+      /* type floor (readability): nothing on the page below 12px */
+      .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }
+      /* ---- white page (desktop + phone): the cards sit on white, no crimson wash ---- */
+      body { background: #fff !important; }
+      .app-main { background: #fff !important; }
+      .booking-history-header h1 { color: #1f1e1e; }
+      .booking-history-header p { color: #6e6a64; }
+      .booking-filter-field label { color: #6e6a64; }
+      .booking-history-panel { box-shadow: 0 1px 2px rgba(0,0,0,.04); border: 1px solid #e5e5e5; border-radius: 14px; }
+      /* phone: cards edge to edge — the details get the width */
+      @media (max-width: 767.98px) {
+        .container-fluid { padding-inline: 12px; }
+        .app-content-header { padding-top: 16px; }
+        .booking-history-table tbody tr { padding: 14px 12px; }
+      }

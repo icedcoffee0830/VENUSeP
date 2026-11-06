@@ -1,4 +1,5 @@
 <?php
+/* Holds: two-step verification for accounts: setup, codes, lockouts. */
 /* =====================================================================
    Two-step verification — account logic (DB-DECISIONS #20).
 
@@ -22,17 +23,17 @@
    6. Secret stored as plain text (base32). Not encrypted: a lost encryption
       key would lock out every account, and decision 2 means there is no way
       back from that.
-   7. The walk-in counter identity check (admin/customer-verify.php) stays
+   7. The walk-in counter identity check (CounterCustomerController) stays
       password-only — not touched.
 
-   The maths (TOTP itself) is includes/totp.php. This file is the account
+   The maths (TOTP itself) is totp.php. This file is the account
    side: lockout, recovery codes, and the pending-2FA session state that
    plan 002 wires into the login/profile pages.
    ===================================================================== */
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/totp.php';
-/* includes/auth.php loads THIS file (for tfa_required_for()); the dependency runs one
+/* auth.php loads THIS file (for tfa_required_for()); the dependency runs one
    way only. tfa_login_step() uses auth.php's csrf_valid(), so its callers — the two
    sign-in pages — load auth.php, as every page already does. */
 
@@ -186,7 +187,7 @@ function tfa_reset(PDO $pdo, int $userId): void
 }
 
 /* The only way a 2FA code (TOTP or recovery) is checked. Mirrors the
-   refund-switch lockout ladder (admin/refund-switch.php:72-125), but in the
+   refund-switch lockout ladder (RefundSwitchController), but in the
    totp_* columns so a sign-in lockout never blocks an admin action. */
 function tfa_verify(PDO $pdo, int $userId, string $input): array
 {
@@ -401,8 +402,8 @@ function tfa_redirect_now(string $url): void
 }
 
 /* ---------------------------------------------------------------------
-   THE SIGN-IN FLOW, shared by admin/admin-login.php and
-   customer/customer-login.php. Each page supplies only $finish: the
+   THE SIGN-IN FLOW, shared by AdminLoginController and
+   CustomerLoginController. Each page supplies only $finish: the
    function that creates its real session and never returns. Both pages
    then run the exact same steps, so a fix to one is a fix to both.
    --------------------------------------------------------------------- */

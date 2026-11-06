@@ -30,7 +30,9 @@ class HostelReservationTest extends TestCase
             ->assertSee('const COUNTER = false;', false)
             ->assertSee('const HOSTEL   = ', false)
             ->assertSee('const ACCOUNT = {"name":"Brent Cajipoe"', false)
-            ->assertSee("fetch(COUNTER ? '" . route('admin.booking-create') . "' : '" . route('customer.booking-submit') . "'", false)
+            ->assertSee('bookingCreateUrl: ' . json_encode(route('admin.booking-create')), false)
+            ->assertSee('bookingSubmitUrl: ' . json_encode(route('customer.booking-submit')), false)
+            ->assertSee('fetch(COUNTER ? hostelReservationPage.bookingCreateUrl : hostelReservationPage.bookingSubmitUrl', false)
             ->assertSee(asset('assets/js/confirm-modal.js'), false)
             ->assertSee('Hostel Room 2')                                 /* "More rooms" */
             ->assertSee('class="is-here"', false)

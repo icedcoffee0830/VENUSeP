@@ -22,7 +22,8 @@ class CalendarTest extends TestCase
         $this->actingAsStaff()->get(route('admin.calendar'))->assertOk()
             ->assertSee('<title>VENUSeP | Calendar</title>', false)
             ->assertSee('class="calendar-page"', false)
-            ->assertSee('events: [{', false)
+            ->assertSee('calendarEventsJson: [{', false)
+            ->assertSee('events: adminCalendarPage.calendarEventsJson', false)
             ->assertSee('fullcalendar@6.1.20', false);
     }
 

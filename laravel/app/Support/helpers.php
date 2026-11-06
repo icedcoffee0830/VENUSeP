@@ -5,9 +5,9 @@
    there are the Laravel shims).
 
    Returns every top-level variable the legacy files have defined so far
-   ($venueRooms, $hostelRooms, $DISCOUNT_PERCENT, $customerContact, ...), so
-   `extract(legacy('venue-rooms'));` gives a controller or view exactly what
-   `include 'venue-rooms.php';` gave the old page.
+   ($venueRooms, $hostelRooms, $DISCOUNT_PERCENT, $customerContact, ...). A
+   controller names each one it needs, so a search finds where it comes from:
+   `$venueRooms = legacy('venue-rooms')['venueRooms'];`
 
    Why a registry: the old pages included every file at their top level, so a
    variable one file defined was visible to the next. Here files are loaded from
@@ -49,6 +49,15 @@ if (!function_exists('legacy')) {
             }
         }
         return $vars;
+    }
+}
+
+/* The link to a file in public/, stamped with the time it was saved, so a save and a
+   refresh always shows the change (the browser never reuses an old copy). */
+if (!function_exists('asset_stamped')) {
+    function asset_stamped(string $path): string
+    {
+        return asset($path) . '?v=' . filemtime(public_path($path));
     }
 }
 

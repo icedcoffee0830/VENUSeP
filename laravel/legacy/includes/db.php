@@ -1,6 +1,7 @@
 <?php
+/* Holds: the database connection helpers, and the SQL error rules. */
 /* =====================================================================
-   DATABASE — Laravel shim for the old includes/db.php.
+   DATABASE — Laravel shim for the old db.php.
 
    The legacy includes in this folder run unchanged inside Laravel. They
    call venusep_db(); here that returns Laravel's own PDO, so there is ONE
@@ -23,7 +24,7 @@ if (date_default_timezone_get() !== VENUSEP_TZ) {
     date_default_timezone_set(VENUSEP_TZ);
 }
 
-/* The credentials, read from Laravel's config. includes/backup.php hands
+/* The credentials, read from Laravel's config. backup.php hands
    the same ones to mysqldump / mysql. */
 function venusep_db_config()
 {

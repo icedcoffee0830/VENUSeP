@@ -1,0 +1,21 @@
+<?php
+
+use App\Http\Controllers\Customer;
+use App\Http\Controllers\PendingController;
+use Illuminate\Support\Facades\Route;
+
+/* The customer's bookings, payments, refunds, receipts and FAQ. Keep every URL and route name:
+   links, emails and bookmarks use them. */
+
+Route::get('/customer/booking-history', Customer\BookingHistoryController::class)->middleware('customer')->name('customer.booking-history');
+Route::get('/customer/pay', Customer\PayController::class)->middleware('customer')->name('customer.pay');
+/* JSON endpoint: own 401 JSON for a signed-out POST (see the controller) */
+Route::match(['get', 'post'], '/customer/payment-submit', Customer\PaymentSubmitController::class)->name('customer.payment-submit');
+Route::match(['get', 'post'], '/customer/receipt', Customer\ReceiptController::class)->middleware('customer')->name('customer.receipt');
+Route::get('/receipt-pdf', Customer\ReceiptPdfController::class)->name('root.receipt-pdf');
+Route::get('/customer/refund-request', Customer\RefundRequestController::class)->middleware('customer')->name('customer.refund-request');
+Route::match(['get', 'post'], '/customer/refund-submit', Customer\RefundSubmitController::class)->name('customer.refund-submit');
+Route::post('/customer/booking-cancel', [Customer\BookingChangeController::class, 'cancel'])->name('customer.booking-cancel');
+Route::post('/customer/booking-fix', [Customer\BookingChangeController::class, 'fix'])->name('customer.booking-fix');
+Route::get('/customer/transaction-history', Customer\TransactionHistoryController::class)->middleware('customer')->name('customer.transaction-history');
+Route::get('/customer/faq', Customer\FaqController::class)->name('customer.faq');

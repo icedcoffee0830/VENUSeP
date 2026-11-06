@@ -6,85 +6,9 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/css/tabulator_bootstrap5.min.css" crossorigin="anonymous" />
 @endpush
 @push('styles')
-    <style>
-      /* the lines of this page's old [0] shell block that differ from the admin shell */
-      :root {
-        --venusep-border: #e5e5e5;
-        --venusep-muted: #606a75;
-        --venusep-text: #1f1e1e;
-      }
-    @include('partials.tabulator-pager-css')
-    </style>
-    <style>
-      .th-page { padding: 22px 0 0; } /* 22px + 4px from .app-content = 26px top, matches other pages */
-
-      .th-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
-      .th-head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
-      .th-head p { color: var(--venusep-muted); font-size: 13px; margin: 4px 0 0; }
-
-      /* back-to-dashboard button */
-      .th-back { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 15px; border: 1px solid #ddd7ce; border-radius: 10px; background: #fff; color: #1f1e1e; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: .2s; }
-      .th-back:hover { background: #f4f2ee; border-color: #c9c2b6; }
-
-      /* card / panel — same language as the rest of the system */
-      .th-panel { background: #fff; border: 1px solid var(--venusep-border); border-radius: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); overflow: hidden; }
-      .th-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 15px 18px; border-bottom: 1px solid #f0efec; }
-      .th-panel-head h3 { font-size: 14.5px; font-weight: 650; margin: 0; }
-
-      /* search box */
-      .th-search { display: flex; align-items: center; gap: 8px; min-width: 220px; height: 36px; padding: 0 12px; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; }
-      .th-search i { color: var(--venusep-muted); font-size: 14px; }
-      .th-search input { border: 0; outline: 0; font: inherit; font-size: 13px; width: 100%; background: transparent; color: #1f1e1e; }
-
-      /* export toolbar */
-      .th-toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 18px 0; }
-      .th-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; color: #1f1e1e; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: .2s; }
-      .th-btn:hover { background: #f4f2ee; border-color: #c9c2b6; }
-      .th-btn i { font-size: 14px; color: var(--venusep-muted); }
-
-      /* filter panel */
-      .th-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; gap: 12px; align-items: end; padding: 14px 18px 4px; }
-      .th-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-      .th-field label { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--venusep-muted); }
-      .th-field select, .th-field input { height: 36px; padding: 0 10px; border: 1px solid #d7d7d7; border-radius: 9px; background: #fff; font: inherit; font-size: 13px; color: #1f1e1e; }
-      .th-field select:focus, .th-field input:focus, .th-search input:focus { outline: none; }
-      .th-field-reset { display: flex; align-items: end; }
-
-      /* table wrapper — horizontal scroll for the wide 11-column table */
-      .th-table-wrap { padding: 14px 18px 18px; overflow-x: auto; }
-
-      /* status badges — team soft-tint palette (no loud fills, no bold); the staff words are long, so they wrap */
-      .tabulator-cell .vz-chip { white-space: normal; }
-
-      /* row action buttons */
-      .th-actions { display: inline-flex; gap: 6px; }
-      .th-act { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: #1f1e1e; font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
-      .th-act:hover { background: #f4f2ee; border-color: #c9c2b6; }
-      .th-act.is-disabled { opacity: .5; cursor: not-allowed; }
-
-      /* Tabulator restyle — matches the team look (adapted from Staff Management) */
-      .tabulator { border: 1px solid var(--venusep-border); border-radius: 10px; background: #fff; font-size: 13px; }
-      .tabulator .tabulator-header { background: #faf9f7; border-bottom: 1px solid var(--venusep-border); }
-      .tabulator .tabulator-header .tabulator-col { background: transparent; border-right: 1px solid #f0efec; }
-      .tabulator .tabulator-header .tabulator-col .tabulator-col-title { color: #6b6258; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 4px 2px; }
-      .tabulator .tabulator-tableholder .tabulator-table { background: #fff; }
-      .tabulator-row { background: #fff; border-bottom: 1px solid #f2efe9; }
-      .tabulator-row.tabulator-row-even { background: #fff; }
-      .tabulator-row:hover { background: #faf9f7; }
-      .tabulator-row .tabulator-cell { border-right: 1px solid #f6f4f0; padding: 10px 12px; color: #2b2928; }
-      .tabulator .tabulator-footer { background: #faf9f7; border-top: 1px solid var(--venusep-border); }
-      .tabulator .tabulator-footer .tabulator-page { border: 1px solid #d7d7d7; border-radius: 7px; background: #fff; color: #1f1e1e; }
-      .tabulator .tabulator-footer .tabulator-page.active { background: #1f1e1e; color: #fff; border-color: #1f1e1e; }
-      .tabulator .tabulator-footer .tabulator-page:hover:not(:disabled) { background: #f4f2ee; }
-
-      @media (max-width: 1100px) {
-        .th-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .th-field-reset { grid-column: 1 / -1; }
-      }
-      @media (max-width: 767.98px) {
-        .th-head { flex-direction: column; }
-      }
-    </style>
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/admin/transaction-history-shell.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/tabulator-pager.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/admin/transaction-history.css') }}" />
 @endpush
 @section('content')
       <main class="app-main">
@@ -167,130 +91,19 @@
 @push('scripts')
     <!-- Tabulator library (the only third-party script this page needs) -->
     <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
-    <script src="{{ asset('assets/js/table-page-size.js') }}"></script>
+    <script src="{{ asset_stamped('assets/js/table-page-size.js') }}"></script>
 
     <!-- ============================================================
          [6] PAGE SCRIPT — builds the table, filters, exports.
          ============================================================ -->
     <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        // Rows come from transaction_rows() — every customer, staff view.
-        const rows = {!! $transactionRowsJson !!};
-        const emptyTransactionMessage = 'No transactions found.';
-
-        const parseDate = (value) => {
-          const parsed = Date.parse(value);
-          return Number.isNaN(parsed) ? 0 : parsed;
-        };
-
-        const TONES = @json(\App\Support\Status::CHIP_TONES);
-        const statusBadge = (cell) => {
-          const v = cell.getValue();
-          return `<span class="vz-chip vz-chip-${TONES[v] || 'grey'}">${v}</span>`;
-        };
-
-        const actionButtons = (cell) => {
-          const row = cell.getRow().getData();
-          // View — the booking and its payment, in a modal over this page
-          // (includes/booking-details-modal.php, 2026-10-27). The valid ID is
-          // a link inside it; staff can open ANY booking's.
-          const viewBtn = `<button type="button" class="th-act" onclick="openBookingDetails('${encodeURIComponent(row.bookingId)}')"><i class="bi bi-eye"></i>View</button>`;
-          // Receipt opens admin/receipt.php — the same styled "paper slip" view
-          // customer/receipt.php shows, just gated for staff instead of the
-          // booking's own customer (see that file's header for why it's separate).
-          // Its own "Download PDF" link goes to receipt-pdf.php when an actual
-          // file is wanted — receipt-pdf.php itself always forces a download
-          // (Content-Disposition: attachment), so linking the button straight to
-          // it here would never let staff just LOOK at the receipt in the tab.
-          const receiptBtn = row.hasReceipt
-            ? `<a class="th-act" href="{{ route('admin.receipt') }}?booking=${encodeURIComponent(row.bookingId)}"><i class="bi bi-receipt"></i>Receipt</a>`
-            : `<span class="th-act is-disabled" title="No Transaction Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
-          return `
-            <div class="th-actions">
-              ${viewBtn}
-              ${receiptBtn}
-            </div>`;
-        };
-
-        const table = new Tabulator('#transaction-history-table', {
-          data: rows,
-          layout: 'fitDataStretch',
-          placeholder: emptyTransactionMessage,
-          pagination: true,
-          paginationSize: 10,          /* the size box is assets/js/table-page-size.js: type a number, or pick 10 / 25 / 50 / 100 / All */
-          movableColumns: true,
-          initialSort: [{ column: 'transactionDate', dir: 'desc' }],
-          /* A customer's name like =HYPERLINK(...) must not run as a formula when the CSV is opened in a spreadsheet. */
-          columnDefaults: { accessorDownload: (v) => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v) },
-          columns: [
-            { title: 'Transaction ID', field: 'transactionId', minWidth: 150, width: 150 },
-            { title: 'Booking ID', field: 'bookingId', minWidth: 140, width: 140 },
-            { title: 'Customer Name', field: 'customerName', minWidth: 180, width: 180 },
-            { title: 'Venue', field: 'venue', minWidth: 200, width: 200 },
-            { title: 'Event Date', field: 'eventDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 130, width: 130 },
-            { title: 'Transaction Date', field: 'transactionDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 150, width: 150 },
-            { title: 'Amount', field: 'amount', minWidth: 110, width: 110, hozAlign: 'right' },
-            { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150 },
-            { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 170, width: 170, hozAlign: 'center' },
-            { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 170, width: 170, hozAlign: 'center' },
-            { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 180, width: 180, hozAlign: 'center', print: false },   /* buttons mean nothing on paper */
-          ],
-        });
-
-        const globalFilter = document.getElementById('table-filter');
-        const paymentStatusFilter = document.getElementById('payment-status-filter');
-        const bookingStatusFilter = document.getElementById('booking-status-filter');
-        const paymentMethodFilter = document.getElementById('payment-method-filter');
-        const dateFromFilter = document.getElementById('date-from-filter');
-        const dateToFilter = document.getElementById('date-to-filter');
-        const resetFilters = document.getElementById('reset-transaction-filters');
-
-        const applyFilters = () => {
-          const query = globalFilter.value.trim().toLowerCase();
-          const paymentStatus = paymentStatusFilter.value;
-          const bookingStatus = bookingStatusFilter.value;
-          const paymentMethod = paymentMethodFilter.value;
-          const dateFrom = dateFromFilter.value ? Date.parse(dateFromFilter.value) : null;
-          const dateTo = dateToFilter.value ? Date.parse(`${dateToFilter.value}T23:59:59`) : null;
-
-          table.setFilter((row) => {
-            const rowText = [
-              row.transactionId, row.bookingId, row.customerName, row.venue,
-              row.eventDate, row.transactionDate, row.amount,
-              row.paymentMethod, row.paymentStatus, row.bookingStatus,
-            ].join(' ').toLowerCase();
-            const transactionDate = parseDate(row.transactionDate);
-
-            return (!query || rowText.includes(query))
-              && (!paymentStatus || row.paymentStatus === paymentStatus)
-              && (!bookingStatus || row.bookingStatus === bookingStatus)
-              && (!paymentMethod || row.paymentMethod === paymentMethod)
-              && (!dateFrom || transactionDate >= dateFrom)
-              && (!dateTo || transactionDate <= dateTo);
-          });
-        };
-
-        [globalFilter, paymentStatusFilter, bookingStatusFilter, paymentMethodFilter, dateFromFilter, dateToFilter]
-          .forEach((control) => control.addEventListener('input', applyFilters));
-
-        resetFilters.addEventListener('click', () => {
-          globalFilter.value = '';
-          paymentStatusFilter.value = '';
-          bookingStatusFilter.value = '';
-          paymentMethodFilter.value = '';
-          dateFromFilter.value = '';
-          dateToFilter.value = '';
-          table.clearFilter();
-        });
-
-        document.getElementById('export-csv').addEventListener('click', () => table.download('csv', 'transaction-history.csv'));
-        document.getElementById('export-json').addEventListener('click', () => table.download('json', 'transaction-history.json'));
-        /* Print exactly the rows on the current page; pick "All rows" in the page
-           size to print the whole (filtered) list. */
-        document.getElementById('print-table').addEventListener('click', () => table.print('visible', true));
-        venusepPageSize(table, [10, 25, 50, 100]);
-        table.on('tableBuilt', () => table.element.prepend(table.element.querySelector('.tabulator-footer')));   /* the pager goes above the rows */
-      });
-    </script>
+  /* Values from PHP for assets/js/admin/transaction-history.js */
+  var adminTransactionsPage = {
+    receiptUrl: @json(route('admin.receipt')),
+    transactionRowsJson: {!! $transactionRowsJson !!},
+    chipTones: @json(\App\Support\Status::CHIP_TONES),
+  };
+</script>
+<script src="{{ asset_stamped('assets/js/admin/transaction-history.js') }}"></script>
     @php include base_path('legacy/includes/booking-details-modal.php'); /* "View" */ @endphp
 @endpush

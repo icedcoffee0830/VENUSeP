@@ -1,10 +1,11 @@
 <?php
+/* Holds: what every way of signing up or signing in shares (usernames, the signed-in session). */
 /* =====================================================================
    ACCOUNTS — the pieces every way of signing up or signing in shares, so
    a password sign-in, a Google sign-in and a remembered device can never
    drift apart.
 
-     venusep_unique_username()  register-submit.php and Google sign-up
+     venusep_unique_username()  RegisterSubmitController and Google sign-up
      customer_session_open()    the only place a customer session is made
      cl_finish_login()          customer-login.php — reached by a password,
                                 a two-step code, or Google; then redirects
@@ -62,7 +63,7 @@ function customer_session_open(int $userId): bool
 
 /* Signs the customer in and sends them to the booking page; never returns.
    $remember: they ticked "Remember me" — this device stays signed in for
-   REMEMBER_DAYS (includes/remember-me.php, #23). Only reached after the full
+   REMEMBER_DAYS (remember-me.php, #23). Only reached after the full
    proof, two-step code included, so a remembered device can skip the code. */
 function cl_finish_login(PDO $pdo, int $userId, bool $remember = false): void
 {

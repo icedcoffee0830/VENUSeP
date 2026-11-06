@@ -17,6 +17,7 @@ class CounterBookerTest extends TestCase
         preg_match_all('~<script>(.*?)</script>~s', $html, $m);
         $block = collect($m[1])->first(fn ($s) => str_contains($s, 'const booker0'));
         $this->assertNotNull($block, 'counter-booker.php block not on the page');
+        $block = collect($m[1])->first(fn ($s) => str_contains($s, 'var counterBooker')) . "\n" . $block;   // its values from PHP
 
         $esc = "function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }";
         $script = "const COUNTER_STAFF='Staff', DISCOUNT_PERCENT=20, CSRF='t', COUNTER_OVERDUE={}, COUNTER_BLOCKED={}; let state; function render(){}\n"

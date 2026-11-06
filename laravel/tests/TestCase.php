@@ -10,6 +10,26 @@ use Illuminate\Support\Facades\DB;
    in with the same session keys the sign-in pages write (LARAVEL-PORT.md). */
 abstract class TestCase extends BaseTestCase
 {
+    /* A test reads a page the way a browser does: with the page's own CSS and JS files
+       from public/assets, each at the spot its tag stands. (two-factor.js loads on every
+       profile page, and tests check that page for what its panel holds.) */
+    protected function createTestResponse($response, $request)
+    {
+        $html = $response->getContent();
+        if (is_string($html) && str_contains((string) $response->headers->get('Content-Type'), 'html')) {
+            $file = fn (array $m) => file_get_contents(public_path($m[1]));   // a linked file that is missing fails the test
+            $html = preg_replace_callback('~<script src="[^"]*?/(assets/js/(?!two-factor)[^"?]+\.js)\?v=\d+"[^>]*></script>~',
+                fn ($m) => $m[0] . '<script>' . $file($m) . '</script>', $html);
+            $html = preg_replace_callback('~<link rel="stylesheet" href="[^"]*?/(assets/css/[^"?]+\.css)\?v=\d+"[^>]*>~',
+                fn ($m) => $m[0] . '<style>' . $file($m) . '</style>', $html);
+            $original = $response->original;   // setContent() would wipe the view the tests read
+            $response->setContent($html);
+            $response->original = $original;
+        }
+
+        return parent::createTestResponse($response, $request);
+    }
+
     /* admin@gmail.com. Admins must have two-step verification on, or the staff
        guard signs them out (DB-DECISIONS #20) — so the test DB gets a key if it
        has none. */

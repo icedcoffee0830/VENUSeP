@@ -73,7 +73,7 @@ class StaffHallScopeTest extends TestCase
     private function calendarEvents(object $viewer, string $type = 'staff'): array
     {
         $html = $this->signInAs($viewer, $type)->get(route('admin.calendar'))->assertOk()->getContent();
-        $this->assertSame(1, preg_match('/events: (\[.*\]),\s*\}\);/s', $html, $m));
+        $this->assertSame(1, preg_match('/calendarEventsJson: (\[.*?\]),\n/s', $html, $m));
         return json_decode($m[1], true);
     }
 

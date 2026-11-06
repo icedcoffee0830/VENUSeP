@@ -3,7 +3,7 @@
      A native <dialog>: it keeps focus inside, and Esc closes it. --}}
 @php $blockModal = \App\Http\Controllers\Customer\BookingRules::blockModalNotices(request()->query('room')); @endphp
 @if ($blockModal)
-<style>#blockModal::backdrop { background: rgba(28, 27, 25, .55); }</style>
+<link rel="stylesheet" href="{{ asset_stamped('assets/css/block-modal.css') }}" />
 <dialog id="blockModal" aria-labelledby="blockModalTitle" style="width:min(440px,calc(100vw - 32px));padding:22px;border:0;border-radius:16px;background:#fff;color:#1c1b19;font-family:Inter,system-ui,sans-serif;box-shadow:0 18px 48px rgba(0,0,0,.28)">
   <h2 id="blockModalTitle" style="margin:0 0 10px;font-size:18px;font-weight:700;color:#1c1b19">Booking Not Available</h2>
   @foreach ($blockModal as $block)
@@ -13,5 +13,5 @@
     <button type="submit" style="min-width:88px;height:44px;padding:0 18px;border:0;border-radius:10px;background:#a11626;color:#fff;font:inherit;font-size:14px;font-weight:650;cursor:pointer">OK</button>
   </form>
 </dialog>
-<script>document.getElementById('blockModal').showModal();</script>
+<script src="{{ asset_stamped('assets/js/block-modal.js') }}"></script>
 @endif

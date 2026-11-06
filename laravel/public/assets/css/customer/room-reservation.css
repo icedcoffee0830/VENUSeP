@@ -1,0 +1,31 @@
+/* Styles for resources/views/customer/room-reservation.blade.php. */
+
+  *{box-sizing:border-box}
+  body{margin:0;background:#f4f3f0;color:#1c1b19;font-family:'Inter',system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#a11626;text-decoration:none}
+  a:hover{color:#7d0f1e}
+  input,select,button,textarea{font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:2px solid rgba(161,22,38,.35);outline-offset:0}
+  ::placeholder{color:#a5a19a}
+  button{appearance:none}
+  /* custom date-picker dropdown (booking panel) */
+  .cal-pop{position:absolute;top:calc(100% + 6px);z-index:70;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.14);padding:12px;width:274px}
+  .cal-nav{width:28px;height:28px;border:none;background:none;border-radius:8px;cursor:pointer;color:#5c584f;font-size:15px;line-height:1}
+  .cal-nav:hover:not(:disabled){background:#f0eeea}
+  .cal-nav:disabled{color:#c6c2ba;cursor:default}
+  .cal-day{width:32px;height:32px;border:none;background:none;border-radius:999px;display:flex;align-items:center;justify-content:center;font:500 12.5px 'Inter',system-ui,sans-serif;color:#1c1b19;cursor:pointer;padding:0}
+  .cal-day:hover:not(:disabled){background:#eef0f4}
+  .cal-day:disabled{color:#c6c2ba;text-decoration:line-through;cursor:default;background:none}
+  .cal-day.out{color:#c6c2ba}
+  .cal-day.today:not(.sel){box-shadow:inset 0 0 0 1.5px #b9c0d0}
+  .cal-day.sel,.cal-day.sel:hover{background:#a11626;color:#fff;font-weight:650}
+  /* partly booked: still pickable, other hours are free (2026-10-27) */
+  .cal-day.part{position:relative;color:#8a5a12;font-weight:600}
+  .cal-day.part::after{content:'';position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:999px;background:#d9930d}
+  .cal-day.part.sel::after{background:#fff}
+  /* time dropdown (booking panel) */
+  .tt-pop{position:absolute;top:calc(100% + 6px);left:0;right:0;min-width:118px;z-index:70;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.14);max-height:196px;overflow-y:auto;padding:5px}
+  .tt-opt{display:block;width:100%;border:none;background:none;text-align:left;padding:8px 11px;border-radius:8px;font:500 13.5px 'Inter',system-ui,sans-serif;color:#1c1b19;cursor:pointer;white-space:nowrap}
+  .tt-opt:hover{background:#f0eeea}
+  .tt-opt.sel,.tt-opt.sel:hover{background:#a11626;color:#fff}
+  .bk-more-status{display:none}   /* phone only: the badge's reason, in the card body */

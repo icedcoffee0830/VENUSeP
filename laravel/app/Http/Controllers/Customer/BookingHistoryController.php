@@ -12,7 +12,9 @@ class BookingHistoryController
 {
     public function __invoke()
     {
-        extract(legacy('customer-bookings', 'offices'));
+        $legacy = legacy('customer-bookings', 'offices');
+        $customerBookings = $legacy['customerBookings'];   // these two: set in customer-bookings.php
+        $customerContact = $legacy['customerContact'];
 
         $bookingHistory = $customerBookings;
 

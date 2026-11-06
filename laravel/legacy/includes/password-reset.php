@@ -1,4 +1,5 @@
 <?php
+/* Holds: the forgot password links for every kind of account. */
 /* =====================================================================
    FORGOT PASSWORD (DB-DECISIONS #23; staff and admins too since #28).
 

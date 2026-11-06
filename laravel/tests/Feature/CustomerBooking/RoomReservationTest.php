@@ -29,7 +29,9 @@ class RoomReservationTest extends TestCase
             ->assertSee('const PAY_POLICY = { prepay: false', false)     /* refunds off -> post-pay */
             ->assertSee('const COUNTER = false;', false)
             ->assertSee('const ACCOUNT = {"name":"Brent Cajipoe"', false)
-            ->assertSee("fetch(COUNTER ? '" . route('admin.booking-create') . "' : '" . route('customer.booking-submit') . "'", false)
+            ->assertSee('bookingCreateUrl: ' . json_encode(route('admin.booking-create')), false)
+            ->assertSee('bookingSubmitUrl: ' . json_encode(route('customer.booking-submit')), false)
+            ->assertSee('fetch(COUNTER ? roomReservationPage.bookingCreateUrl : roomReservationPage.bookingSubmitUrl', false)
             ->assertSee("fd.append('_token', CSRF);", false)
             ->assertSee('Heritage Function Room')                        /* "More rooms": same venue */
             ->assertSee('class="is-here"', false)                        /* nav marks the room's venue */

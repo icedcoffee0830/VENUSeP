@@ -1,4 +1,5 @@
 <?php
+/* Holds: the list of amenities a room can have, and their labels and groups. */
 /* =====================================================================
    AMENITIES — the VOCABULARY. PHP-coded, deliberately (DB-DECISIONS #9).
 

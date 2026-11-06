@@ -941,7 +941,7 @@ tr:hover {
                     <span class="stat-icon"><i class="bi bi-cash-stack"></i></span>
                     <h3>Revenue</h3>
                     <div class="number">₱{{ number_format($adRevenue) }}</div>
-                    <div class="info">Current quarter</div>
+                    <div class="info">{{ $adRevenueNote }}</div>
                 </div>
             </div>
             @endfragment

@@ -44,6 +44,9 @@ class DashboardController
             $adManaging = 'No venue assigned';
         }
 
-        return live_view('admin.dashboard', compact('adRows', 'adToday', 'adRevenue', 'adVenues', 'adWho', 'adManaging'));
+        /* staff: their halls only, so it is not taken for the whole-office figure on Reports */
+        $adRevenueNote = staff_hall_ids() === null ? 'Current quarter' : 'Your halls · current quarter';
+
+        return live_view('admin.dashboard', compact('adRows', 'adToday', 'adRevenue', 'adRevenueNote', 'adVenues', 'adWho', 'adManaging'));
     }
 }

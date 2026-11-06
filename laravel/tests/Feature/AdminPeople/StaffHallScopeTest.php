@@ -118,11 +118,13 @@ class StaffHallScopeTest extends TestCase
         DB::table('bookings')->where('id', $other)->update(['total_amount' => 7654321]);
         $staffTile = $this->asStaff()->get(route('admin.dashboard'))->assertOk();
         $this->assertLessThan(7654321, $staffTile->viewData('adRevenue'));
+        $staffTile->assertSee('Your halls · current quarter');
         $this->assertSame(0, $staffTile->viewData('adToday'));
         $this->assertSame([1], array_map('intval', array_column($staffTile->viewData('adVenues'), 'rooms')));
 
         $adminTile = $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.dashboard'))->assertOk();
         $this->assertGreaterThanOrEqual(7654321, $adminTile->viewData('adRevenue'));
+        $adminTile->assertSee('Current quarter')->assertDontSee('Your halls');
     }
 
     /* ---------------------------------------------------------------- the booking page */

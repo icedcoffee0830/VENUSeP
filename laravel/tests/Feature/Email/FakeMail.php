@@ -22,7 +22,8 @@ trait FakeMail
         config(['venusep.mail_config' => $this->fakeSettings]);
     }
 
-    /* Starts the pretend server: 'accept' takes every email, 'reject' refuses the sign-in. */
+    /* Starts the pretend server: 'accept' takes every email, 'reject' refuses the sign-in,
+       'leak' refuses the email and repeats the password. */
     private function fakeGmail(string $mode = 'accept', array $settings = []): void
     {
         $this->fakeCapture = tempnam(sys_get_temp_dir(), 'vsmtp');

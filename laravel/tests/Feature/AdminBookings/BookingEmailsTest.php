@@ -102,24 +102,38 @@ class BookingEmailsTest extends TestCase
             ->assertStatus(409)->assertJson(['message' => 'That email was already sent, or is still on its way.']);
     }
 
-    public function test_a_wrong_password_reads_plainly_and_the_password_appears_nowhere(): void
+    public function test_a_wrong_password_reads_plainly(): void
     {
         [$id, $ref] = $this->seedVenueBooking('r1');
         $mail = $this->failedEmail($id);
         $plain = 'The mail server refused the sign-in. Check the App Password in mail-config.php.';
+        $oldLog = ini_set('error_log', storage_path('logs/auth-tests-error.log'));   // the raw message stays out of PHPUnit's output
+
+        $this->fakeGmail('reject');
+        $this->actingAsStaff()->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
+            ->assertOk()->assertJson(['ok' => false, 'message' => $plain, 'email' => ['status' => 'failed', 'error' => $plain]]);
+        ini_set('error_log', $oldLog);
+    }
+
+    /* The server repeats the password in a refusal: it reaches neither staff, the row nor the log. */
+    public function test_the_password_is_hidden_even_when_the_server_repeats_it(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1');
+        $mail = $this->failedEmail($id);
         $log = tempnam(sys_get_temp_dir(), 'vlog');
         $oldLog = ini_set('error_log', $log);
 
-        $this->fakeGmail('reject');
+        $this->fakeGmail('leak');
         $res = $this->actingAsStaff()->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
-            ->assertOk()->assertJson(['ok' => false, 'message' => $plain, 'email' => ['status' => 'failed', 'error' => $plain]]);
+            ->assertOk()->assertJson(['ok' => false, 'email' => ['status' => 'failed']]);
 
         ini_set('error_log', $oldLog);
         $logged = (string) file_get_contents($log);
         @unlink($log);
-        $this->assertStringContainsString('VENUSeP mail #' . $mail . ' failed', $logged);
-        $this->assertStringNotContainsString('fake-app-password-123', $logged . $res->getContent()
-            . DB::table('email_outbox')->where('id', $mail)->value('last_error'));
+        $stored = (string) DB::table('email_outbox')->where('id', $mail)->value('last_error');
+        $this->assertStringContainsString('[hidden]', $stored);
+        $this->assertStringContainsString('[hidden]', $logged);
+        $this->assertStringNotContainsString('fake-app-password-123', $logged . $res->getContent() . $stored);
     }
 
     public function test_no_network_reads_plainly_and_can_be_resent(): void

@@ -1,8 +1,8 @@
 <?php
 /* A pretend mail server for the tests, on 127.0.0.1 only: nothing it takes goes anywhere.
-   php fake-smtp.php accept|reject <capture file>. Prints its port, then answers until
-   it is stopped. Reject acts like Gmail refusing the sign-in, and repeats the password
-   in its reply, so a test can prove the password never gets past the mailer. */
+   php fake-smtp.php accept|reject|leak <capture file>. Prints its port, then answers until
+   it is stopped. Reject acts like Gmail refusing the sign-in. Leak signs in, then refuses
+   the sender and repeats the password, so a test can prove it never gets past the mailer. */
 [, $mode, $capture] = $argv;
 $server = stream_socket_server('tcp://127.0.0.1:0');
 echo substr(strrchr(stream_socket_get_name($server, false), ':'), 1), "\n";
@@ -25,7 +25,9 @@ while ($client = stream_socket_accept($server, 120)) {
         } elseif ($state === 'auth') {
             $state = '';
             $password = substr(strrchr(base64_decode($bare), "\0"), 1);
-            fwrite($client, $mode === 'reject' ? "535 5.7.8 Username and Password not accepted: {$password}\r\n" : "235 ok\r\n");
+            fwrite($client, $mode === 'reject' ? "535 5.7.8 Username and Password not accepted\r\n" : "235 ok\r\n");
+        } elseif ($mode === 'leak' && stripos($bare, 'MAIL') === 0) {
+            fwrite($client, "550 5.7.1 Refused for {$password}\r\n");
         } elseif (stripos($bare, 'EHLO') === 0) {
             fwrite($client, "250-fake\r\n250 AUTH PLAIN\r\n");
         } elseif (stripos($bare, 'AUTH') === 0) {

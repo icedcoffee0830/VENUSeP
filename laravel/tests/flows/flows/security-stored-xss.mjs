@@ -105,8 +105,25 @@ export default {
           '/admin/calendar', '/admin/transaction-history', `/valid-id-view?booking=${s.ref}`,
           ...(who === 'super admin' ? ['/admin/customer-management', '/admin/reports', '/admin/activity'] : [])], hits);
         expect.equal(hits.join(' | ') || 'none', 'none', 'script ran');
+        s[who] = page;
         return page;
       });
     }
+
+    /* CSV injection: a name a spreadsheet would run as a formula when staff open the export. */
+    await step('The ledger\'s CSV export never starts a cell with a formula a customer typed', async () => {
+      const formula = '=HYPERLINK("https://example.com","Open")';
+      await s.c.goto(ctx.url('/customer/customer-profile'));
+      const d = await post(s.c, ctx.url('/profile-save'), { action: 'details', full_name: formula, email: s.email, contact_number: '09171234567' });
+      expect.equal(d.status, 200, 'profile: ' + JSON.stringify(d.body));
+      const page = s['super admin'];
+      await page.goto(ctx.url('/admin/transaction-history'));
+      await page.locator('#table-filter').fill(s.ref);
+      const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#export-csv').click()]);
+      const csv = (await import('node:fs')).readFileSync(await dl.path(), 'utf8');
+      expect.ok(csv.includes('HYPERLINK'), 'the customer\'s row is not in the export: ' + csv.slice(0, 300));
+      expect.ok(!/(^|,)"?[=+\-@]HYPERLINK/m.test(csv), 'a cell starts with the formula: ' + csv.split('\n').find((l) => l.includes('HYPERLINK')));
+      return page;
+    });
   },
 };

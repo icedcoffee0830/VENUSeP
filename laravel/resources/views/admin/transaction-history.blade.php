@@ -220,6 +220,8 @@
           paginationSize: 10,          /* the size box is assets/js/table-page-size.js: type a number, or pick 10 / 25 / 50 / 100 / All */
           movableColumns: true,
           initialSort: [{ column: 'transactionDate', dir: 'desc' }],
+          /* A customer's name like =HYPERLINK(...) must not run as a formula when the CSV is opened in a spreadsheet. */
+          columnDefaults: { accessorDownload: (v) => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v) },
           columns: [
             { title: 'Transaction ID', field: 'transactionId', minWidth: 150, width: 150 },
             { title: 'Booking ID', field: 'bookingId', minWidth: 140, width: 140 },

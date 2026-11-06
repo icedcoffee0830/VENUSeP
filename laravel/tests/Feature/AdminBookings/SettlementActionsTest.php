@@ -104,7 +104,7 @@ class SettlementActionsTest extends TestCase
         DB::table('payments')->insert(['booking_id' => $id, 'payment_method' => 'gcash', 'amount' => 100,
             'payment_record_status' => 'confirmed', 'paid_at' => now(), 'confirmed_at' => now()]);
         legacy('bookings', 'system-receipt');
-        receipt_issue(venusep_db(), $id, (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id'));
+        receipt_issue($id, (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id'));
         return [$id, $ref];
     }
 

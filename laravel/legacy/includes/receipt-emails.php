@@ -24,14 +24,9 @@ require_once __DIR__ . '/offices.php';
 
 /* The walk-in contact for a booking: only for a customer with NO account who
    gave an email at the counter. Account holders are never auto-emailed. */
-function receipt_walkin_contact(PDO $pdo, int $bookingId): ?array
+function receipt_walkin_contact(int $bookingId): ?array
 {
-    $stmt = $pdo->prepare(
-        'SELECT c.full_name, c.contact_email FROM bookings b JOIN customers c ON c.id = b.customer_id
-          WHERE b.id = :b AND c.user_id IS NULL'
-    );
-    $stmt->execute([':b' => $bookingId]);
-    $row = $stmt->fetch();
+    $row = \App\Queries\EmailQueries::findWalkIn($bookingId);
     if (!$row || trim((string) $row['contact_email']) === '') {
         return null;
     }
@@ -127,7 +122,7 @@ function re_paragraph(string $html, string $pad = '20px 32px 0 32px', string $si
    Status emails (2026-11-01): the moments a customer must not miss if they
    never open the site. Account holders and walk-ins who gave an address.
    --------------------------------------------------------------------- */
-function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note, ?int $actorUserId): ?int
+function queue_status_email(int $bookingId, string $kind, string $note, ?int $actorUserId): ?int
 {
     $words = [
         'booking_approved'  => ['Your booking was approved', 'Your booking request was approved.'],
@@ -141,10 +136,7 @@ function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note
     if (!isset($words[$kind])) {
         return null;
     }
-    $st = $pdo->prepare('SELECT c.full_name, COALESCE(u.email, c.contact_email) AS email
-                           FROM bookings b JOIN customers c ON c.id = b.customer_id LEFT JOIN users u ON u.id = c.user_id WHERE b.id = :b');
-    $st->execute([':b' => $bookingId]);
-    $who = $st->fetch();
+    $who = \App\Queries\EmailQueries::findNameAndEmail($bookingId);
     $rows = bookings_query(['booking_id' => $bookingId]);
     if (!$who || trim((string) $who['email']) === '' || !$rows) {
         return null;
@@ -157,7 +149,7 @@ function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note
     $html = re_frame($line, $title, $first, bh_e($intro),
         re_paragraph(bh_e($line)) . ($note !== '' ? re_paragraph(bh_e($note)) : ''),
         'You&rsquo;re getting this because of your VENUSeP booking ' . bh_e($b['bookingId']) . '.' . re_office_footer($office));
-    return mail_enqueue($pdo, [
+    return mail_enqueue([
         'kind' => $kind, 'booking_id' => $bookingId, 'requested_by_user_id' => $actorUserId ?: null,
         'to_email' => $who['email'], 'subject' => $title . ': ' . $b['bookingId'],
         'body_html' => $html,
@@ -167,14 +159,14 @@ function queue_status_email(PDO $pdo, int $bookingId, string $kind, string $note
 
 /* The super admin handover (DB-DECISIONS 28): both people are told, with the reason.
    $old, $new: email and name. Returns the two outbox ids. */
-function queue_handover_emails(PDO $pdo, array $old, array $new, string $reason, int $actorUserId): array
+function queue_handover_emails(array $old, array $new, string $reason, int $actorUserId): array
 {
     $line = $new['name'] . ' (' . $new['email'] . ') is now the VENUSeP super admin. '
           . $old['name'] . ' (' . $old['email'] . ') handed it over and that account is suspended. This cannot be undone.';
     $ids = [];
     foreach ([[$old, 'You handed over the super admin'], [$new, 'You are now the super admin']] as [$who, $title]) {
         $first = re_first_name($who['name']);
-        $ids[] = mail_enqueue($pdo, [
+        $ids[] = mail_enqueue([
             'kind' => 'super_admin_handover', 'requested_by_user_id' => $actorUserId, 'to_email' => $who['email'],
             'subject' => 'VENUSeP: ' . $title,
             'body_html' => re_frame($line, $title, $first, bh_e($line), re_paragraph('Reason: ' . bh_e($reason)),
@@ -188,7 +180,7 @@ function queue_handover_emails(PDO $pdo, array $old, array $new, string $reason,
 /* The welcome email of an account made at an office's counter (DB-DECISIONS 28), sent
    again to the corrected address after an email fix. The account has no password yet:
    it says how to choose one. Returns the outbox id. */
-function queue_counter_welcome(PDO $pdo, string $name, string $email, array $office, int $actorUserId): int
+function queue_counter_welcome(string $name, string $email, array $office, int $actorUserId): int
 {
     $first = re_first_name($name);
     $forgot = mail_base_url() . '/customer/forgot-password';   // route customer.forgot-password
@@ -196,7 +188,7 @@ function queue_counter_welcome(PDO $pdo, string $name, string $email, array $off
     $how = 'To book or pay online, choose a password: open <a href="' . bh_e($forgot) . '" style="color:#a11626;">' . bh_e($forgot)
          . '</a>, enter this email address, and follow the link we send you.';
     $contact = 'Contact ' . office_contact_line($office);
-    return mail_enqueue($pdo, [
+    return mail_enqueue([
         'kind' => 'counter_welcome', 'requested_by_user_id' => $actorUserId, 'to_email' => $email,
         'subject' => 'Your VENUSeP account is ready',
         'body_html' => re_frame('Your VENUSeP account is ready. Choose a password to use it online.', 'Your account is ready', $first, $intro,
@@ -211,40 +203,23 @@ function queue_counter_welcome(PDO $pdo, string $name, string $email, array $off
 
 /* Payment due / overdue happen in sp_expire_due_bookings, with nobody at a keyboard, so
    the first request after them sends the emails. Recent changes only; a few at a time. */
-function mail_status_sweep(PDO $pdo): void
+function mail_status_sweep(): void
 {
-    $rows = $pdo->query(
-        "SELECT DISTINCT b.id, b.payment_status FROM bookings b
-           JOIN booking_timeline t ON t.booking_id = b.id AND t.action_code = 'status_changed'
-                AND t.new_payment_status = b.payment_status AND t.occurred_at >= NOW() - INTERVAL 3 DAY
-          WHERE b.refunds_allowed = 0 AND b.pay_to_use = 0
-            AND (b.payment_status = 'overdue' OR (b.payment_status IN ('await_gcash', 'await_cash') AND t.old_payment_status = 'await_event'))
-            AND NOT EXISTS (SELECT 1 FROM email_outbox e WHERE e.booking_id = b.id
-                             AND e.kind = IF(b.payment_status = 'overdue', 'payment_overdue', 'payment_due'))
-          LIMIT 3"
-    )->fetchAll();
+    $rows = \App\Queries\EmailQueries::dueWithoutEmail();
     foreach ($rows as $r) {
-        $outbox = queue_status_email($pdo, (int) $r['id'], $r['payment_status'] === 'overdue' ? 'payment_overdue' : 'payment_due', '', null);
+        $outbox = queue_status_email((int) $r['id'], $r['payment_status'] === 'overdue' ? 'payment_overdue' : 'payment_due', '', null);
         if ($outbox) {
-            mail_send($pdo, $outbox);
+            mail_send($outbox);
         }
     }
 
     /* A pending request the procedure cancelled because the customer was still blocked at
        its office (its History note starts "Cancelled automatically:"). */
-    $cancelled = $pdo->query(
-        "SELECT DISTINCT b.id FROM bookings b
-           JOIN booking_timeline t ON t.booking_id = b.id AND t.action_code = 'status_changed'
-                AND t.new_reservation_status = 'cancelled' AND t.note LIKE 'Cancelled automatically:%'
-                AND t.occurred_at >= NOW() - INTERVAL 3 DAY
-          WHERE b.reservation_status = 'cancelled'
-            AND NOT EXISTS (SELECT 1 FROM email_outbox e WHERE e.booking_id = b.id AND e.kind = 'booking_block_cancelled')
-          LIMIT 3"
-    )->fetchAll(PDO::FETCH_COLUMN);
+    $cancelled = \App\Queries\EmailQueries::blockCancelledWithoutEmail();
     foreach ($cancelled as $id) {
-        $outbox = queue_status_email($pdo, (int) $id, 'booking_block_cancelled', '', null);
+        $outbox = queue_status_email((int) $id, 'booking_block_cancelled', '', null);
         if ($outbox) {
-            mail_send($pdo, $outbox);
+            mail_send($outbox);
         }
     }
 }
@@ -252,9 +227,9 @@ function mail_status_sweep(PDO $pdo): void
 /* ---------------------------------------------------------------------
    1. walkin_booking — the counter booking, confirmed
    --------------------------------------------------------------------- */
-function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
+function queue_walkin_booking(int $bookingId, int $actorUserId): ?int
 {
-    $who = receipt_walkin_contact($pdo, $bookingId);
+    $who = receipt_walkin_contact($bookingId);
     $rows = $who ? bookings_query(['booking_id' => $bookingId]) : [];
     if (!$who || !$rows) {
         return null;
@@ -319,7 +294,7 @@ function queue_walkin_booking(PDO $pdo, int $bookingId, int $actorUserId): ?int
           . "\nEvent: " . $b['eventName'] . "\nDate: " . strip_tags(str_replace('<br>', '; ', $when)) . "\nAmount due: " . $due . "\n\n"
           . strip_tags(html_entity_decode($heading . '. ' . $how, ENT_QUOTES, 'UTF-8')) . "\n\nKeep this email.\n\n" . ($office !== '' ? $office . "\n\n" : '') . RE_NO_REPLY;
 
-    return mail_enqueue($pdo, [
+    return mail_enqueue([
         'kind' => 'walkin_booking', 'booking_id' => $bookingId, 'requested_by_user_id' => $actorUserId ?: null,
         'to_email' => $who['email'], 'subject' => 'Your VENUSeP booking ' . $b['bookingId'],
         'body_html' => $html, 'body_text' => $text,
@@ -404,15 +379,15 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
     ];
 }
 
-function queue_walkin_receipt(PDO $pdo, int $bookingId, int $receiptId, int $actorUserId): ?int
+function queue_walkin_receipt(int $bookingId, int $receiptId, int $actorUserId): ?int
 {
-    $who = receipt_walkin_contact($pdo, $bookingId);
-    $receipt = $who ? receipt_load($pdo, $receiptId) : null;
+    $who = receipt_walkin_contact($bookingId);
+    $receipt = $who ? receipt_load($receiptId) : null;
     if (!$who || !$receipt) {
         return null;
     }
     $m = re_receipt_email($receipt, re_first_name($who['name']), false, $who['email']);
-    return mail_enqueue($pdo, [
+    return mail_enqueue([
         'kind' => 'walkin_receipt', 'booking_id' => $bookingId, 'receipt_id' => $receiptId,
         'requested_by_user_id' => $actorUserId ?: null, 'to_email' => $who['email'],
         'subject' => $m['subject'], 'body_html' => $m['html'], 'body_text' => $m['text'],
@@ -421,14 +396,14 @@ function queue_walkin_receipt(PDO $pdo, int $bookingId, int $receiptId, int $act
 
 /* "Email me this receipt". $toEmail is the account's own users.email, read by
    the caller from the database — never from the request. */
-function queue_receipt_copy(PDO $pdo, int $receiptId, int $userId, string $toEmail, string $fullName): ?int
+function queue_receipt_copy(int $receiptId, int $userId, string $toEmail, string $fullName): ?int
 {
-    $receipt = receipt_load($pdo, $receiptId);
+    $receipt = receipt_load($receiptId);
     if (!$receipt) {
         return null;
     }
     $m = re_receipt_email($receipt, re_first_name($fullName), true, $toEmail);
-    return mail_enqueue($pdo, [
+    return mail_enqueue([
         'kind' => 'receipt_copy', 'booking_id' => (int) $receipt['booking_id'], 'receipt_id' => $receiptId,
         'requested_by_user_id' => $userId, 'to_email' => $toEmail,
         'subject' => $m['subject'], 'body_html' => $m['html'], 'body_text' => $m['text'],
@@ -436,12 +411,7 @@ function queue_receipt_copy(PDO $pdo, int $receiptId, int $userId, string $toEma
 }
 
 /* The "Email me" throttle: one copy per receipt per 5 minutes. */
-function receipt_copy_sent_recently(PDO $pdo, int $receiptId): bool
+function receipt_copy_sent_recently(int $receiptId): bool
 {
-    $stmt = $pdo->prepare(
-        "SELECT 1 FROM email_outbox WHERE kind = 'receipt_copy' AND receipt_id = :r
-            AND created_at > NOW() - INTERVAL 5 MINUTE LIMIT 1"
-    );
-    $stmt->execute([':r' => $receiptId]);
-    return $stmt->fetchColumn() !== false;
+    return \App\Queries\EmailQueries::copySentRecently($receiptId);
 }

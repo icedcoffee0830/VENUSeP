@@ -73,8 +73,8 @@ class NoDiscountLeftTest extends TestCase
         legacy('system-receipt');
         $pdo = venusep_db();
         $actor = (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id');
-        $this->assertNotNull(payment_confirm($pdo, $id, $actor, 'Test payment', true));
-        $view = receipt_view(receipt_for_booking($pdo, $id));
+        $this->assertNotNull(payment_confirm($id, $actor, 'Test payment', true));
+        $view = receipt_view(receipt_for_booking($id));
         $this->assertStringNotContainsString('USeP discount', json_encode($view));
     }
 }

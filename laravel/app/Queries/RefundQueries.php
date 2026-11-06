@@ -103,7 +103,7 @@ class RefundQueries
         ", [$bookingId]));
         if ($orPending) {
             legacy('notifications');
-            notify_refund_needs_admin(DB::connection()->getPdo(), $bookingId, $actor);
+            notify_refund_needs_admin($bookingId, $actor);
         }
     }
 
@@ -174,7 +174,7 @@ class RefundQueries
             ", [$actor, $bookingId]));
             if ($receiptLost) {
                 legacy('notifications');
-                notify_refund_needs_admin(DB::connection()->getPdo(), $bookingId, $actor);
+                notify_refund_needs_admin($bookingId, $actor);
             }
         });
     }
@@ -286,7 +286,7 @@ class RefundQueries
             ", [$category, $reason, $actor, $actor, $cashierReference, $refundedOn, $bookingId]);
             self::closeAsRefunded('saveOutsideRefund', $bookingId, $actor);
             legacy('notifications');
-            notify_refund_needs_admin(DB::connection()->getPdo(), $bookingId, $actor, 'refund_recorded');
+            notify_refund_needs_admin($bookingId, $actor, 'refund_recorded');
         });
     }
 

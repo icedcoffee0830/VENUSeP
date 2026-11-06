@@ -21,7 +21,7 @@ class ReceiptController extends Controller
         if ($arBookingId === null || $arPdo === null || !staff_may_handle_booking($arBookingId)) {
             return $this->notFound();
         }
-        $arReceipt = receipt_for_booking($arPdo, $arBookingId);
+        $arReceipt = receipt_for_booking($arBookingId);
         if ($arReceipt === null) {
             return $this->notFound();
         }

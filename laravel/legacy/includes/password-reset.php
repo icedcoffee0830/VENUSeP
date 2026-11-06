@@ -91,7 +91,7 @@ function pr_request(PDO $pdo, string $email, ?string $ip, ?array $mailConfig = n
             'INSERT INTO password_resets (user_id, token_hash, expires_at, requested_ip)
              VALUES (:u, :h, NOW() + INTERVAL ' . PR_RESET_TTL_MIN . ' MINUTE, :ip)'
         )->execute([':u' => $userId, ':h' => pr_hash($token), ':ip' => $ip !== null ? mb_substr($ip, 0, 45) : null]);
-        $outboxId = mail_enqueue($pdo, [
+        $outboxId = mail_enqueue([
             'kind' => 'password_reset', 'requested_by_user_id' => $userId, 'to_email' => (string) $who['email'],
             'subject' => $m['subject'], 'body_html' => $m['html'], 'body_text' => $m['text'],
         ]);
@@ -103,7 +103,7 @@ function pr_request(PDO $pdo, string $email, ?string $ip, ?array $mailConfig = n
         throw $e;
     }
 
-    mail_send($pdo, $outboxId, $mailConfig);   // never throws
+    mail_send($outboxId, $mailConfig);   // never throws
 
     /* The stored copy must not stay a working key: take the link out of it,
        whether or not it went out. A failed send is not resent — they ask again. */

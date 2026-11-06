@@ -288,7 +288,7 @@ class BookingQueries
                 return false;
             }
             legacy('notifications');
-            notify_booking_parties(DB::connection()->getPdo(), $id, 'booking_cancelled', $actor, ['note' => $reason]);
+            notify_booking_parties($id, 'booking_cancelled', $actor, ['note' => $reason]);
             return true;
         });
     }
@@ -306,7 +306,7 @@ class BookingQueries
             ", [$reason, $actor, $id]));
             self::writeHistory($id, 'write_off_requested', $actor, $note);
             legacy('notifications');
-            notify_refund_needs_admin(DB::connection()->getPdo(), $id, $actor, 'write_off_requested');
+            notify_refund_needs_admin($id, $actor, 'write_off_requested');
         });
     }
 
@@ -395,7 +395,7 @@ class BookingQueries
         ", [$officeClosed ? 0 : 1, $id, $id]));
         self::writeHistory($id, 'date_moved', $actor, $note);
         legacy('notifications');
-        notify_booking_parties(DB::connection()->getPdo(), $id, 'booking_moved', $actor, ['note' => $note]);
+        notify_booking_parties($id, 'booking_moved', $actor, ['note' => $note]);
     }
 
     /* The words customers see for a status, in order. $table: reservation_statuses or payment_statuses. */

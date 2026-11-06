@@ -157,7 +157,7 @@ class CounterCustomerController
         try {
             [$customerId, $outboxId] = DB::transaction(fn () => [
                 CustomerQueries::createAtCounter($email, venusep_unique_username($email), $name, $mobile, $office['id']),
-                queue_counter_welcome($pdo, $name, $email, $office, (int) session('user_id')),
+                queue_counter_welcome($name, $email, $office, (int) session('user_id')),
             ]);
         } catch (QueryException $e) {
             if (($e->errorInfo[1] ?? null) !== 1062) {
@@ -166,7 +166,7 @@ class CounterCustomerController
             /* the same email registered a moment ago: uq_users_email */
             return $this->reply(409, ['ok' => false, 'field' => 'email', 'error' => 'email_taken', 'message' => self::ALREADY_HAS_ACCOUNT]);
         }
-        mail_send($pdo, $outboxId);   // never throws
+        mail_send($outboxId);   // never throws
 
         return $this->reply(200, ['ok' => true, 'customerId' => $customerId, 'name' => $name,
             'phone' => self::maskPhone($mobile), 'warning' => $warning,

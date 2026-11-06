@@ -51,23 +51,23 @@ class NotificationsController
         if ($request->isMethod('post')) {
             $action = (string) $request->input('action', '');
             if ($action === 'read_all') {
-                notif_mark_read($pdo, $userId, null);
+                notif_mark_read($userId, null);
             } elseif ($action === 'read' && ctype_digit((string) $request->input('id', ''))) {
-                notif_mark_read($pdo, $userId, (int) $request->input('id'));
+                notif_mark_read($userId, (int) $request->input('id'));
             } else {
                 return $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
             }
-            return $this->reply(200, ['ok' => true, 'unread' => notif_unread_count($pdo, $userId)]);
+            return $this->reply(200, ['ok' => true, 'unread' => notif_unread_count($userId)]);
         }
 
         try {
-            notif_cleanup($pdo, $userId);
+            notif_cleanup($userId);
             return $this->reply(200, [
                 'ok'        => true,
-                'unread'    => notif_unread_count($pdo, $userId),
-                'needsYou'  => $type === 'customer' && notif_needs_customer($pdo, $userId),
-                'items'     => notif_items($pdo, $userId, $type),
-                'reminders' => $type === 'customer' ? [] : notif_reminders($pdo, staff_venue_scope(), $type === 'admin', $type === 'staff' ? (int) session('user_id') : null),
+                'unread'    => notif_unread_count($userId),
+                'needsYou'  => $type === 'customer' && notif_needs_customer($userId),
+                'items'     => notif_items($userId, $type),
+                'reminders' => $type === 'customer' ? [] : notif_reminders(staff_venue_scope(), $type === 'admin', $type === 'staff' ? (int) session('user_id') : null),
             ]);
         } catch (PDOException $e) {
             sql_failed($e);

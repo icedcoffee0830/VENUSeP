@@ -178,7 +178,7 @@ class BookingCreateController extends Controller
             $this->reply(400, ['ok' => false, 'message' => 'The customer must confirm they understand the booking is non-refundable.']);
         }
 
-        $type === 'hostel' ? $this->hostel($request, $pdo, $c) : $this->venue($request, $pdo, $c);
+        $type === 'hostel' ? $this->hostel($request, $pdo, $c) : $this->venue($request, $c);
     }
 
     /* The identity proof is spent: it confirmed one person for one booking. */
@@ -323,19 +323,19 @@ class BookingCreateController extends Controller
         /* ---- 3. the evidence, the approval, the cash, the receipt email ---- */
         $queued = null;
         try {
-            DB::transaction(function () use ($pdo, $bookingId, $c, $pct, &$queued) {
+            DB::transaction(function () use ($bookingId, $c, $pct, &$queued) {
                 $this->timeline($bookingId, $c, $pct, 'Walk-in stay booked at the front desk for ' . $c['bookerName'] . '.');
                 BookingCreateQueries::approveNow($bookingId, $c['actor']);
                 /* the cash staff took before pressing the button: paid, with its
                    payment row and System Receipt, in this same transaction */
-                $receiptId = payment_confirm($pdo, $bookingId, $c['actor'], 'Cash received at the counter.', true);
+                $receiptId = payment_confirm($bookingId, $c['actor'], 'Cash received at the counter.', true);
                 if ($receiptId === null) {
                     throw new RuntimeException('no receipt was issued');
                 }
                 /* One email, not two: the System Receipt already names the stay. */
                 if ($c['contactEmail'] !== '') {
                     try {
-                        $queued = queue_walkin_receipt($pdo, $bookingId, $receiptId, $c['actor']);
+                        $queued = queue_walkin_receipt($bookingId, $receiptId, $c['actor']);
                     } catch (Throwable $mailErr) {
                         if ($mailErr instanceof PDOException) {
                             throw $mailErr;
@@ -352,7 +352,7 @@ class BookingCreateController extends Controller
 
         $this->spendProof($c);
         if ($queued !== null) {
-            mail_send($pdo, $queued);
+            mail_send($queued);
         }
         $row = BookingCreateQueries::findDates($bookingId);
         $this->reply(200, [
@@ -366,7 +366,7 @@ class BookingCreateController extends Controller
     }
 
     /* ---- VENUE AT THE COUNTER: approved on the spot, paid later as usual. ---- */
-    private function venue(Request $request, PDO $pdo, array $c): never
+    private function venue(Request $request, array $c): never
     {
         $room = $c['room'];
         $eventName = trim((string) ($request->post('event_name') ?? ''));
@@ -428,7 +428,7 @@ class BookingCreateController extends Controller
         /* ---- the write ---- */
         $queued = null;   /* the walk-in confirmation email, sent after commit */
         try {
-            $bookingId = BookingCreateQueries::saveNew(function () use ($pdo, &$c, &$queued, $method, $roomPrice, $pct, $discount, $total, $eventName, $startIso, $endIso, $attendees, $slots) {
+            $bookingId = BookingCreateQueries::saveNew(function () use (&$c, &$queued, $method, $roomPrice, $pct, $discount, $total, $eventName, $startIso, $endIso, $attendees, $slots) {
                 if ($c['isNewWalkIn']) {
                     $this->insertWalkIn($c);
                 }
@@ -442,7 +442,7 @@ class BookingCreateController extends Controller
                 /* The walk-in's confirmation email, queued now, sent after commit. */
                 if ($c['contactEmail'] !== '') {
                     try {
-                        $queued = queue_walkin_booking($pdo, $id, $c['actor']);
+                        $queued = queue_walkin_booking($id, $c['actor']);
                     } catch (Throwable $mailErr) {
                         if ($mailErr instanceof PDOException) {
                             throw $mailErr;
@@ -468,7 +468,7 @@ class BookingCreateController extends Controller
         $this->spendProof($c);
         /* Committed — now the email. */
         if ($queued !== null) {
-            mail_send($pdo, $queued);
+            mail_send($queued);
         }
 
         try {

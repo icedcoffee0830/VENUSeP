@@ -182,11 +182,11 @@ class CustomerController
         // Save
         $pdo = venusep_db_or_fail();
         try {
-            $outboxId = DB::transaction(function () use ($pdo, $account, $email, $reason) {
+            $outboxId = DB::transaction(function () use ($account, $email, $reason) {
                 if (!CustomerQueries::fixEmail($account, $email, $reason, (int) session('user_id'))) {
                     return null;
                 }
-                return queue_counter_welcome($pdo, $account['full_name'], $email, office_by_id($account['counter_venue_id']), (int) session('user_id'));
+                return queue_counter_welcome($account['full_name'], $email, office_by_id($account['counter_venue_id']), (int) session('user_id'));
             });
         } catch (QueryException $e) {
             if (($e->errorInfo[1] ?? null) !== 1062) {
@@ -197,7 +197,7 @@ class CustomerController
         if ($outboxId === null) {
             return $this->reply(409, ['ok' => false, 'message' => 'The account changed a moment ago (signed into, or its email changed), so the email was not corrected.']);
         }
-        mail_send($pdo, $outboxId);   // never throws
+        mail_send($outboxId);   // never throws
         return $this->reply(200, ['ok' => true, 'message' => 'Email corrected. A welcome email went to ' . $email . '.']);
     }
 

@@ -107,7 +107,7 @@ class BookingChangeController
         $docError = '';
         doc_store($id, 'customer_id', $file->getPathname(), $file->getClientOriginalName(), $user, $docError);
         try {
-            notify_new_request($pdo, $id, $user);
+            notify_new_request($id, $user);
         } catch (PDOException $e) {
             sql_failed($e, optional: true);
         }

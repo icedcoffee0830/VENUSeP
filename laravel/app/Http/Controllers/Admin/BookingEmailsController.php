@@ -57,7 +57,7 @@ class BookingEmailsController extends Controller
             if ($beId === null) {
                 $this->reply(409, ['ok' => false, 'message' => 'That email was already sent, or is still on its way.']);
             }
-            mail_send($pdo, $beId);
+            mail_send($beId);
             $row = EmailQueries::find($beId);
             $this->reply(200, ['ok' => $row['status'] === 'sent', 'email' => $this->email($row),
                 'message' => $row['status'] === 'sent' ? 'Sent.' : 'Still couldn&rsquo;t send it. Check the mail settings and try again.']);
@@ -69,7 +69,7 @@ class BookingEmailsController extends Controller
         }
         $isWalkIn = $who['user_id'] === null;
 
-        $receipt = receipt_for_booking($pdo, $beBookingId);
+        $receipt = receipt_for_booking($beBookingId);
 
         $this->reply(200, [
             'ok'       => true,

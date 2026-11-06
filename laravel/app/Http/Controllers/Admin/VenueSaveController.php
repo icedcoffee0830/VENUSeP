@@ -10,7 +10,6 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use PDO;
 use PDOException;
 
 /* =====================================================================
@@ -53,8 +52,7 @@ class VenueSaveController extends Controller
             $this->reply(400, ['ok' => false, 'error' => 'bad_name', 'message' => 'Enter a venue name (up to 150 characters).']);
         }
 
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so the venue was not saved.']);
         }
 
@@ -90,7 +88,7 @@ class VenueSaveController extends Controller
                 VenueQueries::saveNameAndDescription($venueId, $name, $description);
                 return $this->moveStaff($venueId, $moveIds, $movedEmails);
             });
-            $this->notifyMoves($pdo, $movedEmails, $name, (int) $venueId);
+            $this->notifyMoves($movedEmails, $name, (int) $venueId);
 
             $this->reply(200, ['ok' => true, 'created' => false, 'name' => $name, 'description' => $description, 'moved' => $moved]);
         } catch (HttpResponseException $e) {
@@ -145,7 +143,7 @@ class VenueSaveController extends Controller
 
     /* Tell the admins of the offices each one left and joined who was moved (2026-10-28;
        DB-DECISIONS 28). A failure costs a notification, never the save. */
-    private function notifyMoves(PDO $pdo, array $emails, $venueName, int $venueId)
+    private function notifyMoves(array $emails, $venueName, int $venueId)
     {
         if (!$emails) {
             return;
@@ -153,7 +151,7 @@ class VenueSaveController extends Controller
         legacy('notifications');
         try {
             foreach ($emails as $email => $from) {
-                notify_account_event($pdo, 'staff_moved', (int) session('user_id'), ['email' => $email, 'venue' => $venueName], [$from, $venueId]);
+                notify_account_event('staff_moved', (int) session('user_id'), ['email' => $email, 'venue' => $venueName], [$from, $venueId]);
             }
         } catch (PDOException $e) {
             sql_failed($e, optional: true);

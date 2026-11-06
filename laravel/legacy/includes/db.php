@@ -134,7 +134,7 @@ function venusep_expire_due_bookings()
         app()->terminating(function () use ($pdo) {
             try {
                 legacy('bookings', 'receipt-emails');
-                mail_status_sweep($pdo);
+                mail_status_sweep();
             } catch (\Throwable $e) {
                 sql_failed($e, optional: true);
             }

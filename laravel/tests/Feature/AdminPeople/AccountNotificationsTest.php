@@ -82,11 +82,11 @@ class AccountNotificationsTest extends TestCase
     {
         legacy('db', 'notifications');
         $francis = (int) DB::table('users')->where('email', 'francishubero@gmail.com')->value('id');
-        notify_account_event(venusep_db(), 'account_created', $francis, ['email' => 'x@test.local', 'role' => 'admin'], null);
+        notify_account_event('account_created', $francis, ['email' => 'x@test.local', 'role' => 'admin'], null);
         $this->assertSame(['admin@gmail.com'], $this->told('account_created'));
 
         $sa = (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id');
-        notify_account_event(venusep_db(), 'account_reactivated', $sa, ['email' => 'x@test.local', 'role' => 'admin'], null);
+        notify_account_event('account_reactivated', $sa, ['email' => 'x@test.local', 'role' => 'admin'], null);
         $this->assertSame([], $this->told('account_reactivated'));   // the super admin did it: nobody
     }
 
@@ -94,7 +94,7 @@ class AccountNotificationsTest extends TestCase
     {
         legacy('db', 'notifications');
         $sa = (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id');
-        notify_account_event(venusep_db(), 'account_created', $sa, ['email' => 'x@test.local', 'role' => 'staff'], [3]);
+        notify_account_event('account_created', $sa, ['email' => 'x@test.local', 'role' => 'staff'], [3]);
         $this->assertSame(['cedu.admin@gmail.com'], $this->told('account_created'));
     }
 
@@ -105,12 +105,12 @@ class AccountNotificationsTest extends TestCase
         legacy('db', 'notifications');
         $booking = (int) DB::table('bookings as b')->join('rooms as r', 'r.id', '=', 'b.room_id')->where('r.venue_id', 1)->value('b.id');
         $staff = (int) DB::table('users')->where('email', 'staff@gmail.com')->value('id');
-        notify_refund_needs_admin(venusep_db(), $booking, $staff, 'write_off_requested');
+        notify_refund_needs_admin($booking, $staff, 'write_off_requested');
         $this->assertSame(['francishubero@gmail.com'], $this->told('write_off_requested'));
 
         DB::table('users')->where('email', 'francishubero@gmail.com')->update(['is_active' => 0]);
         try {
-            notify_refund_needs_admin(venusep_db(), $booking, $staff);
+            notify_refund_needs_admin($booking, $staff);
             $this->assertSame(['admin@gmail.com'], $this->told('refund_needs_admin'));
         } finally {
             DB::table('users')->where('email', 'francishubero@gmail.com')->update(['is_active' => 1]);

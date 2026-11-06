@@ -150,13 +150,13 @@ class OfficeBlockTest extends TestCase
             DB::table('booking_timeline')->where(['booking_id' => $blocked, 'new_reservation_status' => 'cancelled'])->value('note'));
 
         legacy('bookings', 'receipt-emails');
-        mail_status_sweep(DB::connection()->getPdo());
+        mail_status_sweep();
         $mail = DB::table('email_outbox')->where(['booking_id' => $blocked, 'kind' => 'booking_block_cancelled'])->first();
         $this->assertNotNull($mail, 'no email to the customer');
         $this->assertSame(self::EMAIL, $mail->to_email);
         $this->assertStringContainsString('Contact USeP Venues: ', $mail->body_text);
         $this->assertStringNotContainsString('Secret', $mail->body_html . $mail->body_text);
-        mail_status_sweep(DB::connection()->getPdo());   /* once only */
+        mail_status_sweep();   /* once only */
         $this->assertSame(1, DB::table('email_outbox')->where(['booking_id' => $blocked, 'kind' => 'booking_block_cancelled'])->count());
     }
 

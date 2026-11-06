@@ -177,7 +177,7 @@ class RegisterSubmitController
                 if ($venueId !== null) {
                     $venueName = (string) (VenueQueries::find($venueId)['name'] ?? '');
                 }
-                notify_account_event($pdo, 'account_created', (int) session('user_id'),
+                notify_account_event('account_created', (int) session('user_id'),
                     ['email' => $email, 'role' => $kind, 'venue' => $venueName], $kind === 'staff' ? [(int) $venueId] : null);
             } catch (PDOException $e) {
                 sql_failed($e, optional: true);

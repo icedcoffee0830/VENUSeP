@@ -32,7 +32,7 @@ class WalkInRefundTest extends TestCase
         DB::table('payments')->insert(['booking_id' => $id, 'payment_method' => 'cash',
             'amount' => $this->booking($id)->total_amount, 'payment_record_status' => 'confirmed', 'paid_at' => now(), 'confirmed_at' => now()]);
         legacy('bookings', 'system-receipt');
-        $receipt = receipt_issue(venusep_db(), $id, (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id'));
+        $receipt = receipt_issue($id, (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id'));
 
         return [$id, $ref, 'VSR-' . now()->year . '-' . str_pad((string) $receipt, 6, '0', STR_PAD_LEFT)];
     }

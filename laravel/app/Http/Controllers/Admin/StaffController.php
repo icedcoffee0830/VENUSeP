@@ -132,10 +132,10 @@ class StaffController
     /* Tell the admins who look after that account (2026-10-28; DB-DECISIONS 28):
        $venueIds = the staff member's offices, null = an admin account (the super admin).
        A failure costs a notification, never the change itself. */
-    private function notify(PDO $pdo, $kind, $actor, array $detail, ?array $venueIds): void
+    private function notify($kind, $actor, array $detail, ?array $venueIds): void
     {
         try {
-            notify_account_event($pdo, $kind, (int) $actor, $detail, $venueIds);
+            notify_account_event($kind, (int) $actor, $detail, $venueIds);
         } catch (PDOException $e) {
             sql_failed($e, optional: true);
         }
@@ -260,7 +260,7 @@ class StaffController
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the venue was not changed.']);
             }
             if ((int) $user['old_venue_id'] !== (int) $venue['id']) {
-                $this->notify($pdo, 'staff_moved', $actor, ['email' => $user['email'], 'venue' => $venue['name']], [(int) $user['old_venue_id'], $venue['id']]);
+                $this->notify('staff_moved', $actor, ['email' => $user['email'], 'venue' => $venue['name']], [(int) $user['old_venue_id'], $venue['id']]);
             }
             return $this->reply(200, ['ok' => true, 'venue_id' => $venue['id'], 'venue' => $venue['name'],
                 'message' => 'Venue assignment updated.']);
@@ -335,7 +335,7 @@ class StaffController
             }
             if ($venueGiven && $user['account_type'] === 'staff' && $venue['id'] !== null
                 && (int) $user['old_venue_id'] !== (int) $venue['id']) {
-                $this->notify($pdo, 'staff_moved', $actor, ['email' => $email, 'venue' => $venue['name']], [(int) $user['old_venue_id'], $venue['id']]);
+                $this->notify('staff_moved', $actor, ['email' => $email, 'venue' => $venue['name']], [(int) $user['old_venue_id'], $venue['id']]);
             }
             return $this->reply(200, ['ok' => true, 'message' => 'Account updated.']);
         }
@@ -364,7 +364,7 @@ class StaffController
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the password was not changed.']);
             }
             \App\Http\Controllers\Auth\SignInThrottle::passed((string) $user['email']);   // a forgotten password often means a sign-in lock too
-            $this->notify($pdo, 'account_password_reset', $actor, ['email' => $user['email']], $this->offices($user));
+            $this->notify('account_password_reset', $actor, ['email' => $user['email']], $this->offices($user));
             return $this->reply(200, ['ok' => true,
                 'message' => 'Password reset. Give them the temporary password; they must replace it when they sign in.']);
         }
@@ -400,7 +400,7 @@ class StaffController
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
             }
             if ((int) $user['is_active'] !== $active) {
-                $this->notify($pdo, $active ? 'account_reactivated' : 'account_suspended', $actor,
+                $this->notify($active ? 'account_reactivated' : 'account_suspended', $actor,
                     ['email' => $user['email'], 'role' => $user['account_type']], $this->offices($user));
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,
@@ -445,7 +445,7 @@ class StaffController
                         'message' => 'Wrong password. ' . $no['attemptsLeft'] . ' attempt(s) left before a temporary lock.']);
             }
             AccountQueries::handOverSuperAdmin($actor, (int) $user['id']);
-            $outbox = queue_handover_emails($pdo,
+            $outbox = queue_handover_emails(
                 ['email' => (string) $me['email'], 'name' => (string) $me['full_name']],
                 ['email' => (string) $user['email'], 'name' => (string) ($user['full_name'] ?? $user['email'])],
                 $reason, $actor);
@@ -456,9 +456,9 @@ class StaffController
             return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
         }
         foreach ($outbox as $id) {
-            mail_send($pdo, $id);   // never throws
+            mail_send($id);   // never throws
         }
-        $this->notify($pdo, 'super_admin_handover', $actor, ['email' => $user['email']], null);   // the new super admin's bell
+        $this->notify('super_admin_handover', $actor, ['email' => $user['email']], null);   // the new super admin's bell
         return $this->reply(200, ['ok' => true, 'signed_out' => true,
             'message' => $user['email'] . ' is now the super admin. Your account is suspended, so you are signed out.']);
     }

@@ -118,13 +118,13 @@ class BookingActionController extends Controller
         $statusEmail = ['approve' => 'booking_approved', 'reject' => 'booking_rejected', 'force_cancel' => 'booking_cancelled'][$action] ?? null;
         if ($statusEmail !== null && $queued === null) {
             try {
-                $queued = queue_status_email($pdo, $bookingId, $statusEmail, $note, $actor);
+                $queued = queue_status_email($bookingId, $statusEmail, $note, $actor);
             } catch (\Throwable $mailErr) {
                 sql_failed($mailErr, optional: true);
             }
         }
         if ($queued !== null) {
-            mail_send($pdo, $queued);
+            mail_send($queued);
         }
 
         /* Hand back the booking's new state so the page can redraw from the truth. */
@@ -516,7 +516,7 @@ class BookingActionController extends Controller
             $this->reply(400, ['ok' => false, 'message' => 'Attach the proof you found, so an administrator can approve it.']);
         }
         if (!$lost) {
-            $issued = receipt_for_booking(venusep_db(), $id);
+            $issued = receipt_for_booking($id);
             if (!$issued || strcasecmp(trim((string) $request->post('receipt_number')), $issued['number']) !== 0) {
                 $this->reply(400, ['ok' => false, 'message' => 'That receipt number does not match this booking. Check it, or tick "The receipt was lost".']);
             }

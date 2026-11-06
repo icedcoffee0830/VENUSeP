@@ -298,7 +298,7 @@ class BookingSubmitController extends Controller
         /* Tell the venue's staff and the admins (2026-10-28). A failure costs a
            notification, never the booking. */
         try {
-            notify_new_request($pdo, $bookingId, (int) session('user_id'));
+            notify_new_request($bookingId, (int) session('user_id'));
         } catch (PDOException $e) {
             sql_failed($e, optional: true);
         }

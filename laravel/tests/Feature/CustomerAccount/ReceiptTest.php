@@ -20,7 +20,7 @@ class ReceiptTest extends TestCase
     {
         parent::setUp();
         legacy('system-receipt');
-        $this->receiptId = receipt_issue(venusep_db(), self::BOOKING, 1);
+        $this->receiptId = receipt_issue(self::BOOKING, 1);
     }
 
     protected function tearDown(): void

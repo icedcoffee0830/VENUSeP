@@ -50,7 +50,7 @@ class ReceiptPdfController
             return self::deny();
         }
 
-        $receipt = receipt_for_booking($pdo, $bookingId);
+        $receipt = receipt_for_booking($bookingId);
         if ($receipt === null) {
             return self::deny();
         }

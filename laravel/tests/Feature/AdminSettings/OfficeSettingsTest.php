@@ -188,7 +188,7 @@ class OfficeSettingsTest extends TestCase
         DB::table('venues')->where('id', 2)->update(['contact_phone' => '0917 222 0002']);
         [$id] = $this->seedVenueBooking('r5');
         legacy('bookings', 'receipt-emails');
-        $outbox = queue_status_email(DB::connection()->getPdo(), $id, 'booking_approved', '', null);
+        $outbox = queue_status_email($id, 'booking_approved', '', null);
         $mail = DB::table('email_outbox')->where('id', $outbox)->first();
         $this->assertStringContainsString('Contact USeP Venues: 0917 222 0002 · usep.venues@example.com', $mail->body_html);
         $this->assertStringContainsString('Contact USeP Venues: 0917 222 0002', $mail->body_text);

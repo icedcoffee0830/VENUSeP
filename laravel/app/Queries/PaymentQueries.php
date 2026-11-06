@@ -329,7 +329,7 @@ class PaymentQueries
                 WHERE id = ?
             ", [$actor, $bookingId]));
             legacy('notifications');
-            notify_booking_parties(DB::connection()->getPdo(), $bookingId, 'payment_reversed', $actor, ['note' => $reason]);
+            notify_booking_parties($bookingId, 'payment_reversed', $actor, ['note' => $reason]);
         });
     }
 
@@ -344,6 +344,36 @@ class PaymentQueries
         ", [$paymentId]);
     }
 
+    /* Money landed: the booking is paid, inside the caller's transaction. A booking says what it
+       owes, a payment row says what arrived: SETTLE the row the customer's upload made rather
+       than add a second one for one transfer. No row yet: a cash payment at the counter, which
+       only staff ever record, so this is its first record. */
+    public static function settleConfirmed(int $bookingId, int $actor, ?string $note, bool $asCash): void
+    {
+        self::signedAs($actor, $note, fn () => DB::update("
+            UPDATE bookings
+            SET payment_method = IF(?, 'cash', payment_method),
+                payment_status = IF(payment_method = 'cash', 'paid_cash', 'confirmed'),
+                updated_by_user_id = ?
+            WHERE id = ?
+        ", [$asCash ? 1 : 0, $actor, $bookingId]));
+        $settled = DB::update("
+            UPDATE payments
+            SET payment_record_status = 'confirmed',
+                confirmed_at = NOW(),
+                confirmed_by_user_id = ?
+            WHERE booking_id = ? AND payment_record_status IN ('submitted', 'under_review')
+        ", [$actor, $bookingId]);
+        if ($settled === 0) {
+            DB::insert("
+                INSERT INTO payments (booking_id, payment_method, amount, payment_record_status, paid_at, confirmed_at, confirmed_by_user_id)
+                SELECT id, COALESCE(payment_method, 'gcash'), total_amount, 'confirmed', NOW(), NOW(), ?
+                FROM bookings
+                WHERE id = ?
+            ", [$actor, $bookingId]);
+        }
+    }
+
     /* payment_confirm() (legacy/includes/system-receipt.php) marks the booking paid, settles
        its payment row and issues the System Receipt, inside the caller's save: it is given
        Laravel's own connection. A database error undoes it all; a problem building a walk-in's
@@ -352,12 +382,12 @@ class PaymentQueries
     {
         legacy('system-receipt', 'receipt-emails');
         $pdo = DB::connection()->getPdo();
-        $receiptId = payment_confirm($pdo, $bookingId, $actor, $note, $asCash);
+        $receiptId = payment_confirm($bookingId, $actor, $note, $asCash);
         if ($receiptId === null) {
             return null;
         }
         try {
-            return queue_walkin_receipt($pdo, $bookingId, $receiptId, $actor);
+            return queue_walkin_receipt($bookingId, $receiptId, $actor);
         } catch (\Throwable $mailErr) {
             if ($mailErr instanceof PDOException) {
                 throw $mailErr;

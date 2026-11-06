@@ -182,8 +182,8 @@ class StaffHallsTest extends TestCase
         DB::table('venue_booking_slots')->where('booking_id', $id)->update(['slot_date' => $day->toDateString(), 'start_time' => $day->format('H:i:s'), 'end_time' => '23:59:59']);
         try {
             legacy('notifications');
-            $mine = array_column(notif_reminders(DB::connection()->getPdo(), [self::BAHAY], false, $on->id), 'text');
-            $other = array_column(notif_reminders(DB::connection()->getPdo(), [self::BAHAY], false, $off->id), 'text');
+            $mine = array_column(notif_reminders([self::BAHAY], false, $on->id), 'text');
+            $other = array_column(notif_reminders([self::BAHAY], false, $off->id), 'text');
             $this->assertNotEmpty(array_filter($mine, fn ($t) => str_contains($t, $ref)));
             $this->assertEmpty(array_filter($other, fn ($t) => str_contains($t, $ref)));
         } finally {

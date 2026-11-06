@@ -101,10 +101,8 @@ $hrOccupied = [];
 $hrNightRows = \App\Queries\CatalogQueries::occupiedNights();
 foreach ($hrNightRows as $n) {
   $g = $n['gender'] === 'female' ? 'F' : ($n['gender'] === 'male' ? 'M' : 'O');
-  $hrOccupied[$n['room_id']][$n['night_date']][] = [
-    'name'   => $n['full_name'],
-    'gender' => $g,
-  ];
+  /* the gender only: every customer's booking page gets this, so another guest's name never does */
+  $hrOccupied[$n['room_id']][$n['night_date']][] = ['gender' => $g];
 }
 
 /* ---- 4. assemble the shape every page has always consumed ---- */

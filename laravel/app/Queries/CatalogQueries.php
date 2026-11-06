@@ -125,12 +125,12 @@ class CatalogQueries
         "));
     }
 
-    /* Who sleeps where, every room and night in ONE query. Released nights are left out:
-       that is what frees a bed. */
+    /* The beds taken, every room and night in ONE query. Released nights are left out:
+       that is what frees a bed. No names: this reaches the customers' booking page. */
     public static function occupiedNights(): array
     {
         return self::rows(DB::select("
-            SELECT hb.room_id, n.night_date, o.full_name, o.gender
+            SELECT hb.room_id, n.night_date, o.gender
             FROM bed_reservation_nights n
             JOIN hostel_beds hb ON hb.id = n.bed_id
             JOIN bed_reservations br ON br.id = n.bed_reservation_id

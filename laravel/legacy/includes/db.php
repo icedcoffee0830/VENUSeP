@@ -128,7 +128,7 @@ function venusep_expire_due_bookings()
     try {
         $pdo->exec('CALL sp_expire_due_bookings()');
         require_once __DIR__ . '/documents.php';
-        doc_remove_finished_ids($pdo);
+        doc_remove_finished_ids();
         /* After the response: an email must not slow a page, and loading the booking
            code here, inside a function, would hide its variables from the page. */
         app()->terminating(function () use ($pdo) {

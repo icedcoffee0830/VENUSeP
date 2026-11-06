@@ -372,7 +372,7 @@ function google_create_customer(PDO $pdo, string $sub, string $email, string $na
         $pdo->prepare(
             "INSERT INTO users (email, username, password_hash, google_sub, account_type, email_verified_at)
              VALUES (:e, :u, NULL, :s, 'customer', NOW())"
-        )->execute([':e' => $email, ':u' => venusep_unique_username($pdo, $email), ':s' => $sub]);
+        )->execute([':e' => $email, ':u' => venusep_unique_username($email), ':s' => $sub]);
         $userId = (int) $pdo->lastInsertId();
         $pdo->prepare('INSERT INTO customers (user_id, full_name, phone) VALUES (:u, :n, :p)')
             ->execute([':u' => $userId, ':n' => $name, ':p' => $phone]);

@@ -114,7 +114,7 @@ class CustomerLoginController
                 } else {
                     SignInThrottle::passed($email);
                     // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).
-                    venusep_password_upgrade($pdo, (int) $customer['user_id'], $password, $customer['password_hash']);
+                    venusep_password_upgrade((int) $customer['user_id'], $password, $customer['password_hash']);
                     /* "Remember me" rides along through the code step (it is in the pending state). */
                     tfa_after_password($pdo, (int) $customer['user_id'], 'customer', 'customer', $customer['email'],
                         ['remember' => $rememberMe], $self,

@@ -141,7 +141,7 @@ class RegisterSubmitController
         /* A unique username derived from the email — the same rule Google sign-up uses. */
         legacy('accounts');
         try {
-            $username = venusep_unique_username($pdo, $email);
+            $username = venusep_unique_username($email);
         } catch (PDOException $e) {
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);

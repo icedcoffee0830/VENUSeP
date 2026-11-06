@@ -73,6 +73,19 @@ class CustomerQueries
         return $row ? (array) $row : null;
     }
 
+    /* What the booking pages show of the signed-in customer, or null. */
+    public static function findContact(int $customerId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT c.id, c.full_name, c.phone, c.university_id_no, c.photo_path, u.email
+            FROM customers c
+            LEFT JOIN users u ON u.id = c.user_id
+            WHERE c.id = ?
+            LIMIT 1
+        ", [$customerId]);
+        return $row ? (array) $row : null;
+    }
+
     /* A customer account's own address and name, or null. */
     public static function findEmailAndName(int $userId): ?array
     {

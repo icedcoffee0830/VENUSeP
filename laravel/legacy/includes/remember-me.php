@@ -181,7 +181,7 @@ function remember_restore(PDO $pdo): bool
     try {
         $r = remember_check($pdo, $cookie);
         if ($r['status'] === 'ok' || $r['status'] === 'race') {
-            if (customer_session_open($pdo, (int) $r['user_id'])) {
+            if (customer_session_open((int) $r['user_id'])) {
                 session(['remembered' => true]);   // signed in by the cookie, not by a password this time
                 if ($r['status'] === 'ok') {
                     remember_cookie_set($r['cookie'], $r['expires']);

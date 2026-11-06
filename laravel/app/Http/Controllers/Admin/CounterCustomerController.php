@@ -156,7 +156,7 @@ class CounterCustomerController
         $pdo = venusep_db_or_fail();
         try {
             [$customerId, $outboxId] = DB::transaction(fn () => [
-                CustomerQueries::createAtCounter($email, venusep_unique_username($pdo, $email), $name, $mobile, $office['id']),
+                CustomerQueries::createAtCounter($email, venusep_unique_username($email), $name, $mobile, $office['id']),
                 queue_counter_welcome($pdo, $name, $email, $office, (int) session('user_id')),
             ]);
         } catch (QueryException $e) {

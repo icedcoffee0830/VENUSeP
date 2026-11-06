@@ -9,9 +9,26 @@ use Illuminate\Support\Facades\DB;
    faqs: one row per question, ordered inside its section by sort_order.
      is_builtin = 1: ships with the system: hidden, never deleted; default_question and
      default_answer are the wording "restore" goes back to.
-     policy: any, refunds_on, refunds_off: which refund switch shows it. */
+     policy: any, refunds_on, refunds_off: which refund switch shows it.
+   faq_sections: the sections' names. */
 class FaqQueries
 {
+    public static function sections(): array
+    {
+        return array_map(fn ($r) => (array) $r, DB::select('SELECT section_key, label FROM faq_sections ORDER BY sort_order, section_key'));
+    }
+
+    /* Every question in order; the hidden ones only when asked for. */
+    public static function all(bool $includeHidden): array
+    {
+        return array_map(fn ($r) => (array) $r, DB::select("
+            SELECT id, section_key, question, answer, sort_order, is_active, is_builtin, policy,
+                   default_question, default_answer, updated_at
+            FROM faqs" . ($includeHidden ? '' : ' WHERE is_active = 1') . "
+            ORDER BY section_key, sort_order, id
+        "));
+    }
+
     /* The next position at the end of a section. */
     public static function nextPosition(string $section): int
     {

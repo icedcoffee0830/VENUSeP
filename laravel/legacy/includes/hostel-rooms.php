@@ -42,7 +42,7 @@ require_once __DIR__ . '/offices.php';
 require_once __DIR__ . '/amenities.php';
 require_once __DIR__ . '/auth.php';        /* staff_sees_venue() — staff list their own venue only */
 
-$hrPdo = venusep_db_or_fail();
+venusep_db_or_fail();
 venusep_expire_due_bookings();   /* a lapsed request must not still hold its beds */
 
 /* Same opt-in flag as venue-rooms.php — customer pages never set it (active
@@ -52,22 +52,10 @@ $hrIncludeInactive = isset($hrIncludeInactive) ? (bool) $hrIncludeInactive : fal
 
 /* The hostel venue's name, from the venue that actually holds the hostel
    rooms rather than a constant that could drift away from it. */
-$HOSTEL_VENUE = (string) $hrPdo->query(
-  "SELECT name FROM venues WHERE venue_type = 'hostel' ORDER BY id LIMIT 1"
-)->fetchColumn();
+$HOSTEL_VENUE = \App\Queries\CatalogQueries::hostelName();
 
 /* ---- 1. the rooms (a deleted room, migration 18, is gone for everyone) ---- */
-$hrRoomRows = $hrPdo->query(
-  "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
-          r.venue_id, v.name AS venue_name,
-          d.cr_type, d.rate_per_head_per_night, d.check_in_time, d.check_out_time,
-          (SELECT COUNT(*) FROM hostel_beds b WHERE b.room_id = r.id AND b.is_active = 1) AS bed_count
-     FROM rooms r
-     JOIN venues v                   ON v.id = r.venue_id
-     LEFT JOIN hostel_room_details d  ON d.room_id = r.id
-    WHERE r.room_type = 'hostel' AND r.deleted_at IS NULL" . ($hrIncludeInactive ? '' : ' AND r.is_active = 1') . "
-    ORDER BY r.id"
-)->fetchAll();
+$hrRoomRows = \App\Queries\CatalogQueries::hostelRooms($hrIncludeInactive);
 
 /* Rates are per head, PER NIGHT: total = beds x rate x nights.
    Derived from the rooms rather than hard-coded, so changing a rate in the
@@ -88,14 +76,7 @@ $HOSTEL_CR_LABEL = [
 
 /* ---- 2. closures — same shape and same rule as every venue room ---- */
 $hrMaint = [];
-$hrMaintRows = $hrPdo->query(
-  "SELECT m.room_id, m.from_date, m.until_date, m.reason, m.blocks_booking
-     FROM maintenance_windows m
-     JOIN rooms r ON r.id = m.room_id
-    WHERE r.room_type = 'hostel'
-      AND (m.until_date IS NULL OR m.until_date >= CURDATE())
-    ORDER BY m.room_id, (m.from_date <= CURDATE()) DESC, m.from_date ASC"
-)->fetchAll();
+$hrMaintRows = \App\Queries\CatalogQueries::roomClosures('hostel');
 foreach ($hrMaintRows as $m) {
   if (isset($hrMaint[$m['room_id']])) continue;
   $hrMaint[$m['room_id']] = [
@@ -117,17 +98,7 @@ foreach ($hrMaintRows as $m) {
    of the two, so a guest is never silently counted as something they are
    not. It is display-only either way — nothing here reserves a bed by gender. */
 $hrOccupied = [];
-$hrNightRows = $hrPdo->query(
-  "SELECT hb.room_id, n.night_date, o.full_name, o.gender
-     FROM bed_reservation_nights n
-     JOIN hostel_beds hb       ON hb.id = n.bed_id
-     JOIN bed_reservations br  ON br.id = n.bed_reservation_id
-     JOIN hostel_occupants o   ON o.id  = br.occupant_id
-     JOIN bookings bk          ON bk.id = n.booking_id
-    WHERE n.released_at IS NULL
-      AND bk.reservation_status IN ('pending', 'approved', 'completed')
-    ORDER BY hb.room_id, n.night_date, o.id"
-)->fetchAll();
+$hrNightRows = \App\Queries\CatalogQueries::occupiedNights();
 foreach ($hrNightRows as $n) {
   $g = $n['gender'] === 'female' ? 'F' : ($n['gender'] === 'male' ? 'M' : 'O');
   $hrOccupied[$n['room_id']][$n['night_date']][] = [
@@ -157,7 +128,7 @@ foreach ($hrRoomRows as $r) {
     'occupied'    => isset($hrOccupied[$r['id']]) ? $hrOccupied[$r['id']] : [],
   ];
 }
-unset($hrRoomRows, $hrMaintRows, $hrNightRows, $hrMaint, $hrOccupied, $hrPdo);
+unset($hrRoomRows, $hrMaintRows, $hrNightRows, $hrMaint, $hrOccupied);
 
 /* ---------------------------------------------------------------------
    Derived helpers — every one of these COMPUTES; none of them reads a

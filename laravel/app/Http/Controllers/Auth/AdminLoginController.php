@@ -107,7 +107,7 @@ class AdminLoginController
                     } else {
                         SignInThrottle::passed($email);
                         // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).
-                        venusep_password_upgrade($pdo, (int) $user['id'], $password, $user['password_hash']);
+                        venusep_password_upgrade((int) $user['id'], $password, $user['password_hash']);
 
                         /* The password alone never signs an admin in (DB-DECISIONS #20): next is
                            the code, or setting up a phone if this account has none yet. */

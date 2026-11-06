@@ -13,6 +13,45 @@ use Illuminate\Support\Facades\DB;
    Read only: bookings. */
 class DocumentQueries
 {
+    /* One stored document, waiting for staff to check it. */
+    public static function add(array $d): int
+    {
+        DB::insert("
+            INSERT INTO booking_documents
+                (booking_id, document_type, file_path, original_filename, stored_filename,
+                 mime_type, file_size_bytes, sha256_hash, verification_status, uploaded_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        ", [$d['booking'], $d['type'], $d['path'], $d['original'], $d['stored'], $d['mime'], $d['size'], $d['hash'], $d['by']]);
+        return (int) DB::getPdo()->lastInsertId();
+    }
+
+    public static function markEncrypted(int $id): void
+    {
+        DB::update('UPDATE booking_documents SET encrypted = 1 WHERE id = ?', [$id]);
+    }
+
+    /* IDs no longer needed, fifty at a time: the booking is finished, or a rejected request's
+       chance to be fixed has passed (its first day). */
+    public static function finishedIds(): array
+    {
+        return array_map(fn ($r) => (array) $r, DB::select("
+            SELECT d.id, d.file_path
+            FROM booking_documents d
+            JOIN bookings b ON b.id = d.booking_id
+            WHERE d.document_type = 'customer_id'
+              AND d.removed_at IS NULL
+              AND (b.reservation_status IN ('completed', 'cancelled', 'released')
+                   OR (b.reservation_status = 'rejected' AND fn_booking_first_day(b.id) < CURDATE()))
+            LIMIT 50
+        "));
+    }
+
+    /* The file is gone; the row stays, so the page can say what happened. */
+    public static function markRemoved(int $id): void
+    {
+        DB::update('UPDATE booking_documents SET removed_at = NOW() WHERE id = ?', [$id]);
+    }
+
     /* A document with its booking's owner, in one read; or null. */
     public static function findDocument(int $id): ?array
     {

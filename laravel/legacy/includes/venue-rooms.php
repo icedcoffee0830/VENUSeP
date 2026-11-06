@@ -45,7 +45,7 @@ require_once __DIR__ . '/offices.php';
 require_once __DIR__ . '/amenities.php';
 require_once __DIR__ . '/auth.php';        /* staff_sees_venue() — staff list their own venue only */
 
-$vrPdo = venusep_db_or_fail();
+venusep_db_or_fail();
 venusep_expire_due_bookings();   /* a lapsed request must not still show as taken */
 
 /* Customer-facing pages never set this: they get active rooms only, same as
@@ -56,17 +56,7 @@ venusep_expire_due_bookings();   /* a lapsed request must not still show as take
 $vrIncludeInactive = isset($vrIncludeInactive) ? (bool) $vrIncludeInactive : false;
 
 /* ---- 1. the rooms themselves (a deleted room, migration 18, is gone for everyone) ---- */
-$vrRoomRows = $vrPdo->query(
-  "SELECT r.id, r.room_code, r.name, r.description, r.amenities, r.is_active,
-          r.best_for, r.catering, r.accessibility,
-          r.venue_id, v.name AS venue_name,
-          d.attendee_capacity, d.fee_per_day
-     FROM rooms r
-     JOIN venues v                  ON v.id = r.venue_id
-     LEFT JOIN event_room_details d ON d.room_id = r.id
-    WHERE r.room_type = 'event' AND r.deleted_at IS NULL" . ($vrIncludeInactive ? '' : ' AND r.is_active = 1') . "
-    ORDER BY r.id"
-)->fetchAll();
+$vrRoomRows = \App\Queries\CatalogQueries::eventRooms($vrIncludeInactive);
 
 /* ---- 2. closures, every room in ONE query (never N+1 inside the loop) ----
    The room array carries ONE maintenance window because the UI shows one
@@ -75,16 +65,7 @@ $vrRoomRows = $vrPdo->query(
    start. Anything already finished is ignored — a closure that has ended
    is not news, and this is exactly how a fixed window self-heals. */
 $vrMaint = [];
-$vrMaintRows = $vrPdo->query(
-  "SELECT m.room_id, m.from_date, m.until_date, m.reason, m.blocks_booking
-     FROM maintenance_windows m
-     JOIN rooms r ON r.id = m.room_id
-    WHERE r.room_type = 'event'
-      AND (m.until_date IS NULL OR m.until_date >= CURDATE())
-    ORDER BY m.room_id,
-             (m.from_date <= CURDATE()) DESC,   -- a live window beats a planned one
-             m.from_date ASC"
-)->fetchAll();
+$vrMaintRows = \App\Queries\CatalogQueries::roomClosures('event');
 foreach ($vrMaintRows as $m) {
   if (isset($vrMaint[$m['room_id']])) continue;          // first per room wins
   $vrMaint[$m['room_id']] = [
@@ -101,14 +82,7 @@ foreach ($vrMaintRows as $m) {
    the two ever drifted, a customer could pick a slot this page called free
    and have the booking rejected at the last step. */
 $vrBooked = [];
-$vrSlotRows = $vrPdo->query(
-  "SELECT s.room_id, s.slot_date, s.start_time, s.end_time
-     FROM venue_booking_slots s
-     JOIN bookings b ON b.id = s.booking_id
-    WHERE s.released_at IS NULL
-      AND b.reservation_status IN ('pending','approved')
-    ORDER BY s.slot_date, s.start_time"
-)->fetchAll();
+$vrSlotRows = \App\Queries\CatalogQueries::heldSlots();
 foreach ($vrSlotRows as $s) {
   $vrBooked[$s['room_id']][] = [
     'date'  => $s['slot_date'],
@@ -144,7 +118,7 @@ foreach ($vrRoomRows as $r) {
     'booked'      => isset($vrBooked[$r['id']]) ? $vrBooked[$r['id']] : [],
   ];
 }
-unset($vrRoomRows, $vrMaintRows, $vrSlotRows, $vrMaint, $vrBooked, $vrPdo);
+unset($vrRoomRows, $vrMaintRows, $vrSlotRows, $vrMaint, $vrBooked);
 
 /* Rooms under a given venue — the landing page groups by venue. */
 function venueRoomsFor(array $rooms, $venue) {

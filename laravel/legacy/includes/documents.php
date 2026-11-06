@@ -125,7 +125,7 @@ function doc_store_raw($sub, $prefix, $tmpPath, $originalName, &$error) {
    ("juan-dela-cruz-drivers-licence.jpg" leaks in any directory listing or
    log line). The original is kept in a column for staff to see. */
 /* IDs are encrypted on disk with the app key (APP_KEY in .env): lose the key, lose the IDs. */
-function doc_encrypt_row(PDO $pdo, int $docId, string $relative): bool
+function doc_encrypt_row(int $docId, string $relative): bool
 {
     $full = doc_path($relative);
     if ($full === null || !is_file($full)) {
@@ -135,7 +135,7 @@ function doc_encrypt_row(PDO $pdo, int $docId, string $relative): bool
     if ($bytes === false || file_put_contents($full, \Illuminate\Support\Facades\Crypt::encryptString(base64_encode($bytes))) === false) {
         return false;
     }
-    $pdo->prepare('UPDATE booking_documents SET encrypted = 1 WHERE id = :i')->execute([':i' => $docId]);
+    \App\Queries\DocumentQueries::markEncrypted($docId);
     return true;
 }
 
@@ -160,22 +160,14 @@ function doc_read(string $full, bool $encrypted): ?string
 /* AN ID IS KEPT ONLY WHILE IT IS NEEDED (Aron, 2026-11-01): removed once its booking is
    finished. A rejected request keeps its ID until the chance to fix it has passed (the
    booking's first day). The row stays, so the page can say what happened. */
-function doc_remove_finished_ids(PDO $pdo): void
+function doc_remove_finished_ids(): void
 {
-    $rows = $pdo->query(
-        "SELECT d.id, d.file_path FROM booking_documents d JOIN bookings b ON b.id = d.booking_id
-          WHERE d.document_type = 'customer_id' AND d.removed_at IS NULL
-            AND (b.reservation_status IN ('completed', 'cancelled', 'released')
-                 OR (b.reservation_status = 'rejected' AND fn_booking_first_day(b.id) < CURDATE()))
-          LIMIT 50"
-    )->fetchAll();
-    $mark = $pdo->prepare('UPDATE booking_documents SET removed_at = NOW() WHERE id = :i');
-    foreach ($rows as $r) {
+    foreach (\App\Queries\DocumentQueries::finishedIds() as $r) {
         $full = doc_path($r['file_path']);
         if ($full !== null && is_file($full)) {
             @unlink($full);
         }
-        $mark->execute([':i' => $r['id']]);
+        \App\Queries\DocumentQueries::markRemoved((int) $r['id']);
     }
 }
 
@@ -189,8 +181,7 @@ function doc_store($bookingId, $type, $tmpPath, $originalName, $uploadedByUserId
     if ($ext === null) {
         return null;
     }
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         $error = 'The database is unreachable, so the document was not saved.';
         return null;
     }
@@ -212,28 +203,21 @@ function doc_store($bookingId, $type, $tmpPath, $originalName, $uploadedByUserId
     @chmod($dest, 0600);
 
     try {
-        $stmt = $pdo->prepare(
-            'INSERT INTO booking_documents
-                (booking_id, document_type, file_path, original_filename, stored_filename,
-                 mime_type, file_size_bytes, sha256_hash, verification_status, uploaded_by_user_id)
-             VALUES (:b, :t, :p, :o, :s, :m, :z, :h, \'pending\', :u)'
-        );
-        $stmt->execute([
-            ':b' => (int) $bookingId,
-            ':t' => $type,
+        $docId = \App\Queries\DocumentQueries::add([
+            'booking' => (int) $bookingId,
+            'type' => $type,
             /* A path RELATIVE to doc_root(), never absolute: the column must not
                pin the install to one machine, and it must not be a URL. */
-            ':p' => $sub . '/' . $stored,
-            ':o' => mb_substr((string) $originalName, 0, 255),
-            ':s' => $stored,
-            ':m' => $ext === 'pdf' ? 'application/pdf' : (@getimagesize($dest)['mime'] ?: null),
-            ':z' => filesize($dest) ?: null,
-            ':h' => hash_file('sha256', $dest),
-            ':u' => $uploadedByUserId ? (int) $uploadedByUserId : null,
+            'path' => $sub . '/' . $stored,
+            'original' => mb_substr((string) $originalName, 0, 255),
+            'stored' => $stored,
+            'mime' => $ext === 'pdf' ? 'application/pdf' : (@getimagesize($dest)['mime'] ?: null),
+            'size' => filesize($dest) ?: null,
+            'hash' => hash_file('sha256', $dest),
+            'by' => $uploadedByUserId ? (int) $uploadedByUserId : null,
         ]);
-        $docId = (int) $pdo->lastInsertId();
         if ($type === 'customer_id') {
-            doc_encrypt_row($pdo, $docId, $sub . '/' . $stored);
+            doc_encrypt_row($docId, $sub . '/' . $stored);
         }
         return $docId;
     } catch (PDOException $e) {

@@ -16,15 +16,13 @@ require_once __DIR__ . '/two-factor.php';   /* tfa_pending_clear() */
 /* A username is required to be unique too, so derive one from the email's local
    part and add a suffix if it is taken. Never fail a registration over a
    username the person never chose and will never see. Throws PDOException. */
-function venusep_unique_username(PDO $pdo, string $email): string
+function venusep_unique_username(string $email): string
 {
     $base = preg_replace('/[^a-z0-9._-]+/', '', strtolower(explode('@', $email)[0]));
     if ($base === '') { $base = 'user'; }
     $username = mb_substr($base, 0, 70);
-    $check = $pdo->prepare('SELECT 1 FROM users WHERE username = :u LIMIT 1');
     for ($i = 0; $i < 50; $i++) {
-        $check->execute([':u' => $username]);
-        if ($check->fetchColumn() === false) { break; }
+        if (!\App\Queries\AccountQueries::usernameTaken($username)) { break; }
         $username = mb_substr($base, 0, 66) . random_int(100, 9999);
     }
     return $username;
@@ -34,17 +32,9 @@ function venusep_unique_username(PDO $pdo, string $email): string
    a code step, a trip to Google, or 15 days on a remembered device may sit
    between the proof and this. False (and nothing changed) for an account that
    is gone, suspended, or not a customer. */
-function customer_session_open(PDO $pdo, int $userId): bool
+function customer_session_open(int $userId): bool
 {
-    $stmt = $pdo->prepare(
-        'SELECT u.id AS user_id, u.email, u.is_active, c.id AS customer_id, c.full_name
-           FROM users u
-           INNER JOIN customers c ON c.user_id = u.id
-          WHERE u.id = :id AND u.account_type = :account_type
-          LIMIT 1'
-    );
-    $stmt->execute([':id' => $userId, ':account_type' => 'customer']);
-    $customer = $stmt->fetch();
+    $customer = \App\Queries\AccountQueries::findCustomerForSession($userId);
     if (!$customer || !$customer['is_active']) {
         return false;
     }
@@ -66,8 +56,7 @@ function customer_session_open(PDO $pdo, int $userId): bool
         'auth_at' => time(),
     ]);
 
-    $update = $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id');
-    $update->execute([':id' => $customer['user_id']]);
+    \App\Queries\AccountQueries::markSignedIn((int) $customer['user_id']);
     return true;
 }
 
@@ -77,7 +66,7 @@ function customer_session_open(PDO $pdo, int $userId): bool
    proof, two-step code included, so a remembered device can skip the code. */
 function cl_finish_login(PDO $pdo, int $userId, bool $remember = false): void
 {
-    if (!customer_session_open($pdo, $userId)) {
+    if (!customer_session_open($userId)) {
         tfa_pending_clear();
         tfa_redirect_now(route('customer.customer-login'));
     }

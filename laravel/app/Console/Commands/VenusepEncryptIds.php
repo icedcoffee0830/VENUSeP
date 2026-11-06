@@ -20,7 +20,7 @@ class VenusepEncryptIds extends Command
         }
         $done = 0;
         foreach ($pdo->query("SELECT id, file_path FROM booking_documents WHERE document_type = 'customer_id' AND encrypted = 0 AND removed_at IS NULL")->fetchAll() as $d) {
-            if (doc_encrypt_row($pdo, (int) $d['id'], (string) $d['file_path'])) {
+            if (doc_encrypt_row((int) $d['id'], (string) $d['file_path'])) {
                 $done++;
             }
         }

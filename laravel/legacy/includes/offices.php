@@ -14,11 +14,10 @@ function office_all(): array
         return $all;
     }
     $all = [];
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return $all;
     }
-    foreach ($pdo->query('SELECT * FROM venues ORDER BY id')->fetchAll() as $v) {
+    foreach (\App\Queries\CatalogQueries::offices() as $v) {
         $all[(int) $v['id']] = [
             'id'         => (int) $v['id'],
             'name'       => (string) $v['name'],
@@ -39,7 +38,7 @@ function office_all(): array
             'refunds'    => (bool) $v['refunds_enabled'],
         ];
     }
-    foreach ($pdo->query('SELECT id, venue_id, from_date, until_date, reason FROM venue_closures WHERE until_date >= CURDATE() ORDER BY from_date')->fetchAll() as $c) {
+    foreach (\App\Queries\CatalogQueries::officeClosures() as $c) {
         if (isset($all[(int) $c['venue_id']])) {
             $all[(int) $c['venue_id']]['closures'][] = ['id' => (int) $c['id'], 'from' => $c['from_date'], 'until' => $c['until_date'], 'reason' => (string) $c['reason']];
         }
@@ -54,26 +53,20 @@ function office_by_id($venueId): ?array
 
 function office_of_room($roomCode): ?array
 {
-    $pdo = venusep_db();
-    if ($pdo === null || !is_string($roomCode)) {
+    if (venusep_db() === null || !is_string($roomCode)) {
         return null;
     }
-    $st = $pdo->prepare('SELECT venue_id FROM rooms WHERE room_code = :c');
-    $st->execute([':c' => $roomCode]);
-    $id = $st->fetchColumn();
-    return $id === false ? null : office_by_id($id);
+    $id = \App\Queries\CatalogQueries::officeIdOfRoom($roomCode);
+    return $id === null ? null : office_by_id($id);
 }
 
 function office_of_booking(int $bookingId): ?array
 {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return null;
     }
-    $st = $pdo->prepare('SELECT r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b');
-    $st->execute([':b' => $bookingId]);
-    $id = $st->fetchColumn();
-    return $id === false ? null : office_by_id($id);
+    $id = \App\Queries\CatalogQueries::officeIdOfBooking($bookingId);
+    return $id === null ? null : office_by_id($id);
 }
 
 /* "Monday to Friday, 7:00 AM – 10:00 PM", from the office's closed days and hours.

@@ -109,6 +109,30 @@ class AccountQueries
         return $row ? (array) $row : null;
     }
 
+    public static function usernameTaken(string $username): bool
+    {
+        return DB::selectOne('SELECT 1 AS found FROM users WHERE username = ? LIMIT 1', [$username]) !== null;
+    }
+
+    /* The customer account as it stands when its session opens, or null. */
+    public static function findCustomerForSession(int $userId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT u.id AS user_id, u.email, u.is_active, c.id AS customer_id, c.full_name
+            FROM users u
+            JOIN customers c ON c.user_id = u.id
+            WHERE u.id = ? AND u.account_type = 'customer'
+            LIMIT 1
+        ", [$userId]);
+        return $row ? (array) $row : null;
+    }
+
+    /* A stronger hash of the same password, unless it changed in another window meanwhile. */
+    public static function upgradeHash(int $userId, string $newHash, string $oldHash): void
+    {
+        DB::update('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?', [$newHash, $userId, $oldHash]);
+    }
+
     /* The account as it stands at the last step of a sign-in, or null. */
     public static function findForSession(int $userId): ?array
     {

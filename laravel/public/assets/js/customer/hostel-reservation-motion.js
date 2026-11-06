@@ -1,5 +1,5 @@
 /* Script for resources/views/customer/hostel-reservation.blade.php. */
-  bookingMotion(function (EASE) {
+  bookingMotion(function (EASE, armScreen) {
     (function () {
       if (!window.matchMedia || !window.matchMedia('(max-width: 720px)').matches) return;
       var bar = document.createElement('div'); bar.className = 'bk-cta'; bar.setAttribute('aria-hidden', 'true');

@@ -79,5 +79,5 @@
     /* PHONE CTA BAR. On a phone the booking form sits below the photos and the
        description; this bar keeps "Reserve" one tap away and hides itself once
        the form is on screen. Detail screen only; nothing on desktop. */
-    pageMotion(EASE);
+    pageMotion(EASE, armScreen);
   }

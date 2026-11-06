@@ -1,4 +1,5 @@
 <?php
+/* Holds: the booking details popup behind "View" on the history pages. */
 /* =====================================================================
    BOOKING DETAILS MODAL (2026-10-27) — "View" on Transaction History
    (both portals) and the customer's Booking History.

@@ -1,12 +1,13 @@
 <?php
+/* Holds: the hostel's rooms, rates and bed availability ($hostelRooms, $HOSTEL_VENUE, $HOSTEL_RATES, $HOSTEL_CR_LABEL). */
 /* =====================================================================
    USeP HOSTEL — rooms + the availability model, read from the database.
-   THE ONE SOURCE, mirroring includes/venue-rooms.php.
+   THE ONE SOURCE, mirroring venue-rooms.php.
 
    Included by:
-     customer/hostel-reservation.php    (json_encode'd into the booking page)
-     customer/venusep_venue_booking.php (the landing list)
-     admin/venue-management.php         (the room cards)
+     HostelReservationController    (json_encode'd into the booking page)
+     VenueBookingController (the landing list)
+     VenueManagementController         (the room cards)
 
    ---------------------------------------------------------------------
    THE AVAILABILITY MODEL — the one structural difference from venues
@@ -46,7 +47,7 @@ venusep_db_or_fail();
 venusep_expire_due_bookings();   /* a lapsed request must not still hold its beds */
 
 /* Same opt-in flag as venue-rooms.php — customer pages never set it (active
-   rooms only); admin/venue-management.php sets it so a disabled room stays
+   rooms only); VenueManagementController sets it so a disabled room stays
    visible on its own management screen. */
 $hrIncludeInactive = isset($hrIncludeInactive) ? (bool) $hrIncludeInactive : false;
 
@@ -166,24 +167,6 @@ function hostelGenderMix(array $room, $night) {
     $mix[$g]++;
   }
   return $mix;
-}
-
-/** Nights are EXCLUSIVE of the check-out date: Aug 1 -> Aug 4 = Aug 1,2,3. */
-function hostelNights($checkIn, $checkOut) {
-  $out = [];
-  if (!$checkIn || !$checkOut || $checkOut <= $checkIn) return $out;
-  $cur = strtotime($checkIn); $end = strtotime($checkOut);
-  while ($cur < $end && count($out) < 366) { $out[] = date('Y-m-d', $cur); $cur = strtotime('+1 day', $cur); }
-  return $out;
-}
-
-/** The peak occupancy across a stay — what actually limits how many beds
-    you can reserve for the WHOLE stay (a bed must be free every night). */
-function hostelMaxBedsFree(array $room, array $nights) {
-  if (!$nights) return $room['beds'];
-  $min = $room['beds'];
-  foreach ($nights as $n) $min = min($min, hostelBedsFree($room, $n));
-  return $min;
 }
 
 /* Rooms grouped by CR type — the landing page shows the two types distinctly. */

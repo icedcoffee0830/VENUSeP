@@ -1,8 +1,9 @@
 <?php
+/* Holds: the two-step verification sign-in screens. */
 /* =====================================================================
    TWO-STEP VERIFICATION — the sign-in screens (DB-DECISIONS #20).
 
-   Shared by admin/admin-login.php and customer/customer-login.php, which
+   Shared by AdminLoginController and CustomerLoginController, which
    use the same auth layout and class names. The crimson panel says where
    the person is (tfa_view_hero); the white card holds only the action.
    Every form posts back to the page it is on, with the csrf token (LARAVEL:

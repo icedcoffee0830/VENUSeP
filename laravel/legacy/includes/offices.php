@@ -1,4 +1,5 @@
 <?php
+/* Holds: each office's own settings: hours, closures, discount, grace days, refund switch. */
 /* =====================================================================
    THE OFFICES (Aron, 2026-11-01). Each `venues` row runs itself: its own
    hours, closed days, closures, USeP discount, grace days, lead time and

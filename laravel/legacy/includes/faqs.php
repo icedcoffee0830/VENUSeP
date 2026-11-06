@@ -1,14 +1,15 @@
 <?php
+/* Holds: the FAQ questions: reading them and filling in their live values. */
 /* =====================================================================
    FAQs — THE ONE SOURCE for every question on the customer FAQ page.
    Read from the database (faqs + faq_sections, 2026-09-18).
 
    Included by:
-     customer/faq.php              (the ACTIVE rows each office's refund
+     Customer/FaqController              (the ACTIVE rows each office's refund
                                     switch shows, per section: faq_row_for)
-     admin/faq-management.php      (every row, with a preview switch:
+     Admin/FaqController      (every row, with a preview switch:
                                     "as customers see it with refunds ON / OFF")
-     admin/faq-save.php            (the only writer)
+     Admin/FaqController            (the only writer)
 
    Two kinds of rows, one table:
      built-in  (is_builtin = 1) — shipped with the system, seeded from

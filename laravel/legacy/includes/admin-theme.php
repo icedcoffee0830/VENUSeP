@@ -1,7 +1,8 @@
 <?php
+/* Holds: the crimson page theme printed on every admin page. */
 /* =====================================================================
    ADMIN THEME — the crimson look for every admin page, in ONE place.
-   Included automatically by includes/header.php (admin branch), which every
+   Included automatically by header.php (admin branch), which every
    admin page already includes AFTER its own <style>, so these rules win at
    equal specificity without touching any page.
 

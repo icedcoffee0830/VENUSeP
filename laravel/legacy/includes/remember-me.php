@@ -1,4 +1,5 @@
 <?php
+/* Holds: the "Remember me" cookie for customers. */
 /* =====================================================================
    REMEMBER ME — customers only (DB-DECISIONS #23).
 
@@ -22,7 +23,7 @@
    extend it, so a stolen-then-quiet cookie cannot live forever.
 
    FORGOTTEN WHEN
-     Log Out                                this device (customer/logout.php)
+     Log Out                                this device (LogoutController)
      password changed, reset, or first set  every device (profile-save.php,
                                             password-reset.php)
      two-step verification on or off        every device (profile-save.php)

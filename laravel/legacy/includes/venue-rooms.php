@@ -1,12 +1,13 @@
 <?php
+/* Holds: the event rooms of every venue ($venueRooms). */
 /* =====================================================================
    VENUE ROOMS — the event-venue rooms (Bahay Alumni + USeP Venues),
    read from the database. THE ONE SOURCE, mirroring hostel-rooms.php.
 
    Included by:
-     customer/room-reservation.php      (json_encode'd into the booking page)
-     customer/venusep_venue_booking.php (the landing list)
-     admin/venue-management.php         (the room cards)
+     RoomReservationController      (json_encode'd into the booking page)
+     VenueBookingController (the landing list)
+     VenueManagementController         (the room cards)
 
    WHY ONE SOURCE: these rooms used to be hand-written SEPARATELY on every
    page and had already drifted into four different room universes — the
@@ -18,7 +19,7 @@
      rooms + venues            name, venue, description, active
      event_room_details        capacity, fee per day
      rooms.amenities           amenity KEYS -> labels via amenities.php
-     includes/amenities.php    the amenity VOCABULARY + the at-a-glance
+     amenities.php    the amenity VOCABULARY + the at-a-glance
                                facts, both PHP-coded on purpose (#9)
      maintenance_windows       the closure, if any
      venue_booking_slots       what is already taken
@@ -49,7 +50,7 @@ venusep_db_or_fail();
 venusep_expire_due_bookings();   /* a lapsed request must not still show as taken */
 
 /* Customer-facing pages never set this: they get active rooms only, same as
-   always. admin/venue-management.php sets it to true first, because staff
+   always. VenueManagementController sets it to true first, because staff
    have to be able to see (and re-enable) a room they disabled — a room that
    vanished from its own management screen the moment it was turned off would
    be a one-way trip. */
@@ -96,7 +97,7 @@ $venueRooms = [];
 foreach ($vrRoomRows as $r) {
   if (!staff_sees_room($r['id'], $r['venue_id'])) continue;
   /* "At a glance": what the room form saved (2026-10-27), else the text that
-     used to be hard-coded in includes/amenities.php */
+     used to be hard-coded in amenities.php */
   $glance = room_glance($r['room_code']);
   if ($r['best_for'] !== null)      { $glance['bestFor']    = (string) $r['best_for']; }
   if ($r['catering'] !== null)      { $glance['catering']   = (string) $r['catering']; }

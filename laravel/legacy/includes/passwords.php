@@ -1,4 +1,5 @@
 <?php
+/* Holds: making password hashes. */
 /* =====================================================================
    PASSWORDS — the one place a password hash is made (DB-DECISIONS #21).
 

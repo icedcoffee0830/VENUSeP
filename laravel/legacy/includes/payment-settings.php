@@ -1,12 +1,13 @@
 <?php
+/* Holds: the GCash account of each office ($gcAccounts). */
 /* =====================================================================
    PAYMENT SETTINGS — the ONE source of the GCash account per venue,
    read from the `gcash_accounts` table.
 
    Included by:
-     admin/payment-settings.php         (the screen that edits these)
-     customer/room-reservation.php      (Bahay Alumni / USeP Venues)
-     customer/hostel-reservation.php    (USeP Hostel)
+     PaymentSettingsController         (the screen that edits these)
+     RoomReservationController      (Bahay Alumni / USeP Venues)
+     HostelReservationController    (USeP Hostel)
 
    WHY ONE SOURCE: the receipt checker verifies that money landed in the
    RIGHT account, and the payment screen tells the customer where to send

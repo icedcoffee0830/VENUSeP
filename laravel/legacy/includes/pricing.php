@@ -1,4 +1,5 @@
 <?php
+/* Holds: the USeP discount and the price helpers ($DISCOUNT_PERCENT). */
 /* =====================================================================
    PRICING & THE USeP DISCOUNT — the one source for the rate.
    Mirrors system_settings.discount_percent, which is where this lives
@@ -6,9 +7,9 @@
    20%, dynamic, staff-editable).
 
    Included by:
-     customer/room-reservation.php    (venue total)
-     customer/hostel-reservation.php  (beds x nights total)
-     admin/booking-request.php        (staff decide, price is locked)
+     RoomReservationController    (venue total)
+     HostelReservationController  (beds x nights total)
+     BookingRequestController        (staff decide, price is locked)
 
    THE RULE (agreed 2026-09-09, refining DB-DECISIONS #3):
      A booking is discounted only when the customer uploads a USeP ID AND

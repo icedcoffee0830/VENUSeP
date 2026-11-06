@@ -1,4 +1,5 @@
 <?php
+/* Holds: the one read of bookings for both portals, and how each booking is worded. */
 /* =====================================================================
    BOOKINGS — THE ONE READ PATH. Both portals, one query builder.
 
@@ -73,7 +74,7 @@ function bookings_query(array $opts = []) {
     if (venusep_db() === null) {
         return [];
     }
-    venusep_expire_due_bookings();   /* lapse what is due before showing it (includes/db.php) */
+    venusep_expire_due_bookings();   /* lapse what is due before showing it (db.php) */
 
     $where = [];
     $args  = [];
@@ -491,7 +492,7 @@ function transaction_rows($customerId = null) {
         : bookings_all();
 
     /* Which of these bookings have a VENUSeP System Receipt (DB-DECISIONS
-       #22): ONE query for the whole list — mirrors customer/booking-history.php
+       #22): ONE query for the whole list — mirrors BookingHistoryController
        — so the Receipt button in Transaction History never costs a query per
        row, and never claims a receipt exists before sp_approve/payment
        confirmation has actually written one. */
@@ -529,7 +530,7 @@ function transaction_rows($customerId = null) {
             'paymentStatus'   => $customerId ? $b['paymentStatus'] : $b['paymentStatusStaff'],
             'bookingStatus'   => $customerId ? $b['bookingStatus'] : $b['bookingStatusStaff'],
             /* View Receipt — the VENUSeP System Receipt (#22), the styled page
-               both portals use (customer/receipt.php, admin/receipt.php) — only
+               both portals use (Customer/ReceiptController, Admin/ReceiptController) — only
                once one actually exists for this booking. */
             'hasReceipt'      => isset($hasReceipt[(int) $b['id']]),
             /* View — the uploaded GCash payment screenshot itself (proof of

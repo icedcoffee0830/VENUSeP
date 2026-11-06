@@ -1,7 +1,8 @@
 <?php
+/* Holds: making, listing and restoring backups for the Backup & Restore page. */
 /* =====================================================================
    BACKUP & RESTORE (decided 2026-10-27) — the engine behind
-   admin/backup-restore.php and admin/backup-action.php.
+   BackupRestoreController and BackupActionController.
 
    IDs are not in backups: after a restore, customers with open bookings upload theirs again.
    ONE BACKUP = ONE .tar.gz holding:
@@ -21,7 +22,7 @@
    .tar.gz because PHP's zip extension is off on this XAMPP; Phar + zlib
    are built in. Stored in doc_root()/backups — OUTSIDE the web root, so a
    backup (every ID and password hash in the system) is only ever reached
-   through admin/backup-action.php's admin check. The newest BACKUP_KEEP
+   through BackupActionController's admin check. The newest BACKUP_KEEP
    are kept.
 
    THE LAYOUT VERSION is the highest venusep_migration_NN.sql in the

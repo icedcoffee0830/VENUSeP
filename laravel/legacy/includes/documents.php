@@ -1,4 +1,5 @@
 <?php
+/* Holds: uploaded IDs, GCash receipts and Official Receipts: saving and reading them. */
 /* =====================================================================
    BOOKING DOCUMENTS — uploaded IDs, GCash receipts and Official Receipts.
 
@@ -12,7 +13,7 @@
 
    So these files live OUTSIDE THE WEB ROOT entirely. There is no URL that
    reaches them. The only way to see one is through a PHP script that
-   checks the session first (admin/document-view.php), which can decide
+   checks the session first (DocumentViewController), which can decide
    that staff may see any booking's ID while a customer may see only their
    own.
 

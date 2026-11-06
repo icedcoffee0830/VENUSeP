@@ -1,4 +1,5 @@
 <?php
+/* Holds: the browser check that reads a GCash receipt picture. */
 /* =====================================================================
    SHARED GCASH RECEIPT CHECKER — the ONE engine, used by every page that
    takes a GCash payment. Port of the verified PHP engine at
@@ -8,7 +9,7 @@
    WHY THIS IS AN INCLUDE AND NOT COPY-PASTED
    -------------------------------------------
    Every venue takes payment into a DIFFERENT GCash account (see
-   includes/payment-settings.php). A copy-pasted twin means N engines: fix
+   payment-settings.php). A copy-pasted twin means N engines: fix
    a matcher in one and the others stay broken, and the failure is silent —
    legitimate receipts auto-reject as "receiver mismatch" and it looks like
    an OCR bug. One engine; the account is asked for, never hardcoded.

@@ -1,4 +1,5 @@
 <?php
+/* Holds: the list of venues ($venues, $venuesById, $venuesByType). */
 /* =====================================================================
    VENUES — the list of venues, read from the `venues` table.
 
@@ -9,9 +10,9 @@
    a room.
 
    Included by:
-     admin/room-form.php          (Location dropdown — event rooms)
-     admin/hostel-room-form.php   (Location dropdown — hostel rooms)
-     admin/venue-management.php   (the venue filter)
+     RoomFormController          (Location dropdown — event rooms)
+     RoomFormController   (Location dropdown — hostel rooms)
+     VenueManagementController   (the venue filter)
 
    ADD A VENUE = add a row (admin Venue Management -> Add Venue), and it
    appears in every Location dropdown and filter automatically.
@@ -46,9 +47,6 @@ foreach ($stmt as $row) {
   $venues[] = $row['name'];
   $venuesByType[$row['venue_type']][(int) $row['id']] = $row['name'];
 }
-/* Laravel: legacy() loads this file inside a function, so publish the variable
-   venueIdForName() reads with `global`. */
-$GLOBALS['venuesById'] = $venuesById;
 
 /* Render a custom-dropdown option list from $venues, marking $current as the
    summary. Shared by both room forms so they can never list different venues.
@@ -59,13 +57,4 @@ function venueOptions($venues) {
     $out .= '<li class="vm-dd-option">' . htmlspecialchars($v) . '</li>' . "\n                ";
   }
   return rtrim($out);
-}
-
-/* The venue id for a name — the reverse of $venuesById. Returns null for an
-   unknown name rather than guessing, so a caller can refuse rather than
-   silently file a room under the wrong venue. */
-function venueIdForName($name) {
-  global $venuesById;
-  $id = array_search($name, $venuesById, true);
-  return $id === false ? null : (int) $id;
 }

@@ -1,12 +1,13 @@
 <?php
+/* Holds: the "who is this booking for" step staff fill in at the counter. */
 /* =====================================================================
    COUNTER BOOKER (2026-10-27) — the "who is this booking for" step that
    staff fill in when booking for someone at the counter: find their
    account and have them confirm it with their password
-   (admin/customer-verify.php), or take a walk-in's details; then confirm
+   (CounterCustomerController), or take a walk-in's details; then confirm
    the ID they were shown.
 
-   Moved here verbatim from customer/room-reservation.php so the venue AND
+   Moved here verbatim from RoomReservationController so the venue AND
    the hostel booking pages share ONE copy — two counters must not drift.
    Include it BEFORE the page's main <script> (state uses booker0). It
    calls back into what every booking page defines: state, render(), esc(),

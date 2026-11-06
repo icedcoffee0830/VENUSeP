@@ -1,4 +1,5 @@
 <?php
+/* Holds: the top bar of the customer browse pages. */
 /* =====================================================================
    SHARED CUSTOMER NAV — the ONE top bar the browse-mode customer pages use
    (landing page, FAQ, the two booking pages). The account-mode pages

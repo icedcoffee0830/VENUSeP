@@ -1,4 +1,5 @@
 <?php
+/* Holds: each room's photo gallery and 360 picture. */
 /* =====================================================================
    ROOM PHOTOS — room_media-backed gallery + 360° panorama storage,
    keyed by the room's existing string id / room_code (r1, h1, ...).
@@ -10,7 +11,7 @@
    Everything about WHICH photos exist, their order, and the cover is now
    the `room_media` table (room_id FK -> rooms.id, looked up by room_code)
    — not a JSON sidecar file. Writes fail loud if the DB is unreachable
-   (mirrors admin/refund-switch.php); reads fail safe (empty/null), so a
+   (mirrors RefundSwitchController); reads fail safe (empty/null), so a
    DB hiccup degrades a customer's room photos to placeholders instead of
    a fatal error.
 

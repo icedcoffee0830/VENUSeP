@@ -1,8 +1,9 @@
 <?php
+/* Holds: the bell and its panel in both top bars. */
 /* =====================================================================
    THE NOTIFICATION BELL (2026-10-28) — in both shared top bars, so it is
-   on every signed-in page: includes/header.php (admin/staff pages and the
-   customer account pages) and includes/customer-nav.php (landing, venue
+   on every signed-in page: header.php (admin/staff pages and the
+   customer account pages) and customer-nav.php (landing, venue
    list, booking pages, FAQ; staff in counter mode too).
 
    Usage:  <?php $nbLook = 'admin' | 'nav'; include __DIR__ . '/notification-bell.php'; ?>

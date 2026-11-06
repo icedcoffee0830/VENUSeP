@@ -29,6 +29,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: ['127.0.0.1', '::1'], headers: \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        /* A failed query keeps its SQL and its ? marks and loses its values, on the page, in the
+           JSON and in the log: a value could be a password hash, and APP_DEBUG pages have been
+           served publicly. The same exception object, so the real file and line stay. */
+        $exceptions->map(\Illuminate\Database\QueryException::class, fn ($e) => (function () {
+            $this->bindings = [];
+            $this->message = $this->formatMessage($this->connectionName, $this->sql, [], $this->getPrevious());
+            return $this;
+        })->call($e));
         /* An expired page (bad CSRF token). Laravel's check stays on EVERY route;
            this only keeps the old replies: the JSON endpoints' scripts expect
            400 {"ok":false,"error":"csrf",...} (or 401 when the session is gone),

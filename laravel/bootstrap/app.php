@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trimStrings(except: ['new_password', 'confirm_new_password', 'confirm_password', 'creator_password']);
         $middleware->prepend(\App\Http\Middleware\DetectOpenTransaction::class);
         $middleware->web(append: [
+            \App\Http\Middleware\NoFraming::class,   // first, so it marks every reply below it too
             \App\Http\Middleware\EnforceTwoFactor::class,
         ]);
         // "Remember me" (#23) writes and reads its own cookie (legacy/includes/remember-me.php)

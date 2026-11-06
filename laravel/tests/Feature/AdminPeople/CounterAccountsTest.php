@@ -4,6 +4,7 @@ namespace Tests\Feature\AdminPeople;
 
 use App\Http\Controllers\Admin\CounterCustomerController;
 use Illuminate\Support\Facades\DB;
+use Tests\Feature\Email\FakeMail;
 use Tests\TestCase;
 
 /* DB-DECISIONS 28, the counter's customers: the search finds any account of every office
@@ -13,6 +14,8 @@ use Tests\TestCase;
    "ID checked" for an account with no password. */
 class CounterAccountsTest extends TestCase
 {
+    use FakeMail;
+
     private int $lastUser = 0;
     private int $lastOutbox = 0;
 
@@ -26,6 +29,7 @@ class CounterAccountsTest extends TestCase
     /* Only what this test made: accounts and emails newer than setUp. */
     protected function tearDown(): void
     {
+        $this->stopFakeMail();
         $users = DB::table('users')->where('id', '>', $this->lastUser)->where('account_type', 'customer')->pluck('id')->all() ?: [0];
         $customers = DB::table('customers')->whereIn('user_id', $users)->pluck('id')->all() ?: [0];
         foreach (DB::table('email_outbox')->where('id', '>', $this->lastOutbox)->pluck('id') as $id) {
@@ -103,15 +107,33 @@ class CounterAccountsTest extends TestCase
         $this->createAccount(['check' => '1'])->assertOk()->assertJsonPath('warning', '');
         $this->assertSame($users, DB::table('users')->count());
 
-        $res = $this->createAccount(['phone' => '09175550188'])->assertOk()->assertJsonPath('phone', '0917•••0188');
+        $res = $this->createAccount(['phone' => '09175550188'])->assertOk()->assertJsonPath('phone', '0917•••0188')
+            ->assertJsonPath('message', 'Account made. ' . MAIL_NOT_SET_UP);   // no mail settings: never "went to"
         $row = DB::table('customers as c')->join('users as u', 'u.id', '=', 'c.user_id')->where('c.id', $res->json('customerId'))->first();
         $this->assertSame(['lorna.counter@gmail.com', null, 'customer', 1, '09175550188'],
             [$row->email, $row->password_hash, $row->account_type, (int) $row->counter_venue_id, $row->phone]);
         $mail = DB::table('email_outbox')->where('to_email', 'lorna.counter@gmail.com')->first();
-        $this->assertSame(['counter_welcome', 'sent'], [$mail->kind, $mail->status]);
+        $this->assertSame(['counter_welcome', 'not_sent'], [$mail->kind, $mail->status]);
         $this->assertStringContainsString('/customer/forgot-password', $mail->body_text);
         $this->assertStringContainsString('Bahay Alumni counter', $mail->body_text);
         $this->createAccount([])->assertStatus(409);                                        // made once
+    }
+
+    public function test_the_welcome_line_says_what_really_happened_to_the_email(): void
+    {
+        ini_set('error_log', storage_path('logs/auth-tests-error.log'));   // mailer failures are error_log()ged
+        $this->actingAsStaff();
+        $this->fakeGmail();
+        $this->createAccount([])->assertOk()->assertJsonPath('message', 'Account made. A welcome email went to lorna.counter@gmail.com.');
+
+        $this->noNetwork();
+        $this->createAccount(['email' => 'lorna.two@gmail.com'])->assertOk()
+            ->assertJsonPath('message', "Account made. Could not reach the mail server. Check this laptop's internet connection, then try again.");
+
+        /* the same reply on the email fix */
+        $counter = $this->account('wrong.adress@gmial.com', [], ['counter_venue_id' => 3]);
+        $this->actingAsAdmin('cedu.admin@gmail.com')->fixEmail($counter, 'right.address@gmail.com')->assertOk()
+            ->assertJsonPath('message', "Email corrected. Could not reach the mail server. Check this laptop's internet connection, then try again.");
     }
 
     public function test_only_a_normal_admin_of_the_creating_group_fixes_the_email_of_an_unused_counter_account(): void

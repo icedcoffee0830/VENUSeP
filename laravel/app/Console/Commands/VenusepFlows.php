@@ -57,7 +57,8 @@ class VenusepFlows extends Command
         $baseUrl = "http://127.0.0.1:{$port}";
         /* Every child (server, runner, flows-tool) sees the flows database. A real
            environment variable wins over .env (Dotenv does not overwrite it). */
-        $env = ['DB_DATABASE' => $db, 'FLOWS_SNAPSHOT' => $snapshot, 'APP_URL' => $baseUrl];
+        $env = ['DB_DATABASE' => $db, 'FLOWS_SNAPSHOT' => $snapshot, 'APP_URL' => $baseUrl,
+                'VENUSEP_MAIL_CONFIG' => 'no-mail-settings-in-flows'];   // a laptop's real settings never send from a flow
 
         $server = null;
         if ($this->option('reuse')) {

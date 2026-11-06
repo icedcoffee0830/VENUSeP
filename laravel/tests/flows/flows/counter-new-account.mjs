@@ -90,7 +90,7 @@ export default {
       expect.equal((await page.locator('#bkConfirmEmail').textContent()).trim(), `${s.local}@gmail.com`, 'the email on the confirm step');
       await expect.text(page, 'Another account already uses this mobile number');
       await page.getByRole('button', { name: /It is right — make the account/ }).click();
-      await expect.text(page, 'Account made. A welcome email went to');
+      await expect.text(page, "Account made. Not sent: email isn't set up on this laptop.");
       const a = await dbOne(`SELECT c.id, c.counter_venue_id, u.password_hash FROM customers c JOIN users u ON u.id = c.user_id WHERE u.email = ?`, [`${s.local}@gmail.com`]);
       expect.ok(a && Number(a.counter_venue_id) === 2 && a.password_hash === null, 'the account (USeP Venues counter, no password): ' + JSON.stringify(a));
       s.customerId = Number(a.id);

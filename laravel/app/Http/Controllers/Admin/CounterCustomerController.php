@@ -166,11 +166,10 @@ class CounterCustomerController
             /* the same email registered a moment ago: uq_users_email */
             return $this->reply(409, ['ok' => false, 'field' => 'email', 'error' => 'email_taken', 'message' => self::ALREADY_HAS_ACCOUNT]);
         }
-        mail_send($outboxId);   // never throws
 
         return $this->reply(200, ['ok' => true, 'customerId' => $customerId, 'name' => $name,
             'phone' => self::maskPhone($mobile), 'warning' => $warning,
-            'message' => 'Account made. A welcome email went to ' . $email . '.']);
+            'message' => 'Account made. ' . mail_send_line($outboxId, 'A welcome email went to ' . $email . '.')]);
     }
 
     /* Show enough of a number to confirm it, never enough to write it down. */

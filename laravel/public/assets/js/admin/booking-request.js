@@ -1083,13 +1083,15 @@
           + (m.kind === 'receipt_copy' ? ' <span class="soft">· requested by the customer</span>' : (m.receiptId ? ' <span class="soft">· PDF</span>' : ''));
         const chip = m.status === 'sent' ? '<span class="br-badge b-green">Sent</span>'
                    : m.status === 'failed' ? '<span class="br-badge b-red">Failed</span>'
+                   : m.status === 'not_sent' ? '<span class="br-badge b-amber">Not sent</span>'
                    : '<span class="br-badge b-amber">Sending</span>';
         const meta = m.status === 'sent' ? 'Sent ' + esc(m.sent)
                    : 'Tried ' + esc(m.created) + ' · ' + m.attempts + ' attempt' + (m.attempts === 1 ? '' : 's');
-        const btn = m.status === 'failed'
+        const stopped = m.status === 'failed' || m.status === 'not_sent';
+        const btn = stopped
           ? `<button class="br-btn br-btn-primary" type="button" onclick="resendMail(${m.id})" ${mail.busy ? 'disabled' : ''}>${mail.busy === m.id ? 'Sending…' : 'Resend'}</button>` : '';
-        const err = m.status === 'failed'
-          ? `<div class="err" title="${esc(m.error || '')}">Couldn&rsquo;t send it. The booking and payment are still recorded; only the email is waiting.</div>` : '';
+        const err = stopped
+          ? `<div class="err">${esc(m.error || 'Couldn’t send it.')} The booking and payment are still recorded; only the email is waiting.</div>` : '';
         return `<div class="br-mail"><div class="what">${what}</div><div class="meta">${meta}</div><div class="side">${chip}${btn}</div>${err}</div>`;
       }
 
@@ -1114,7 +1116,7 @@
             ${d.emails.map(mailRow).join('')}
             ${(!note && !d.emails.length) ? '<div class="br-mail-note">Nothing emailed yet.</div>' : ''}
             ${rcpt}
-            ${mail.flash ? `<div class="br-mail-flash" role="status">${mail.flash}</div>` : ''}
+            ${mail.flash ? `<div class="br-mail-flash" role="status">${esc(mail.flash)}</div>` : ''}
           </div></div>`;
       }
 

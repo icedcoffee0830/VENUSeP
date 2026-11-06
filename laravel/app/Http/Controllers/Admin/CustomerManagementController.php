@@ -197,8 +197,7 @@ class CustomerManagementController
         if ($outboxId === null) {
             return $this->reply(409, ['ok' => false, 'message' => 'The account changed a moment ago (signed into, or its email changed), so the email was not corrected.']);
         }
-        mail_send($outboxId);   // never throws
-        return $this->reply(200, ['ok' => true, 'message' => 'Email corrected. A welcome email went to ' . $email . '.']);
+        return $this->reply(200, ['ok' => true, 'message' => 'Email corrected. ' . mail_send_line($outboxId, 'A welcome email went to ' . $email . '.')]);
     }
 
     /* Block or lift a customer at one office: check, then save. */

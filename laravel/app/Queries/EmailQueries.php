@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\DB;
 /* The SQL behind the outbox and a booking's Emails panel. Columns: venusep_schema.sql
    (search "CREATE TABLE email_outbox").
 
-   email_outbox: one row per email: pending, sent or failed. The wording is
+   email_outbox: one row per email: pending, sent, failed, or not_sent (no mail settings
+     here, so nothing left the machine). The wording is
      legacy/includes/receipt-emails.php, the sending mailer.php.
    Read only: bookings, customers, users, booking_timeline. */
 class EmailQueries
@@ -43,6 +44,18 @@ class EmailQueries
                 attempts = attempts + 1
             WHERE id = ?
         ", [$error, $id]);
+    }
+
+    /* Nothing left the machine, so it can never count as sent; $note says why. */
+    public static function markNotSent(int $id, string $note): void
+    {
+        DB::update("
+            UPDATE email_outbox
+            SET status = 'not_sent',
+                last_error = ?,
+                attempts = attempts + 1
+            WHERE id = ?
+        ", [$note, $id]);
     }
 
     /* The walk-in of a booking: only a customer with no account; or null. */
@@ -103,26 +116,28 @@ class EmailQueries
         "), 'id');
     }
 
-    /* The "Email me" throttle: a copy of this receipt in the last five minutes? */
+    /* The "Email me" throttle: a copy of this receipt that went, or is going, in the last five
+       minutes? One that never went does not count: the reply would say "already sent". */
     public static function copySentRecently(int $receiptId): bool
     {
         return DB::selectOne("
             SELECT 1 AS found
             FROM email_outbox
             WHERE kind = 'receipt_copy' AND receipt_id = ?
+              AND status IN ('pending', 'sent')
               AND created_at > NOW() - INTERVAL 5 MINUTE
             LIMIT 1
         ", [$receiptId]) !== null;
     }
 
-    /* The id of a booking's email that may go out again: failed, or stuck for five minutes; or null. */
+    /* The id of a booking's email that may go out again: failed, not sent, or stuck for five minutes; or null. */
     public static function findResendable(int $id, int $bookingId): ?int
     {
         $row = DB::selectOne("
             SELECT id
             FROM email_outbox
             WHERE id = ? AND booking_id = ?
-              AND (status = 'failed' OR (status = 'pending' AND created_at < NOW() - INTERVAL 5 MINUTE))
+              AND (status IN ('failed', 'not_sent') OR (status = 'pending' AND created_at < NOW() - INTERVAL 5 MINUTE))
         ", [$id, $bookingId]);
         return $row ? (int) $row->id : null;
     }
@@ -144,6 +159,12 @@ class EmailQueries
             WHERE b.id = ?
         ", [$bookingId]);
         return $row ? (array) $row : null;
+    }
+
+    /* Every password reset email: its mail-log copy, if any, is named after this id. */
+    public static function passwordResetIds(): array
+    {
+        return array_column(DB::select("SELECT id FROM email_outbox WHERE kind = 'password_reset'"), 'id');
     }
 
     public static function forBooking(int $bookingId): array

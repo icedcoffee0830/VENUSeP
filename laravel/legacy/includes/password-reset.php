@@ -20,7 +20,8 @@
        so nobody can flood someone's inbox from this form.
      - The email goes through the outbox like every other email, but the
        link is SCRUBBED from the stored body right after sending, and these
-       rows are never resent: the customer asks again instead.
+       rows are never resent: the customer asks again instead. A laptop with no
+       mail settings keeps a copy in mail-log; the first real send removes them all.
      - Using the link sets a new password and password_changed_at, which
        ends every session that was signed in before (customer_session_heal())
        and forgets every remembered device — whoever was in the account is out.
@@ -38,6 +39,8 @@ require_once __DIR__ . '/passwords.php';
 
 const PR_RESET_TTL_MIN      = 30;   // minutes a link works
 const PR_RESET_THROTTLE_MIN = 5;    // minutes between emails to one account
+/* The same for every address too: it tells only that this machine has no mail settings. */
+const PR_NOT_SET_UP_REPLY   = 'Not sent: email isn’t set up on this laptop, so no reset link can arrive.';
 const PR_REQUEST_REPLY      = 'If that email belongs to a VENUSeP account, we’ve sent it a link to reset the password. The link works for 30 minutes. Check your spam folder if it doesn’t arrive.';
 
 /* The accounts one side's links are for. */
@@ -54,7 +57,7 @@ function pr_hash(string $token): string
 }
 
 /* "Forgot password" for this email. Says nothing about whether it worked: the
-   caller always shows PR_REQUEST_REPLY. Throws PDOException only.
+   caller always shows PR_REQUEST_REPLY (PR_NOT_SET_UP_REPLY with no mail settings). Throws PDOException only.
    $mailConfig: the tests pass the log transport, so nothing leaves the machine. */
 function pr_request(PDO $pdo, string $email, ?string $ip, ?array $mailConfig = null, bool $staff = false): void
 {

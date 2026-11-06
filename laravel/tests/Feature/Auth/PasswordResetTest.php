@@ -34,14 +34,14 @@ class PasswordResetTest extends TestCase
         $c = $this->makeAccount('customer');
         $this->post(route('customer.forgot-password'), ['email' => strtoupper($c->email)])
             ->assertRedirect(route('customer.forgot-password'));
-        $this->get(route('customer.forgot-password'))->assertSee('Check your email')->assertSee('If that email belongs to a VENUSeP account');
+        $this->get(route('customer.forgot-password'))->assertSee('Email isn’t set up')->assertSee(PR_NOT_SET_UP_REPLY);   // no mail settings in tests
         $this->get(route('customer.forgot-password'))->assertSee('Reset your password');   // shown once
 
         $rows = DB::table('password_resets')->where('user_id', $c->id)->get();
         $this->assertCount(1, $rows);
         $mail = DB::table('email_outbox')->where('requested_by_user_id', $c->id)->first();
         $this->assertSame('password_reset', $mail->kind);
-        $this->assertContains($mail->status, ['sent', 'failed']);   // log transport: nothing leaves the machine either way
+        $this->assertSame('not_sent', $mail->status);   // log transport: nothing leaves the machine
         $this->assertStringContainsString('[link removed after sending]', $mail->body_text);
         $this->assertStringNotContainsString('reset-password?token=', $mail->body_text);
 

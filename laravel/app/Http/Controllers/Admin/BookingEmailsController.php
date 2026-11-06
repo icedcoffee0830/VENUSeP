@@ -18,7 +18,7 @@ use Illuminate\Http\Request;
          -> { ok, email: {...} }
 
    Bodies are never returned. Resend only touches an email of THIS booking
-   that failed (or has sat unsent for 5 minutes).
+   that failed, was not sent (no mail settings then), or has sat unsent for 5 minutes.
    CSRF: Laravel's own check; an expired token comes back as the old 400
    JSON (bootstrap/app.php).
    ===================================================================== */
@@ -60,7 +60,7 @@ class BookingEmailsController extends Controller
             mail_send($beId);
             $row = EmailQueries::find($beId);
             $this->reply(200, ['ok' => $row['status'] === 'sent', 'email' => $this->email($row),
-                'message' => $row['status'] === 'sent' ? 'Sent.' : 'Still couldn&rsquo;t send it. Check the mail settings and try again.']);
+                'message' => $row['status'] === 'sent' ? 'Sent.' : (string) $row['last_error']]);
         }
 
         $who = EmailQueries::findRecipient($beBookingId);

@@ -83,7 +83,7 @@ class BookingCreateTest extends TestCase
         $this->assertSame(2, DB::table('booking_timeline')->where('booking_id', $id)->where('action_code', 'like', 'counter_%')->count());
         $mail = DB::table('email_outbox')->where('booking_id', $id)->first();
         $this->assertSame('walkin_booking', $mail->kind);
-        $this->assertSame('sent', $mail->status);                      // the 'log' transport: nothing left the machine
+        $this->assertSame('not_sent', $mail->status);                  // the 'log' transport: nothing left the machine
         @unlink(getenv('VENUSEP_DOC_ROOT') . '/mail-log/' . $mail->id . '.eml');
     }
 

@@ -69,5 +69,25 @@ export default {
         return page;
       }, { timeout: 120_000 });
     }
+
+    await step('Transaction History: the filter finds the write-offs, each a grey chip inside its cell, staff words wrapping', async () => {
+      const page = s.admin;
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(ctx.url('/admin/transaction-history'));
+      await page.locator('#payment-status-filter').selectOption('Written off');
+      const chip = page.locator('.tabulator-row .vz-chip', { hasText: 'Written off' }).first();
+      await chip.waitFor();
+      expect.ok((await chip.getAttribute('class')).includes('vz-chip-grey'), 'the chip is not grey');
+      await page.locator('#payment-status-filter').selectOption('');
+      await page.locator('.vz-ps input').fill('100');
+      await page.locator('.vz-ps input').press('Enter');
+      await page.waitForFunction(() => document.querySelectorAll('.tabulator-row').length > 10);
+      const clipped = await page.evaluate(() => [...document.querySelectorAll('.tabulator-cell .vz-chip')].filter((c) => {
+        const cell = c.closest('.tabulator-cell').getBoundingClientRect(), r = c.getBoundingClientRect();
+        return r.right > cell.right + 1 || r.bottom > cell.bottom + 1;
+      }).map((c) => c.textContent));
+      expect.equal(clipped.join(', ') || 'none', 'none', 'chips cut off by their cell');
+      return page;
+    });
   },
 };

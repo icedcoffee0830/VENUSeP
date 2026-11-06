@@ -41,7 +41,7 @@
 --
 --  ROLLBACK: for the rounding alone, run sp_approve_booking from venusep_migration_18.sql
 --  again (from its "DROP PROCEDURE IF EXISTS sp_approve_booking$$" to its "END$$", between a
---  DELIMITER $$ and a DELIMITER ;). For everything, the FAQ wording too, restore the backup
+--  DELIMITER $$ and a DELIMITER ;). For everything, the FAQ wording and the label too, restore the backup
 --  taken before running this:
 --      C:\xamp5\mysql\bin\mysql.exe -u root -e "DROP DATABASE venusep_laravel; CREATE DATABASE venusep_laravel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 --      C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < %USERPROFILE%\venusep_laravel_before_m19.sql

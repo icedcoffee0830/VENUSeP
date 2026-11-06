@@ -133,6 +133,104 @@ class AccountQueries
         DB::update('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?', [$newHash, $userId, $oldHash]);
     }
 
+    /* A staff session's account as it stands now: fresh on every page, or null. */
+    public static function findStaffSession(int $userId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT account_type, is_active,
+                   password_changed_at IS NULL AS must_change,
+                   UNIX_TIMESTAMP(password_changed_at) AS changed_ts
+            FROM users
+            WHERE id = ?
+        ", [$userId]);
+        return $row ? (array) $row : null;
+    }
+
+    /* A signed-in customer's profile id and whether the account is active, or null. */
+    public static function findCustomerOfUser(int $userId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT c.id, u.is_active
+            FROM customers c
+            JOIN users u ON u.id = c.user_id
+            WHERE c.user_id = ?
+            LIMIT 1
+        ", [$userId]);
+        return $row ? (array) $row : null;
+    }
+
+    /* When the password last changed, as a timestamp; null when it never did. */
+    public static function passwordChangedAt(int $userId): ?int
+    {
+        $at = DB::selectOne('SELECT UNIX_TIMESTAMP(password_changed_at) AS changed_ts FROM users WHERE id = ?', [$userId])->changed_ts ?? null;
+        return $at === null ? null : (int) $at;
+    }
+
+    /* reauth_verify() (auth.php): the right password wipes the wrong tries. */
+    public static function clearPasswordTries(int $userId): void
+    {
+        DB::update('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = ?', [$userId]);
+    }
+
+    public static function countPasswordTry(int $userId, int $attempts): void
+    {
+        DB::update('UPDATE users SET reauth_failed_attempts = ? WHERE id = ?', [$attempts, $userId]);
+    }
+
+    public static function lockPasswordTries(int $userId, int $level, int $seconds): void
+    {
+        DB::update("
+            UPDATE users
+            SET reauth_failed_attempts = 0,
+                reauth_lock_level = ?,
+                reauth_locked_until = DATE_ADD(NOW(), INTERVAL ? SECOND)
+            WHERE id = ?
+        ", [$level, $seconds, $userId]);
+    }
+
+    /* The account behind a Google id, or null. */
+    public static function findByGoogleSub(string $sub): ?array
+    {
+        $row = DB::selectOne("
+            SELECT u.id, u.email, u.account_type, u.is_active, c.id AS customer_id
+            FROM users u
+            LEFT JOIN customers c ON c.user_id = u.id
+            WHERE u.google_sub = ?
+            LIMIT 1
+        ", [$sub]);
+        return $row ? (array) $row : null;
+    }
+
+    /* What kind of account has this email, or null. */
+    public static function typeOfEmail(string $email): ?string
+    {
+        return DB::selectOne('SELECT account_type FROM users WHERE email = ? LIMIT 1', [$email])->account_type ?? null;
+    }
+
+    /* Connect a Google id to a customer with none yet. False when nothing changed. */
+    public static function linkGoogle(int $userId, string $sub): bool
+    {
+        return DB::update("
+            UPDATE users
+            SET google_sub = ?
+            WHERE id = ? AND google_sub IS NULL AND account_type = 'customer'
+        ", [$sub, $userId]) === 1;
+    }
+
+    /* A customer from a brand-new Google identity: no password, the email marked verified. */
+    public static function createGoogleCustomer(string $email, string $username, string $sub, string $name, ?string $phone): int
+    {
+        return DB::transaction(function () use ($email, $username, $sub, $name, $phone) {
+            DB::insert("
+                INSERT INTO users (email, username, password_hash, google_sub, account_type, email_verified_at)
+                VALUES (?, ?, NULL, ?, 'customer', NOW())
+            ", [$email, $username, $sub]);
+            $userId = (int) DB::getPdo()->lastInsertId();
+            DB::insert('INSERT INTO customers (user_id, full_name, phone) VALUES (?, ?, ?)', [$userId, $name, $phone]);
+            return $userId;
+        });
+    }
+
     /* The account as it stands at the last step of a sign-in, or null. */
     public static function findForSession(int $userId): ?array
     {

@@ -125,7 +125,7 @@ class GoogleController
             $userId = (int) session('user_id');
             try {
                 if ($purpose === 'link') {
-                    $problem = google_link($pdo, $userId, $sub);
+                    $problem = google_link($userId, $sub);
                     session(['profile_notice' => $problem ?? 'Google account connected. You can now sign in with Google too.']);
                 } else {
                     $linked = AccountQueries::findPasswordAndGoogle($userId)['google_sub'] ?? null;
@@ -144,7 +144,7 @@ class GoogleController
         }
 
         try {
-            $who = google_resolve($pdo, $sub, $email);
+            $who = google_resolve($sub, $email);
         } catch (PDOException $e) {
             sql_failed($e);
             $this->fail(self::GC_GENERIC);

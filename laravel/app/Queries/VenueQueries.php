@@ -69,12 +69,6 @@ class VenueQueries
         "));
     }
 
-    /* Move one staff member to an office; its halls come with them. */
-    public static function moveOneStaff(int $userId, int $venueId): void
-    {
-        self::moveStaff([$userId], $venueId);
-    }
-
     /* Move these staff to an office; its halls come with them. */
     public static function moveStaff(array $userIds, int $venueId): void
     {

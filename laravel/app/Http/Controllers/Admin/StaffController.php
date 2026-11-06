@@ -254,7 +254,7 @@ class StaffController
                 $this->requireNotLastStaff($target);   // the new office's halls come with the move (trg_staff_halls_follow_upd)
             }
             try {
-                VenueQueries::moveOneStaff($target, (int) $venue['id']);
+                VenueQueries::moveStaff([$target], (int) $venue['id']);
             } catch (PDOException $e) {
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the venue was not changed.']);

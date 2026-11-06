@@ -69,7 +69,7 @@ class CustomerLoginController
                 }
                 if (!$googleErrors) {
                     try {
-                        $newUserId = google_create_customer($pdo, (string) $signup['sub'], (string) $signup['email'], $gName, $gPhoneNorm);
+                        $newUserId = google_create_customer((string) $signup['sub'], (string) $signup['email'], $gName, $gPhoneNorm);
                     } catch (PDOException $e) {
                         session()->forget('google_signup');
                         if ($e->getCode() === '23000') {

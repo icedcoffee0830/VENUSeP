@@ -105,12 +105,12 @@ class GoogleSignInTest extends TestCase
         $c = $this->makeAccount('customer');
         $staff = $this->makeAccount('staff', ['google_sub' => 'sub-staff-' . $c->id]);
         $linked = $this->makeAccount('customer', ['google_sub' => 'sub-cust-' . $c->id]);
-        $this->assertSame(['action' => 'taken'], google_resolve($pdo, 'new-sub-' . $c->id, $c->email));
-        $this->assertSame(['action' => 'refused'], google_resolve($pdo, 'sub-staff-' . $c->id, 'x@y.test'));
-        $this->assertSame(['action' => 'new'], google_resolve($pdo, 'new-sub-' . $c->id, 'nobody-' . $c->id . '@test.local'));
-        $this->assertSame('signin', google_resolve($pdo, 'sub-cust-' . $c->id, 'whatever@test.local')['action']);
-        $this->assertSame('That Google account is already connected to another VENUSeP account.', google_link($pdo, $c->id, 'sub-cust-' . $c->id));
-        $this->assertNull(google_link($pdo, $c->id, 'fresh-sub-' . $c->id));
+        $this->assertSame(['action' => 'taken'], google_resolve('new-sub-' . $c->id, $c->email));
+        $this->assertSame(['action' => 'refused'], google_resolve('sub-staff-' . $c->id, 'x@y.test'));
+        $this->assertSame(['action' => 'new'], google_resolve('new-sub-' . $c->id, 'nobody-' . $c->id . '@test.local'));
+        $this->assertSame('signin', google_resolve('sub-cust-' . $c->id, 'whatever@test.local')['action']);
+        $this->assertSame('That Google account is already connected to another VENUSeP account.', google_link($c->id, 'sub-cust-' . $c->id));
+        $this->assertNull(google_link($c->id, 'fresh-sub-' . $c->id));
         $this->assertSame('fresh-sub-' . $c->id, DB::table('users')->where('id', $c->id)->value('google_sub'));
     }
 }

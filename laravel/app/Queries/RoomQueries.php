@@ -293,6 +293,31 @@ class RoomQueries
         DB::update('UPDATE rooms SET is_active = ? WHERE id = ?', [$active, $roomId]);
     }
 
+    /* A room's id and office by its code, or null. */
+    public static function findIdAndOffice(string $roomCode): ?array
+    {
+        $row = DB::selectOne('SELECT id, venue_id FROM rooms WHERE room_code = ?', [$roomCode]);
+        return $row ? (array) $row : null;
+    }
+
+    /* The rooms of an office, not deleted. */
+    public static function idsOfOffice(int $venueId): array
+    {
+        return array_map(fn ($r) => (int) $r->id, DB::select('SELECT id FROM rooms WHERE venue_id = ? AND deleted_at IS NULL', [$venueId]));
+    }
+
+    /* The room of a booking: its id and office; or null. */
+    public static function findRoomOfBooking(int $bookingId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT r.id, r.venue_id
+            FROM bookings b
+            JOIN rooms r ON r.id = b.room_id
+            WHERE b.id = ?
+        ", [$bookingId]);
+        return $row ? (array) $row : null;
+    }
+
     /* Which room a photo call is about: its id, office, and whether it is deleted; or null. */
     public static function findForPhotos(string $roomCode): ?array
     {

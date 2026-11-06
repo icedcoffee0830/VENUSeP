@@ -268,15 +268,9 @@ function google_check_claims(array $c, string $clientId, string $nonce, int $now
                                password, or linked to another Google account)
      ['action' => 'refused']   a staff/admin account, a suspended one, or a
                                login with no customer profile */
-function google_resolve(PDO $pdo, string $sub, string $email): array
+function google_resolve(string $sub, string $email): array
 {
-    $stmt = $pdo->prepare(
-        'SELECT u.id, u.email, u.account_type, u.is_active, c.id AS customer_id
-           FROM users u LEFT JOIN customers c ON c.user_id = u.id
-          WHERE u.google_sub = :s LIMIT 1'
-    );
-    $stmt->execute([':s' => $sub]);
-    $row = $stmt->fetch();
+    $row = \App\Queries\AccountQueries::findByGoogleSub($sub);
     if ($row) {
         if ($row['account_type'] !== 'customer' || !(bool) $row['is_active'] || $row['customer_id'] === null) {
             return ['action' => 'refused'];
@@ -284,10 +278,8 @@ function google_resolve(PDO $pdo, string $sub, string $email): array
         return ['action' => 'signin', 'user_id' => (int) $row['id'], 'email' => (string) $row['email']];
     }
 
-    $stmt = $pdo->prepare('SELECT account_type FROM users WHERE email = :e LIMIT 1');
-    $stmt->execute([':e' => $email]);
-    $type = $stmt->fetchColumn();
-    if ($type === false) {
+    $type = \App\Queries\AccountQueries::typeOfEmail($email);
+    if ($type === null) {
         return ['action' => 'new'];
     }
     return ['action' => $type === 'customer' ? 'taken' : 'refused'];
@@ -323,28 +315,22 @@ function google_proof_clear(string $key): void
 /* Connects a Google id to a signed-in customer. Null on success (or if it was
    already this account's), otherwise the sentence to show them. One Google
    account can belong to one VENUSeP account only (uq_users_google_sub). */
-function google_link(PDO $pdo, int $userId, string $sub): ?string
+function google_link(int $userId, string $sub): ?string
 {
     $taken = 'That Google account is already connected to another VENUSeP account.';
-    $stmt = $pdo->prepare('SELECT id FROM users WHERE google_sub = :s LIMIT 1');
-    $stmt->execute([':s' => $sub]);
-    $owner = $stmt->fetchColumn();
-    if ($owner !== false) {
-        return (int) $owner === $userId ? null : $taken;
+    $owner = \App\Queries\AccountQueries::findByGoogleSub($sub);
+    if ($owner !== null) {
+        return (int) $owner['id'] === $userId ? null : $taken;
     }
     try {
-        $upd = $pdo->prepare(
-            "UPDATE users SET google_sub = :s
-              WHERE id = :u AND google_sub IS NULL AND account_type = 'customer'"
-        );
-        $upd->execute([':s' => $sub, ':u' => $userId]);
+        $linked = \App\Queries\AccountQueries::linkGoogle($userId, $sub);
     } catch (PDOException $e) {
         if ($e->getCode() === '23000') {
             return $taken;   // connected elsewhere in the instant since the check above
         }
         throw $e;
     }
-    return $upd->rowCount() === 1 ? null : 'This account is already connected to a different Google account. Disconnect it first.';
+    return $linked ? null : 'This account is already connected to a different Google account. Disconnect it first.';
 }
 
 /* The Google identity waiting on the "finish your account" screen, or null. */
@@ -364,24 +350,8 @@ function google_signup_pending(): ?array
 /* Creates the customer for a brand-new Google identity: no password, the
    Google id linked, and the email marked verified (Google verified it).
    Throws PDOException; 23000 means the email or Google id was taken meanwhile. */
-function google_create_customer(PDO $pdo, string $sub, string $email, string $name, ?string $phone): int
+function google_create_customer(string $sub, string $email, string $name, ?string $phone): int
 {
     require_once __DIR__ . '/accounts.php';
-    $pdo->beginTransaction();
-    try {
-        $pdo->prepare(
-            "INSERT INTO users (email, username, password_hash, google_sub, account_type, email_verified_at)
-             VALUES (:e, :u, NULL, :s, 'customer', NOW())"
-        )->execute([':e' => $email, ':u' => venusep_unique_username($email), ':s' => $sub]);
-        $userId = (int) $pdo->lastInsertId();
-        $pdo->prepare('INSERT INTO customers (user_id, full_name, phone) VALUES (:u, :n, :p)')
-            ->execute([':u' => $userId, ':n' => $name, ':p' => $phone]);
-        $pdo->commit();
-        return $userId;
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $e;
-    }
+    return \App\Queries\AccountQueries::createGoogleCustomer($email, venusep_unique_username($email), $sub, $name, $phone);
 }

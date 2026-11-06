@@ -805,3 +805,9 @@ rounds UP to the peso, DOWN when up gives back the full price (₱3 -> ₱2), ne
 - **Block strip**: back on the landing page on every load (`blockNoticesForLanding()`); the popup stays once per session.
 - **Photo viewer**: `partials/booking-gallery` is now one native `<dialog>` viewer, `openGallery(i)`. Strip photos are buttons. The hostel page has no summary picture (its `heroTile` is unused).
 - New flow: `photo-viewer` (also covers the Terms link).
+
+### 15h. Cleanup H-K (2026-11-06, branch `cleanup-3`, no migration, behaviour unchanged)
+- **Where the SQL is now**: `app/Queries/*Queries.php`, one file per topic, a plain line per table at the top. Controllers and most of `legacy/includes` only call them. New files: `BookingCreateQueries`, `BookingListQueries`, `CatalogQueries`, `RoomMediaQueries`, `VenueQueries`, `OfficeSettingsQueries`, `FaqQueries`, `EmailQueries`, `DocumentQueries`, `NotificationQueries`, `ReceiptQueries`.
+- **Still plain PDO, on purpose**: `BookingRules::assignBeds` (its race test hands in a PDO); every transaction closed by `reauth_verify()`, which commits a wrong try itself (GCash, refund switch, password change, new admin, counter password, handover, payment reversal, restore); `legacy/includes/two-factor.php`, `password-reset.php`, `remember-me.php` (their bindings are secrets, and an uncaught `QueryException` prints bindings into its message); `backup.php`'s two DELETEs after a restore.
+- **`sql_failed()`**: a `DB::` failure is logged with its SQL and `?` marks, never the values, and the app line that ran it.
+- **`venusep_routines.sql`** (repo root): every function, procedure, trigger and view with one plain line each. For reading only: nothing runs it, a change still goes in a new migration. Written from the database at migration 19; the demo seed's routines are left out.

@@ -13,6 +13,12 @@ final class Status
         'Pending' => 'amber', 'Payment due' => 'amber', 'Awaiting POS' => 'amber', 'Under review' => 'amber', 'Action needed' => 'amber',
         'Refund requested' => 'amber', 'Refund processing' => 'amber', 'Refund - action needed' => 'amber', 'Refund - Official Receipt needed' => 'amber',
         'Overdue' => 'red', 'Rejected' => 'red', 'Refund denied' => 'red',
+        /* the staff words, each the colour of its customer word */
+        'Payment confirmed' => 'green', 'Paid at cashier' => 'green', 'Paid at the front desk' => 'green', 'Reservation approved' => 'green',
+        'Reservation pending review' => 'amber', 'Awaiting POS - CEDU' => 'amber', 'Awaiting GCash payment' => 'amber', 'Awaiting cash payment' => 'amber',
+        'Receipt under review' => 'amber', 'Room closed - awaiting decision' => 'amber', 'Refund returned for correction' => 'amber',
+        'Refund approved - awaiting Official Receipt' => 'amber',
+        'Payment overdue' => 'red', 'Request rejected' => 'red',
     ];
 
     public static function chipClass(string $word): string

@@ -53,7 +53,8 @@
       /* table wrapper — horizontal scroll for the wide 11-column table */
       .th-table-wrap { padding: 14px 18px 18px; overflow-x: auto; }
 
-      /* status badges — team soft-tint palette (no loud fills, no bold) */
+      /* status badges — team soft-tint palette (no loud fills, no bold); the staff words are long, so they wrap */
+      .tabulator-cell .vz-chip { white-space: normal; }
 
       /* row action buttons */
       .th-actions { display: inline-flex; gap: 6px; }
@@ -119,24 +120,18 @@
                     <label for="payment-status-filter">Payment Status</label>
                     <select id="payment-status-filter">
                       <option value="">All</option>
-                      <option value="Paid">Paid</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Payment pending">Payment pending</option>
-                      <option value="Payment due">Payment due</option>
-                      <option value="Overdue">Overdue</option>
-                      <option value="Unpaid">Unpaid</option>
-                      <option value="Refunded">Refunded</option>
+                      @foreach ($paymentLabels as $label)
+                      <option value="{{ $label }}">{{ $label }}</option>
+                      @endforeach
                     </select>
                   </div>
                   <div class="th-field">
                     <label for="booking-status-filter">Booking Status</label>
                     <select id="booking-status-filter">
                       <option value="">All</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Approved">Approved</option>
-                      <option value="Rejected">Rejected</option>
-                      <option value="Completed">Completed</option>
-                      <option value="Cancelled">Cancelled</option>
+                      @foreach ($bookingLabels as $label)
+                      <option value="{{ $label }}">{{ $label }}</option>
+                      @endforeach
                     </select>
                   </div>
                   <div class="th-field">
@@ -234,8 +229,8 @@
             { title: 'Transaction Date', field: 'transactionDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 150, width: 150 },
             { title: 'Amount', field: 'amount', minWidth: 110, width: 110, hozAlign: 'right' },
             { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150 },
-            { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
+            { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 170, width: 170, hozAlign: 'center' },
+            { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 170, width: 170, hozAlign: 'center' },
             { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 180, width: 180, hozAlign: 'center', print: false },   /* buttons mean nothing on paper */
           ],
         });

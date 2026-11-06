@@ -1,10 +1,10 @@
 -- ============================================================================
 --  VENUSeP — MIGRATION 19: rounding never cancels the USeP discount, and a booking is
 --  never free (decided 2026-11-05, option B). Also the FAQ wording: the refund rule and
---  the receipt's new name (decided 2026-11-06).
+--  the receipt's new name, and what customers read on a written-off booking (decided 2026-11-06).
 --  Run against the EXISTING database your site uses, after 18. Safe to re-run
---  (idempotent): it replaces sp_approve_booking and rewords FAQ text that still has the old
---  words. No table and no stored amount changes.
+--  (idempotent): it replaces sp_approve_booking and rewords FAQ text and the one status label
+--  that still have the old words. No table and no stored amount changes.
 --
 --  THE DATABASE NAME in these commands must be the one your site uses: DB_DATABASE in
 --  laravel\.env. Aron's site uses venusep_laravel, not venusep; a build from SETUP.md
@@ -14,7 +14,7 @@
 --          C:\xamp5\mysql\bin\mysqldump.exe -u root --routines --triggers --events --single-transaction venusep_laravel > %USERPROFILE%\venusep_laravel_before_m19.sql
 --          C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_19.sql
 --
---  It ends with one line that must read "OK: migration 19 is in: the rounding and the FAQ wording".
+--  It ends with one line that must read "OK: migration 19 is in: the rounding, the FAQ wording and the written-off label".
 --
 --  WHAT CHANGES
 --    The USeP discount at approval, in sp_approve_booking (every approval goes through it:
@@ -34,6 +34,10 @@
 --        exact old text changes, so an answer someone reworded is left alone: read that one
 --        on the FAQ page afterwards;
 --      - "VENUSeP System Receipt" becomes "VENUSeP Transaction Receipt", wherever it is used.
+--
+--    The written-off status (payment_statuses.customer_label): customers read "Closed by the
+--    office", not "Closed". Staff keep "Written off". Only the old word changes, so a label
+--    someone reworded is left alone.
 --
 --  ROLLBACK: for the rounding alone, run sp_approve_booking from venusep_migration_18.sql
 --  again (from its "DROP PROCEDURE IF EXISTS sp_approve_booking$$" to its "END$$", between a
@@ -145,12 +149,17 @@ UPDATE faqs SET answer = REPLACE(answer, 'VENUSeP System Receipt', 'VENUSeP Tran
 UPDATE faqs SET default_answer = REPLACE(default_answer, 'VENUSeP System Receipt', 'VENUSeP Transaction Receipt')
  WHERE default_answer LIKE '%VENUSeP System Receipt%';
 
+-- ---- what customers read on a written-off booking ----
+UPDATE payment_statuses SET customer_label = 'Closed by the office'
+ WHERE code = 'written_off' AND customer_label = 'Closed';
+
 -- ---- check ----
 SELECT IF((SELECT COUNT(*) FROM information_schema.ROUTINES
             WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = 'sp_approve_booking'
               AND ROUTINE_DEFINITION LIKE '%FLOOR(v_exact)%') = 1
           AND (SELECT COUNT(*) FROM faqs
                 WHERE answer = @m19_old_close COLLATE utf8mb4_bin OR default_answer = @m19_old_close COLLATE utf8mb4_bin
-                   OR answer LIKE '%VENUSeP System Receipt%' OR default_answer LIKE '%VENUSeP System Receipt%') = 0,
-          'OK: migration 19 is in: the rounding and the FAQ wording',
-          'NOT APPLIED: the rounding or the FAQ wording is still the old one; run this file again') AS m19_check;
+                   OR answer LIKE '%VENUSeP System Receipt%' OR default_answer LIKE '%VENUSeP System Receipt%') = 0
+          AND (SELECT COUNT(*) FROM payment_statuses WHERE code = 'written_off' AND customer_label = 'Closed') = 0,
+          'OK: migration 19 is in: the rounding, the FAQ wording and the written-off label',
+          'NOT APPLIED: the rounding, the FAQ wording or the written-off label is still the old one; run this file again') AS m19_check;

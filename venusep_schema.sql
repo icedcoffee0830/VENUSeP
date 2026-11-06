@@ -995,7 +995,8 @@ INSERT INTO payment_statuses (code, staff_label, customer_label, sort_order) VAL
   ('refund_await_or',   'Refund approved - awaiting Official Receipt', 'Refund - Official Receipt needed', 13),
   ('refund_processing', 'Refund processing',        'Refund processing', 14),
   ('refunded',          'Refunded',                 'Refunded',          15),
-  ('refund_denied',     'Refund denied',            'Refund denied',     16);
+  ('refund_denied',     'Refund denied',            'Refund denied',     16),
+  ('written_off',       'Written off',              'Closed by the office', 16);
 
 -- ---- Venues ----
 INSERT INTO venues (id, venue_code, name, venue_type, description) VALUES

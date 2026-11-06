@@ -785,7 +785,7 @@ Decision: memory `venusep-teammate-bugs-2026-11-05`, item 11. **All of it is in 
 ### 15e. Phase P (2026-11-05, branch `fixes-3`, migration 19)
 **Migration 19 is NOT on the real DB**: Aron runs, in cmd, after the backup in its header,
 `C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_19.sql`; it ends with
-"OK: migration 19 is in: the rounding and the FAQ wording". It replaces `sp_approve_booking` and rewords the FAQ (refund rule, Transaction Receipt; added in phase T2): the discounted total
+"OK: migration 19 is in: the rounding, the FAQ wording and the written-off label". It replaces `sp_approve_booking`, rewords the FAQ (refund rule, Transaction Receipt; added in phase T2) and changes what customers read on a written-off booking from "Closed" to "Closed by the office" (added 2026-11-06; staff keep "Written off"): the discounted total
 rounds UP to the peso, DOWN when up gives back the full price (₱3 -> ₱2), never 0 (₱1 stays ₱1, no discount).
 `usep_discounted()` / `priceWithDiscount()` use the same rule. The test/flows snapshot is `.before-m19` + a blank line
 + migration 19.

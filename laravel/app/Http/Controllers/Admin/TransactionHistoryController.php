@@ -16,6 +16,16 @@ class TransactionHistoryController extends Controller
 
         return view('admin.transaction-history', [
             'transactionRowsJson' => json_encode($transactionRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?: '[]',
+            /* The filters match a row's label exactly, so they offer the labels the rows carry. */
+            'paymentLabels' => self::labels($transactionRows, 'paymentStatus'),
+            'bookingLabels' => self::labels($transactionRows, 'bookingStatus'),
         ]);
+    }
+
+    private static function labels(array $rows, string $field): array
+    {
+        $labels = array_values(array_unique(array_column($rows, $field)));
+        sort($labels);
+        return $labels;
     }
 }

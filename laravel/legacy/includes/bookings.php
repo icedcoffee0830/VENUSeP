@@ -525,8 +525,9 @@ function transaction_rows($customerId = null) {
             'paidOn'          => $b['paidAtIso'] ? date('F j, Y', strtotime($b['paidAtIso'])) : '',
             'amount'          => $b['amount'],
             'paymentMethod'   => $b['method'],
-            'paymentStatus'   => $b['paymentStatus'],
-            'bookingStatus'   => $b['bookingStatus'],
+            /* the customer's own ledger uses their words, the staff one the staff words */
+            'paymentStatus'   => $customerId ? $b['paymentStatus'] : $b['paymentStatusStaff'],
+            'bookingStatus'   => $customerId ? $b['bookingStatus'] : $b['bookingStatusStaff'],
             /* View Receipt — the VENUSeP System Receipt (#22), the styled page
                both portals use (customer/receipt.php, admin/receipt.php) — only
                once one actually exists for this booking. */

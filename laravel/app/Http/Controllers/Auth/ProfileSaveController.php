@@ -26,6 +26,21 @@ class ProfileSaveController
         throw new HttpResponseException(response()->json($data, $status)->header('Cache-Control', 'no-store'));
     }
 
+    /* The one lockout for "type your password again" (reauth_verify, auth.php): a stolen session
+       cannot guess the password through any form here. reauth_verify closes the transaction on a
+       wrong try, so it stays plain PDO. */
+    private function mustKnowPassword($pdo, int $userId, string $password, string $field): void
+    {
+        $pdo->beginTransaction();
+        if ($no = reauth_verify($pdo, AccountQueries::lockForPasswordCheck($userId), $password)) {
+            $this->reply(isset($no['locked']) ? 423 : 401, ['ok' => false, 'field' => $field,
+                'message' => isset($no['locked'])
+                    ? 'Too many wrong passwords. Try again in ' . $no['locked'] . ' seconds.'
+                    : 'That is not your current password.']);
+        }
+        $pdo->commit();
+    }
+
     public function __invoke(Request $request)
     {
         legacy('auth', 'db', 'room-photos', 'bookings', 'two-factor', 'passwords', 'google-auth', 'remember-me');
@@ -104,10 +119,10 @@ class ProfileSaveController
                     $this->reply(403, ['ok' => false, 'field' => 'email', 'reauth' => true,
                         'message' => 'To change your email, first confirm it’s you with Google (Account Security, below).']);
                 }
-            } elseif (!password_verify((string) $post->get('current_password', ''), $acct['password_hash'])) {
-                $this->reply(401, ['ok' => false, 'field' => 'current_password', 'message' => $post->get('current_password', '') === ''
-                    ? 'Enter your current password to change your email.'
-                    : 'That is not your current password.']);
+            } elseif ((string) $post->get('current_password', '') === '') {
+                $this->reply(401, ['ok' => false, 'field' => 'current_password', 'message' => 'Enter your current password to change your email.']);
+            } else {
+                $this->mustKnowPassword($pdo, $userId, (string) $post->get('current_password'), 'current_password');
             }
         }
 
@@ -244,9 +259,7 @@ class ProfileSaveController
         if ($action === 'google_link_begin' && !google_enabled()) {
             $this->reply(409, ['ok' => false, 'message' => 'Google sign-in is not set up on this server yet.']);
         }
-        if (!password_verify((string) $post->get('password', ''), $acct['password_hash'])) {
-            $this->reply(401, ['ok' => false, 'field' => 'password', 'message' => 'That is not your current password.']);
-        }
+        $this->mustKnowPassword($pdo, $userId, (string) $post->get('password', ''), 'password');
 
         if ($action === 'google_link_begin') {
             google_proof_set('google_link', $userId);
@@ -343,14 +356,11 @@ class ProfileSaveController
 
             if ($action === 'tfa_begin' && !$tfa['enabled']) {
                 $acct = AccountQueries::findEmailAndHash($userId);
-                $hash = $acct ? $acct['password_hash'] : false;
-                if ($hash === null) {
+                if ($acct && $acct['password_hash'] === null) {
                     $this->reply(409, ['ok' => false, 'field' => 'password',
                         'message' => 'Set a password first (Account Security, above), then turn this on.']);
                 }
-                if ($hash === false || !password_verify((string) $post->get('password', ''), $hash)) {
-                    $this->reply(401, ['ok' => false, 'field' => 'password', 'message' => 'That is not your current password.']);
-                }
+                $this->mustKnowPassword($pdo, $userId, (string) $post->get('password', ''), 'password');
             } elseif ($action !== 'tfa_confirm') {
                 $check = tfa_verify($pdo, $userId, $code);
                 if (!$check['ok']) {

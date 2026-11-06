@@ -449,9 +449,11 @@ An admin sets it up again at their next sign-in; for a customer it is simply off
   resend is the identical email. `includes/mailer.php` is the only file that talks to
   the mail library.
 - **Sending:** settings in `laravel/legacy/includes/mail-config.php`, git-ignored (template:
-  `mail-config.example.php`). Laptops send into **Mailpit**, a local test inbox; only the
-  demo machine holds the Gmail App Password. With no settings file nothing is sent: each
-  email is written to a `.eml` file outside the web root.
+  `mail-config.example.php`). Every laptop sends through the one VENUSeP Gmail with its own
+  App Password, and `redirect_all_to` set to its owner's Gmail while testing (decided
+  2026-11-06). With no settings file nothing is sent: each email is written to a `.eml`
+  file outside the web root and its row says `not_sent`, never `sent`. Staff read "Not sent:
+  email isn't set up on this laptop" and can Resend it once the settings exist.
 - **System Receipt** (`system_receipts`): one per confirmed payment, contents frozen in
   `snapshot_json`; the number `VSR-<year>-<id>` is derived, never stored. It is **not** the
   Official Receipt from the University Cashier, which stays out of scope for now.

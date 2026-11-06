@@ -3,12 +3,20 @@
 namespace Tests\Feature\AdminBookings;
 
 use Illuminate\Support\Facades\DB;
+use Tests\Feature\Email\FakeMail;
 use Tests\TestCase;
 
 /* admin/booking-emails — the Receipt & emails panel's JSON + Resend. */
 class BookingEmailsTest extends TestCase
 {
+    use FakeMail;
     use SeedsBookings;
+
+    protected function tearDown(): void
+    {
+        $this->stopFakeMail();
+        parent::tearDown();
+    }
 
     private function failedEmail(int $bookingId): int
     {
@@ -60,19 +68,97 @@ class BookingEmailsTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_resend_goes_to_the_mail_log_and_marks_it_sent(): void
+    public function test_with_no_settings_resend_says_not_sent_and_the_row_never_says_sent(): void
     {
         [$id, $ref] = $this->seedVenueBooking('r1');
         $mail = $this->failedEmail($id);
         $this->actingAsStaff()->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
-            ->assertOk()->assertJson(['ok' => true, 'message' => 'Sent.', 'email' => ['id' => $mail, 'status' => 'sent']]);
-        $this->assertSame('sent', DB::table('email_outbox')->where('id', $mail)->value('status'));
+            ->assertOk()->assertJson(['ok' => false, 'message' => "Not sent: email isn't set up on this laptop.",
+                'email' => ['id' => $mail, 'status' => 'not_sent', 'sent' => null]]);
         // the 'log' transport (no mail-config.php): nothing left the machine
-        $eml = getenv('VENUSEP_DOC_ROOT') . '/mail-log/' . $mail . '.eml';
+        $eml = doc_root() . '/mail-log/' . $mail . '.eml';
         $this->assertFileExists($eml);
         @unlink($eml);
+
+        $this->get(route('admin.booking-emails', ['booking' => $ref]))
+            ->assertOk()->assertJson(['emails' => [['id' => $mail, 'status' => 'not_sent', 'sent' => null, 'error' => MAIL_NOT_SET_UP]]]);
+        $this->assertNull(DB::table('email_outbox')->where('id', $mail)->value('sent_at'));
+    }
+
+    public function test_a_not_sent_row_goes_out_on_resend_once_settings_exist_and_only_once(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1');
+        $mail = $this->failedEmail($id);
+        DB::table('email_outbox')->where('id', $mail)->update(['status' => 'not_sent', 'last_error' => 'Not sent.']);
+
+        $this->fakeGmail();
+        $this->actingAsStaff()->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
+            ->assertOk()->assertJson(['ok' => true, 'message' => 'Sent.', 'email' => ['id' => $mail, 'status' => 'sent', 'error' => null]]);
+        $this->assertStringContainsString('RCPT TO:<walkin@example.test>', $this->fakeInbox());
+        $this->assertNotNull(DB::table('email_outbox')->where('id', $mail)->value('sent_at'));
+
         // a sent email cannot be resent
         $this->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
             ->assertStatus(409)->assertJson(['message' => 'That email was already sent, or is still on its way.']);
+    }
+
+    public function test_a_wrong_password_reads_plainly(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1');
+        $mail = $this->failedEmail($id);
+        $plain = 'The mail server refused the sign-in. Check the App Password in mail-config.php.';
+        $oldLog = ini_set('error_log', storage_path('logs/auth-tests-error.log'));   // the raw message stays out of PHPUnit's output
+
+        $this->fakeGmail('reject');
+        $this->actingAsStaff()->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
+            ->assertOk()->assertJson(['ok' => false, 'message' => $plain, 'email' => ['status' => 'failed', 'error' => $plain]]);
+        ini_set('error_log', $oldLog);
+    }
+
+    /* The server repeats the password in a refusal: it reaches neither staff, the row nor the log. */
+    public function test_the_password_is_hidden_even_when_the_server_repeats_it(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1');
+        $mail = $this->failedEmail($id);
+        $log = tempnam(sys_get_temp_dir(), 'vlog');
+        $oldLog = ini_set('error_log', $log);
+
+        $this->fakeGmail('leak');
+        $res = $this->actingAsStaff()->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
+            ->assertOk()->assertJson(['ok' => false, 'email' => ['status' => 'failed']]);
+
+        ini_set('error_log', $oldLog);
+        $logged = (string) file_get_contents($log);
+        @unlink($log);
+        $stored = (string) DB::table('email_outbox')->where('id', $mail)->value('last_error');
+        $this->assertStringContainsString('[hidden]', $stored);
+        $this->assertStringContainsString('[hidden]', $logged);
+        $this->assertStringNotContainsString('fake-app-password-123', $logged . $res->getContent() . $stored);
+    }
+
+    public function test_no_network_reads_plainly_and_can_be_resent(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1');
+        $mail = $this->failedEmail($id);
+        $plain = "Could not reach the mail server. Check this laptop's internet connection, then try again.";
+        $oldLog = ini_set('error_log', storage_path('logs/auth-tests-error.log'));   // the raw message stays out of PHPUnit's output
+
+        $this->noNetwork();
+        $this->actingAsStaff()->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
+            ->assertOk()->assertJson(['ok' => false, 'message' => $plain, 'email' => ['status' => 'failed', 'error' => $plain]]);
+
+        ini_set('error_log', $oldLog);
+        $this->fakeGmail();
+        $this->postWithToken(route('admin.booking-emails'), ['booking' => $ref, 'action' => 'resend', 'id' => $mail])
+            ->assertOk()->assertJson(['ok' => true, 'email' => ['status' => 'sent']]);
+    }
+
+    /* A laptop's real mail-config.php must never be read by a test: it would send real email. */
+    public function test_the_tests_never_read_a_laptops_real_settings(): void
+    {
+        legacy('mailer');
+        $this->assertSame('no-mail-settings-in-tests', config('venusep.mail_config'));
+        $this->assertSame('log', mail_config()['transport']);
+        $this->assertFalse(mail_is_set_up());
     }
 }

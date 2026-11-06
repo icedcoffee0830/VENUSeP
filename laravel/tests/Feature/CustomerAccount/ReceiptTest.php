@@ -10,6 +10,8 @@ use Tests\TestCase;
    confirmed payment) and removes it, plus any email it queued, afterwards. */
 class ReceiptTest extends TestCase
 {
+    use \Tests\Feature\Email\FakeMail;
+
     use BookingRefs;
 
     private const BOOKING = 7;
@@ -26,8 +28,9 @@ class ReceiptTest extends TestCase
     protected function tearDown(): void
     {
         foreach (DB::table('email_outbox')->where('receipt_id', $this->receiptId)->pluck('id') as $outboxId) {
-            @unlink(storage_path('app/venusep-private/mail-log/' . $outboxId . '.eml'));
+            @unlink(doc_root() . '/mail-log/' . $outboxId . '.eml');
         }
+        $this->stopFakeMail();
         DB::table('email_outbox')->where('receipt_id', $this->receiptId)->delete();
         DB::table('system_receipts')->where('id', $this->receiptId)->delete();
         parent::tearDown();
@@ -73,27 +76,48 @@ class ReceiptTest extends TestCase
             ->assertNotFound();
     }
 
-    /* The copy is queued to email_outbox and "sent" through the log transport
-       (no mail-config.php here, so nothing leaves the machine). Until abook
-       fixes the logo path in legacy mailer.php (__DIR__/../assets) the log
-       write fails and the page says "failed" — the old failure path. */
-    public function test_email_me_queues_one_copy_and_redirects(): void
+    private function emailMe(string $self)
+    {
+        return $this->actingAsCustomer('customer@gmail.com')->withSession(['_token' => 't'])
+            ->post($self, ['_token' => 't', 'action' => 'email'])->assertStatus(303);
+    }
+
+    /* With settings the copy goes out; a second one within 5 minutes is not queued. */
+    public function test_email_me_sends_one_copy_and_holds_the_next(): void
+    {
+        $this->fakeGmail();
+        $self = route('customer.receipt', ['booking' => $this->ref(self::BOOKING)]);
+        $this->emailMe($self)->assertRedirect($self . '&sent=1');
+        $copy = DB::table('email_outbox')->where('receipt_id', $this->receiptId)->first();
+        $this->assertSame(['receipt_copy', 'sent'], [$copy->kind, $copy->status]);
+        $this->assertStringContainsString('VENUSeP Transaction Receipt', $copy->subject);
+        $this->get($self . '&sent=1')->assertSee('Check your inbox');
+
+        $this->emailMe($self)->assertRedirect($self . '&recent=1');
+        $this->assertSame(1, DB::table('email_outbox')->where('receipt_id', $this->receiptId)->count());
+    }
+
+    /* The log transport: nothing left, so the page says so, and pressing again never says "already sent". */
+    public function test_email_me_with_no_settings_never_claims_it_was_sent(): void
+    {
+        $self = route('customer.receipt', ['booking' => $this->ref(self::BOOKING)]);
+        foreach ([1, 2] as $press) {
+            $this->emailMe($self)->assertRedirect($self . '&notsent=1');
+        }
+        $this->assertSame(['not_sent', 'not_sent'], DB::table('email_outbox')->where('receipt_id', $this->receiptId)->pluck('status')->all());
+        $this->get($self . '&notsent=1')->assertOk()->assertSee('Not sent: email isn&rsquo;t set up here yet', false)
+            ->assertDontSee('Check your inbox')->assertDontSee('Already sent');
+    }
+
+    public function test_email_me_when_the_mail_server_refuses_says_it_could_not_send(): void
     {
         ini_set('error_log', storage_path('logs/cacct-test-error.log'));   // mailer failures are error_log()ged
-        $ref = $this->ref(self::BOOKING);
-        $self = route('customer.receipt', ['booking' => $ref]);
-        $res = $this->actingAsCustomer('customer@gmail.com')->withSession(['_token' => 't'])
-            ->post($self, ['_token' => 't', 'action' => 'email'])
-            ->assertStatus(303);
-        $this->assertContains($res->headers->get('Location'), [$self . '&sent=1', $self . '&failed=1']);
-        $this->assertSame(1, DB::table('email_outbox')->where('receipt_id', $this->receiptId)->where('kind', 'receipt_copy')->count());
-        $this->assertStringContainsString('VENUSeP Transaction Receipt', DB::table('email_outbox')->where('receipt_id', $this->receiptId)->value('subject'));
-
-        if ($res->headers->get('Location') === $self . '&sent=1') {
-            // a second one within 5 minutes is not queued
-            $this->post($self, ['_token' => 't', 'action' => 'email'])->assertRedirect($self . '&recent=1');
-            $this->assertSame(1, DB::table('email_outbox')->where('receipt_id', $this->receiptId)->count());
+        $this->fakeGmail('reject');
+        $self = route('customer.receipt', ['booking' => $this->ref(self::BOOKING)]);
+        foreach ([1, 2] as $press) {
+            $this->emailMe($self)->assertRedirect($self . '&failed=1');
         }
+        $this->get($self . '&failed=1')->assertSee('We couldn&rsquo;t send it right now', false)->assertDontSee('Check your inbox');
     }
 
     public function test_pdf_for_the_owner_with_the_old_headers(): void

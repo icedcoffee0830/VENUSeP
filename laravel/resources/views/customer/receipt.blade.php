@@ -45,6 +45,8 @@
                 <div class="rc-strip is-ok" role="status"><i class="bi bi-envelope-check" aria-hidden="true"></i>Already sent a few minutes ago. Check your inbox, and your spam folder.</div>
               @elseif ($rcFlash === 'failed')
                 <div class="rc-strip is-warn" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>We couldn&rsquo;t send it right now. Try again in a few minutes, or use Download PDF.</div>
+              @elseif ($rcFlash === 'notsent')
+                <div class="rc-strip is-warn" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>Not sent: email isn&rsquo;t set up here yet. Use Download PDF to keep your receipt.</div>
               @endif
 
               @if ($rcView['void'])

@@ -10,19 +10,19 @@
                      This is also what happens when mail-config.php is
                      missing, so a fresh checkout can never email anyone.
 
-   LAPTOPS (everyone on the team): run Mailpit, a local test inbox, and
-   keep the values below as they are. Every email the site sends then
-   shows at http://localhost:8025 instead of reaching a real person.
+   EVERY LAPTOP (real email through the one VENUSeP Gmail account):
+     host 'smtp.gmail.com', port 587, encryption 'tls',
+     username = the Gmail address,
+     password = YOUR OWN 16-character App Password, no spaces (each teammate has one;
+                Google Account -> Security -> 2-Step Verification -> App passwords),
+     from_email = the same Gmail address (Gmail rewrites any other sender),
+     redirect_all_to = your own Gmail, always, while testing.
+
+   WITHOUT GMAIL: run Mailpit, a local test inbox, and keep the values below as
+   they are. Every email the site sends then shows at http://localhost:8025.
      Windows: download mailpit-windows-amd64.zip from
               https://github.com/axllent/mailpit/releases, unzip, run mailpit.exe
      Mac:     brew install mailpit && mailpit
-
-   DEMO MACHINE ONLY (real email through the VENUSeP Gmail account):
-     host 'smtp.gmail.com', port 587, encryption 'tls',
-     username = the Gmail address,
-     password = its 16-character App Password
-                (Google Account -> Security -> 2-Step Verification -> App passwords),
-     from_email = the same Gmail address (Gmail rewrites any other sender).
    ===================================================================== */
 return [
     'transport'  => 'smtp',

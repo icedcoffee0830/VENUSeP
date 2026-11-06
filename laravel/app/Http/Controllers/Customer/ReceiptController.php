@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
    RECEIPT (was customer/receipt.php) — one booking's VENUSeP System
    Receipt (DB-DECISIONS #22).
 
-   GET   ?booking=<VB-ref>[&confirm=1|&sent=1|&recent=1|&failed=1]
+   GET   ?booking=<VB-ref>[&confirm=1|&sent=1|&recent=1|&failed=1|&notsent=1]
    POST  _token, action=email            "Email me this receipt"
 
    EMAIL ME goes to the account's OWN address, read from the database, never
@@ -59,8 +59,8 @@ class ReceiptController
             } else {
                 try {
                     $rcOutbox = queue_receipt_copy((int) $rcReceipt['id'], (int) session('user_id'), (string) $rcMe['email'], (string) $rcMe['full_name']);
-                    if ($rcOutbox !== null && mail_send($rcOutbox)) {
-                        $rcState = 'sent';
+                    if ($rcOutbox !== null) {
+                        $rcState = mail_send($rcOutbox) ? 'sent' : (mail_is_set_up() ? 'failed' : 'notsent');
                     }
                 } catch (\Throwable $e) {
                     sql_failed($e, optional: true);
@@ -70,7 +70,7 @@ class ReceiptController
         }
 
         $rcConfirm = !empty($request->query('confirm'));
-        $rcFlash   = !empty($request->query('sent')) ? 'sent' : (!empty($request->query('recent')) ? 'recent' : (!empty($request->query('failed')) ? 'failed' : ''));
+        $rcFlash   = collect(['sent', 'recent', 'failed', 'notsent'])->first(fn ($state) => !empty($request->query($state)), '');
         $rcView    = receipt_view($rcReceipt);
 
         /* (old header('Cache-Control: private, no-store') — the customer middleware sends no-store) */

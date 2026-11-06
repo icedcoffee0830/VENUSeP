@@ -22,6 +22,7 @@
         <env name="APP_DEBUG" value="true"/>
         <env name="VENUSEP_MAX_DAYS_AHEAD" value="5000"/>
         <env name="VENUSEP_MAX_UNPAID" value="100000"/>
+        <env name="VENUSEP_MAIL_CONFIG" value="no-mail-settings-in-tests"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

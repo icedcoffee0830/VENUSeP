@@ -179,6 +179,24 @@ export default {
       expect.equal(h.payment_status, 'await_gcash', 'payment_status after the POS');
     });
 
+    /* Flows have no mail settings: the approval email never left, so the panel must not say Sent. */
+    await step('Receipt & emails: the approval email says Not sent and why; Resend stays honest and stays there', async () => {
+      const page = s.admin;
+      await page.reload();   // the panel loads with the page
+      const notSent = "Not sent: email isn't set up on this laptop.";
+      const row = page.locator('.br-mail', { hasText: 'Booking approved' });
+      await row.getByText('Not sent', { exact: true }).waitFor();
+      await row.getByText(notSent).waitFor();
+      expect.equal(await row.locator('.br-badge.b-green').count(), 0, 'a green Sent chip');
+      await row.getByRole('button', { name: 'Resend' }).click();
+      await page.locator('.br-mail-flash').getByText(notSent).waitFor();
+      await row.getByText('2 attempts').waitFor();
+      expect.ok(await row.getByRole('button', { name: 'Resend' }).isEnabled(), 'Resend is still there for when settings exist');
+      const mail = await dbOne(`SELECT status, sent_at FROM email_outbox WHERE booking_id = ? AND kind = 'booking_approved'`, [s.bookingId]);
+      expect.equal(mail.status, 'not_sent', 'the row');
+      expect.equal(mail.sent_at, null, 'sent_at');
+    });
+
     await step('Booking Management: newest request first, and the stay is under "Awaiting payment", not "Overdue"', async () => {
       const page = s.admin;
       await page.goto(ctx.url('/admin/booking-requests'));

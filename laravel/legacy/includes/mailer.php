@@ -11,6 +11,10 @@
    action has still happened; the row just says 'failed' and staff press
    Resend. The body is rendered when queued, so a resend is the same email.
 
+   A ROW SAYS WHAT REALLY HAPPENED: 'sent' only when the mail server took it,
+   'failed' with a plain reason when it refused, 'not_sent' when this laptop
+   has no mail settings, so nothing left the machine. Staff can Resend the last two.
+
    WHO GETS EMAIL (settled 2026-10-01):
      walk-ins        their counter confirmation and their System Receipt,
                      if they gave an address at the counter
@@ -21,6 +25,8 @@
    each email is written as a .eml file outside the web root and nothing
    leaves the machine, so a fresh checkout can never email a real person.
    The settings may hold a Gmail App Password — never echo or log them.
+   VENUSEP_MAIL_CONFIG points at another file: the tests' fake settings, so
+   they can never use a laptop's real ones.
    ===================================================================== */
 
 require_once __DIR__ . '/documents.php';   /* doc_ensure_dir() for the log transport; also loads db.php */
@@ -42,6 +48,9 @@ const MAIL_KINDS = [
     'booking_block_cancelled' => 'Booking cancelled (office block)',
     'counter_welcome'         => 'New account welcome',
 ];
+
+/* What a 'not_sent' row says: staff read this, in the panel and in the reply. */
+const MAIL_NOT_SET_UP = "Not sent: email isn't set up on this laptop.";
 
 /* The settings file's array over the defaults. A missing or broken file means
    'log' — the safe direction. Takes a path so the tests can point it anywhere. */
@@ -68,11 +77,13 @@ function mail_config_from(string $path): array
 
 function mail_config(): array
 {
-    static $cfg = null;
-    if ($cfg === null) {
-        $cfg = mail_config_from(__DIR__ . '/mail-config.php');
-    }
-    return $cfg;
+    return mail_config_from(config('venusep.mail_config') ?: __DIR__ . '/mail-config.php');
+}
+
+/* Can an email leave this machine at all? */
+function mail_is_set_up(): bool
+{
+    return mail_config()['transport'] === 'smtp';
 }
 
 /* For links inside emails, e.g. mail_base_url() . '/customer/booking-history.php'. */
@@ -122,8 +133,8 @@ function mail_attachments_for(array $row): array
     return [['bytes' => receipt_pdf_bytes($receipt), 'name' => $receipt['number'] . '.pdf', 'type' => 'application/pdf']];
 }
 
-/* Send one queued email and record what happened. Returns true when it went
-   out (or already had). NEVER throws: whoever called this has already done
+/* Send one queued email and record what happened. Returns true only when it
+   went out (or already had). NEVER throws: whoever called this has already done
    the real work, and a mail problem must not reach them. */
 function mail_send(int $outboxId, ?array $config = null): bool
 {
@@ -139,12 +150,14 @@ function mail_send(int $outboxId, ?array $config = null): bool
         }
 
         $mail = mail_build($row, $config);
-        if ($config['transport'] === 'smtp') {
-            $mail->send();
-        } else {
+        if ($config['transport'] !== 'smtp') {
             mail_write_log($mail, (int) $row['id']);
+            \App\Queries\EmailQueries::markNotSent($outboxId, MAIL_NOT_SET_UP);
+            return false;
         }
 
+        mail_forget_logged_reset_links();
+        $mail->send();
         \App\Queries\EmailQueries::markSent($outboxId);
         return true;
     } catch (\Throwable $e) {
@@ -155,12 +168,40 @@ function mail_send(int $outboxId, ?array $config = null): bool
             $error = str_replace((string) $config['password'], '[hidden]', $error);
         }
         try {
-            \App\Queries\EmailQueries::markFailed($outboxId, mb_substr($error, 0, 500));
+            \App\Queries\EmailQueries::markFailed($outboxId, mb_substr(mail_plain_error($error), 0, 500));
         } catch (\Throwable $dbErr) {
             sql_failed($dbErr, optional: true);   // the database itself is the problem; the send must still answer false
         }
         error_log('VENUSeP mail #' . $outboxId . ' failed: ' . $error);
         return false;
+    }
+}
+
+/* Send, then say what happened in staff's words: $sentLine, or why it did not go. */
+function mail_send_line(int $outboxId, string $sentLine): string
+{
+    return mail_send($outboxId) ? $sentLine : (string) \App\Queries\EmailQueries::find($outboxId)['last_error'];
+}
+
+/* The mail library's message in staff's words. 530/535 are the server's "sign in first"
+   and "wrong password". Anything else stays as it is. The full message goes to the log. */
+function mail_plain_error(string $error): string
+{
+    if (preg_match('/authenticate|\b53[05]\b/i', $error)) {
+        return 'The mail server refused the sign-in. Check the App Password in mail-config.php.';
+    }
+    if (stripos($error, 'connect') !== false) {
+        return "Could not reach the mail server. Check this laptop's internet connection, then try again.";
+    }
+    return $error;
+}
+
+/* Once real sending is on, the mail-log's copies of reset emails go: each holds a link
+   that was never scrubbed. ponytail: reads every reset id on every send; fine at this size. */
+function mail_forget_logged_reset_links(): void
+{
+    foreach (\App\Queries\EmailQueries::passwordResetIds() as $id) {
+        @unlink(doc_root() . '/mail-log/' . $id . '.eml');
     }
 }
 

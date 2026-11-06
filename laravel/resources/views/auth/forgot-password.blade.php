@@ -6,11 +6,11 @@
 @section('labelledby', 'forgotTitle')
 @section('card')
           <div class="auth-heading">
-            <h1 class="auth-title" id="forgotTitle">{{ $fpSent ? 'Check your email' : 'Reset your password' }}</h1>
+            <h1 class="auth-title" id="forgotTitle">{{ $fpSent ? (mail_is_set_up() ? 'Check your email' : 'Email isn’t set up') : 'Reset your password' }}</h1>
             <p class="auth-subtitle">{{ $fpSent ? '' : 'Enter the email you use for VENUSeP and we’ll send you a link.' }}</p>
           </div>
           @if ($fpSent)
-          <p class="auth-notice" role="status">{{ PR_REQUEST_REPLY }}</p>
+          <p class="auth-notice" role="status">{{ mail_is_set_up() ? PR_REQUEST_REPLY : PR_NOT_SET_UP_REPLY }}</p>
           <a class="btn-auth" href="{{ route($pr['login']) }}">Back to login</a>
           <div class="auth-alt">
             <span class="auth-alt-text">Didn&rsquo;t get it after a few minutes?</span>

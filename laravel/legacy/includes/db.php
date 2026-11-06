@@ -98,11 +98,10 @@ function venue_cleanup_gap_minutes()
         return $gap;
     }
     $gap = 60;
-    $pdo = venusep_db();
-    if ($pdo !== null) {
+    if (venusep_db() !== null) {
         try {
-            $v = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'venue_cleanup_gap_minutes'")->fetchColumn();
-            if ($v !== false && ctype_digit((string) $v)) {
+            $v = \App\Queries\BookingCreateQueries::cleanupGapSetting();
+            if ($v !== null && ctype_digit($v)) {
                 $gap = (int) $v;
             }
         } catch (PDOException $e) {
@@ -121,17 +120,16 @@ function venusep_expire_due_bookings()
         return;
     }
     $done = true;
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return;
     }
     try {
-        $pdo->exec('CALL sp_expire_due_bookings()');
+        \App\Queries\BookingCreateQueries::expireDue();
         require_once __DIR__ . '/documents.php';
         doc_remove_finished_ids();
         /* After the response: an email must not slow a page, and loading the booking
            code here, inside a function, would hide its variables from the page. */
-        app()->terminating(function () use ($pdo) {
+        app()->terminating(function () {
             try {
                 legacy('bookings', 'receipt-emails');
                 mail_status_sweep();

@@ -70,8 +70,7 @@ function booking_id_from_reference($ref) {
      venue_id      int[]  only these offices' bookings ([] = none)
    --------------------------------------------------------------------- */
 function bookings_query(array $opts = []) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return [];
     }
     venusep_expire_due_bookings();   /* lapse what is due before showing it (includes/db.php) */
@@ -92,74 +91,8 @@ function bookings_query(array $opts = []) {
     if (isset($opts['venue_id'])) {
         $where[] = 'v.id IN (' . implode(',', array_map('intval', (array) $opts['venue_id']) ?: [0]) . ')';
     }
-    $sql = "
-        SELECT b.id, b.booking_type, b.reservation_status, b.payment_status, b.payment_method,
-               b.is_usep_affiliated, b.affiliation_verified,
-               b.room_price, b.discount_percent, b.discount_amount, b.total_amount,
-               b.refunds_allowed, b.pay_to_use, b.current_deadline_at, b.receipt_attempts_allowed, b.submitted_at, b.approved_at,
-               b.completed_at, b.cancelled_at, b.customer_notes, b.staff_notes,
-               c.id AS customer_id, c.full_name AS customer_name, c.phone AS customer_phone,
-               c.university_id_no, u.email AS customer_email, c.contact_email,
-               r.room_code, r.name AS room_name,
-               v.name AS venue_name, v.postpay_grace_days AS office_grace,
-               COALESCE(b.quoted_discount_percent, v.discount_percent) AS quoted_discount, b.organization_name, b.write_off_reason, hd.checked_out,
-               erd.attendee_capacity, erd.fee_per_day,
-               hrd.cr_type, hrd.rate_per_head_per_night,
-               vd.event_name, vd.purpose, vd.start_date, vd.end_date, vd.attendee_count,
-               hd.check_in_date, hd.check_out_date, hd.pos_number, hd.official_receipt_no,
-               hd.checked_in,
-               rs.customer_label AS res_customer_label, rs.staff_label AS res_staff_label,
-               ps.customer_label AS pay_customer_label, ps.staff_label AS pay_staff_label,
-               (SELECT COUNT(*) FROM hostel_occupants ho WHERE ho.booking_id = b.id) AS bed_count,
-               (SELECT rf.refund_status FROM refunds rf WHERE rf.booking_id = b.id
-                 ORDER BY rf.id DESC LIMIT 1) AS refund_status,
-               (SELECT rf.requested_at FROM refunds rf WHERE rf.booking_id = b.id
-                 ORDER BY rf.id DESC LIMIT 1) AS refund_requested_at,
-               (SELECT rf.official_receipt_pending FROM refunds rf WHERE rf.booking_id = b.id
-                 ORDER BY rf.id DESC LIMIT 1) AS refund_or_pending,
-               /* The latest receipt's verdict. 'under_review' means a receipt is
-                  in; WHICH queue tab it lands in depends on whether the scanner
-                  passed it (staff confirm) or sent it to a human (staff judge). */
-               /* When money actually moved, for the transaction ledger. */
-               (SELECT p.paid_at FROM payments p WHERE p.booking_id = b.id
-                 ORDER BY p.id DESC LIMIT 1) AS paid_at,
-               (SELECT gr.verdict FROM gcash_receipts gr WHERE gr.booking_id = b.id
-                 ORDER BY gr.id DESC LIMIT 1) AS receipt_verdict,
-               (SELECT gr.reference_number FROM gcash_receipts gr WHERE gr.booking_id = b.id
-                 ORDER BY gr.id DESC LIMIT 1) AS receipt_reference,
-               /* The uploaded GCash screenshot's own row id — document-view.php's
-                  ?receipt= param. Not the System Receipt (#22); this is the proof
-                  of payment the customer sent, which staff review it against.
-                  Rejected uploads are on record too (DB-DECISIONS #6), so the one
-                  that went through is preferred; a rejected one only when there
-                  is nothing else. */
-               (SELECT gr.id FROM gcash_receipts gr WHERE gr.booking_id = b.id
-                 ORDER BY gr.verdict = 'rejected', gr.id DESC LIMIT 1) AS gcash_receipt_id,
-               (SELECT COALESCE(JSON_LENGTH(gr.flags_json), 0) FROM gcash_receipts gr
-                 WHERE gr.booking_id = b.id ORDER BY gr.id DESC LIMIT 1) AS receipt_flags,
-               /* The 5-attempt rule: every upload counts, rejected ones too. */
-               (SELECT COUNT(*) FROM gcash_receipts gr WHERE gr.booking_id = b.id) AS receipt_attempts,
-               /* the customer is blocked at this booking's office (DB-DECISIONS 28) */
-               fn_customer_blocked(b.customer_id, b.room_id) AS office_blocked
-          FROM bookings b
-          JOIN customers c                      ON c.id = b.customer_id
-          LEFT JOIN users u                     ON u.id = c.user_id
-          JOIN rooms r                          ON r.id = b.room_id
-          JOIN venues v                         ON v.id = r.venue_id
-          LEFT JOIN event_room_details erd      ON erd.room_id = r.id
-          LEFT JOIN hostel_room_details hrd     ON hrd.room_id = r.id
-          LEFT JOIN venue_booking_details vd    ON vd.booking_id = b.id
-          LEFT JOIN hostel_booking_details hd   ON hd.booking_id = b.id
-          JOIN reservation_statuses rs          ON rs.code = b.reservation_status
-          JOIN payment_statuses ps              ON ps.code = b.payment_status
-        " . ($where ? 'WHERE ' . implode(' AND ', $where) : '') . "
-        ORDER BY COALESCE(vd.start_date, hd.check_in_date) DESC, b.id DESC
-        " . (!empty($opts['limit']) ? 'LIMIT ' . (int) $opts['limit'] : '');
-
     try {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($args);
-        $rows = $stmt->fetchAll();
+        $rows = \App\Queries\BookingListQueries::find($where ? 'WHERE ' . implode(' AND ', $where) : '', $args, (int) ($opts['limit'] ?? 0));
     } catch (PDOException $e) {
         sql_failed($e);
         return [];
@@ -388,20 +321,17 @@ function booking_by_reference($ref) {
 
 /* Every paper filed with a refund request (document-view repeats the permission check). */
 function booking_refund_documents($bookingId) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return [];
     }
     try {
-        $stmt = $pdo->prepare("SELECT id, original_filename, file_path FROM booking_documents
-                                WHERE booking_id = :b AND document_type = 'refund_support' ORDER BY id");
-        $stmt->execute([':b' => (int) $bookingId]);
+        $docs = \App\Queries\BookingListQueries::refundDocuments((int) $bookingId);
     } catch (PDOException $e) {
         sql_failed($e);
         return [];
     }
     $out = [];
-    foreach ($stmt->fetchAll() as $r) {
+    foreach ($docs as $r) {
         $path = doc_path($r['file_path']);
         if ($path !== null && is_file($path)) {
             $out[] = ['id' => (int) $r['id'], 'name' => (string) $r['original_filename']];
@@ -413,21 +343,11 @@ function booking_refund_documents($bookingId) {
 /* The named guests on a hostel booking, with the exact bed each one holds.
    Loaded on demand — only the request-detail page shows a roster. */
 function booking_occupants($bookingId) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return [];
     }
     try {
-        $stmt = $pdo->prepare(
-            "SELECT o.full_name, o.gender, o.is_primary_guest, hb.bed_label, hb.bed_code
-               FROM hostel_occupants o
-               LEFT JOIN bed_reservations br ON br.occupant_id = o.id
-               LEFT JOIN hostel_beds hb      ON hb.id = br.bed_id
-              WHERE o.booking_id = :b
-              ORDER BY o.is_primary_guest DESC, o.id"
-        );
-        $stmt->execute([':b' => (int) $bookingId]);
-        return $stmt->fetchAll();
+        return \App\Queries\BookingListQueries::occupants((int) $bookingId);
     } catch (PDOException $e) {
         sql_failed($e);
         return [];
@@ -577,10 +497,9 @@ function transaction_rows($customerId = null) {
        confirmation has actually written one. */
     $hasReceipt = [];
     $ids = array_filter(array_map(function ($b) { return (int) ($b['id'] ?? 0); }, $bookings));
-    if ($ids && ($pdo = venusep_db()) !== null) {
+    if ($ids && venusep_db() !== null) {
         try {
-            $stmt = $pdo->query('SELECT DISTINCT booking_id FROM system_receipts WHERE booking_id IN (' . implode(',', $ids) . ')');
-            $hasReceipt = array_flip(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
+            $hasReceipt = array_flip(\App\Queries\PaymentQueries::bookingsWithReceipt($ids));
         } catch (PDOException $e) {
             sql_failed($e);
             // no Receipt buttons rather than a broken page
@@ -658,10 +577,9 @@ function calendar_events($customerId = null) {
        can share a date, with a cleanup gap), so its title says which hours —
        read from the first day it holds. One query for every booking. */
     $firstSlot = [];
-    $pdo = venusep_db();
-    if ($pdo !== null) {
+    if (venusep_db() !== null) {
         try {
-            foreach ($pdo->query('SELECT booking_id, slot_date, start_time, end_time FROM venue_booking_slots ORDER BY slot_date, start_time') as $s) {
+            foreach (\App\Queries\BookingListQueries::allSlots() as $s) {
                 if (!isset($firstSlot[$s['booking_id']])) {
                     $firstSlot[$s['booking_id']] = date('g:i A', strtotime($s['start_time'])) . '–' . date('g:i A', strtotime($s['end_time']));
                 }
@@ -739,17 +657,11 @@ function booking_date_label(array $b) {
    because a three-day event is rarely the same hours each day, so there is no
    single start/end on the booking header to read instead. */
 function booking_slots($bookingId) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return [];
     }
     try {
-        $stmt = $pdo->prepare(
-            'SELECT slot_date, start_time, end_time, released_at
-               FROM venue_booking_slots WHERE booking_id = :b ORDER BY slot_date, start_time'
-        );
-        $stmt->execute([':b' => (int) $bookingId]);
-        return $stmt->fetchAll();
+        return \App\Queries\BookingListQueries::slots((int) $bookingId);
     } catch (PDOException $e) {
         sql_failed($e);
         return [];
@@ -762,33 +674,20 @@ function booking_slots($bookingId) {
    not a document and must not be advertised as a link that can only return 404. */
 /* When this booking's ID was removed, or null. */
 function booking_id_removed_on($bookingId) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return null;
     }
-    $st = $pdo->prepare("SELECT MAX(removed_at) FROM booking_documents WHERE booking_id = :b AND document_type = 'customer_id'");
-    $st->execute([':b' => (int) $bookingId]);
-    $on = $st->fetchColumn();
+    $on = \App\Queries\BookingListQueries::idRemovedOn((int) $bookingId);
     return $on ? date('M j, Y', strtotime($on)) : null;
 }
 
 function booking_document_ids($bookingId) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return [];
     }
     try {
-        $stmt = $pdo->prepare(
-            'SELECT d.document_type, d.id, d.file_path
-               FROM booking_documents d
-               JOIN (SELECT document_type, MAX(id) AS id
-                       FROM booking_documents
-                      WHERE booking_id = :b
-                      GROUP BY document_type) latest ON latest.id = d.id'
-        );
-        $stmt->execute([':b' => (int) $bookingId]);
         $out = [];
-        foreach ($stmt->fetchAll() as $r) {
+        foreach (\App\Queries\BookingListQueries::latestDocuments((int) $bookingId) as $r) {
             $path = doc_path($r['file_path']);
             if ($path !== null && is_file($path)) {
                 $out[$r['document_type']] = (int) $r['id'];
@@ -806,19 +705,12 @@ function booking_document_ids($bookingId) {
    so a receipt the checker refused is no longer invisible to the people who
    decide the payment. Ids only for the images: document-view.php serves them. */
 function booking_receipt_attempts($bookingId) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return [];
     }
     try {
-        $stmt = $pdo->prepare(
-            'SELECT id, attempt_no, reference_number, receiver_number, amount_centavos,
-                    sha256_hash, verdict, flags_json, reviewed_at, override_note, created_at
-               FROM gcash_receipts WHERE booking_id = :b ORDER BY attempt_no, id'
-        );
-        $stmt->execute([':b' => (int) $bookingId]);
         $out = [];
-        foreach ($stmt->fetchAll() as $r) {
+        foreach (\App\Queries\BookingListQueries::receiptAttempts((int) $bookingId) as $r) {
             $flags = json_decode((string) $r['flags_json'], true);
             $r['flags'] = is_array($flags) ? $flags : [];
             unset($r['flags_json']);
@@ -845,18 +737,11 @@ function booking_receipt_outcome(array $r) {
 
 /* The latest GCash receipt on a booking, with its flags decoded. */
 function booking_receipt($bookingId) {
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return null;
     }
     try {
-        $stmt = $pdo->prepare(
-            'SELECT id, reference_number, receiver_name, receiver_number, amount_centavos,
-                    receipt_datetime, ocr_confidence, verdict, flags_json
-               FROM gcash_receipts WHERE booking_id = :b ORDER BY id DESC LIMIT 1'
-        );
-        $stmt->execute([':b' => (int) $bookingId]);
-        $r = $stmt->fetch();
+        $r = \App\Queries\BookingListQueries::latestReceipt((int) $bookingId);
         if (!$r) {
             return null;
         }
@@ -874,7 +759,6 @@ function booking_receipt($bookingId) {
    booking's own timestamps, so a booking that has never been updated since it
    was created still shows an honest history instead of an empty panel. */
 function booking_history_events(array $b) {
-    $pdo = venusep_db();
     $events = [];
     $events[] = [
         'w' => date('M j · g:i A', strtotime($b['submittedAt'])) . ' — Customer',
@@ -884,18 +768,8 @@ function booking_history_events(array $b) {
                  : $b['eventName'] . ' · ' . $b['days'] . ' day' . ($b['days'] == 1 ? '' : 's')
                    . ($b['refundsAllowed'] ? '.' : '. Customer confirmed the booking is non-refundable.'),
     ];
-    if ($pdo !== null) {
+    if (venusep_db() !== null) {
         try {
-            $stmt = $pdo->prepare(
-                "SELECT t.occurred_at, t.action_code, t.old_reservation_status, t.new_reservation_status,
-                        t.old_payment_status, t.new_payment_status, t.note,
-                        COALESCE(s.full_name, u.email, 'System') AS actor
-                   FROM booking_timeline t
-                   LEFT JOIN users u ON u.id = t.performed_by_user_id
-                   LEFT JOIN staff s ON s.user_id = t.performed_by_user_id
-                  WHERE t.booking_id = :b ORDER BY t.occurred_at, t.id"
-            );
-            $stmt->execute([':b' => (int) $b['id']]);
             /* Most action codes read well enough turned back into words. The
                counter ones do not — "Counter id checked" is staff evidence
                about someone's identity and deserves a sentence, not a slug. */
@@ -915,7 +789,7 @@ function booking_history_events(array $b) {
                 'counter_overdue_booked'     => 'Booked at the counter despite an unpaid booking',
                 'checked_in'                 => 'Guest checked in',
             ];
-            foreach ($stmt->fetchAll() as $t) {
+            foreach (\App\Queries\BookingListQueries::timeline((int) $b['id']) as $t) {
                 $code = (string) $t['action_code'];
                 $events[] = [
                     'w' => date('M j · g:i A', strtotime($t['occurred_at'])) . ' — ' . $t['actor'],
@@ -1057,11 +931,10 @@ if (!function_exists('status_badge_maps')) {
         ];
 
         $maps = ['res' => [], 'pay' => []];
-        $pdo  = venusep_db();
-        if ($pdo === null) { return $maps; }
+        if (venusep_db() === null) { return $maps; }
         try {
             foreach (['res' => 'reservation_statuses', 'pay' => 'payment_statuses'] as $key => $table) {
-                $rows = $pdo->query("SELECT code, staff_label FROM {$table}")->fetchAll();
+                $rows = \App\Queries\BookingListQueries::staffLabels($table);
                 foreach ($rows as $r) {
                     $maps[$key][$r['code']] = [
                         't' => $r['staff_label'],

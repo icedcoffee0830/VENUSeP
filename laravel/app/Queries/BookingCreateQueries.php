@@ -107,8 +107,20 @@ class BookingCreateQueries
        the transaction two submits a moment apart deadlocked on each other's new booking row. */
     public static function saveNew(callable $save): mixed
     {
-        DB::statement('CALL sp_expire_due_bookings()');
+        self::expireDue();
         return DB::transaction($save);
+    }
+
+    /* The deadline rules, applied before anyone looks. */
+    public static function expireDue(): void
+    {
+        DB::statement('CALL sp_expire_due_bookings()');
+    }
+
+    /* The system-wide cleanup gap, as stored; null when it is not set. */
+    public static function cleanupGapSetting(): ?string
+    {
+        return DB::selectOne("SELECT setting_value FROM system_settings WHERE setting_key = 'venue_cleanup_gap_minutes'")->setting_value ?? null;
     }
 
     /* The booking row, and what it keeps for later: the rate shown right now, and who it is

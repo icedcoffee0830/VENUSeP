@@ -107,7 +107,7 @@ class EmailKindsTest extends TestCase
             $this->assertSame('[TEST → ' . $recipient . '] ' . $row['subject'], $built->Subject, $kind);
             $this->assertSame([self::TEAM], array_column($built->getToAddresses(), 0), $kind);
 
-            $taken = quoted_printable_decode(substr((string) file_get_contents($this->fakeCapture), $before));
+            $taken = $this->fakeInbox($before);
             $this->assertStringContainsString('RCPT TO:<' . self::TEAM . '>', $taken, $kind);
             $this->assertStringNotContainsString('RCPT TO:<' . $recipient . '>', $taken, $kind);
 
@@ -122,6 +122,7 @@ class EmailKindsTest extends TestCase
         }
 
         $this->assertSame(self::BASE . '/customer/forgot-password', $links['counter_welcome'][0]);
-        $this->assertStringStartsWith(self::BASE . '/customer/reset-password?token=', $links['password_reset'][0]);
+        // every copy of the reset link, in the HTML part and the plain one, is whole
+        $this->assertSame($links['password_reset'], preg_grep('~^' . preg_quote(self::BASE) . '/customer/reset-password\?token=[A-Za-z0-9_-]{43}$~', $links['password_reset']));
     }
 }

@@ -41,10 +41,12 @@ trait FakeMail
         $this->fakeMailSettings(['port' => $port]);
     }
 
-    /* Everything the pretend server took so far, quoted-printable undone. */
-    private function fakeInbox(): string
+    /* Everything the pretend server took after byte $from, each quoted-printable part decoded.
+       Only those parts: decoding a plain part too would turn a link's "token=3A..." into garbage. */
+    private function fakeInbox(int $from = 0): string
     {
-        return quoted_printable_decode((string) file_get_contents($this->fakeCapture));
+        return preg_replace_callback('/(Content-Transfer-Encoding: quoted-printable\r?\n(?:[^\r\n]+\r?\n)*\r?\n)(.*?)(?=\r?\n--)/si',
+            fn ($part) => $part[1] . quoted_printable_decode($part[2]), substr((string) file_get_contents($this->fakeCapture), $from));
     }
 
     private function stopFakeMail(): void

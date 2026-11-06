@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Concerns;
 
 use App\Http\Controllers\Customer\BookingRules;
+use App\Queries\AccountQueries;
 use App\Queries\BookingCreateQueries;
 use App\Queries\BookingQueries;
 use App\Queries\PaymentQueries;
@@ -121,7 +122,7 @@ trait BookingSettlementActions
         $words = $reason . ': ' . mb_substr($note, 0, 400);
         $pdo = venusep_db();
         $pdo->beginTransaction();
-        if ($no = reauth_verify($pdo, PaymentQueries::lockAccountForPasswordCheck($actor), $password)) {
+        if ($no = reauth_verify($pdo, AccountQueries::lockForPasswordCheck($actor), $password)) {
             isset($no['locked'])
                 ? $this->reply(423, ['ok' => false, 'message' => 'Too many wrong passwords. Try again in ' . $no['locked'] . ' seconds.'])
                 : $this->reply(401, ['ok' => false, 'message' => 'Wrong password. ' . $no['attemptsLeft'] . ' attempt(s) left before a temporary lock.']);

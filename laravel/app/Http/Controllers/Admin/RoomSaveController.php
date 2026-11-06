@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Customer\BookingRules;
+use App\Queries\RoomQueries;
 use App\Queries\StaffHallQueries;
+use App\Queries\VenueQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
-use PDO;
+use Illuminate\Support\Facades\DB;
 use PDOException;
 use Symfony\Component\HttpFoundation\InputBag;
 
@@ -88,33 +90,17 @@ class RoomSaveController extends Controller
     /* A room carries ONE live closure: the current/future window is replaced, and
        windows that already ended stay as history. Returns the live bookings inside
        a CLOSED (hard) window — staff resolve those; nothing is cancelled here. */
-    private function applyMaintenance(PDO $pdo, $roomId, $roomType, array $mt, $actor)
+    private function applyMaintenance($roomId, $roomType, array $mt, $actor)
     {
-        $pdo->prepare('DELETE FROM maintenance_windows WHERE room_id = :r AND (until_date IS NULL OR until_date >= CURDATE())')
-            ->execute([':r' => $roomId]);
+        RoomQueries::clearLiveClosure($roomId);
         if (!$mt['on']) {
             return [];
         }
-        $pdo->prepare(
-            'INSERT INTO maintenance_windows (room_id, from_date, until_date, reason, blocks_booking, created_by_user_id)
-             VALUES (:r, :f, :u, :why, :b, :a)'
-        )->execute([':r' => $roomId, ':f' => $mt['from'], ':u' => $mt['until'], ':why' => $mt['reason'],
-                    ':b' => $mt['hard'] ? 1 : 0, ':a' => $actor]);
+        RoomQueries::addClosure($roomId, $mt['from'], $mt['until'], $mt['reason'], $mt['hard'], $actor);
         if (!$mt['hard']) {
             return [];
         }
-        $until = $mt['until'] ?? '9999-12-31';
-        $sql = $roomType === 'hostel'
-            ? "SELECT DISTINCT b.id, b.submitted_at FROM bed_reservation_nights n
-                 JOIN hostel_beds hb ON hb.id = n.bed_id JOIN bookings b ON b.id = n.booking_id
-                WHERE hb.room_id = :r AND n.released_at IS NULL AND b.reservation_status IN ('pending','approved')
-                  AND n.night_date BETWEEN :f AND :u ORDER BY b.id"
-            : "SELECT DISTINCT b.id, b.submitted_at FROM venue_booking_slots s JOIN bookings b ON b.id = s.booking_id
-                WHERE s.room_id = :r AND s.released_at IS NULL AND b.reservation_status IN ('pending','approved')
-                  AND s.slot_date BETWEEN :f AND :u ORDER BY b.id";
-        $st = $pdo->prepare($sql);
-        $st->execute([':r' => $roomId, ':f' => $mt['from'], ':u' => $until]);
-        return $this->refs($st->fetchAll());
+        return $this->refs(RoomQueries::bookingsInClosure($roomId, $roomType, $mt['from'], $mt['until'] ?? '9999-12-31'));
     }
 
     /* HOSTEL BEDS (2026-10-27): make the room hold $target active beds. Adding
@@ -122,11 +108,9 @@ class RoomSaveController extends Controller
        highest-numbered beds, and is REFUSED if any of them has an upcoming
        night booked — a guest's bed must never vanish. Beds are retired
        (is_active = 0), never deleted: past stays still point at them. */
-    private function setBeds(PDO $pdo, $roomId, $roomCode, $target)
+    private function setBeds($roomId, $roomCode, $target)
     {
-        $beds = $pdo->prepare('SELECT id, bed_code, display_order, is_active FROM hostel_beds WHERE room_id = :r ORDER BY display_order, id');
-        $beds->execute([':r' => $roomId]);
-        $all = $beds->fetchAll();
+        $all = RoomQueries::beds($roomId);
         $active = array_values(array_filter($all, function ($b) { return (int) $b['is_active'] === 1; }));
         $count = count($active);
         if ($target > $count) {
@@ -134,28 +118,20 @@ class RoomSaveController extends Controller
             foreach ($all as $b) {
                 if ($need === 0) { break; }
                 if ((int) $b['is_active'] === 0) {
-                    $pdo->prepare('UPDATE hostel_beds SET is_active = 1 WHERE id = :id')->execute([':id' => $b['id']]);
+                    RoomQueries::reactivateBed((int) $b['id']);
                     $need--;
                 }
             }
             $order = $all ? max(array_map(function ($b) { return (int) $b['display_order']; }, $all)) : 0;
-            $add = $pdo->prepare('INSERT INTO hostel_beds (room_id, bed_code, bed_label, display_order) VALUES (:r, :c, :l, :o)');
-            while ($need-- > 0) {
-                $order++;
-                $add->execute([':r' => $roomId, ':c' => $roomCode . '-b' . $order, ':l' => 'Bed ' . $order, ':o' => $order]);
-            }
+            RoomQueries::addBeds($roomId, $roomCode, $order, $need);
         } elseif ($target < $count) {
-            $retire = array_slice(array_reverse($active), 0, $count - $target);
-            $ids = implode(',', array_map(function ($b) { return (int) $b['id']; }, $retire));
-            $held = $pdo->query(
-                "SELECT DISTINCT b.id, b.submitted_at FROM bed_reservation_nights n JOIN bookings b ON b.id = n.booking_id
-                  WHERE n.bed_id IN ($ids) AND n.released_at IS NULL AND n.night_date >= CURDATE() ORDER BY b.id"
-            )->fetchAll();
+            $retire = array_map(function ($b) { return (int) $b['id']; }, array_slice(array_reverse($active), 0, $count - $target));
+            $held = RoomQueries::bookingsOnBeds($retire);
             if ($held) {
                 throw new RoomSaveRefusal('Those beds have upcoming guests (' . implode(', ', $this->refs($held))
                     . '), so the bed count cannot go below ' . $count . ' yet. Move or finish those stays first.');
             }
-            $pdo->exec("UPDATE hostel_beds SET is_active = 0 WHERE id IN ($ids)");
+            RoomQueries::retireBeds($retire);
         }
     }
 
@@ -268,15 +244,12 @@ class RoomSaveController extends Controller
         }
         $mt = $this->parseMaintenance($post);
 
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so the room was not saved.']);
         }
 
         try {
-            $venue = $pdo->prepare('SELECT id, venue_type FROM venues WHERE name = :name');
-            $venue->execute([':name' => $venueName]);
-            $venueRow = $venue->fetch();
+            $venueRow = VenueQueries::findByName($venueName);
             if (!$venueRow) {
                 $this->reply(400, ['ok' => false, 'error' => 'bad_venue', 'message' => 'Unknown location.']);
             }
@@ -314,79 +287,43 @@ class RoomSaveController extends Controller
                 /* room_code is GENERATED, never typed — "r9", "h6" — continuing the
                    existing series. The prefix follows the TYPE, not the venue. */
                 $prefix = $roomType === 'hostel' ? 'h' : 'r';
-                $next = $pdo->prepare(
-                    "SELECT COALESCE(MAX(CAST(SUBSTRING(room_code, 2) AS UNSIGNED)), 0) + 1
-                       FROM rooms
-                      WHERE room_code REGEXP CONCAT('^', :p, '[0-9]+$')"
-                );
-                $next->execute([':p' => $prefix]);
-                $newCode = $prefix . (int) $next->fetchColumn();
+                $newCode = RoomQueries::nextCode($prefix);
 
-                $pdo->beginTransaction();
-                $pdo->prepare(
-                    'INSERT INTO rooms (venue_id, room_code, name, room_type, description, amenities)
-                     VALUES (:v, :c, :n, :t, :d, :a)'
-                )->execute([
-                    ':v' => $venueRow['id'], ':c' => $newCode, ':n' => $name, ':t' => $roomType,
-                    ':d' => mb_substr(trim((string) ($post->get('description') ?? '')), 0, 2000) ?: null,
-                    ':a' => json_encode($amenityKeys, JSON_UNESCAPED_SLASHES),
-                ]);
-                $newId = (int) $pdo->lastInsertId();
+                DB::transaction(function () use ($venueRow, $newCode, $name, $roomType, $post, $amenityKeys, $hallStaff, $actor, $glanceGiven, $glance, $hostelGiven, $hIn, $hOut, $mt) {
+                    $newId = RoomQueries::add((int) $venueRow['id'], $newCode, $name, $roomType,
+                        mb_substr(trim((string) ($post->get('description') ?? '')), 0, 2000) ?: null,
+                        json_encode($amenityKeys, JSON_UNESCAPED_SLASHES));
 
-                if ($roomType === 'hostel') {
-                    /* A hostel room is booked PER BED; the beds ARE the room's capacity. */
-                    $beds = (int) ($post->get('beds') ?? 6);
-                    $beds = max(1, min(20, $beds));
-                    $rate = (float) ($post->get('rate') ?? 0);
-                    $crType = ($post->get('cr_type') ?? '') === 'private' ? 'private' : 'communal';
-
-                    $pdo->prepare(
-                        'INSERT INTO hostel_room_details (room_id, cr_type, rate_per_head_per_night)
-                         VALUES (:r, :c, :p)'
-                    )->execute([':r' => $newId, ':c' => $crType, ':p' => $rate]);
-
-                    $bed = $pdo->prepare(
-                        'INSERT INTO hostel_beds (room_id, bed_code, bed_label, display_order)
-                         VALUES (:r, :c, :l, :o)'
-                    );
-                    for ($i = 1; $i <= $beds; $i++) {
-                        $bed->execute([':r' => $newId, ':c' => $newCode . '-b' . $i, ':l' => 'Bed ' . $i, ':o' => $i]);
+                    if ($roomType === 'hostel') {
+                        /* A hostel room is booked PER BED; the beds ARE the room's capacity. */
+                        $beds = (int) ($post->get('beds') ?? 6);
+                        $beds = max(1, min(20, $beds));
+                        $rate = (float) ($post->get('rate') ?? 0);
+                        $crType = ($post->get('cr_type') ?? '') === 'private' ? 'private' : 'communal';
+                        RoomQueries::addHostelRoom($newId, $newCode, $crType, $rate, $beds);
+                    } else {
+                        RoomQueries::saveEventDetails($newId, max(1, (int) ($post->get('capacity') ?? 1)), max(0, (float) ($post->get('fee') ?? 0)));
+                        foreach ($hallStaff as $staffId) {
+                            StaffHallQueries::assign($newId, $staffId, $actor);
+                        }
                     }
-                } else {
-                    $pdo->prepare(
-                        'INSERT INTO event_room_details (room_id, attendee_capacity, fee_per_day)
-                         VALUES (:r, :c, :f)'
-                    )->execute([
-                        ':r' => $newId,
-                        ':c' => max(1, (int) ($post->get('capacity') ?? 1)),
-                        ':f' => max(0, (float) ($post->get('fee') ?? 0)),
-                    ]);
-                    foreach ($hallStaff as $staffId) {
-                        StaffHallQueries::assign($newId, $staffId, $actor);
+                    if ($glanceGiven) {
+                        RoomQueries::saveGlance($newId, $glance);
                     }
-                }
-                if ($glanceGiven) {
-                    $pdo->prepare('UPDATE rooms SET best_for = :b, catering = :c, accessibility = :a WHERE id = :id')
-                        ->execute([':b' => $glance['best_for'] ?: null, ':c' => $glance['catering'] ?: null,
-                                   ':a' => $glance['accessibility'] ?: null, ':id' => $newId]);
-                }
-                if ($hostelGiven) {
-                    $pdo->prepare('UPDATE hostel_room_details SET check_in_time = :i, check_out_time = :o WHERE room_id = :r')
-                        ->execute([':i' => $hIn . ':00', ':o' => $hOut . ':00', ':r' => $newId]);
-                }
-                if ($mt !== null) {
-                    $this->applyMaintenance($pdo, $newId, $roomType, $mt, $actor);
-                }
-                $pdo->commit();
+                    if ($hostelGiven) {
+                        RoomQueries::saveStayTimes($newId, $hIn, $hOut);
+                    }
+                    if ($mt !== null) {
+                        $this->applyMaintenance($newId, $roomType, $mt, $actor);
+                    }
+                });
 
                 $this->reply(200, ['ok' => true, 'created' => true, 'room_id' => $newCode,
                     'name' => $name, 'venue' => $venueName,
                     'message' => 'Room created as ' . $newCode . '. You can add its photos now.']);
             }
 
-            $room = $pdo->prepare('SELECT id, room_type, venue_id FROM rooms WHERE room_code = :code AND deleted_at IS NULL');
-            $room->execute([':code' => $roomCode]);
-            $roomRow = $room->fetch();
+            $roomRow = RoomQueries::findForEdit($roomCode);
             if (!$roomRow) {
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
             }
@@ -406,126 +343,93 @@ class RoomSaveController extends Controller
             $rid = (int) $roomRow['id'];
             $notes = [];
 
-            $pdo->beginTransaction();
-
-            /* MOVING A ROOM TO ANOTHER VENUE (2026-10-27): only with no upcoming live
-               bookings — the venue decides which GCash account is paid and which staff
-               handle the booking. And only to a venue of the same kind. */
-            $cur = $pdo->prepare('SELECT venue_id FROM rooms WHERE id = :id FOR UPDATE');
-            $cur->execute([':id' => $rid]);
-            if ((int) $cur->fetchColumn() !== $venueId) {
-                if ($venueRow['venue_type'] !== ($roomType === 'hostel' ? 'hostel' : 'event')) {
-                    throw new RoomSaveRefusal($roomType === 'hostel' ? 'A hostel room can only belong to a hostel venue.' : 'An event room can only belong to an event venue.');
-                }
-                /* the hall goes to the new office's staff (trg_rooms_halls_follow_upd): it needs one */
-                if ($roomType === 'event' && !StaffHallQueries::staffOf($venueId)) {
-                    throw new RoomSaveRefusal('Create or assign a staff member to ' . $venueName . ' first: every hall needs one.');
-                }
-                $up = $pdo->prepare(
-                    "SELECT b.id, b.submitted_at FROM bookings b
-                      WHERE b.room_id = :r AND b.reservation_status IN ('pending','approved')
-                        AND fn_booking_last_day(b.id) >= CURDATE() ORDER BY b.id"
-                );
-                $up->execute([':r' => $rid]);
-                $upcoming = $up->fetchAll();
-                if ($upcoming) {
-                    throw new RoomSaveRefusal('This room has upcoming bookings (' . implode(', ', $this->refs($upcoming))
-                        . '), so it cannot move to another venue yet. The venue decides who is paid and which staff handle them.');
-                }
-            }
-
-            $pdo->prepare('UPDATE rooms SET name = :name, venue_id = :venue_id WHERE id = :id')
-                ->execute([':name' => $name, ':venue_id' => $venueId, ':id' => $rid]);
-            /* amenities only when the form actually sent them — see $amenitiesGiven. */
-            if ($amenitiesGiven) {
-                $pdo->prepare('UPDATE rooms SET amenities = :a WHERE id = :id')
-                    ->execute([':a' => json_encode($amenityKeys, JSON_UNESCAPED_SLASHES), ':id' => $rid]);
-            }
-            if ($descGiven) {
-                $pdo->prepare('UPDATE rooms SET description = :d WHERE id = :id')->execute([':d' => $desc !== '' ? $desc : null, ':id' => $rid]);
-            }
-            if ($glanceGiven) {
-                $pdo->prepare('UPDATE rooms SET best_for = :b, catering = :c, accessibility = :a WHERE id = :id')
-                    ->execute([':b' => $glance['best_for'] ?: null, ':c' => $glance['catering'] ?: null,
-                               ':a' => $glance['accessibility'] ?: null, ':id' => $rid]);
-            }
-
-            if ($roomType === 'event' && ($capGiven || $feeGiven)) {
-                $old = $pdo->prepare('SELECT attendee_capacity, fee_per_day FROM event_room_details WHERE room_id = :r');
-                $old->execute([':r' => $rid]);
-                $o = $old->fetch() ?: ['attendee_capacity' => 0, 'fee_per_day' => 0];
-                $newCap = $capGiven ? $cap : (int) $o['attendee_capacity'];
-                $newFee = $feeGiven ? $fee : (float) $o['fee_per_day'];
-                if (abs($newFee - (float) $o['fee_per_day']) > 0.004 && session('account_type') !== 'admin') {
-                    $this->reply(403, ['ok' => false, 'error' => 'admin_price', 'message' => 'Only an administrator can change a price.']);
-                }
-                $pdo->prepare(
-                    'INSERT INTO event_room_details (room_id, attendee_capacity, fee_per_day) VALUES (:r, :c, :f)
-                     ON DUPLICATE KEY UPDATE attendee_capacity = VALUES(attendee_capacity), fee_per_day = VALUES(fee_per_day)'
-                )->execute([':r' => $rid, ':c' => $newCap, ':f' => $newFee]);
-                /* a booking snapshots its price, so a new rate only reaches NEW ones */
-                if (abs($newFee - (float) $o['fee_per_day']) > 0.004) {
-                    $notes[] = 'The new rate applies to new bookings; existing bookings keep the price they were made at.';
-                }
-                /* capacity may go down; say which upcoming bookings are now over it */
-                if ($newCap < (int) $o['attendee_capacity']) {
-                    $over = $pdo->prepare(
-                        "SELECT b.id, b.submitted_at FROM bookings b JOIN venue_booking_details v ON v.booking_id = b.id
-                          WHERE b.room_id = :r AND b.reservation_status IN ('pending','approved')
-                            AND v.end_date >= CURDATE() AND v.attendee_count > :c ORDER BY b.id"
-                    );
-                    $over->execute([':r' => $rid, ':c' => $newCap]);
-                    $overRows = $over->fetchAll();
-                    if ($overRows) {
-                        $notes[] = 'These upcoming bookings expect more than ' . $newCap . ' people: ' . implode(', ', $this->refs($overRows)) . '. They are kept as booked.';
+            DB::transaction(function () use (&$notes, $rid, $venueId, $venueRow, $venueName, $roomType, $roomCode, $name, $amenitiesGiven, $amenityKeys, $descGiven, $desc, $glanceGiven, $glance, $capGiven, $cap, $feeGiven, $fee, $hostelGiven, $hRate, $hCr, $hIn, $hOut, $hBeds, $mt, $actor) {
+                /* MOVING A ROOM TO ANOTHER VENUE (2026-10-27): only with no upcoming live
+                   bookings — the venue decides which GCash account is paid and which staff
+                   handle the booking. And only to a venue of the same kind. */
+                if (RoomQueries::lockVenueId($rid) !== $venueId) {
+                    if ($venueRow['venue_type'] !== ($roomType === 'hostel' ? 'hostel' : 'event')) {
+                        throw new RoomSaveRefusal($roomType === 'hostel' ? 'A hostel room can only belong to a hostel venue.' : 'An event room can only belong to an event venue.');
+                    }
+                    /* the hall goes to the new office's staff (trg_rooms_halls_follow_upd): it needs one */
+                    if ($roomType === 'event' && !StaffHallQueries::staffOf($venueId)) {
+                        throw new RoomSaveRefusal('Create or assign a staff member to ' . $venueName . ' first: every hall needs one.');
+                    }
+                    $upcoming = RoomQueries::upcomingBookings($rid);
+                    if ($upcoming) {
+                        throw new RoomSaveRefusal('This room has upcoming bookings (' . implode(', ', $this->refs($upcoming))
+                            . '), so it cannot move to another venue yet. The venue decides who is paid and which staff handle them.');
                     }
                 }
-            }
 
-            if ($hostelGiven) {
-                $old = $pdo->prepare('SELECT rate_per_head_per_night FROM hostel_room_details WHERE room_id = :r');
-                $old->execute([':r' => $rid]);
-                $oldRate = (float) $old->fetchColumn();
-                $pdo->prepare(
-                    'UPDATE hostel_room_details SET rate_per_head_per_night = :p, cr_type = :c, check_in_time = :i, check_out_time = :o WHERE room_id = :r'
-                )->execute([':p' => $hRate, ':c' => $hCr, ':i' => $hIn . ':00', ':o' => $hOut . ':00', ':r' => $rid]);
-                if (abs($hRate - $oldRate) > 0.004 && session('account_type') !== 'admin') {
-                    $this->reply(403, ['ok' => false, 'error' => 'admin_price', 'message' => 'Only an administrator can change a price.']);
+                RoomQueries::saveNameAndVenue($rid, $name, $venueId);
+                /* amenities only when the form actually sent them — see $amenitiesGiven. */
+                if ($amenitiesGiven) {
+                    RoomQueries::saveAmenities($rid, json_encode($amenityKeys, JSON_UNESCAPED_SLASHES));
                 }
-                if (abs($hRate - $oldRate) > 0.004) {
-                    $notes[] = 'The new rate applies to new bookings; existing stays keep the price they were booked at.';
+                if ($descGiven) {
+                    RoomQueries::saveDescription($rid, $desc !== '' ? $desc : null);
                 }
-                $this->setBeds($pdo, $rid, $roomCode, $hBeds);
-            }
+                if ($glanceGiven) {
+                    RoomQueries::saveGlance($rid, $glance);
+                }
 
-            if ($mt !== null) {
-                $affected = $this->applyMaintenance($pdo, $rid, $roomType, $mt, $actor);
-                if ($affected) {
-                    $notes[] = 'These bookings fall inside the closure and still need you: ' . implode(', ', $affected) . '. Nothing was cancelled.';
+                if ($roomType === 'event' && ($capGiven || $feeGiven)) {
+                    $o = RoomQueries::findEventDetails($rid) ?? ['attendee_capacity' => 0, 'fee_per_day' => 0];
+                    $newCap = $capGiven ? $cap : (int) $o['attendee_capacity'];
+                    $newFee = $feeGiven ? $fee : (float) $o['fee_per_day'];
+                    if (abs($newFee - (float) $o['fee_per_day']) > 0.004 && session('account_type') !== 'admin') {
+                        $this->reply(403, ['ok' => false, 'error' => 'admin_price', 'message' => 'Only an administrator can change a price.']);
+                    }
+                    RoomQueries::saveEventDetails($rid, $newCap, $newFee);
+                    /* a booking snapshots its price, so a new rate only reaches NEW ones */
+                    if (abs($newFee - (float) $o['fee_per_day']) > 0.004) {
+                        $notes[] = 'The new rate applies to new bookings; existing bookings keep the price they were made at.';
+                    }
+                    /* capacity may go down; say which upcoming bookings are now over it */
+                    if ($newCap < (int) $o['attendee_capacity']) {
+                        $overRows = RoomQueries::bookingsOverCapacity($rid, $newCap);
+                        if ($overRows) {
+                            $notes[] = 'These upcoming bookings expect more than ' . $newCap . ' people: ' . implode(', ', $this->refs($overRows)) . '. They are kept as booked.';
+                        }
+                    }
                 }
-            }
 
-            $pdo->commit();
+                if ($hostelGiven) {
+                    $oldRate = RoomQueries::findHostelRate($rid);
+                    RoomQueries::saveHostelDetails($rid, $hRate, $hCr, $hIn, $hOut);
+                    if (abs($hRate - $oldRate) > 0.004 && session('account_type') !== 'admin') {
+                        $this->reply(403, ['ok' => false, 'error' => 'admin_price', 'message' => 'Only an administrator can change a price.']);
+                    }
+                    if (abs($hRate - $oldRate) > 0.004) {
+                        $notes[] = 'The new rate applies to new bookings; existing stays keep the price they were booked at.';
+                    }
+                    $this->setBeds($rid, $roomCode, $hBeds);
+                }
+
+                if ($mt !== null) {
+                    $affected = $this->applyMaintenance($rid, $roomType, $mt, $actor);
+                    if ($affected) {
+                        $notes[] = 'These bookings fall inside the closure and still need you: ' . implode(', ', $affected) . '. Nothing was cancelled.';
+                    }
+                }
+            });
             $this->reply(200, ['ok' => true, 'name' => $name, 'venue' => $venueName, 'notes' => $notes,
                 'message' => 'Room saved.' . ($notes ? "\n\n" . implode("\n\n", $notes) : '')]);
         } catch (HttpResponseException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         } catch (RoomSaveRefusal $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $this->reply(409, ['ok' => false, 'error' => 'refused', 'message' => $e->getMessage()]);
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             /* uq_rooms_venue_name: two rooms with the same name in one venue would be
                indistinguishable in every dropdown and every booking reference. */
-            if ($e->getCode() === '23000' && stripos($e->getMessage(), 'uq_rooms_venue_name') !== false) {
+            if ($e->getCode() === '23000' && stripos((string) ($e->errorInfo[2] ?? ''), 'uq_rooms_venue_name') !== false) {
                 $this->reply(409, ['ok' => false, 'error' => 'duplicate',
                     'message' => 'That location already has a room with this name.']);
             }
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the room was not saved.']);
         } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the room was not saved.']);
         }

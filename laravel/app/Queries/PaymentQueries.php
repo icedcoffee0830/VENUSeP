@@ -18,7 +18,6 @@ use PDOException;
      overridden_by_staff
    system_receipts: the System Receipt issued for a confirmed payment; voided on a reversal.
    bookings: the payment_status changes here too (BookingQueries has the bookings notes).
-   users: an administrator's own row, locked for the password check before a reversal.
    Read only: rooms, venues, gcash_accounts (the account an office is paid into).
    Confirming a payment is done by payment_confirm() (legacy/includes/system-receipt.php).
 
@@ -297,24 +296,6 @@ class PaymentQueries
                   AND payment_record_status IN ('submitted', 'under_review')
             ", [$bookingId]);
         });
-    }
-
-    /* The signed-in administrator's row, locked until the reversal commits, with what
-       reauth_verify() (legacy/includes/auth.php) needs to check the password: two wrong
-       tries at the same moment must both count. */
-    public static function lockAccountForPasswordCheck(int $userId): ?array
-    {
-        $row = DB::selectOne("
-            SELECT u.id, u.password_hash, u.account_type, u.is_active,
-                   u.reauth_failed_attempts, u.reauth_lock_level,
-                   CASE WHEN u.reauth_locked_until > NOW()
-                        THEN TIMESTAMPDIFF(SECOND, NOW(), u.reauth_locked_until)
-                        ELSE 0 END AS lock_seconds
-            FROM users u
-            WHERE u.id = ?
-            FOR UPDATE
-        ", [$userId]);
-        return $row ? (array) $row : null;
     }
 
     /* Reverse a payment (a fake receipt, or the wrong booking): its payment row is rejected,

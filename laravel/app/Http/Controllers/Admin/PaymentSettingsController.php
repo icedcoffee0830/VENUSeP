@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use Illuminate\Http\Request;
-use PDO;
+use App\Queries\AccountQueries;
+use App\Queries\OfficeSettingsQueries;
 use PDOException;
 
 /* Payment Settings (was admin/payment-settings.php). Route middleware: staff
@@ -31,14 +32,8 @@ class PaymentSettingsController
         $rsStay = array_count_values(array_column(array_filter(bookings_all(), fn ($b) => $b['refundable']), 'venueName'));
         $rsOpen = $rsLast = [];
         try {
-            $rsOpen = venusep_db()->query(
-                "SELECT r.venue_id, COUNT(*) FROM refunds f JOIN bookings b ON b.id = f.booking_id JOIN rooms r ON r.id = b.room_id
-                  WHERE f.refund_status IN ('requested','under_review','returned_for_correction','approved') GROUP BY r.venue_id"
-            )->fetchAll(PDO::FETCH_KEY_PAIR);
-            foreach (venusep_db()->query(
-                "SELECT h.venue_id, h.changed_at, u.email FROM venue_settings_history h LEFT JOIN users u ON u.id = h.changed_by_user_id
-                  WHERE h.field = 'refunds' ORDER BY h.id"
-            ) as $h) {
+            $rsOpen = OfficeSettingsQueries::openRefundsByOffice();
+            foreach (OfficeSettingsQueries::refundSwitchChanges() as $h) {
                 $rsLast[(int) $h['venue_id']] = $h;   // the newest wins
             }
         } catch (PDOException $e) { sql_failed($e); /* the counts read zero, the switch still works */ }
@@ -50,12 +45,7 @@ class PaymentSettingsController
         $rsLockSeconds = 0;
         if ($rsDbOk && $rsIsAdmin) {
             try {
-                $rsStmt = venusep_db()->prepare(
-                    'SELECT CASE WHEN reauth_locked_until > NOW() THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END
-                       FROM users WHERE id = :id'
-                );
-                $rsStmt->execute([':id' => (int) session('user_id')]);
-                $rsLockSeconds = (int) $rsStmt->fetchColumn();
+                $rsLockSeconds = AccountQueries::passwordLockSeconds((int) session('user_id'));
             } catch (PDOException $e) { sql_failed($e); $rsLockSeconds = 0; }
         }
         $rsJustSaved = $request->query('refunds') === 'saved' ? ($rsOffices[(int) $request->query('office')] ?? null) : null;
@@ -65,13 +55,7 @@ class PaymentSettingsController
            it is paid, and its customers could never pay by GCash. */
         $psCards = $gcAccounts;
         try {
-            foreach (venusep_db()->query(
-                "SELECT v.name FROM venues v
-                  WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . "
-                    AND NOT EXISTS (SELECT 1 FROM gcash_accounts g
-                                     WHERE g.venue_id = v.id AND g.is_active = 1 AND g.valid_until IS NULL)
-                  ORDER BY v.id"
-            )->fetchAll(PDO::FETCH_COLUMN) as $psVenue) {
+            foreach (OfficeSettingsQueries::officesWithoutGcash() as $psVenue) {
                 $psCards[$psVenue] = ['name' => '', 'number' => '',
                     'note' => 'No GCash account yet: customers cannot pay this venue by GCash until one is set.'];
             }
@@ -81,7 +65,7 @@ class PaymentSettingsController
            by name — a renamed hostel stays the hostel. Cards are keyed by name. */
         $psHostelVenues = [];
         try {
-            $psHostelVenues = venusep_db()->query("SELECT name FROM venues WHERE venue_type = 'hostel'")->fetchAll(PDO::FETCH_COLUMN);
+            $psHostelVenues = OfficeSettingsQueries::hostelNames();
         } catch (PDOException $e) { sql_failed($e); /* every card reads as a business account */ }
 
         return live_view('admin.payment-settings', compact(

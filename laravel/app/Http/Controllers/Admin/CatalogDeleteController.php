@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\AccountQueries;
 use App\Queries\RoomQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -26,15 +27,12 @@ class CatalogDeleteController extends Controller
         }
 
         legacy('db', 'auth', 'venue-photos');   /* + room-photos: rp_room_dir() */
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so nothing was deleted.']);
         }
 
         /* Re-read the account instead of trusting a possibly stale session role. */
-        $account = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :id');
-        $account->execute([':id' => (int) session('user_id')]);
-        $accountRow = $account->fetch();
+        $accountRow = AccountQueries::findTypeAndActive((int) session('user_id'));
         if (!$accountRow || !(bool) $accountRow['is_active'] || $accountRow['account_type'] !== 'admin') {
             $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only administrators can delete rooms or venues.']);
         }
@@ -92,9 +90,6 @@ class CatalogDeleteController extends Controller
         } catch (HttpResponseException $e) {
             throw $e;
         } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Nothing was deleted because the request could not be completed safely.']);
         }

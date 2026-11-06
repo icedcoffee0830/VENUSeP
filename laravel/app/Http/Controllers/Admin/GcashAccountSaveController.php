@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\JsonEndpoint;
+use App\Queries\AccountQueries;
+use App\Queries\OfficeSettingsQueries;
+use App\Queries\VenueQueries;
 use Illuminate\Http\Request;
 use PDOException;
 
@@ -76,16 +79,9 @@ class GcashAccountSaveController
             $pdo->beginTransaction();
 
             /* Re-read the account and re-check the password. FOR UPDATE so two
-               attempts at once both count against the lockout. */
-            $u = $pdo->prepare(
-                'SELECT id, password_hash, account_type, is_active,
-                        reauth_failed_attempts, reauth_lock_level,
-                        CASE WHEN reauth_locked_until > NOW()
-                             THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
-                   FROM users WHERE id = :id FOR UPDATE'
-            );
-            $u->execute([':id' => (int) session('user_id')]);
-            $user = $u->fetch();
+               attempts at once both count against the lockout. The transaction stays plain
+               PDO: reauth_verify closes it itself on a wrong password. */
+            $user = AccountQueries::lockForPasswordCheck((int) session('user_id'));
             if (!$user || !(bool) $user['is_active'] || $user['account_type'] !== 'admin') {
                 $pdo->rollBack();
                 return $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can change where a venue is paid.']);
@@ -96,10 +92,8 @@ class GcashAccountSaveController
                     : $this->reply(401, ['ok' => false, 'error' => 'wrong_password', 'attemptsLeft' => $no['attemptsLeft'], 'message' => 'Wrong password.']);
             }
 
-            $v = $pdo->prepare('SELECT id FROM venues WHERE name = :n');
-            $v->execute([':n' => $venueName]);
-            $venueId = $v->fetchColumn();
-            if ($venueId === false) {
+            $venueId = VenueQueries::findByName($venueName)['id'] ?? null;
+            if ($venueId === null) {
                 $pdo->rollBack();
                 return $this->reply(404, ['ok' => false, 'message' => 'Unknown venue.']);
             }
@@ -111,12 +105,7 @@ class GcashAccountSaveController
 
             /* Nothing to do if neither field moved — avoids filling the history with
                rows that record no change. */
-            $cur = $pdo->prepare(
-                'SELECT id, account_name, mobile_number, note FROM gcash_accounts
-                  WHERE venue_id = :v AND is_active = 1 AND valid_until IS NULL'
-            );
-            $cur->execute([':v' => $venueId]);
-            $current = $cur->fetch();
+            $current = OfficeSettingsQueries::findCurrentGcash((int) $venueId);
             if ($current && $current['account_name'] === $acctName && $current['mobile_number'] === $digits) {
                 $pdo->rollBack();
                 return $this->reply(400, ['ok' => false, 'message' => 'That is already this venue\'s account.']);
@@ -124,18 +113,9 @@ class GcashAccountSaveController
 
             /* Supersede, then insert — one transaction, so the venue is never left
                with no account or two. */
-            if ($current) {
-                $pdo->prepare('UPDATE gcash_accounts SET is_active = 0, valid_until = NOW() WHERE id = :id')
-                    ->execute([':id' => $current['id']]);
-            }
-            $pdo->prepare(
-                'INSERT INTO gcash_accounts (venue_id, account_name, mobile_number, note, created_by_user_id)
-                 VALUES (:v, :n, :m, :o, :u)'
-            )->execute([
-                ':v' => $venueId, ':n' => $acctName, ':m' => $digits,
-                ':o' => $noteSent ? ($note !== '' ? mb_substr($note, 0, 500) : null) : ($current['note'] ?? null),
-                ':u' => (int) session('user_id'),
-            ]);
+            OfficeSettingsQueries::replaceGcash($current, (int) $venueId, $acctName, $digits,
+                $noteSent ? ($note !== '' ? mb_substr($note, 0, 500) : null) : ($current['note'] ?? null),
+                (int) session('user_id'));
 
             $pdo->commit();
         } catch (PDOException $e) {

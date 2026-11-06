@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\JsonEndpoint;
+use App\Queries\AccountQueries;
+use App\Queries\OfficeSettingsQueries;
 use Illuminate\Http\Request;
 use Throwable;
 
@@ -66,16 +68,9 @@ class RefundSwitchController
         try {
             $pdo->beginTransaction();
 
-            /* FOR UPDATE: two wrong attempts sent at the same moment must both count. */
-            $stmt = $pdo->prepare(
-                'SELECT id, email, password_hash, account_type, is_active, is_super_admin,
-                        reauth_failed_attempts, reauth_lock_level,
-                        CASE WHEN reauth_locked_until > NOW()
-                             THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
-                   FROM users WHERE id = :id FOR UPDATE'
-            );
-            $stmt->execute([':id' => (int) session('user_id')]);
-            $user = $stmt->fetch();
+            /* FOR UPDATE: two wrong attempts sent at the same moment must both count. The
+               transaction stays plain PDO: reauth_verify closes it itself on a wrong password. */
+            $user = AccountQueries::lockForPasswordCheck((int) session('user_id'));
 
             if (!$user || !(bool) $user['is_active'] || $user['account_type'] !== 'admin' || !(bool) $user['is_super_admin']) {
                 $pdo->rollBack();
@@ -89,29 +84,18 @@ class RefundSwitchController
                     : $this->reply(401, ['ok' => false, 'error' => 'wrong_password', 'attemptsLeft' => $no['attemptsLeft'], 'message' => 'Wrong password.']);
             }
 
-            $cur = $pdo->prepare('SELECT refunds_enabled FROM venues WHERE id = :v FOR UPDATE');
-            $cur->execute([':v' => (int) $venueId]);
-            $old = $cur->fetchColumn();
-            if ($old === false) {
+            $old = OfficeSettingsQueries::lockRefundSwitch((int) $venueId);
+            if ($old === null) {
                 $pdo->rollBack();
                 return $this->reply(404, ['ok' => false, 'error' => 'no_office', 'message' => 'That office no longer exists.']);
             }
 
-            $changed = ((string) (int) $old !== $enable);
+            $changed = ((string) $old !== $enable);
             if ($changed) {
-                $pdo->prepare('UPDATE venues SET refunds_enabled = :x WHERE id = :v')->execute([':x' => (int) $enable, ':v' => (int) $venueId]);
-                $pdo->prepare(
-                    "INSERT INTO venue_settings_history (venue_id, field, old_value, new_value, note, changed_by_user_id)
-                     VALUES (:v, 'refunds', :old, :new, :note, :u)"
-                )->execute([
-                    ':v' => (int) $venueId,
-                    ':old' => (string) (int) $old,
-                    ':new' => $enable,
-                    ':note' => $enable === '1'
-                        ? 'Refund requests turned ON (Payment Settings, password confirmed).'
-                        : 'Refund requests turned OFF (Payment Settings, password confirmed).',
-                    ':u' => $user['id'],
-                ]);
+                OfficeSettingsQueries::setRefundSwitch((int) $venueId, (int) $enable);
+                OfficeSettingsQueries::addHistory((int) $venueId, 'refunds', (string) $old, $enable, $enable === '1'
+                    ? 'Refund requests turned ON (Payment Settings, password confirmed).'
+                    : 'Refund requests turned OFF (Payment Settings, password confirmed).', (int) $user['id']);
             }
 
             $pdo->commit();

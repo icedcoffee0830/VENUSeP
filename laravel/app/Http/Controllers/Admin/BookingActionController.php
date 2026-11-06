@@ -614,6 +614,10 @@ class BookingActionController extends Controller
     {
         // Check
         $refund = $this->openRefund($booking, false, $note);
+        /* Sent back for correction: it is with the customer until they resubmit (Aron 2026-11-06). */
+        if ($refund['refund_status'] === Status::RETURNED_FOR_CORRECTION) {
+            $this->reply(409, ['ok' => false, 'message' => 'This refund is with the customer to correct. It can be paid once they send it back.']);
+        }
         /* A missing receipt needs an administrator's approval first (Aron 2026-11-01). */
         if ($refund['refund_status'] === Status::UNDER_REVIEW || ($refund['official_receipt_pending'] && $refund['refund_status'] !== Status::APPROVED)) {
             $this->reply(403, ['ok' => false, 'message' => 'The receipt is missing: an administrator has to approve the proof before this is paid.']);

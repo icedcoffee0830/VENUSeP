@@ -141,6 +141,23 @@ class WalkInRefundTest extends TestCase
         $this->assertSame('completed', $this->refund($id)->refund_status);
     }
 
+    /* Aron 2026-11-06: a refund sent back for correction is with the customer. Nobody pays it out
+       or approves it until they resubmit; the request stays as it was. */
+    public function test_a_refund_returned_for_correction_cannot_be_paid_or_approved(): void
+    {
+        [$id, $ref] = $this->seedVenueBooking('r1', 'approved', 'refund_requested', 'gcash', false, true);
+        DB::table('refunds')->insert(['booking_id' => $id, 'reason_category' => 'other', 'reason' => 'x', 'official_receipt_pending' => 0,
+            'amount_requested' => $this->booking($id)->total_amount, 'refund_status' => 'returned_for_correction']);
+        foreach (['actingAsStaff', 'actingAsAdmin'] as $who) {
+            $this->{$who}();
+            $this->act(['booking' => $ref, 'action' => 'refund_complete', 'payout_method' => 'cash'])
+                ->assertStatus(409)->assertJson(['message' => 'This refund is with the customer to correct. It can be paid once they send it back.']);
+            $this->act(['booking' => $ref, 'action' => 'refund_approve'])->assertStatus($who === 'actingAsAdmin' ? 409 : 403);
+            $this->assertSame('returned_for_correction', $this->refund($id)->refund_status);
+            $this->assertSame('refund_requested', $this->booking($id)->payment_status);
+        }
+    }
+
     public function test_an_account_holder_files_their_own_and_another_office_is_refused(): void
     {
         [, $ref] = $this->seedVenueBooking('r1', 'approved', 'confirmed', 'gcash', false, true);

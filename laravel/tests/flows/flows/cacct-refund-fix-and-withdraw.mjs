@@ -39,6 +39,15 @@ export default {
       return page;
     });
 
+    await step('Meanwhile the office cannot pay it out: no "Mark refunded", a note says it is with the customer', async () => {
+      const page = await ctx.loginAdmin('admin@gmail.com');
+      await page.goto(ctx.url(`/admin/booking-request?id=${s.ref}`));
+      await ctx.expect.text(page, 'With the customer to correct. It can be paid once they send it back.');
+      expect.equal(await page.getByRole('button', { name: 'Mark refunded' }).count(), 0, '"Mark refunded" buttons');
+      await expect.visible(page.getByRole('button', { name: 'Deny refund' }), 'no "Deny refund" button');
+      return page;
+    });
+
     await step('"Fix and resubmit" opens the form in correction mode', async () => {
       const page = s.cust;
       await row(page).locator('a.booking-action-fix').click();

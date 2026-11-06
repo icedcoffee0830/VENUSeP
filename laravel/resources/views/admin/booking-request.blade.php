@@ -746,6 +746,8 @@
         if (cur.pay === 'overdue') return cur.postpay || overdueAfterEvent
             ?`<button class="br-btn br-btn-primary" onclick="extendDeadline()">Extend 48 h</button>`
             : `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
+        /* With the customer to correct: nothing to pay or approve until they send it back (the server refuses too). */
+        if (cur.pay === 'refund_correction') return `<span class="none">With the customer to correct. It can be paid once they send it back.</span><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
         if (OPEN_REFUND.includes(cur.pay) && cur.refund && cur.refund.needsAdmin) {
           return (IS_ADMIN ? `<button class="br-btn br-btn-primary" onclick="approveLostReceipt()">Approve the proof</button>`
                            : `<span class="none">Waiting for an administrator to approve the proof</span>`)

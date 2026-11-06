@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Queries\AccountQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDOException;
@@ -127,9 +128,7 @@ class GoogleController
                     $problem = google_link($pdo, $userId, $sub);
                     session(['profile_notice' => $problem ?? 'Google account connected. You can now sign in with Google too.']);
                 } else {
-                    $stmt = $pdo->prepare('SELECT google_sub FROM users WHERE id = :u');
-                    $stmt->execute([':u' => $userId]);
-                    $linked = $stmt->fetchColumn();
+                    $linked = AccountQueries::findPasswordAndGoogle($userId)['google_sub'] ?? null;
                     if (!is_string($linked) || !hash_equals($linked, $sub)) {
                         session(['profile_notice' => 'That was a different Google account from the one connected to VENUSeP. Choose the connected one.']);
                     } else {

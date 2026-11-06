@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\JsonEndpoint;
+use App\Queries\AccountQueries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use PDOException;
@@ -50,9 +51,7 @@ class BackupActionController
         $pdo = venusep_db();
         $actorLabel = 'user #' . $actor;
         if ($pdo !== null) {
-            $who = $pdo->prepare('SELECT email FROM users WHERE id = :u');
-            $who->execute([':u' => $actor]);
-            $actorLabel = (string) ($who->fetchColumn() ?: $actorLabel);
+            $actorLabel = (string) ((AccountQueries::findEmailAndHash($actor)['email'] ?? '') ?: $actorLabel);
         }
 
         /* ---- download: admins only; streams the file ---- */
@@ -122,13 +121,7 @@ class BackupActionController
         /* the shared re-entry lockout — 5 wrong = a lock, each longer than the last */
         try {
             $pdo->beginTransaction();
-            $u = $pdo->prepare(
-                'SELECT id, password_hash, account_type, is_active, is_super_admin, reauth_failed_attempts, reauth_lock_level,
-                        CASE WHEN reauth_locked_until > NOW() THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
-                   FROM users WHERE id = :id FOR UPDATE'
-            );
-            $u->execute([':id' => $actor]);
-            $me = $u->fetch();
+            $me = AccountQueries::lockForPasswordCheck($actor);
             if (!$me || !(bool) $me['is_active'] || $me['account_type'] !== 'admin' || !(bool) $me['is_super_admin']) {
                 $pdo->rollBack();
                 return $this->bk(403, ['ok' => false, 'message' => 'Only the super admin can restore a backup.']);

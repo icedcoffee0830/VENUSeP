@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Queries\AccountQueries;
 use App\Queries\StaffHallQueries;
+use App\Queries\VenueQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDO;
@@ -49,28 +50,17 @@ class StaffController
         $smRows = [];
         $smVenues = [];
         try {
-            $smPdo = venusep_db_or_fail();
+            venusep_db_or_fail();
             /* the offices this admin may move staff to (DB-DECISIONS 28) */
-            foreach ($smPdo->query('SELECT id, name FROM venues ORDER BY id') as $venue) {
+            $offices = VenueQueries::all();
+            foreach ($offices as $venue) {
                 if (staff_may_handle_venue($venue['id'])) {
                     $smVenues[] = ['id' => (int) $venue['id'], 'name' => (string) $venue['name']];
                 }
             }
-            $smStmt = $smPdo->query(
-                "SELECT u.id, u.email, u.account_type, u.is_active, u.last_login_at,
-                        u.is_super_admin, u.office_group, u.handed_over_at,
-                        COALESCE(s.full_name, u.username) AS full_name,
-                        s.employee_no, s.position_role, s.phone, s.venue_id,
-                        v.name AS venue_name, v.office_group AS venue_group, v.venue_type
-                   FROM users u
-                   LEFT JOIN staff s ON s.user_id = u.id
-                   LEFT JOIN venues v ON v.id = s.venue_id
-                  WHERE u.account_type IN ('admin', 'staff')
-                  ORDER BY u.account_type, COALESCE(s.full_name, u.username)"
-            );
             $hallsByStaff = StaffHallQueries::hallsByStaff();
-            $hallNames = array_column(StaffHallQueries::hallsOf(array_column($smPdo->query('SELECT id FROM venues')->fetchAll(), 'id')), 'name', 'id');
-            foreach ($smStmt as $r) {
+            $hallNames = array_column(StaffHallQueries::hallsOf(array_column($offices, 'id')), 'name', 'id');
+            foreach (AccountQueries::listStaffSide() as $r) {
                 $isSelf = (int) $r['id'] === (int) session('user_id');
                 $canManage = !$isSelf && staff_may_manage_account($r);
                 if (!$isSelf && !$canManage && !admin_is_super()) {
@@ -169,7 +159,7 @@ class StaffController
 
     /* $required: a STAFF account must have a venue (decided 2026-10-27). Only
        an admin row may be left without one. */
-    private function resolveVenue(PDO $pdo, $raw, $required = true): array
+    private function resolveVenue($raw, $required = true): array
     {
         if ($raw !== null && !is_scalar($raw)) {
             $this->fail(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue.']);
@@ -184,9 +174,7 @@ class StaffController
         if (!ctype_digit($raw) || (int) $raw < 1) {
             $this->fail(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue.']);
         }
-        $stmt = $pdo->prepare('SELECT id, name, office_group FROM venues WHERE id = :id');
-        $stmt->execute([':id' => (int) $raw]);
-        $venue = $stmt->fetch();
+        $venue = VenueQueries::find((int) $raw);
         if (!$venue) {
             $this->fail(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'That venue does not exist.']);
         }
@@ -230,22 +218,12 @@ class StaffController
 
         /* The SESSION says admin; the DATABASE decides. A suspended (or demoted) admin's
            open session must not keep managing staff until some page throws them out. */
-        $me = $pdo->prepare('SELECT account_type, is_active FROM users WHERE id = :u');
-        $me->execute([':u' => $actor]);
-        $me = $me->fetch();
+        $me = AccountQueries::findTypeAndActive($actor);
         if (!$me || !(bool) $me['is_active'] || $me['account_type'] !== 'admin') {
             return $this->reply(403, ['ok' => false, 'message' => 'Only an administrator can manage staff accounts.']);
         }
 
-        $row = $pdo->prepare(
-            'SELECT u.id, u.email, u.account_type, u.is_active, u.is_super_admin, u.handed_over_at,
-                    s.user_id AS staff_user_id, s.venue_id AS old_venue_id, s.venue_id, s.full_name
-               FROM users u
-               LEFT JOIN staff s ON s.user_id = u.id
-              WHERE u.id = :u'
-        );
-        $row->execute([':u' => $target]);
-        $user = $row->fetch();
+        $user = AccountQueries::findForManaging($target);
         if (!$user) {
             return $this->reply(404, ['ok' => false, 'message' => 'That account no longer exists.']);
         }
@@ -271,13 +249,12 @@ class StaffController
             if ($user['staff_user_id'] === null) {
                 return $this->reply(409, ['ok' => false, 'message' => 'That staff account has no staff profile to update.']);
             }
-            $venue = $this->resolveVenue($pdo, $request->input('venue_id', ''));
+            $venue = $this->resolveVenue($request->input('venue_id', ''));
             if ((int) $user['old_venue_id'] !== $venue['id']) {
                 $this->requireNotLastStaff($target);   // the new office's halls come with the move (trg_staff_halls_follow_upd)
             }
             try {
-                $pdo->prepare('UPDATE staff SET venue_id = :v WHERE user_id = :u')
-                    ->execute([':v' => $venue['id'], ':u' => $target]);
+                VenueQueries::moveOneStaff($target, (int) $venue['id']);
             } catch (PDOException $e) {
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the venue was not changed.']);
@@ -338,40 +315,16 @@ class StaffController
                 if ($user['account_type'] !== 'staff' && $venueRaw !== '' && $venueRaw !== null) {
                     return $this->reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Venue assignments apply to staff accounts.']);
                 }
-                $venue = $this->resolveVenue($pdo, $venueRaw, $user['account_type'] === 'staff');
+                $venue = $this->resolveVenue($venueRaw, $user['account_type'] === 'staff');
                 if ($user['account_type'] === 'staff' && (int) $user['old_venue_id'] !== (int) $venue['id']) {
                     $this->requireNotLastStaff($target);
                 }
             }
 
             try {
-                $pdo->beginTransaction();
-                $pdo->prepare('UPDATE users SET email = :e WHERE id = :u')->execute([':e' => $email, ':u' => $target]);
-                $staffValues = [
-                    ':u' => $target, ':n' => $name,
-                    ':r' => $role !== '' ? mb_substr($role, 0, 120) : null,
-                    ':p' => $phoneNorm,
-                ];
-                if ($venueGiven) {
-                    $staffValues[':v'] = $venue['id'];
-                    $pdo->prepare(
-                        'INSERT INTO staff (user_id, venue_id, full_name, position_role, phone)
-                         VALUES (:u, :v, :n, :r, :p)
-                         ON DUPLICATE KEY UPDATE venue_id = VALUES(venue_id), full_name = VALUES(full_name),
-                                                 position_role = VALUES(position_role),
-                                                 phone = VALUES(phone)'
-                    )->execute($staffValues);
-                } else {
-                    $pdo->prepare(
-                        'INSERT INTO staff (user_id, full_name, position_role, phone)
-                         VALUES (:u, :n, :r, :p)
-                         ON DUPLICATE KEY UPDATE full_name = VALUES(full_name),
-                                                 position_role = VALUES(position_role), phone = VALUES(phone)'
-                    )->execute($staffValues);
-                }
-                $pdo->commit();
+                AccountQueries::saveStaffAccount($target, $email, $name, $role !== '' ? mb_substr($role, 0, 120) : null, $phoneNorm,
+                    $venueGiven, $venueGiven ? $venue['id'] : null);
             } catch (PDOException $e) {
-                if ($pdo->inTransaction()) { $pdo->rollBack(); }
                 if ($e->getCode() === '23000') {
                     /* uq_users_email */
                     return $this->reply(409, ['ok' => false, 'field' => 'email',
@@ -405,9 +358,7 @@ class StaffController
                 return $this->reply(500, ['ok' => false, 'message' => VENUSEP_PASSWORD_SETUP_ERROR]);
             }
             try {
-                $pdo->prepare('UPDATE users SET password_hash = :h, password_changed_at = NULL, reauth_failed_attempts = 0,
-                                      reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :u')
-                    ->execute([':h' => venusep_password_hash($new), ':u' => $target]);
+                AccountQueries::resetPassword($target, venusep_password_hash($new));
             } catch (PDOException $e) {
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the password was not changed.']);
@@ -434,9 +385,7 @@ class StaffController
                 }
                 /* The last active admin. Counted, not assumed. */
                 if ($user['account_type'] === 'admin') {
-                    $left = (int) $pdo->query(
-                        "SELECT COUNT(*) FROM users WHERE account_type = 'admin' AND is_active = 1"
-                    )->fetchColumn();
+                    $left = AccountQueries::countActiveAdmins();
                     if ($left <= 1) {
                         return $this->reply(409, ['ok' => false,
                             'message' => 'This is the last active administrator. Suspending it would lock everyone out of the settings that only an administrator can change.']);
@@ -445,8 +394,7 @@ class StaffController
             }
 
             try {
-                $pdo->prepare('UPDATE users SET is_active = :a WHERE id = :u')
-                    ->execute([':a' => $active, ':u' => $target]);
+                AccountQueries::setActive($target, $active);
             } catch (PDOException $e) {
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
@@ -485,14 +433,7 @@ class StaffController
         legacy('receipt-emails');
         try {
             $pdo->beginTransaction();
-            $me = $pdo->prepare(
-                'SELECT u.id, u.email, u.password_hash, u.account_type, u.is_active, u.is_super_admin,
-                        u.reauth_failed_attempts, u.reauth_lock_level, COALESCE(s.full_name, u.username) AS full_name,
-                        CASE WHEN u.reauth_locked_until > NOW() THEN TIMESTAMPDIFF(SECOND, NOW(), u.reauth_locked_until) ELSE 0 END AS lock_seconds
-                   FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = :id FOR UPDATE'
-            );
-            $me->execute([':id' => $actor]);
-            $me = $me->fetch();
+            $me = AccountQueries::lockForHandover($actor);
             if (!$me || !(bool) $me['is_super_admin']) {
                 $pdo->rollBack();
                 return $this->reply(403, ['ok' => false, 'message' => 'Only the super admin can hand over the super admin.']);

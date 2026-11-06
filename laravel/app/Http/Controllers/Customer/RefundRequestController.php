@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\RefundQueries;
 use Illuminate\Http\Request;
 
 /* ==================================================================
@@ -89,12 +90,7 @@ class RefundRequestController
         $rrExisting = null;
         $rrResubmit = false;
         if ($booking) {
-            $rrStmt = venusep_db()->prepare(
-                'SELECT refund_status, notes, official_receipt_pending, DATE(requested_at) AS filed
-                   FROM refunds WHERE booking_id = :b ORDER BY id DESC LIMIT 1'
-            );
-            $rrStmt->execute([':b' => booking_id_from_reference($booking['bookingId'])]);
-            if ($rrRow = $rrStmt->fetch()) {
+            if ($rrRow = RefundQueries::findLatestForPage(booking_id_from_reference($booking['bookingId']))) {
                 /* The page's four states, mapped from the seven the chain has.
                    'withdrawn' deliberately maps to nothing: free to file again. */
                 $rrMap = [

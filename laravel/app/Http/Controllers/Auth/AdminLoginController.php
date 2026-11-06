@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Queries\AccountQueries;
+use App\Queries\VenueQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDO;
@@ -51,7 +53,7 @@ class AdminLoginController
 
         /* The Department cards = the active venues (Aron, 2026-10-30). A staff account
            must pick its own venue; an admin may pick any. */
-        $departments = $pdo !== null ? $this->departments($pdo) : [];
+        $departments = $pdo !== null ? $this->departments() : [];
         $selectedDepartment = (int) $request->request->get('department', 0);
         $asAdmin = $request->request->has('as_admin');   // "signing in as an administrator": no department to pick
 
@@ -82,19 +84,7 @@ class AdminLoginController
                     /* The department is a venue: staff.venue_id for a staff account, or the
                        office of a cover going on now (staff_covers, migration 18).
                        Authorization itself stays account_type (+ staff_venue_scope()). */
-                    $stmt = $pdo->prepare(
-                        "SELECT u.id, u.email, u.username, u.password_hash, u.account_type, u.is_active,
-                                s.venue_id AS staff_venue_id, v.name AS staff_venue_name,
-                                EXISTS (SELECT 1 FROM staff_covers c WHERE c.user_id = u.id AND c.venue_id = :dept
-                                           AND " . STAFF_COVER_ON_SQL . ") AS cover_card
-                         FROM users u
-                         LEFT JOIN staff s ON s.user_id = u.id
-                         LEFT JOIN venues v ON v.id = s.venue_id
-                         WHERE u.email = :email
-                         LIMIT 1"
-                    );
-                    $stmt->execute(['email' => $email, 'dept' => $selectedDepartment]);
-                    $user = $stmt->fetch();
+                    $user = AccountQueries::findStaffSignIn($email, (int) $selectedDepartment);
 
                     if (
                         !$user ||
@@ -151,10 +141,10 @@ class AdminLoginController
     }
 
     /* The active venues by id — the Department cards (name, icon, one line under it). */
-    private function departments(PDO $pdo): array
+    private function departments(): array
     {
         $out = [];
-        foreach ($pdo->query('SELECT id, name, venue_code, venue_type FROM venues WHERE is_active = 1 ORDER BY venue_type, name') as $v) {
+        foreach (VenueQueries::openForSignIn() as $v) {
             [$icon, $line] = match (true) {
                 $v['venue_type'] === 'hostel' => ['bi-door-open', 'Hostel Room Management'],
                 $v['venue_code'] === 'BAHAY-ALUMNI' => ['bi-house', 'Alumni House Management'],
@@ -173,16 +163,14 @@ class AdminLoginController
        Never returns (throws the redirect), like the old al_finish_login(). */
     private function finishLogin(PDO $pdo, int $userId, int $department, bool $passedCode): void
     {
-        $stmt = $pdo->prepare('SELECT id, email, username, account_type, is_active FROM users WHERE id = :id LIMIT 1');
-        $stmt->execute(['id' => $userId]);
-        $user = $stmt->fetch();
+        $user = AccountQueries::findForSession($userId);
         if (!$user || !(bool) $user['is_active'] || !in_array($user['account_type'], ['admin', 'staff'], true)) {
             tfa_pending_clear();
             throw new HttpResponseException(redirect()->route('admin.admin-login'));
         }
 
         // Record the successful login using the schema's last_login_at.
-        $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id')->execute(['id' => $userId]);
+        AccountQueries::markSignedIn($userId);
 
         // Start from an empty session (nothing from a previous login survives) with a new id.
         session()->flush();

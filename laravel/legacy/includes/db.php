@@ -12,6 +12,7 @@
    and the same behaviour, because the legacy includes call them.
    ===================================================================== */
 
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -56,12 +57,23 @@ function venusep_db()
    A refusal is an answer, not a failure: a procedure's SIGNAL 45000, a deadlock (40001) and
    a duplicate key (1062) are never rethrown, whatever the caller does with them.
    $optional: work that must not cost the action around it (a notification, an email).
-   No stack trace in the line: its arguments could carry part of a password. */
+   No stack trace in the line: its arguments could carry part of a password. A query through
+   DB:: names its SQL with the ? marks, never the values, and the app's own line that ran it. */
 function sql_failed(Throwable $e, bool $optional = false): void
 {
     $refusal = $e instanceof PDOException
         && (in_array($e->getCode(), ['45000', '40001'], true) || ($e->errorInfo[1] ?? null) === 1062);
-    Log::error('SQL failed at ' . $e->getFile() . ':' . $e->getLine() . ': ' . $e->getMessage());
+    [$file, $line, $what] = [$e->getFile(), $e->getLine(), $e->getMessage()];
+    if ($e instanceof QueryException) {
+        $what = $e->getPrevious()->getMessage() . ' (SQL: ' . $e->getSql() . ')';
+        foreach ($e->getTrace() as $frame) {
+            if (isset($frame['file']) && !str_contains($frame['file'], DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR)) {
+                [$file, $line] = [$frame['file'], $frame['line']];
+                break;
+            }
+        }
+    }
+    Log::error('SQL failed at ' . $file . ':' . $line . ': ' . $what);
     if (!$refusal && !$optional && config('app.debug')) {
         throw $e;
     }

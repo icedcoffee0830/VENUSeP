@@ -24,6 +24,55 @@ class CustomerQueries
         return [$mobile, '63' . substr($mobile, 1)];
     }
 
+    /* The customer's account, locked for the password check at the counter (reauth_verify,
+       auth.php): two wrong passwords at the same moment must both count. Null when there is none. */
+    public static function lockForPasswordCheck(int $customerId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT u.id, u.password_hash, u.is_active, u.reauth_failed_attempts, u.reauth_lock_level,
+                   CASE WHEN u.reauth_locked_until > NOW()
+                        THEN TIMESTAMPDIFF(SECOND, NOW(), u.reauth_locked_until)
+                        ELSE 0 END AS lock_seconds
+            FROM customers c
+            JOIN users u ON u.id = c.user_id
+            WHERE c.id = ?
+            LIMIT 1
+            FOR UPDATE
+        ", [$customerId]);
+        return $row ? (array) $row : null;
+    }
+
+    /* Customer Management: every customer, or for a normal admin ($scope: its office ids) those
+       who booked there or were made at its counter, with their bookings counted at those offices. */
+    public static function listForAdmin(?array $scope): array
+    {
+        $offices = $scope === null ? '' : implode(',', array_map('intval', $scope) ?: [0]);
+        $mine = $scope === null ? '' : " AND r.venue_id IN ($offices)";
+        return array_map(fn ($r) => (array) $r, DB::select("
+            SELECT u.id AS user_id, u.email, u.is_active, u.last_login_at, u.google_sub IS NULL AS not_google,
+                   c.id AS customer_id, c.full_name, c.phone, c.university_id_no, c.created_at, c.counter_venue_id,
+                   (SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id
+                     WHERE b.customer_id = c.id $mine) AS booking_count,
+                   (SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id
+                     WHERE b.customer_id = c.id $mine
+                       AND b.reservation_status IN ('pending', 'approved')
+                       AND (b.payment_status = 'overdue' OR fn_booking_last_day(b.id) >= CURDATE())) AS open_count
+            FROM customers c
+            JOIN users u ON u.id = c.user_id
+            WHERE u.account_type = 'customer'"
+            . ($scope === null ? '' : " AND (EXISTS (SELECT 1 FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.customer_id = c.id $mine)
+                                              OR c.counter_venue_id IN ($offices))") . "
+            ORDER BY c.full_name
+        "));
+    }
+
+    /* The account an admin is about to change, or null. */
+    public static function findUser(int $userId): ?array
+    {
+        $row = DB::selectOne('SELECT id, account_type, is_active FROM users WHERE id = ?', [$userId]);
+        return $row ? (array) $row : null;
+    }
+
     /* A customer account's own address and name, or null. */
     public static function findEmailAndName(int $userId): ?array
     {

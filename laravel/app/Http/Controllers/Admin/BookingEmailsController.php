@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\EmailQueries;
 use Illuminate\Http\Request;
 
 /* =====================================================================
@@ -52,38 +53,22 @@ class BookingEmailsController extends Controller
             if (($request->post('action') ?? '') !== 'resend') {
                 $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
             }
-            $stmt = $pdo->prepare(
-                "SELECT id FROM email_outbox
-                  WHERE id = :id AND booking_id = :b
-                    AND (status = 'failed' OR (status = 'pending' AND created_at < NOW() - INTERVAL 5 MINUTE))"
-            );
-            $stmt->execute([':id' => (int) ($request->post('id') ?? 0), ':b' => $beBookingId]);
-            $beId = $stmt->fetchColumn();
-            if ($beId === false) {
+            $beId = EmailQueries::findResendable((int) ($request->post('id') ?? 0), $beBookingId);
+            if ($beId === null) {
                 $this->reply(409, ['ok' => false, 'message' => 'That email was already sent, or is still on its way.']);
             }
-            mail_send($pdo, (int) $beId);
-            $stmt = $pdo->prepare('SELECT * FROM email_outbox WHERE id = :id');
-            $stmt->execute([':id' => $beId]);
-            $row = $stmt->fetch();
+            mail_send($pdo, $beId);
+            $row = EmailQueries::find($beId);
             $this->reply(200, ['ok' => $row['status'] === 'sent', 'email' => $this->email($row),
                 'message' => $row['status'] === 'sent' ? 'Sent.' : 'Still couldn&rsquo;t send it. Check the mail settings and try again.']);
         }
 
-        $stmt = $pdo->prepare(
-            'SELECT c.user_id, c.contact_email, u.email AS account_email
-               FROM bookings b JOIN customers c ON c.id = b.customer_id LEFT JOIN users u ON u.id = c.user_id
-              WHERE b.id = :b'
-        );
-        $stmt->execute([':b' => $beBookingId]);
-        $who = $stmt->fetch();
+        $who = EmailQueries::findRecipient($beBookingId);
         if (!$who) {
             $this->reply(404, ['ok' => false, 'message' => 'That booking no longer exists.']);
         }
         $isWalkIn = $who['user_id'] === null;
 
-        $stmt = $pdo->prepare('SELECT * FROM email_outbox WHERE booking_id = :b ORDER BY id');
-        $stmt->execute([':b' => $beBookingId]);
         $receipt = receipt_for_booking($pdo, $beBookingId);
 
         $this->reply(200, [
@@ -91,7 +76,7 @@ class BookingEmailsController extends Controller
             'isWalkIn' => $isWalkIn,
             'to'       => (string) ($isWalkIn ? $who['contact_email'] : $who['account_email']),
             'receipt'  => $receipt ? ['number' => $receipt['number']] : null,
-            'emails'   => array_map([$this, 'email'], $stmt->fetchAll()),
+            'emails'   => array_map([$this, 'email'], EmailQueries::forBooking($beBookingId)),
         ]);
     }
 

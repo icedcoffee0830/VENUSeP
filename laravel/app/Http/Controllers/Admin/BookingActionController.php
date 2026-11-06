@@ -95,8 +95,8 @@ class BookingActionController extends Controller
         } catch (HttpResponseException $r) {
             /* A refusal mid-action. The old endpoint exit()ed here, which closed its
                connection: no open transaction survived. The query files' saves undo
-               themselves; the two that keep a plain PDO transaction (the payment
-               reversal, the date move) are undone here. */
+               themselves; the one that keeps a plain PDO transaction (the payment
+               reversal) is undone here. */
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }

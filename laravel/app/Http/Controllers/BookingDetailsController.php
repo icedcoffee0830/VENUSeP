@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Queries\PaymentQueries;
 use App\Support\Status;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -83,10 +84,8 @@ class BookingDetailsController extends Controller
 
         /* ---- the System Receipt, once one was issued ---- */
         $hasReceipt = false;
-        if (($pdo = venusep_db()) !== null) {
-            $r = $pdo->prepare('SELECT 1 FROM system_receipts WHERE booking_id = :b LIMIT 1');
-            $r->execute([':b' => $b['id']]);
-            $hasReceipt = $r->fetchColumn() !== false;
+        if (venusep_db() !== null) {
+            $hasReceipt = PaymentQueries::bookingsWithReceipt([(int) $b['id']]) !== [];
         }
 
         /* ---- the money ---- */

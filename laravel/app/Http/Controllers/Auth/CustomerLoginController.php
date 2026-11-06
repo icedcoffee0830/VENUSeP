@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Queries\AccountQueries;
 use Illuminate\Http\Request;
 use PDOException;
 
@@ -96,25 +97,7 @@ class CustomerLoginController
             } elseif (($lock = SignInThrottle::enter($email)) > 0) {
                 $loginError = SignInThrottle::message($lock);   // the password is not even checked
             } else {
-                $stmt = $pdo->prepare(
-                    'SELECT
-                        u.id AS user_id,
-                        u.email,
-                        u.password_hash,
-                        u.is_active,
-                        c.id AS customer_id,
-                        c.full_name,
-                        c.phone,
-                        c.address,
-                        c.university_id_no
-                     FROM users u
-                     INNER JOIN customers c ON c.user_id = u.id
-                     WHERE u.email = :email
-                       AND u.account_type = :account_type
-                     LIMIT 1'
-                );
-                $stmt->execute([':email' => $email, ':account_type' => 'customer']);
-                $customer = $stmt->fetch();
+                $customer = AccountQueries::findCustomerSignIn($email);
 
                 if ($customer && $customer['is_active'] && $customer['password_hash'] === null) {
                     /* Created through Google, no password set yet. */

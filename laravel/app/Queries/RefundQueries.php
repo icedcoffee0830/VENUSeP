@@ -120,6 +120,19 @@ class RefundQueries
         return $row ? (array) $row : null;
     }
 
+    /* What the customer's refund page shows of the latest request, or null. */
+    public static function findLatestForPage(int $bookingId): ?array
+    {
+        $row = DB::selectOne("
+            SELECT refund_status, notes, official_receipt_pending, DATE(requested_at) AS filed
+            FROM refunds
+            WHERE booking_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+        ", [$bookingId]);
+        return $row ? (array) $row : null;
+    }
+
     /* Whether the booking has a refund request staff can still decide (the same list as Status::REFUND_OPEN). */
     public static function hasOpenRefund(int $bookingId): bool
     {

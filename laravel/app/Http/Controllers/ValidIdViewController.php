@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Queries\DocumentQueries;
+use App\Queries\PaymentQueries;
 use Illuminate\Http\Request;
 
 /* =====================================================================
@@ -50,17 +52,9 @@ class ValidIdViewController extends Controller
 
         $viFile = null;
         if ($viDocId) {
-            $s = $viPdo->prepare('SELECT booking_id, file_path, document_type AS kind, uploaded_at AS at FROM booking_documents WHERE id = :i');
-            $s->execute([':i' => $viDocId]);
-            $viFile = $s->fetch() ?: null;
+            $viFile = DocumentQueries::findIdFile($viDocId);
         } elseif ($viReceiptId) {
-            $s = $viPdo->prepare(
-                "SELECT booking_id, file_path, 'gcash_receipt' AS kind, created_at AS at, attempt_no, reference_number,
-                        amount_centavos, receiver_number, verdict, flags_json, override_note
-                   FROM gcash_receipts WHERE id = :i"
-            );
-            $s->execute([':i' => $viReceiptId]);
-            $viFile = $s->fetch() ?: null;
+            $viFile = DocumentQueries::findUploadFile($viReceiptId);
         }
         if ($viFile) {
             $viBookingId = (int) $viFile['booking_id'];
@@ -69,10 +63,8 @@ class ValidIdViewController extends Controller
         }
 
         /* ---- may this person see it? ---- */
-        $own = $viPdo->prepare('SELECT customer_id FROM bookings WHERE id = :b');
-        $own->execute([':b' => $viBookingId]);
-        $ownerId = $own->fetchColumn();
-        if ($ownerId === false || ($viIsStaff ? !staff_may_handle_booking($viBookingId) : (int) $ownerId !== (int) (session('customer_id') ?? 0))) {
+        $ownerId = PaymentQueries::findBookingCustomer($viBookingId);
+        if ($ownerId === null || ($viIsStaff ? !staff_may_handle_booking($viBookingId) : (int) $ownerId !== (int) (session('customer_id') ?? 0))) {
             return $this->notFound();
         }
         $viRows = bookings_query(['booking_id' => $viBookingId]);

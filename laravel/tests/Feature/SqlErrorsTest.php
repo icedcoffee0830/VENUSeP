@@ -73,6 +73,23 @@ class SqlErrorsTest extends TestCase
             && str_contains($msg, 'SQL failed at ') && preg_match('/\.php:\d+: /', $msg) === 1);
     }
 
+    /* A query through DB:: says what failed and which app line ran it, never the values: one could be a password hash. */
+    public function test_a_failed_db_query_logs_its_sql_and_our_line_but_not_its_values(): void
+    {
+        legacy('db');
+        config(['app.debug' => false]);
+        Log::spy();
+        try {
+            DB::update('UPDATE users SET no_such_column = ? WHERE id = ?', ['secret-hash-value', 0]);
+            $this->fail('the query should have failed');
+        } catch (PDOException $e) {
+            sql_failed($e);
+        }
+        Log::shouldHaveReceived('error')->withArgs(fn ($msg) => str_contains($msg, 'no_such_column')
+            && str_contains($msg, 'SET no_such_column = ?') && !str_contains($msg, 'secret-hash-value')
+            && str_contains($msg, 'SqlErrorsTest.php:'));
+    }
+
     /* ---- a JSON endpoint: fetch() sends no text/html, and must always get JSON ---- */
 
     public function test_debug_on_a_json_endpoint_answers_json_with_the_real_message(): void

@@ -229,15 +229,7 @@ class CounterCustomerController
         try {
             /* FOR UPDATE: two wrong passwords sent at the same moment must both count. */
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare(
-                'SELECT u.id, u.password_hash, u.is_active, u.reauth_failed_attempts, u.reauth_lock_level,
-                        CASE WHEN u.reauth_locked_until > NOW()
-                             THEN TIMESTAMPDIFF(SECOND, NOW(), u.reauth_locked_until) ELSE 0 END AS lock_seconds
-                   FROM customers c JOIN users u ON u.id = c.user_id
-                  WHERE c.id = :c LIMIT 1 FOR UPDATE'
-            );
-            $stmt->execute([':c' => $customerId]);
-            $user = $stmt->fetch();
+            $user = CustomerQueries::lockForPasswordCheck($customerId);
 
             if (!$user) {
                 $pdo->rollBack();

@@ -22,6 +22,30 @@ class VenueQueries
         return $row ? (array) $row : null;
     }
 
+    /* An office's id, name and group, or null. */
+    public static function find(int $venueId): ?array
+    {
+        $row = DB::selectOne('SELECT id, name, office_group FROM venues WHERE id = ?', [$venueId]);
+        return $row ? (array) $row : null;
+    }
+
+    /* Every office: id and name. */
+    public static function all(): array
+    {
+        return array_map(fn ($r) => (array) $r, DB::select('SELECT id, name FROM venues ORDER BY id'));
+    }
+
+    /* The open offices, for the sign-in cards. */
+    public static function openForSignIn(): array
+    {
+        return array_map(fn ($r) => (array) $r, DB::select("
+            SELECT id, name, venue_code, venue_type
+            FROM venues
+            WHERE is_active = 1
+            ORDER BY venue_type, name
+        "));
+    }
+
     public static function exists(int $venueId): bool
     {
         return DB::selectOne('SELECT id FROM venues WHERE id = ?', [$venueId]) !== null;
@@ -43,6 +67,12 @@ class VenueQueries
               AND s.user_id IN (" . implode(',', array_map('intval', $userIds)) . ")
             ORDER BY s.full_name
         "));
+    }
+
+    /* Move one staff member to an office; its halls come with them. */
+    public static function moveOneStaff(int $userId, int $venueId): void
+    {
+        self::moveStaff([$userId], $venueId);
     }
 
     /* Move these staff to an office; its halls come with them. */

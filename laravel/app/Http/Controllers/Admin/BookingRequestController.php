@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Queries\BookingCreateQueries;
+use App\Queries\RefundQueries;
 
 /* THE REQUEST DETAIL (was admin/booking-request.php) — built from the same
    `bookings` rows the queue and the customer's own history read. Every
@@ -75,13 +76,7 @@ class BookingRequestController extends Controller
 
         /* The refund claim, when there is one. */
         $refund = null;
-        $rfStmt = venusep_db()->prepare(
-            'SELECT refund_status, reason_category, reason, amount_requested, refund_to_number,
-                    official_receipt_pending, correction_attempts, correction_due_at, notes, requested_at, resubmitted_at
-               FROM refunds WHERE booking_id = :b ORDER BY id DESC LIMIT 1'
-        );
-        $rfStmt->execute([':b' => $b['id']]);
-        if ($rf = $rfStmt->fetch()) {
+        if ($rf = RefundQueries::findLatestRefund((int) $b['id'])) {
             $stageMap = [
                 'requested'               => 'Under verification',
                 'under_review'            => 'Under verification',

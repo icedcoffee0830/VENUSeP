@@ -40,8 +40,8 @@
       '.vz-ps-menu li .vz-ps-tick{visibility:hidden;color:#a11626}' +
       '.vz-ps-menu li[aria-selected="true"]{color:#a11626}' +
       '.vz-ps-menu li[aria-selected="true"] .vz-ps-tick{visibility:visible}' +
-      '.vz-ps-menu .vz-ps-hint{padding:6px 10px 4px;margin-top:3px;border-top:1px solid #f0ece6;font-weight:500;font-size:11.5px;color:#8a857d;cursor:default}' +
-      '.vz-ps-menu .vz-ps-hint:hover{background:none;color:#8a857d}' +
+      '.vz-ps-menu .vz-ps-hint{padding:6px 10px 4px;margin-top:3px;border-top:1px solid #f0ece6;font-weight:500;font-size:11.5px;color:#6e6a64;cursor:default}' +
+      '.vz-ps-menu .vz-ps-hint:hover{background:none;color:#6e6a64}' +
       '@media print{.vz-ps,.vz-ps-menu{display:none!important}}';
     document.head.appendChild(css);
   }

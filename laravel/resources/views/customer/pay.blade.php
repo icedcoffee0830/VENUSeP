@@ -22,13 +22,15 @@
       body { background: #fff !important; }
       .app-main { background: #fff !important; }
       .pay-wrap { max-width: 720px; margin: 0 auto; padding-top: 22px; }
-      .pay-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #4a4440; text-decoration: none; margin-bottom: 14px; }
+      /* the only way out on a phone: the tab bar is off on this page */
+      .pay-nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px; margin-bottom: 14px; }
+      .pay-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; font-weight: 600; color: #4a4440; text-decoration: none; }
       .pay-back:hover { color: var(--crimson); }
       .pay-title { margin: 0 0 4px; font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
       .pay-sub { margin: 0 0 18px; color: var(--soft); font-size: 13.5px; }
       .pay-card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin-bottom: 16px; }
       .pay-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 18px; }
-      .pay-k { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #a3a09a; margin-bottom: 3px; }
+      .pay-k { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6a64; margin-bottom: 3px; }
       .pay-v { font-size: 14px; font-weight: 640; color: #1c1b19; overflow-wrap: anywhere; }
       .pay-amount { font-size: 30px; font-weight: 780; letter-spacing: -.02em; color: var(--crimson); }
       .pay-note { display: flex; gap: 10px; align-items: flex-start; border-radius: 12px; padding: 13px 15px; margin-bottom: 16px; font-size: 13px; line-height: 1.55; }
@@ -42,12 +44,12 @@
       .pay-method { border: 1.5px solid rgba(0,0,0,.12); background: #fff; border-radius: 12px; padding: 12px 14px; cursor: pointer; text-align: left; font: inherit; }
       .pay-method.is-on { border-color: var(--crimson); background: #f9f3f3; }
       .pay-method b { display: block; font-size: 14px; color: #1c1b19; }
-      .pay-method span { display: block; font-size: 12px; color: #8a857d; margin-top: 2px; }
+      .pay-method span { display: block; font-size: 12px; color: #6e6a64; margin-top: 2px; }
       .pay-btn { width: 100%; height: 50px; border: none; border-radius: 12px; background: var(--crimson); color: #fff; font: 700 15px Inter, system-ui, sans-serif; cursor: pointer; margin-top: 16px; }
       .pay-btn:hover { background: var(--crimson-deep); }
       .pay-btn[disabled] { background: #b7b3ab; cursor: not-allowed; }
       .pay-err { margin-top: 10px; color: #b23a3a; font-size: 13px; font-weight: 600; }
-      .pay-small { font-size: 12.5px; color: #8a857d; margin-top: 9px; text-align: center; }
+      .pay-small { font-size: 12.5px; color: #6e6a64; margin-top: 9px; text-align: center; }
       .pay-agree { display: flex; gap: 9px; align-items: flex-start; margin: 14px 0 10px; cursor: pointer; font-size: 12.5px; color: #4a463f; line-height: 1.5; }
       .pay-agree input { width: 15px; height: 15px; margin-top: 2px; accent-color: var(--crimson); flex: none; }
       @media (max-width: 520px) { .pay-methods { grid-template-columns: 1fr; } .pay-amount { font-size: 26px; } }
@@ -59,7 +61,10 @@
         <div class="app-content">
           <div class="container-fluid">
             <div class="pay-wrap">
-              <a class="pay-back" href="{{ route('customer.booking-history') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to Booking History</a>
+              <nav class="pay-nav" aria-label="Leave this page">
+                <a class="pay-back" href="{{ route('customer.booking-history') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to My bookings</a>
+                <a class="pay-back" href="{{ route('customer.venues') }}"><i class="bi bi-house" aria-hidden="true"></i>Home page</a>
+              </nav>
               @fragment('pay-body')
               <div data-live="pay-body" data-pay-code="{{ $payCode }}" data-pay-open="{{ $payOpen ? 1 : 0 }}">
               <h1 class="pay-title">{{ $payOpen ? 'Pay for your booking' : 'Payment' }}</h1>
@@ -196,7 +201,7 @@
             <div style="border:1px solid rgba(0,0,0,.12);border-radius:11px;padding:14px;background:#fff">
               <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:9px">
                 <span style="font-size:13px;font-weight:600;color:#4a463f;overflow-wrap:anywhere">${esc(o.fileName)}</span>
-                <span id="gcBarLabel" style="font-size:12px;color:#8a857d;flex:none">${esc(o.label)} · ${Math.round((o.pct || 0) * 100)}%</span>
+                <span id="gcBarLabel" style="font-size:12px;color:#6e6a64;flex:none">${esc(o.label)} · ${Math.round((o.pct || 0) * 100)}%</span>
               </div>
               <div style="height:6px;border-radius:999px;background:#e7e4de;overflow:hidden">
                 <div id="gcBar" style="height:100%;width:${Math.round((o.pct || 0) * 100)}%;background:#a11626;border-radius:999px;transition:width .25s"></div>
@@ -237,7 +242,7 @@
             <div style="display:flex;gap:13px;padding:13px 14px">
               ${o.thumb ? `<img src="${o.thumb}" alt="receipt" style="width:64px;height:84px;object-fit:cover;border-radius:8px;border:1px solid rgba(0,0,0,.1);flex:none">` : ''}
               <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;align-content:start">
-                ${kv.map(([k, v]) => `<div><div style="font-size:12px;color:#8a857d">${k}</div><div style="font-size:13px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${esc(v)}</div></div>`).join('')}
+                ${kv.map(([k, v]) => `<div><div style="font-size:12px;color:#6e6a64">${k}</div><div style="font-size:13px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${esc(v)}</div></div>`).join('')}
               </div>
             </div>
             ${issues.length ? `
@@ -255,7 +260,7 @@
         const next = PAY.used + 1, last = attemptsLeft() === 1;
         return `<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;margin:2px 0 8px">
             <span style="font-weight:600;color:${last ? '#b23a3a' : '#5c584f'}">Attempt ${next} of ${PAY.allowed}</span>
-            <span style="color:#8a857d">${last ? 'Last try — it goes to staff whatever the check says' : attemptsLeft() + ' receipt uploads left'}</span>
+            <span style="color:#6e6a64">${last ? 'Last try — it goes to staff whatever the check says' : attemptsLeft() + ' receipt uploads left'}</span>
           </div>`;
       }
 
@@ -269,7 +274,7 @@
           <div class="pay-note is-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><div><strong>Send the EXACT amount — not more, not less.</strong>A different amount is not confirmed automatically; a coordinator has to review it.</div></div>
           <section class="pay-card">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line)">
-              <div><div style="font-size:12.5px;color:#8a857d">Amount to send</div><div class="pay-amount">${esc(PAY.amount)}</div></div>
+              <div><div style="font-size:12.5px;color:#6e6a64">Amount to send</div><div class="pay-amount">${esc(PAY.amount)}</div></div>
               <div style="width:56px;height:56px;border-radius:14px;background:#0a6cf0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750">GCash</div>
             </div>
             <div class="pay-grid" style="margin:14px 0">
@@ -288,14 +293,14 @@
         return `
           <section class="pay-card">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line)">
-              <div><div style="font-size:12.5px;color:#8a857d">Amount to pay</div><div class="pay-amount">${esc(PAY.amount)}</div></div>
+              <div><div style="font-size:12.5px;color:#6e6a64">Amount to pay</div><div class="pay-amount">${esc(PAY.amount)}</div></div>
               <div style="width:56px;height:56px;border-radius:14px;background:#a11626;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750">Cash</div>
             </div>
             <div style="margin-top:14px">
               <div class="pay-k">Where to pay</div>
               <div class="pay-v" style="font-size:15px">${esc(c.where)}</div>
               ${c.address ? `<div style="font-size:13px;color:#4a463f;margin-top:3px">${esc(c.address)}</div>` : ''}
-              <div style="font-size:12.5px;color:#8a857d;margin-top:3px">${esc(c.hours)}</div>
+              <div style="font-size:12.5px;color:#6e6a64;margin-top:3px">${esc(c.hours)}</div>
             </div>
             <div style="font-size:12.5px;color:#4a463f;line-height:1.7;border-top:1px solid var(--line);margin-top:14px;padding-top:12px">Bring your reference <strong>${esc(PAY.ref)}</strong> and a valid ID. Staff record the payment there and your booking updates on its own.</div>
           </section>`;

@@ -3,7 +3,7 @@
 @section('active', 'Customer Management')
 
 @push('head')
-  <meta name="theme-color" content="#007bff" media="(prefers-color-scheme: light)"/>
+  <meta name="theme-color" content="#7d1120" media="(prefers-color-scheme: light)"/>
   <meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme: dark)"/>
   <meta name="title" content="Venusep | Customer Management"/>
   <meta name="supported-color-schemes" content="light"/>
@@ -15,281 +15,15 @@
 @push('styles')
   <style>
 @include('partials.people-css-shell')
-
-.app-main {
-  margin-left: var(--venusep-sidebar-width) !important;
-  padding-top: var(--venusep-header-height) !important;
-  width: calc(100vw - var(--venusep-sidebar-width)) !important;
-  min-height: 100vh;
-  background: var(--venusep-cream);
-}
-
-.container-fluid {
-  width: 100%;
-  padding-inline: 1.35rem;
-}
-
-.ms-auto {
-  margin-left: auto !important;
-}
-
-.align-items-center {
-  align-items: center !important;
-}
-
-.d-flex {
-  display: flex !important;
-}
-
-.sidebar-toggle {
-  width: 38px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: #34312f;
-  border: 1px solid #46413d;
-  cursor: default;
-  pointer-events: none;
-}
-
-.staff-content {
-  min-height: calc(100vh - var(--venusep-header-height));
-  padding: 26px 30px 40px !important;
-  background: var(--venusep-cream);
-}
-
-.staff-content > .container-fluid {
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 24px !important;
-}
-
-.page-heading h1 {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 800;
-}
-
-.breadcrumb {
-  display: flex;
-  gap: 0.4rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.82rem;
-}
-
-.breadcrumb-item + .breadcrumb-item::before {
-  content: "/";
-  margin-right: 0.4rem;
-  color: #777;
-}
-
-.staff-panel {
-  width: 100%;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid var(--venusep-border);
-  border-radius: 10px;
-  box-shadow: 0 18px 34px rgba(31, 30, 30, 0.06);
-}
-
-.staff-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.9rem 1rem;
-  background: #fff;
-  border-bottom: 1px solid var(--venusep-border);
-}
-
-.staff-panel-header h2 {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 800;
-}
-
-.table-search {
-  width: min(100%, 18rem);
-}
-
-.input-group-text,
-.form-control {
-  border-color: var(--venusep-border);
-  font: inherit;
-}
-
-.form-control:focus {
-  border-color: #1d1b1b;
-  box-shadow: 0 0 0 0.15rem rgba(29, 27, 27, 0.14);
-}
-
-.staff-panel-body {
-  padding: 1rem;
-}
-
-#customers-table {
-  font-family: inherit;
-}
-
-.tabulator {
-  border: 0;
-  background: #fff;
-  font-size: 0.88rem;
-}
-
-.tabulator .tabulator-header {
-  border-bottom: 1px solid #dfe3e6;
-  background: #fff;
-  color: #2b2f33;
-  font-weight: 800;
-}
-
-.tabulator .tabulator-header .tabulator-col,
-.tabulator .tabulator-header .tabulator-col-row-handle {
-  background: #fff;
-  border-right: 0;
-}
-
-.tabulator .tabulator-tableholder .tabulator-table {
-  color: #25292d;
-  background: #fff;
-}
-
-.tabulator-row {
-  background: #fff !important;
-  border-bottom: 1px solid #ece8e2;
-}
-
-.tabulator-row.tabulator-row-even {
-  background: #fff !important;
-}
-
-.tabulator-row.tabulator-row-odd {
-  background: #fff !important;
-}
-
-.tabulator-row:hover {
-  background: #faf9f7 !important;
-}
-
-.tabulator-row .tabulator-cell {
-  border-right: 0;
-  padding: 0.75rem 1rem;
-}
-
-.tabulator .tabulator-footer {
-  border-top: 1px solid #e5e8eb;
-  background: #fff;
-  padding: 0.8rem 0;
-}
-
-.tabulator .tabulator-footer .tabulator-page-size {
-  min-height: 34px;
-  margin-inline: 0.4rem;
-  padding: 0.35rem 2rem 0.35rem 0.75rem;
-  border: 1px solid var(--venusep-border);
-  border-radius: 7px;
-  background-color: #fff;
-  color: #1d1b1b;
-  font: inherit;
-  font-weight: 700;
-}
-
-.tabulator .tabulator-footer .tabulator-pages {
-  display: inline-flex;
-  gap: 0.35rem;
-  align-items: center;
-  margin-left: 0.55rem;
-}
-
-.tabulator .tabulator-footer .tabulator-page {
-  min-width: 34px;
-  min-height: 34px;
-  margin: 0;
-  padding: 0.35rem 0.7rem;
-  border: 1px solid var(--venusep-border);
-  border-radius: 7px;
-  background: #fff;
-  color: #1d1b1b;
-  font: inherit;
-  font-weight: 800;
-  line-height: 1;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.tabulator .tabulator-footer .tabulator-page:hover:not(:disabled) {
-  border-color: #1d1b1b;
-  background: #f8f7f5;
-  color: #000;
-}
-
-.tabulator .tabulator-footer .tabulator-page.active {
-  border-color: #1d1b1b;
-  background: #1d1b1b;
-  color: #fff;
-}
-
-.tabulator .tabulator-footer .tabulator-page:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.tabulator .tabulator-footer .tabulator-paginator {
-  color: #2b2f33;
-  font-weight: 700;
-}
-
-.tabulator .badge {
-  border-radius: 6px;
-  font-weight: 700;
-}
-
+@include('partials.list-page-css')
+.cm-bookings { color: #a11626; font-weight: 600; text-decoration: none; }
+.cm-bookings:hover { text-decoration: underline; }
+.cm-flag { display: inline-flex; align-items: center; gap: 5px; color: #8a5a12; font-size: 12px; font-weight: 600; }
+.lp-stack .vz-chip { white-space: normal; }
 @media (max-width: 767.98px) {
-  :root {
-    --venusep-sidebar-width: 0px;
-    --venusep-header-height: 56px;
-  }
-
-  .app-header {
-    left: 0;
-  }
-
-  .app-main {
-    margin-left: 0 !important;
-    width: 100vw !important;
-  }
-
-  .staff-content {
-    padding: 1.1rem 1rem 3rem !important;
-  }
-
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    margin-bottom: 1.5rem !important;
-  }
-
-  .staff-panel-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .table-search {
-    width: 100%;
-  }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="bookings"]::before { content: "Bookings"; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="lastLogin"]::before { content: "Activity"; }
+  .lp-table .tabulator-row .tabulator-cell[tabulator-field="status"]::before { content: "Status"; }
 }
 
   @include('partials.tabulator-pager-css')
@@ -300,27 +34,22 @@
     <main class="app-main">
       <div class="app-content staff-content">
         <div class="container-fluid">
-          <div class="page-heading">
-            <h1>Customer Management</h1>
-            <nav aria-label="breadcrumb">
-              <ol class="breadcrumb">
-                <li class="breadcrumb-item">Dashboard</li>
-                <li class="breadcrumb-item active" aria-current="page">Customer Management</li>
-              </ol>
-            </nav>
-          </div>
+          <header class="lp-head">
+            <div>
+              <h1>Customer Management</h1>
+              <p>Customers who booked with your offices. Blocks apply to one office only.</p>
+            </div>
+          </header>
 
           <section class="staff-panel">
-            <div class="staff-panel-header">
-              <h2>Customer accounts</h2>
-              <div class="input-group input-group-sm table-search">
-                <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
-                <input id="table-filter" type="search" class="form-control" placeholder="Filter rows..." aria-label="Filter rows"/>
-              </div>
+            <div class="lp-tools">
+              <label class="lp-search"><i class="bi bi-search" aria-hidden="true"></i><input id="table-filter" type="search" placeholder="Name, email or phone…" aria-label="Search name, email or phone" autocomplete="off"/></label>
+              <button type="button" class="lp-filters-btn" aria-expanded="false"><i class="bi bi-sliders" aria-hidden="true"></i>Filters</button>
+              <div class="lp-field"><label for="cmStatus">Status</label><select id="cmStatus"><option value="">All statuses</option><option>Active</option><option>Suspended</option></select></div>
+              <div class="lp-field"><label for="cmUsep">USeP</label><select id="cmUsep"><option value="">Everyone</option><option value="yes">USeP only</option><option value="no">Outside USeP</option></select></div>
+              <div class="lp-field"><label for="cmBlocks">Blocks</label><select id="cmBlocks"><option value="">Any</option><option value="yes">Blocked somewhere</option></select></div>
             </div>
-            <div class="staff-panel-body">
-              <div id="customers-table"></div>
-            </div>
+            <div id="customers-table" class="lp-table"></div>
           </section>
         </div>
       </div>
@@ -333,13 +62,9 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
   <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
+  <script src="{{ asset('assets/js/list-page.js') }}"></script>
   @fragment('cm-rows')<script type="application/json" data-live="cm-rows">{!! json_encode($cmRows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>@endfragment
   <script>
-    const statusBadge = (cell) => {
-      const value = cell.getValue();
-      return `<span class="badge text-bg-${value === 'Active' ? 'success' : 'secondary'}">${value}</span>`;
-    };
-
     document.addEventListener('DOMContentLoaded', () => {
       /* The real customer accounts, from `users` + `customers`. Walk-ins
          (no user_id) never appear here — see admin/customer-management.php. */
@@ -353,22 +78,21 @@
       };
 
       const toggleActive = async function (row) {
-        const disable = row.status === 'Active';
+        const suspend = row.status === 'Active';
         const ok = await venusepConfirm(
-          disable
-            ? (row.open ? 'Warning: they have ' + row.open + ' upcoming or unpaid booking(s), which stay as they are. ' : '') + 'They will be signed out immediately and cannot sign in or book again until re-enabled. Their existing bookings and history are unaffected.'
+          suspend
+            ? (row.open ? 'Warning: they have ' + row.open + ' upcoming or unpaid booking(s), which stay as they are. ' : '') + 'They will be signed out immediately and cannot sign in or book again until reactivated. Their existing bookings and history are unaffected.'
             : 'They will be able to sign in and book again.',
-          { title: (disable ? 'Disable ' : 'Re-enable ') + row.name + '?', okLabel: disable ? 'Disable' : 'Re-enable', danger: disable });
+          { title: (suspend ? 'Suspend ' : 'Reactivate ') + row.name + '?', okLabel: suspend ? 'Suspend' : 'Reactivate', danger: suspend });
         if (!ok) return;
         const body = new FormData();
         body.append('action', 'set_active');
         body.append('user_id', row.userId);
-        body.append('active', disable ? '0' : '1');
+        body.append('active', suspend ? '0' : '1');
         customerAction(body);
       };
 
       const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-      const PILL = 'cursor:pointer;background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600;border:1px solid ';
 
       /* Block or lift at one office: a reason either way. The customer never sees it. */
       const blockAction = async function (row, act, venueId) {
@@ -403,101 +127,118 @@
         customerAction(body);
       };
 
-      const table = new Tabulator('#customers-table', {
+      const BOOKINGS_URL = @json(route('admin.booking-requests'));
+      const byDate = (a, b) => (Date.parse(a) || 0) - (Date.parse(b) || 0);
+
+      /* The offices to block at: one office is one click; several open a small menu. Suspend,
+         Reactivate and Fix email always stay one click, on the row. */
+      const blockItem = function (row, b) {
+        return b.on
+          ? '<button type="button" class="btn-cust-block" data-act="lift" data-venue="' + b.venueId + '"><span>Lift block at ' + esc(b.office) + '<small>Blocked ' + esc(b.at) + ' by ' + esc(b.by) + ': ' + esc(b.reason) + '</small></span></button>'
+          : '<button type="button" class="btn-cust-block" data-act="block" data-venue="' + b.venueId + '">Block at ' + esc(b.office) + '</button>';
+      };
+      const blockButtons = function (row) {
+        if (row.blocks.length === 1) {
+          const b = row.blocks[0];
+          return b.on
+            ? '<button type="button" class="lp-btn lp-btn-ok btn-cust-block" data-act="lift" data-venue="' + b.venueId + '">Lift block</button>'
+            : '<button type="button" class="lp-btn btn-cust-block" data-act="block" data-venue="' + b.venueId + '">Block at ' + esc(b.office) + '</button>';
+        }
+        if (!row.blocks.length) return '';
+        const id = 'cmBlocks' + row.id;
+        return '<button type="button" class="lp-btn" popovertarget="' + id + '">Blocks <i class="bi bi-chevron-down" aria-hidden="true"></i></button>'
+          + '<div class="lp-menu" id="' + id + '" popover>' + row.blocks.map(function (b) { return blockItem(row, b); }).join('') + '</div>';
+      };
+      const rowActions = function (row) {
+        const active = row.status === 'Active';
+        return '<div class="lp-acts">' + blockButtons(row)
+          + (row.fixEmail ? '<button type="button" class="lp-btn btn-cust-fix-email">Fix email</button>' : '')
+@if ($cmMaySuspend)
+          + '<button type="button" class="lp-btn btn-cust-toggle ' + (active ? 'lp-btn-no">Suspend' : 'lp-btn-ok">Reactivate') + '</button>'
+@endif
+          + '</div>';
+      };
+
+      const table = new Tabulator('#customers-table', Object.assign({
         data: data,
+        placeholder: 'No customers match these filters.',
         layout: 'fitColumns',
         pagination: true,
         paginationSize: 10,
         paginationSizeSelector: [10, 25, 50, 100],
         movableColumns: true,
         columns: [
-          { title: '#', field: 'id', width: 60, headerSort: true },
-          { title: 'Name', field: 'name', headerFilter: 'input', minWidth: 160 },
           {
-            title: 'Email', field: 'email', headerFilter: 'input', minWidth: 200,
-            /* a counter account never signed into: its group's admin may correct a wrong email */
+            title: 'Customer', field: 'name', minWidth: 240, cssClass: 'lp-wide',
             formatter: function (cell) {
-              const row = cell.getRow().getData();
-              return esc(row.email) + (row.fixEmail
-                ? '<div style="margin-top:.25rem"><button type="button" class="btn-cust-fix-email" style="' + PILL + '#d9d4cc;color:#4a4440">Fix email</button></div>' : '');
-            },
-            cellClick: function (e, cell) {
-              if (e.target.closest('.btn-cust-fix-email')) fixEmailAction(cell.getRow().getData());
+              const r = cell.getRow().getData();
+              const contact = [r.email, r.phone].filter(Boolean).map(esc).join(' · ');
+              return '<div class="lp-stack"><span class="lp-name">' + esc(r.name) + (r.usep === 'USeP' ? ' <span class="vz-chip vz-chip-crimson">USeP</span>' : '') + '</span><span class="lp-sub">' + contact + '</span></div>';
             },
           },
-          { title: 'Phone', field: 'phone', width: 140 },
-          { title: 'USeP', field: 'usep', width: 80, hozAlign: 'center' },
-          { title: 'Bookings', field: 'bookings', width: 100, hozAlign: 'center' },
-          { title: 'Joined', field: 'joined', width: 115, hozAlign: 'center' },
-          { title: 'Last sign-in', field: 'lastLogin', width: 120, hozAlign: 'center' },
           {
-            title: 'Status',
-            field: 'status',
-            formatter: statusBadge,
-            headerFilter: 'list',
-            headerFilterParams: { values: ['', 'Active', 'Disabled'] },
-            width: 120,
-            hozAlign: 'center',
+            title: 'Bookings', field: 'bookings', width: 108,
+            formatter: function (cell) {
+              const r = cell.getRow().getData();
+              const words = r.bookings + (r.bookings === 1 ? ' booking' : ' bookings');
+              return r.bookings ? '<a class="cm-bookings" href="' + BOOKINGS_URL + '?q=' + encodeURIComponent(r.name) + '">' + words + '</a>' : words;
+            },
           },
           {
-            /* per office (DB-DECISIONS 28): only the offices this admin may block at */
-            title: 'Office blocks',
-            field: 'blocks',
-            minWidth: 190,
-            headerSort: false,
+            title: 'Activity', field: 'lastLogin', width: 190, sorter: byDate,
             formatter: function (cell) {
-              return cell.getValue().map(function (b) {
-                return b.on
-                  ? '<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin:.15rem 0"><span class="badge text-bg-danger" title="' +
-                      esc('By ' + b.by + ', ' + b.at + ': ' + b.reason) + '">Blocked · ' + esc(b.office) + '</span>' +
-                      '<button type="button" class="btn-cust-block" data-act="lift" data-venue="' + b.venueId + '" style="' + PILL + '#c3e0cd;color:#1c7a4f">Lift block</button></div>'
-                  : '<div style="margin:.15rem 0"><button type="button" class="btn-cust-block" data-act="block" data-venue="' + b.venueId + '" style="' + PILL + '#e3c3c3;color:#b23a3a">Block at ' + esc(b.office) + '</button></div>';
+              const r = cell.getRow().getData();
+              return '<div class="lp-stack"><span>' + (r.lastLogin === 'never' ? 'Never signed in' : 'Last sign-in ' + esc(r.lastLogin)) + '</span><span class="lp-sub">'
+                + (r.counter ? 'Made at the counter ' : 'Joined ') + esc(r.joined) + '</span></div>';
+            },
+          },
+          {
+            /* per office (DB-DECISIONS 28): only what is true, a chip for each block */
+            title: 'Status', field: 'status', width: 180, cssClass: 'lp-wide',
+            formatter: function (cell) {
+              const r = cell.getRow().getData();
+              const blocks = r.blocks.filter(function (b) { return b.on; }).map(function (b) {
+                return '<span class="vz-chip vz-chip-red" title="' + esc('By ' + b.by + ', ' + b.at + ': ' + b.reason) + '">Blocked at ' + esc(b.office) + '</span>';
               }).join('');
-            },
-            cellClick: function (e, cell) {
-              const btn = e.target.closest('.btn-cust-block');
-              if (btn) blockAction(cell.getRow().getData(), btn.dataset.act, Number(btn.dataset.venue));
+              return '<div class="lp-stack"><span class="vz-chip vz-chip-' + (r.status === 'Active' ? 'green' : 'grey') + '">' + esc(r.status) + '</span>' + blocks
+                + (r.fixEmail ? '<span class="cm-flag"><i class="bi bi-envelope-exclamation" aria-hidden="true"></i>Email can still be fixed</span>' : '') + '</div>';
             },
           },
-@if ($cmMaySuspend)
           {
-            title: '',
-            field: 'userId',
-            width: 120,
-            hozAlign: 'center',
-            headerSort: false,
-            formatter: function (cell) {
-              const row = cell.getRow().getData();
-              const disable = row.status === 'Active';
-              return '<button type="button" class="btn-cust-toggle" style="cursor:pointer;border:1px solid ' +
-                (disable ? '#e3c3c3;color:#b23a3a' : '#c3e0cd;color:#1c7a4f') +
-                ';background:#fff;border-radius:999px;padding:.4rem .8rem;min-height:32px;font-size:.76rem;font-weight:600">' +
-                (disable ? 'Disable' : 'Enable') + '</button>';
-            },
+            title: 'Actions', field: 'actions', width: 180, headerSort: false,
+            formatter: function (cell) { return rowActions(cell.getRow().getData()); },
             cellClick: function (e, cell) {
-              if (!e.target.closest('.btn-cust-toggle')) return;
-              toggleActive(cell.getRow().getData());
+              const row = cell.getRow().getData();
+              const block = e.target.closest('.btn-cust-block');
+              if (block) {
+                block.closest('[popover]')?.hidePopover();
+                blockAction(row, block.dataset.act, Number(block.dataset.venue));
+              } else if (e.target.closest('.btn-cust-fix-email')) fixEmailAction(row);
+@if ($cmMaySuspend)
+              else if (e.target.closest('.btn-cust-toggle')) toggleActive(row);
+@endif
             },
           },
-@endif
         ],
-      });
+      }, venusepPager('customers')));
+      table.on('tableBuilt', () => table.element.prepend(table.element.querySelector('.tabulator-footer')));   /* the pager goes above the rows */
 
-      document.getElementById('table-filter').addEventListener('input', (event) => {
-        const value = event.target.value;
-        if (value) {
-          table.setFilter([
-            [
-              { field: 'name', type: 'like', value: value },
-              { field: 'email', type: 'like', value: value },
-              { field: 'phone', type: 'like', value: value },
-              { field: 'status', type: 'like', value: value },
-            ],
-          ]);
-        } else {
-          table.clearFilter();
-        }
-      });
+      /* the search and the three boxes work together */
+      const search = document.getElementById('table-filter');
+      const status = document.getElementById('cmStatus');
+      const usep = document.getElementById('cmUsep');
+      const blocked = document.getElementById('cmBlocks');
+      const applyFilters = function () {
+        const q = search.value.trim().toLowerCase();
+        table.setFilter(function (r) {
+          return (!q || [r.name, r.email, r.phone].join(' ').toLowerCase().includes(q))
+            && (!status.value || r.status === status.value)
+            && (!usep.value || (r.usep === 'USeP') === (usep.value === 'yes'))
+            && (!blocked.value || r.blocks.some(function (b) { return b.on; }));
+        });
+      };
+      search.addEventListener('input', applyFilters);
+      [status, usep, blocked].forEach(function (box) { box.addEventListener('change', applyFilters); });
     });
   </script>
 @endpush

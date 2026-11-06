@@ -17,8 +17,8 @@
         --vm-border: #e7e6e3;
         --vm-hairline: #f0efec;
         --vm-text: #1f1e1e;
-        --vm-muted: #8a8680;
-        --vm-label: #a3a09a;
+        --vm-muted: #6e6a64;
+        --vm-label: #6e6a64;
         --vm-hover: #f5f4f2;
         --vm-dark: #1f1e1e;
         --vm-navy: #1f2a44;
@@ -31,6 +31,15 @@
       .br-page { color: var(--vm-text); padding: 22px 0 0; width: 100%; } /* 22px + 4px from .app-content = 26px top, sides owned by .container-fluid */
       .br-back { color: var(--vm-muted); display: inline-block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.9rem; text-decoration: none; }
       .br-back:hover { color: var(--vm-text); }
+      .br-crumb { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; }
+      .br-crumb span { color: #6e6a64; font-size: 13px; }
+      .br-done { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 1rem; padding: 12px 14px; border-radius: 12px; background: #eaf6ef; color: #1c7a4f; font-size: 14px; font-weight: 600; }
+      .br-done > i { font-size: 18px; }
+      .br-done > span { flex: 1; min-width: 200px; }
+      .br-done small { display: block; color: #2c6a4c; font-size: 13px; font-weight: 400; }
+      .br-next { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; height: 38px; padding: 0 1rem; border-radius: 10px; background: #a11626; color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
+      .br-next:hover { background: #7d0f1e; color: #fff; }
+      @media (max-width: 767.98px) { .br-next { width: 100%; height: 44px; } }
       .br-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.2rem; }
       .br-subtitle { color: var(--vm-muted); font-size: 0.84rem; margin: 0; }
 
@@ -44,8 +53,8 @@
       .b-amber::before { background: #d9930d; }
       .b-red   { background: #fcecec; color: #b23a3a; }
       .b-red::before   { background: #cf4a4a; }
-      .b-navy  { background: #eef1f8; color: #1f2a44; }
-      .b-navy::before  { background: #1f2a44; }
+      .b-navy  { background: #eef0f2; color: #55606b; }
+      .b-navy::before  { background: #55606b; }
 
       .br-btn { background: #ffffff; border: 1px solid var(--vm-border); border-radius: 9px; color: var(--vm-text); cursor: pointer; font-family: inherit; font-size: 0.83rem; font-weight: 600; padding: 0.5rem 0.95rem; }
       .br-btn:hover { background: var(--vm-hover); }
@@ -224,7 +233,7 @@
          reply is what gets drawn — so the screen can never claim a state the
          database did not reach.
          ============================================================ */
-      let acting = false;
+      let acting = false, acted = false;
       async function staffAction(action, extra, onOk) {
         if (acting || !cur) return false;
         acting = true;
@@ -249,6 +258,7 @@
             if (out.booking.tl) cur.tl = out.booking.tl;
           }
           if (typeof onOk === 'function') onOk(out);
+          acted = true;
           acting = false; render(); return true;
         } catch (e) {
           cur.actionError = 'Could not reach the server, so nothing was changed.';
@@ -261,6 +271,7 @@
       async function reloadCur() {
         await Live.refresh();
         Object.assign(cur, Live.data('brq-row') || {}, { fileRefundOpen: false, xMode: null, actionError: null });
+        acted = true;
         render();
         loadMail();
       }
@@ -347,8 +358,8 @@
         if (!target) return line('#b23a3a', 'Enter the number before attaching a receipt — the check has nothing to compare against without it.');
         let out = "";
         if (declared && target !== declared)      out += line('#8a5a12', '<strong>You changed this.</strong> The customer asked for it to go to ' + fmt(declared) + '.');
-        else if (declared)                        out += line('#8a857d', 'Given by the customer on their refund request.');
-        else                                      out += line('#8a857d', 'No number was declared on the request — this is the number on their account.');
+        else if (declared)                        out += line('#6e6a64', 'Given by the customer on their refund request.');
+        else                                      out += line('#6e6a64', 'No number was declared on the request — this is the number on their account.');
         if (declared && onFile && declared !== onFile)
           out += line('#b23a3a', '&#9888; <strong>This is NOT the number on their account</strong> (' + fmt(onFile) + '). Check it against the sender on the original payment before sending.');
         else if (declared && onFile)
@@ -392,7 +403,7 @@
       }
       function amountVerdict(read, required) {
         const a = pesoCentavos(read), b = pesoCentavos(required);
-        if (a == null || b == null) return ' <span style="color:#8a857d">· could not compare</span>';
+        if (a == null || b == null) return ' <span style="color:#6e6a64">· could not compare</span>';
         if (a === b) return ' <span style="color:#1c7a4f">· matches</span>';
         return ' <span style="color:#b23a3a">· ' + (a < b ? 'SHORT by ' : 'OVER by ') + centavosFmt(Math.abs(b - a)) + '</span>';
       }
@@ -429,7 +440,7 @@
         'Other — see the note below',
       ];
       function fixDocOptions() {
-        const docs = ['VENUSeP System Receipt'];
+        const docs = ['VENUSeP Transaction Receipt'];
         if (cur.method === 'gcash') docs.push('GCash Payment Receipt');
         docs.push('Official Receipt (OR)');
         return docs;
@@ -608,9 +619,9 @@
           refund_outside: ['Record a refund made outside the system', 'Only after the school has returned the money through the Cashier. The booking becomes Cancelled and Refunded, and this cannot be edited.',
             sel({ closure: 'Office closure', school: 'School decision', other: 'Other' }) + note('Explanation (the customer reads this)')
             + `<div class="br-fld"><label for="xRef">Cashier reference</label><input id="xRef"></div><div class="br-fld"><label for="xOn">Date returned</label><input id="xOn" type="date"></div><div class="br-fld"><label for="xFile">Proof from the Cashier</label><input id="xFile" type="file" accept="image/*,application/pdf"></div>`],
-          reverse_payment: ['Reverse this payment', 'Check the office\'s GCash app first. The payment is rejected, the System Receipt becomes VOID, and the customer gets 48 hours to pay.',
+          reverse_payment: ['Reverse this payment', 'Check the office\'s GCash app first. The payment is rejected, the Transaction Receipt becomes VOID, and the customer gets 48 hours to pay.',
             sel({ fake: 'Fake receipt', wrong: 'Recorded on the wrong booking', never: 'The money never arrived', other: 'Other' }) + note('Note (at least 10 characters)')
-            + `<div class="br-fld"><label for="xPass">Your password</label><input id="xPass" type="password" autocomplete="current-password"></div>`],
+            + `<div class="br-fld"><label for="xPass">Your password</label><span class="vz-pw"><input id="xPass" type="password" autocomplete="current-password">${venusepEye}</span></div>`],
         }[cur.xMode];
         return `<div class="br-ovr" style="margin-top:0.9rem;text-align:left">
             <div style="font-size:0.82rem;font-weight:650;margin-bottom:0.35rem">${P[0]}</div>
@@ -735,6 +746,8 @@
         if (cur.pay === 'overdue') return cur.postpay || overdueAfterEvent
             ?`<button class="br-btn br-btn-primary" onclick="extendDeadline()">Extend 48 h</button>`
             : `<button class="br-btn br-btn-primary" onclick="releaseSlot()">Release the slot</button><button class="br-btn" onclick="extendDeadline()">Extend 48 h</button>`;
+        /* With the customer to correct: nothing to pay or approve until they send it back (the server refuses too). */
+        if (cur.pay === 'refund_correction') return `<span class="none">With the customer to correct. It can be paid once they send it back.</span><button class="br-btn" onclick="openAction('deny')">Deny refund</button>`;
         if (OPEN_REFUND.includes(cur.pay) && cur.refund && cur.refund.needsAdmin) {
           return (IS_ADMIN ? `<button class="br-btn br-btn-primary" onclick="approveLostReceipt()">Approve the proof</button>`
                            : `<span class="none">Waiting for an administrator to approve the proof</span>`)
@@ -928,7 +941,7 @@
                 'They chose cash in Pay now, so GCash is closed for them. If they cancel that choice, this button goes away and GCash opens again.') +
               `<div class="br-kvgrid">${kv('Pay by', 'end of ' + esc(cur.checkIn))}${kv('Amount due', esc(cur.total))}</div>
                <div style="margin-top:0.8rem"><button class="br-btn br-btn-primary" onclick="cashReceived()">Cash received &mdash; ${esc(cur.total)}</button></div>
-               <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.45rem">Press once the cash is in your hand. The stay is marked paid and its System Receipt is issued.</div>`;
+               <div style="color:var(--vm-muted);font-size:0.74rem;margin-top:0.45rem">Press once the cash is in your hand. The stay is marked paid and its Transaction Receipt is issued.</div>`;
           }
         }
         /* HOSTEL: the POS gate sits in FRONT of every payment state. Without a
@@ -1002,7 +1015,7 @@
           case 'confirmed': return banner('bn-green', 'Payment confirmed', 'Confirmed by ' + esc(cur.confirmedBy || 'staff') + '. The reference number is permanently locked.') + (cur.receipt ? receiptBlock() : '');
           case 'paid_cash': return isHostel()
               /* the hostel takes cash at the front desk; its OR comes later from the cashier */
-              ? banner('bn-green', 'Paid in cash at the front desk', esc(cur.confirmedBy || 'Recorded by staff') + ' · the System Receipt is issued; the Official Receipt follows from the University Cashier.')
+              ? banner('bn-green', 'Paid in cash at the front desk', esc(cur.confirmedBy || 'Recorded by staff') + ' · the Transaction Receipt is issued; the Official Receipt follows from the University Cashier.')
               : banner('bn-green', 'Paid at the cashier', esc(cur.confirmedBy || 'Recorded by staff') + ' · official receipt issued at the counter.');
           case 'overdue': return banner('bn-red', 'Payment overdue', (cur.postpay
               ? 'It was due ' + esc(cur.payBy) + ' and the grace period ended ' + esc(cur.graceEnds || cur.payBy) + ' with no valid payment. The event already happened, so the booking is not released: the payment stays on record and can still be made. Extend the deadline or follow up with the customer.'
@@ -1106,11 +1119,39 @@
           </div>`;
       }
 
+      /* The list this booking was opened from (the queue saves it on the row's click): the back
+         link names its tab, the page says where you are, and Next opens the following one.
+         Opened any other way (a bell, a link): the plain back link, and no Next. */
+      const QUEUE_URL = {!! json_encode(route('admin.booking-requests')) !!};
+      const queue = (function () {
+        try {
+          const list = JSON.parse(sessionStorage.getItem('venusep_queue'));
+          return list && list.ids.includes(qid) ? list : null;
+        } catch (e) { return null; }
+      })();
+      function backLink() {
+        if (!queue) return `<a class="br-back" href="${QUEUE_URL}">&larr; Back to Booking Requests</a>`;
+        const all = queue.tab === 'all';
+        return `<div class="br-crumb"><a class="br-back" href="${esc(queue.url)}">&larr; ${all ? 'Back to Booking Requests' : esc(queue.label)}</a>
+          <span>${queue.ids.indexOf(qid) + 1} of ${queue.ids.length} in this ${all ? 'list' : 'tab'}</span></div>`;
+      }
+      /* after an action: on to the next booking of the same tab */
+      function doneNote() {
+        if (!acted || !queue) return '';
+        const at = queue.ids.indexOf(qid), left = queue.ids.length - at - 1;
+        const word = queue.tab === 'confirm' ? 'receipt' : 'booking';
+        return left
+          ? `<div class="br-done" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Saved.<small>${left} more ${left === 1 ? word : word + 's'} waiting in this ${queue.tab === 'all' ? 'list' : 'tab'}.</small></span>
+              <a class="br-next" href="${QUEUE_URL.replace('booking-requests', 'booking-request')}?id=${encodeURIComponent(queue.ids[at + 1])}">Next ${word} <i class="bi bi-arrow-right" aria-hidden="true"></i></a></div>`
+          : `<div class="br-done" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Saved. That was the last one.</span>
+              <a class="br-next" href="${esc(queue.url)}">Back to the list</a></div>`;
+      }
+
       function render() {
         // venue-only: a hostel booking has named guests, not an attendee count
         const over = !isHostel() && cur.attendees > cur.capacity;
         document.getElementById('brqRoot').innerHTML = `
-          <a class="br-back" href="{{ route('admin.booking-requests') }}">&larr; Back to Booking Requests</a>
+          ${backLink()}
           <div class="br-head">
             <div>
               <h1 class="br-title">${cur.id} · ${esc(cur.event)}</h1>
@@ -1127,6 +1168,7 @@
               ${cur.actionError && !cur.attErr ? `<div role="alert" style="color:#b23a3a;font-size:0.78rem;margin-top:0.4rem;text-align:right">${esc(cur.actionError)}</div>` : ''}
             </div>
           </div>
+          ${doneNote()}
 
           <div class="br-grid">
             <div>
@@ -1211,7 +1253,6 @@
          Walk-ins are emailed if they gave an address at the counter;
          account holders get nothing automatic — they use My Bookings.
          ============================================================ */
-      const MAIL_KIND = { walkin_booking: 'Booking confirmation', walkin_receipt: 'System Receipt', receipt_copy: 'System Receipt' };
       let mail = { loaded: false, data: null, error: null, busy: 0, flash: '' };
 
       async function loadMail() {
@@ -1242,7 +1283,7 @@
 
       function mailRow(m) {
         const rc = mail.data.receipt;
-        const what = MAIL_KIND[m.kind] + (m.receiptId && rc ? ' ' + rc.number : '')
+        const what = esc(m.label || m.kind) + (m.receiptId && rc ? ' ' + rc.number : '')
           + (m.kind === 'receipt_copy' ? ' <span class="soft">· requested by the customer</span>' : (m.receiptId ? ' <span class="soft">· PDF</span>' : ''));
         const chip = m.status === 'sent' ? '<span class="br-badge b-green">Sent</span>'
                    : m.status === 'failed' ? '<span class="br-badge b-red">Failed</span>'
@@ -1269,7 +1310,7 @@
           note = 'No automatic emails for account holders. They download the receipt or email it to themselves from My Bookings.';
         }
         const rcpt = d.receipt
-          ? `<div class="br-rcpt"><span>System Receipt ${esc(d.receipt.number)}</span><a class="br-btn" href="{{ route('root.receipt-pdf') }}?booking=${encodeURIComponent(cur.id)}">Download PDF</a></div>`
+          ? `<div class="br-rcpt"><span>Transaction Receipt ${esc(d.receipt.number)}</span><a class="br-btn" href="{{ route('root.receipt-pdf') }}?booking=${encodeURIComponent(cur.id)}">Download PDF</a></div>`
           : '';
         return `<div class="br-card"><div class="br-sec">
             <h2 class="br-h2">Receipt &amp; emails <span class="br-mail-to">${to}</span></h2>
@@ -1312,7 +1353,7 @@
       /* PAY TO USE (2026-10-27): the guest paid cash at the front desk. The
          stay becomes a cash booking, paid, with its System Receipt. */
       async function cashReceived() {
-        if (!(await venusepConfirm('Mark ' + cur.total + ' as received in cash? The stay is marked paid and its System Receipt is issued.',
+        if (!(await venusepConfirm('Mark ' + cur.total + ' as received in cash? The stay is marked paid and its Transaction Receipt is issued.',
               { title: 'Cash received?', okLabel: 'Cash received' }))) return;
         staffAction('cash_received', {}, function (out) {
           if (out.booking && out.booking.method) cur.method = String(out.booking.method).toLowerCase();

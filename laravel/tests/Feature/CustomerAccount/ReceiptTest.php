@@ -20,7 +20,7 @@ class ReceiptTest extends TestCase
     {
         parent::setUp();
         legacy('system-receipt');
-        $this->receiptId = receipt_issue(venusep_db(), self::BOOKING, 1);
+        $this->receiptId = receipt_issue(self::BOOKING, 1);
     }
 
     protected function tearDown(): void
@@ -42,14 +42,24 @@ class ReceiptTest extends TestCase
             ->assertNotFound()->assertSeeText('Not found.');
     }
 
+    public function test_the_receipt_view_has_the_phone_tab_bar_on_bookings(): void
+    {
+        $this->actingAsCustomer('customer@gmail.com')
+            ->get(route('customer.receipt', ['booking' => $this->ref(self::BOOKING)]))
+            ->assertOk()
+            ->assertSee('data-tab="bookings" aria-current="page"', false);
+    }
+
     public function test_the_owner_sees_the_receipt_and_the_confirm_strip(): void
     {
         $ref = $this->ref(self::BOOKING);
         $this->actingAsCustomer('customer@gmail.com')
             ->get(route('customer.receipt', ['booking' => $ref, 'confirm' => 1]))
             ->assertOk()
-            ->assertSee('System Receipt')
+            ->assertSee('Transaction Receipt')->assertDontSee('System Receipt')
             ->assertSee('A refund request needs this receipt.')
+            ->assertSee('<a class="rc-back" href="' . route('customer.booking-history') . '">', false)
+            ->assertSee('Back to My bookings')
             ->assertSee('Send this receipt as a PDF to', false)
             ->assertSee('customer@gmail.com')
             ->assertSee(route('root.receipt-pdf', ['booking' => $ref]), false)
@@ -77,6 +87,7 @@ class ReceiptTest extends TestCase
             ->assertStatus(303);
         $this->assertContains($res->headers->get('Location'), [$self . '&sent=1', $self . '&failed=1']);
         $this->assertSame(1, DB::table('email_outbox')->where('receipt_id', $this->receiptId)->where('kind', 'receipt_copy')->count());
+        $this->assertStringContainsString('VENUSeP Transaction Receipt', DB::table('email_outbox')->where('receipt_id', $this->receiptId)->value('subject'));
 
         if ($res->headers->get('Location') === $self . '&sent=1') {
             // a second one within 5 minutes is not queued

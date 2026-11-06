@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Queries\AccountQueries;
 use App\Queries\BlockQueries;
 use App\Queries\CustomerQueries;
 use Illuminate\Database\QueryException;
@@ -38,27 +39,12 @@ class CustomerController
     {
         legacy('auth', 'offices');
         $scope = staff_venue_scope();   /* null = the super admin: every customer, every office */
-        $mine = $scope === null ? '' : ' AND r.venue_id IN (' . implode(',', array_map('intval', $scope) ?: [0]) . ')';
         $offices = array_values(array_filter(office_all(), fn ($o) => staff_may_handle_venue($o['id'])));
         $cmRows = [];
         try {
-            $cmPdo = venusep_db_or_fail();
+            venusep_db_or_fail();
             $blocks = BlockQueries::activeByCustomer($scope);
-            $cmStmt = $cmPdo->query(
-                "SELECT u.id AS user_id, u.email, u.is_active, u.last_login_at, u.google_sub IS NULL AS not_google,
-                        c.id AS customer_id, c.full_name, c.phone, c.university_id_no, c.created_at, c.counter_venue_id,
-                        (SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.customer_id = c.id $mine) AS booking_count,
-                        (SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id
-                          WHERE b.customer_id = c.id $mine AND b.reservation_status IN ('pending', 'approved')
-                            AND (b.payment_status = 'overdue' OR fn_booking_last_day(b.id) >= CURDATE())) AS open_count
-                   FROM customers c
-                   JOIN users u ON u.id = c.user_id
-                  WHERE u.account_type = 'customer'"
-                  . ($scope === null ? '' : " AND (EXISTS (SELECT 1 FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.customer_id = c.id $mine)
-                                                   OR c.counter_venue_id IN (" . implode(',', array_map('intval', $scope) ?: [0]) . '))') . '
-                  ORDER BY c.full_name'
-            );
-            foreach ($cmStmt as $r) {
+            foreach (CustomerQueries::listForAdmin($scope) as $r) {
                 $on = $blocks[(int) $r['customer_id']] ?? [];
                 $cmRows[] = [
                     'userId'    => (int) $r['user_id'],
@@ -67,10 +53,11 @@ class CustomerController
                     'email'     => (string) $r['email'],
                     'phone'     => (string) ($r['phone'] ?? ''),
                     'usep'      => $r['university_id_no'] !== null && $r['university_id_no'] !== '' ? 'USeP' : '—',
-                    'status'    => $r['is_active'] ? 'Active' : 'Disabled',
+                    'status'    => $r['is_active'] ? 'Active' : 'Suspended',
                     'bookings'  => (int) $r['booking_count'],
                     'open'      => (int) $r['open_count'],
                     'joined'    => $r['created_at'] ? date('M j, Y', strtotime($r['created_at'])) : '—',
+                    'counter'   => $r['counter_venue_id'] !== null,
                     'lastLogin' => $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
                     'fixEmail'  => self::mayFixEmail($r['counter_venue_id'], $r['last_login_at'] === null, (bool) $r['not_google']),
                     /* one entry per office this admin may block at: on or off, and by whom */
@@ -130,9 +117,7 @@ class CustomerController
             return $this->reply(503, ['ok' => false, 'message' => 'The database is unreachable, so nothing was saved.']);
         }
 
-        $row = $pdo->prepare('SELECT id, account_type, is_active FROM users WHERE id = :u');
-        $row->execute([':u' => $target]);
-        $user = $row->fetch();
+        $user = CustomerQueries::findUser($target);
         if (!$user) {
             return $this->reply(404, ['ok' => false, 'message' => 'That account no longer exists.']);
         }
@@ -145,14 +130,13 @@ class CustomerController
             $active = !empty($request->input('active')) ? 1 : 0;
 
             try {
-                $pdo->prepare('UPDATE users SET is_active = :a WHERE id = :u')
-                    ->execute([':a' => $active, ':u' => $target]);
+                AccountQueries::setActive($target, $active);
             } catch (PDOException $e) {
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,
-                'message' => $active ? 'Account re-enabled.' : 'Account disabled. They have been signed out and can no longer sign in.']);
+                'message' => $active ? 'Account reactivated.' : 'Account suspended. They have been signed out and can no longer sign in.']);
         }
 
         return $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
@@ -198,11 +182,11 @@ class CustomerController
         // Save
         $pdo = venusep_db_or_fail();
         try {
-            $outboxId = DB::transaction(function () use ($pdo, $account, $email, $reason) {
+            $outboxId = DB::transaction(function () use ($account, $email, $reason) {
                 if (!CustomerQueries::fixEmail($account, $email, $reason, (int) session('user_id'))) {
                     return null;
                 }
-                return queue_counter_welcome($pdo, $account['full_name'], $email, office_by_id($account['counter_venue_id']), (int) session('user_id'));
+                return queue_counter_welcome($account['full_name'], $email, office_by_id($account['counter_venue_id']), (int) session('user_id'));
             });
         } catch (QueryException $e) {
             if (($e->errorInfo[1] ?? null) !== 1062) {
@@ -213,7 +197,7 @@ class CustomerController
         if ($outboxId === null) {
             return $this->reply(409, ['ok' => false, 'message' => 'The account changed a moment ago (signed into, or its email changed), so the email was not corrected.']);
         }
-        mail_send($pdo, $outboxId);   // never throws
+        mail_send($outboxId);   // never throws
         return $this->reply(200, ['ok' => true, 'message' => 'Email corrected. A welcome email went to ' . $email . '.']);
     }
 

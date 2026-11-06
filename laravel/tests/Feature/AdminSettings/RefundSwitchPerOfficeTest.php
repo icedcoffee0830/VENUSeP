@@ -180,5 +180,9 @@ class RefundSwitchPerOfficeTest extends TestCase
         $this->get(route('customer.venues'))->assertOk()->assertSee('All bookings are non-refundable.')->assertDontSee('Refunds depend on the office.');
         $this->get(route('customer.faq'))->assertOk()
             ->assertDontSee('class="fq-for"', false)->assertDontSee('Who can ask for a refund?')->assertSee('Can I get a refund?');
+        // the booking pages promise no money back after a closure either
+        $this->actingAsCustomer('aronerfe0830@gmail.com');
+        $this->get(route('customer.hostel-reservation', ['room' => 'h1']))->assertOk()->assertDontSee('your payment is returned');
+        $this->get(route('customer.room-reservation', ['room' => 'r5']))->assertOk()->assertDontSee('your payment is returned');
     }
 }

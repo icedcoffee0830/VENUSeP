@@ -73,6 +73,68 @@ class SqlErrorsTest extends TestCase
             && str_contains($msg, 'SQL failed at ') && preg_match('/\.php:\d+: /', $msg) === 1);
     }
 
+    /* A query through DB:: says what failed and which app line ran it, never the values: one could be a password hash. */
+    public function test_a_failed_db_query_logs_its_sql_and_our_line_but_not_its_values(): void
+    {
+        legacy('db');
+        config(['app.debug' => false]);
+        Log::spy();
+        try {
+            DB::update('UPDATE users SET no_such_column = ? WHERE id = ?', ['secret-hash-value', 0]);
+            $this->fail('the query should have failed');
+        } catch (PDOException $e) {
+            sql_failed($e);
+        }
+        Log::shouldHaveReceived('error')->withArgs(fn ($msg) => str_contains($msg, 'no_such_column')
+            && str_contains($msg, 'SET no_such_column = ?') && !str_contains($msg, 'secret-hash-value')
+            && str_contains($msg, 'SqlErrorsTest.php:'));
+    }
+
+    /* ---- the values of a query: never on the debug page, in its JSON or in the log ---- */
+
+    /* in two pieces: the debug page quotes this file's own lines */
+    private const HASH_START = '$argon2' . 'id$';
+    private const NEW_ACCOUNT = ['full_name' => 'Bindings Test', 'email' => 'bindings-test@example.com',
+        'password' => 'Bindings-Test-1', 'confirm_password' => 'Bindings-Test-1', 'terms' => '1'];
+
+    /* The query that fails carries a password hash. A visitor can reach this page: it is the sign-up form. */
+    public function test_debug_page_shows_the_failed_sql_with_marks_but_never_the_hash(): void
+    {
+        config(['app.debug' => true]);
+        $this->breakColumn('users', 'office_group');
+        $res = $this->post(route('root.register-submit'), self::NEW_ACCOUNT)->assertStatus(500);
+        $res->assertSee('Unknown column', false)->assertSee('INSERT INTO users', false)->assertSee('office_group', false);
+        $res->assertDontSee(self::HASH_START, false);
+    }
+
+    public function test_debug_json_reply_shows_the_failed_sql_with_marks_but_never_the_hash(): void
+    {
+        config(['app.debug' => true]);
+        $this->breakColumn('users', 'office_group');
+        $res = $this->post(route('root.register-submit'), self::NEW_ACCOUNT, ['Accept' => 'application/json'])->assertStatus(500);
+        $res->assertJsonPath('message', fn ($m) => str_contains($m, 'Unknown column') && str_contains($m, 'VALUES (?, ?, ?, ?, ?)'));
+        $this->assertStringNotContainsString(self::HASH_START, $res->getContent());
+    }
+
+    /* A later query fails: the page's list of the request's queries must not show the earlier one's hash. */
+    public function test_debug_page_lists_the_requests_queries_without_their_values(): void
+    {
+        config(['app.debug' => true]);
+        $this->breakColumn('customers', 'phone');
+        $res = $this->post(route('root.register-submit'), self::NEW_ACCOUNT)->assertStatus(500);
+        $res->assertSee('INSERT INTO users', false)->assertDontSee(self::HASH_START, false);
+    }
+
+    public function test_the_log_of_an_uncaught_query_error_has_no_hash(): void
+    {
+        config(['app.debug' => true]);
+        $this->breakColumn('users', 'office_group');
+        Log::spy();
+        $this->post(route('root.register-submit'), self::NEW_ACCOUNT)->assertStatus(500);
+        Log::shouldNotHaveReceived('error', fn ($msg) => str_contains((string) $msg, self::HASH_START));
+        Log::shouldNotHaveReceived('log', fn ($level, $msg) => str_contains((string) $msg, self::HASH_START));
+    }
+
     /* ---- a JSON endpoint: fetch() sends no text/html, and must always get JSON ---- */
 
     public function test_debug_on_a_json_endpoint_answers_json_with_the_real_message(): void

@@ -39,44 +39,27 @@ function receipt_money(float $amount): string
    already issued for it. Runs inside the staff action's transaction: if it
    throws, the confirmation rolls back with it, so a paid booking never lacks
    its receipt. Returns null only when no confirmed payment exists. */
-function receipt_issue(PDO $pdo, int $bookingId, int $actorUserId): ?int
+function receipt_issue(int $bookingId, int $actorUserId): ?int
 {
-    $stmt = $pdo->prepare(
-        "SELECT id, amount, payment_method, confirmed_at FROM payments
-          WHERE booking_id = :b AND payment_record_status = 'confirmed'
-          ORDER BY id DESC LIMIT 1"
-    );
-    $stmt->execute([':b' => $bookingId]);
-    $payment = $stmt->fetch();
+    $payment = \App\Queries\ReceiptQueries::findConfirmedPayment($bookingId);
     if (!$payment) {
         return null;
     }
 
-    $stmt = $pdo->prepare('SELECT id FROM system_receipts WHERE payment_id = :p');
-    $stmt->execute([':p' => $payment['id']]);
-    $existing = $stmt->fetchColumn();
-    if ($existing !== false) {
-        return (int) $existing;
+    $existing = \App\Queries\ReceiptQueries::findIdForPayment((int) $payment['id']);
+    if ($existing !== null) {
+        return $existing;
     }
 
     $rows = bookings_query(['booking_id' => $bookingId]);
     if (!$rows) {
         throw new RuntimeException('Booking ' . $bookingId . ' could not be read to issue its receipt.');
     }
-    $stmt = $pdo->prepare('SELECT c.contact_email FROM bookings b JOIN customers c ON c.id = b.customer_id WHERE b.id = :b');
-    $stmt->execute([':b' => $bookingId]);
-    $contactEmail = (string) $stmt->fetchColumn();
+    $contactEmail = \App\Queries\ReceiptQueries::contactEmail($bookingId);
 
-    $pdo->prepare(
-        'INSERT INTO system_receipts (booking_id, payment_id, snapshot_json, issued_at, issued_by_user_id)
-         VALUES (:b, :p, :s, NOW(), :u)'
-    )->execute([
-        ':b' => $bookingId,
-        ':p' => $payment['id'],
-        ':s' => json_encode(receipt_snapshot($rows[0], $payment, $contactEmail), JSON_UNESCAPED_UNICODE),
-        ':u' => $actorUserId ?: null,
-    ]);
-    return (int) $pdo->lastInsertId();
+    return \App\Queries\ReceiptQueries::add($bookingId, (int) $payment['id'],
+        json_encode(receipt_snapshot($rows[0], $payment, $contactEmail), JSON_UNESCAPED_UNICODE),
+        $actorUserId ?: null);
 }
 
 /* Money landed: mark the booking paid, settle its payment row and issue its
@@ -86,42 +69,10 @@ function receipt_issue(PDO $pdo, int $bookingId, int $actorUserId): ?int
    2026-10-27). $asCash = staff took cash in hand, whatever method the booking
    had: a pay-to-use guest may arrive and pay cash at the desk.
    Returns the receipt id (null only if no confirmed payment came of it). */
-function payment_confirm(PDO $pdo, int $bookingId, int $actorUserId, string $note, bool $asCash = false): ?int
+function payment_confirm(int $bookingId, int $actorUserId, string $note, bool $asCash = false): ?int
 {
-    $pdo->prepare('SET @venusep_actor_user_id = :a')->execute([':a' => $actorUserId]);
-    $pdo->prepare('SET @venusep_action_note = :n')->execute([':n' => $note !== '' ? $note : null]);
-    $pdo->prepare(
-        "UPDATE bookings
-            SET payment_method = IF(:c, 'cash', payment_method),
-                payment_status = IF(payment_method = 'cash', 'paid_cash', 'confirmed'),
-                updated_by_user_id = :u
-          WHERE id = :b"
-    )->execute([':c' => $asCash ? 1 : 0, ':u' => $actorUserId, ':b' => $bookingId]);
-    $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
-    /* The payment row is the money's own record, separate from the booking's
-       state — a booking says what it owes, a payment says what arrived.
-
-       SETTLE the row the customer's submission already created rather than
-       adding another. Inserting unconditionally gave one payment TWO rows,
-       an 'under_review' and a 'confirmed', for a single transfer — which
-       would have made the ledger describe money that never moved twice. */
-    $settle = $pdo->prepare(
-        "UPDATE payments SET payment_record_status = 'confirmed', confirmed_at = NOW(),
-                confirmed_by_user_id = :u
-          WHERE booking_id = :b AND payment_record_status IN ('submitted', 'under_review')"
-    );
-    $settle->execute([':u' => $actorUserId, ':b' => $bookingId]);
-    if ($settle->rowCount() === 0) {
-        /* Nothing was pending: a cash payment handed over at the counter,
-           which the customer side never records because no money moves
-           online. Staff confirming IS its first record. */
-        $pdo->prepare(
-            "INSERT INTO payments (booking_id, payment_method, amount, payment_record_status, paid_at, confirmed_at, confirmed_by_user_id)
-             SELECT id, COALESCE(payment_method, 'gcash'), total_amount, 'confirmed', NOW(), NOW(), :u
-               FROM bookings WHERE id = :b"
-        )->execute([':u' => $actorUserId, ':b' => $bookingId]);
-    }
-    return receipt_issue($pdo, $bookingId, $actorUserId);
+    \App\Queries\PaymentQueries::settleConfirmed($bookingId, $actorUserId, $note !== '' ? $note : null, $asCash);
+    return receipt_issue($bookingId, $actorUserId);
 }
 
 /* What the receipt says, frozen. Deliberately NOT here: phone, university ID
@@ -154,21 +105,17 @@ function receipt_snapshot(array $b, array $payment, string $contactEmail): array
     ];
 }
 
-function receipt_load(PDO $pdo, int $receiptId): ?array
+function receipt_load(int $receiptId): ?array
 {
-    $stmt = $pdo->prepare('SELECT * FROM system_receipts WHERE id = :id');
-    $stmt->execute([':id' => $receiptId]);
-    $row = $stmt->fetch();
+    $row = \App\Queries\ReceiptQueries::find($receiptId);
     return $row ? receipt_shape($row) : null;
 }
 
 /* The newest receipt on a booking (a second one exists only after a second
    confirmed payment). */
-function receipt_for_booking(PDO $pdo, int $bookingId): ?array
+function receipt_for_booking(int $bookingId): ?array
 {
-    $stmt = $pdo->prepare('SELECT * FROM system_receipts WHERE booking_id = :b ORDER BY id DESC LIMIT 1');
-    $stmt->execute([':b' => $bookingId]);
-    $row = $stmt->fetch();
+    $row = \App\Queries\ReceiptQueries::findLatestForBooking($bookingId);
     return $row ? receipt_shape($row) : null;
 }
 
@@ -225,6 +172,9 @@ function receipt_view(array $receipt): array
         'confirmed'   => $confirmed,
         'footer'      => 'VENUSeP System Receipt, issued automatically when staff confirmed the payment. '
                        . 'University of Southeastern Philippines venue and hostel booking.',
+        /* the slip on screen; 'footer' above is the PDF's printed footer, the teammate's area */
+        'slip_note'   => 'VENUSeP Transaction Receipt, issued automatically when staff confirmed the payment. '
+                       . 'University of Southeastern Philippines venue and hostel booking.',
     ];
 }
 
@@ -248,7 +198,7 @@ function receipt_pdf_bytes(array $receipt): string
     $v = receipt_view($receipt);
     $t = 'receipt_pdf_text';
     $pdf = new FPDF('P', 'mm', 'A4');
-    $pdf->SetTitle($t('VENUSeP System Receipt ' . $v['number']));
+    $pdf->SetTitle($t('VENUSeP Transaction Receipt ' . $v['number']));
     $pdf->SetAuthor('VENUSeP');
     $pdf->SetAutoPageBreak(false);
     $pdf->SetMargins(20, 20, 20);

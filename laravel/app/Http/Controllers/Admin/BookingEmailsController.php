@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\EmailQueries;
 use Illuminate\Http\Request;
 
 /* =====================================================================
@@ -43,55 +44,39 @@ class BookingEmailsController extends Controller
         if ($pdo === null) {
             $this->reply(503, ['ok' => false, 'message' => 'The database is unreachable.']);
         }
-        /* Own venue only for staff — reading the emails as well as resending them (2026-10-31). */
+        /* Own halls only for staff — reading the emails as well as resending them (DB-DECISIONS 28). */
         if (!staff_may_handle_booking($beBookingId)) {
-            $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can see its emails.']);
+            $this->reply(403, ['ok' => false, 'message' => 'This booking is on a hall you do not handle. Only that hall\'s staff or an administrator can see its emails.']);
         }
 
         if ($beIsPost) {
             if (($request->post('action') ?? '') !== 'resend') {
                 $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
             }
-            $stmt = $pdo->prepare(
-                "SELECT id FROM email_outbox
-                  WHERE id = :id AND booking_id = :b
-                    AND (status = 'failed' OR (status = 'pending' AND created_at < NOW() - INTERVAL 5 MINUTE))"
-            );
-            $stmt->execute([':id' => (int) ($request->post('id') ?? 0), ':b' => $beBookingId]);
-            $beId = $stmt->fetchColumn();
-            if ($beId === false) {
+            $beId = EmailQueries::findResendable((int) ($request->post('id') ?? 0), $beBookingId);
+            if ($beId === null) {
                 $this->reply(409, ['ok' => false, 'message' => 'That email was already sent, or is still on its way.']);
             }
-            mail_send($pdo, (int) $beId);
-            $stmt = $pdo->prepare('SELECT * FROM email_outbox WHERE id = :id');
-            $stmt->execute([':id' => $beId]);
-            $row = $stmt->fetch();
+            mail_send($beId);
+            $row = EmailQueries::find($beId);
             $this->reply(200, ['ok' => $row['status'] === 'sent', 'email' => $this->email($row),
                 'message' => $row['status'] === 'sent' ? 'Sent.' : 'Still couldn&rsquo;t send it. Check the mail settings and try again.']);
         }
 
-        $stmt = $pdo->prepare(
-            'SELECT c.user_id, c.contact_email, u.email AS account_email
-               FROM bookings b JOIN customers c ON c.id = b.customer_id LEFT JOIN users u ON u.id = c.user_id
-              WHERE b.id = :b'
-        );
-        $stmt->execute([':b' => $beBookingId]);
-        $who = $stmt->fetch();
+        $who = EmailQueries::findRecipient($beBookingId);
         if (!$who) {
             $this->reply(404, ['ok' => false, 'message' => 'That booking no longer exists.']);
         }
         $isWalkIn = $who['user_id'] === null;
 
-        $stmt = $pdo->prepare('SELECT * FROM email_outbox WHERE booking_id = :b ORDER BY id');
-        $stmt->execute([':b' => $beBookingId]);
-        $receipt = receipt_for_booking($pdo, $beBookingId);
+        $receipt = receipt_for_booking($beBookingId);
 
         $this->reply(200, [
             'ok'       => true,
             'isWalkIn' => $isWalkIn,
             'to'       => (string) ($isWalkIn ? $who['contact_email'] : $who['account_email']),
             'receipt'  => $receipt ? ['number' => $receipt['number']] : null,
-            'emails'   => array_map([$this, 'email'], $stmt->fetchAll()),
+            'emails'   => array_map([$this, 'email'], EmailQueries::forBooking($beBookingId)),
         ]);
     }
 
@@ -101,6 +86,7 @@ class BookingEmailsController extends Controller
         return [
             'id'        => (int) $r['id'],
             'kind'      => $r['kind'],
+            'label'     => MAIL_KINDS[$r['kind']] ?? $r['kind'],
             'status'    => $r['status'],
             'attempts'  => (int) $r['attempts'],
             'receiptId' => $r['receipt_id'] !== null ? (int) $r['receipt_id'] : null,

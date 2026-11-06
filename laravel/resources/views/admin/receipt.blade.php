@@ -1,6 +1,6 @@
 {{-- RECEIPT (STAFF VIEW) (was admin/receipt.php) — the same System Receipt slip customer/receipt shows; any booking, any staff member. --}}
 @extends('layouts.admin')
-@section('title', 'System Receipt ' . $arView['number'])
+@section('title', 'Transaction Receipt ' . $arView['number'])
 @section('active', 'Transaction History')
 @section('body-class', 'receipt-page')
 @push('head')
@@ -83,13 +83,13 @@
                 </div>
               </div>
 
-              <article class="rc-paper" aria-label="System Receipt {{ $arView['number'] }}">
+              <article class="rc-paper" aria-label="Transaction Receipt {{ $arView['number'] }}">
                 <div class="rc-rule"></div>
                 <div class="rc-in">
                   <div class="rc-top">
                     <img src="{{ asset('assets/img/receipt-logo.png') }}" alt="VENUSeP" width="130" height="37">
                     <div class="rc-doc">
-                      <h1>System Receipt</h1>
+                      <h1>Transaction Receipt</h1>
                       <div>No. <b>{{ $arView['number'] }}</b></div>
                       <div>Issued {{ $arView['issued'] }}</div>
                     </div>
@@ -115,7 +115,7 @@
                       <div><span>{{ $arK }}</span>{{ $arV }}</div>
                     @endforeach
                   </div>
-                  <p class="rc-foot">{{ $arView['footer'] }}</p>
+                  <p class="rc-foot">{{ $arView['slip_note'] }}</p>
                 </div>
               </article>
             </div>

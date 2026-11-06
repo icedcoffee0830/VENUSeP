@@ -2,6 +2,7 @@
 
 namespace App\Queries;
 
+use App\Support\Status;
 use Illuminate\Support\Facades\DB;
 
 /* The SQL that reads and changes a booking for the staff actions (BookingActionController).
@@ -28,7 +29,31 @@ use Illuminate\Support\Facades\DB;
    fn_customer_blocked tells whether the customer is blocked at the booking's office. */
 class BookingQueries
 {
+    /* The bookings this session must act on: the sidebar's count, the queue's "need action" and
+       its tabs (booking_queue_category()). Narrowed like every staff list. */
+    public static function needsAction(): int
+    {
+        return (int) DB::selectOne("
+            SELECT COUNT(*) AS n FROM bookings b JOIN rooms r ON r.id = b.room_id
+            WHERE (b.reservation_status = 'pending'
+                   OR b.payment_status IN ('await_pos', 'overdue', 'refund_requested', 'refund_await_or', 'under_review'))
+        " . staff_venue_sql('r.venue_id IN (%s)', 'AND') . staff_hall_sql('r.id'))->n;
+    }
+
     use SavesWithHistory;
+
+    /* One action on a booking at a time. Actions check, then save: two people at the same moment
+       could both pass the check, and cash would be recorded twice. The second one waits here and
+       then reads what the first left. False after 5 seconds. A named lock, not a row lock: the
+       saves open and close their own transactions. It ends with the request. */
+    public static function waitForTurn(int $id): bool
+    {
+        $got = (int) DB::selectOne("SELECT GET_LOCK(CONCAT(DATABASE(), '.booking.', ?), 5) AS got", [$id])->got === 1;
+        if ($got) {
+            app()->terminating(fn () => DB::selectOne("SELECT RELEASE_LOCK(CONCAT(DATABASE(), '.booking.', ?)) AS done", [$id]));
+        }
+        return $got;
+    }
 
     /* The booking a staff action is about, as it is right now, or null. */
     public static function findForStaffAction(int $id): ?array
@@ -276,7 +301,7 @@ class BookingQueries
                 return false;
             }
             legacy('notifications');
-            notify_booking_parties(DB::connection()->getPdo(), $id, 'booking_cancelled', $actor, ['note' => $reason]);
+            notify_booking_parties($id, 'booking_cancelled', $actor, ['note' => $reason]);
             return true;
         });
     }
@@ -294,7 +319,7 @@ class BookingQueries
             ", [$reason, $actor, $id]));
             self::writeHistory($id, 'write_off_requested', $actor, $note);
             legacy('notifications');
-            notify_refund_needs_admin(DB::connection()->getPdo(), $id, $actor, 'write_off_requested');
+            notify_refund_needs_admin($id, $actor, 'write_off_requested');
         });
     }
 
@@ -383,6 +408,31 @@ class BookingQueries
         ", [$officeClosed ? 0 : 1, $id, $id]));
         self::writeHistory($id, 'date_moved', $actor, $note);
         legacy('notifications');
-        notify_booking_parties(DB::connection()->getPdo(), $id, 'booking_moved', $actor, ['note' => $note]);
+        notify_booking_parties($id, 'booking_moved', $actor, ['note' => $note]);
+    }
+
+    /* The words customers see for a status, in order. $table: reservation_statuses or payment_statuses. */
+    public static function customerLabels(string $table): array
+    {
+        return array_column(DB::select("SELECT customer_label FROM {$table} ORDER BY sort_order"), 'customer_label');
+    }
+
+    /* The days the other halls of these offices are taken, for a staff member's calendar:
+       dates only, so nothing else can reach the page. end_date is exclusive, as the calendar
+       wants it: a venue's last day + 1, a hostel's check-out morning. */
+    public static function busyDates(array $offices, array $halls): array
+    {
+        $ids = fn (array $list) => implode(',', array_map('intval', $list) ?: [0]);
+        return DB::select("
+            SELECT DISTINCT COALESCE(vd.start_date, hd.check_in_date) AS start_date,
+                   COALESCE(vd.end_date + INTERVAL 1 DAY, hd.check_out_date) AS end_date
+            FROM bookings b
+            JOIN rooms r ON r.id = b.room_id
+            LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
+            LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
+            WHERE b.reservation_status IN (?, ?, ?)
+              AND r.venue_id IN (" . $ids($offices) . ") AND r.id NOT IN (" . $ids($halls) . ")
+              AND COALESCE(vd.start_date, hd.check_in_date) IS NOT NULL
+        ", [Status::PENDING, Status::APPROVED, Status::COMPLETED]);
     }
 }

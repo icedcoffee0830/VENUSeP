@@ -39,40 +39,30 @@
       .booking-history-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
       .booking-table-scroll { overflow-x: auto; }
       .booking-history-table { width: 100%; border-collapse: collapse; min-width: 900px; }
-      .booking-history-table th, .booking-history-table td { padding: 11px 14px; text-align: left; border-bottom: 1px solid #f2efe9; font-size: 13px; white-space: nowrap; }
+      .booking-history-table th, .booking-history-table td { padding: 11px 8px; text-align: left; border-bottom: 1px solid #f2efe9; font-size: 13px; }
       .booking-history-table th { background: #faf9f7; }
+      /* long names and notes wrap, so nine columns fit the panel with no sideways scroll */
+      .booking-history-table td.booking-id, .booking-history-table td.booking-amount { white-space: nowrap; }
       .sortable-heading { border: 0; background: transparent; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #6b6258; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; padding: 0; }
       .sortable-heading::after { content: "\F282"; font-family: "bootstrap-icons"; font-size: 10px; opacity: .3; }
       .sortable-heading[data-direction="asc"]::after { content: "\F235"; opacity: .8; }
       .sortable-heading[data-direction="desc"]::after { content: "\F229"; opacity: .8; }
       .booking-history-table tbody tr:hover { background: #faf9f7; }
+      .booking-history-table .vz-chip { border-radius: 14px; white-space: normal; }
       .booking-amount { font-variant-numeric: tabular-nums; }
       .booking-empty-state td { text-align: center; color: var(--muted); padding: 28px; }
 
-      /* badges — team soft-tint palette */
-      .booking-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; line-height: 1.5; }
-      .badge-paid, .badge-approved { background: #eaf6ef; color: #1c7a4f; }
-      .badge-completed, .badge-refunded { background: #e9eff8; color: #2b4a7e; }
-      .badge-pending { background: #fbf1dd; color: #8a5a00; }
-      .badge-rejected, .badge-failed { background: #fcecec; color: #b23a3a; }
-      .badge-cancelled, .badge-unpaid { background: #eef0f2; color: #55606b; }
-      .badge-refund-requested { background: #fbf1dd; color: #8a5a00; }
-      .badge-refund-action-needed { background: #fdf3e6; color: #8a5a12; }
-      .badge-refund-denied { background: #fcecec; color: #b23a3a; }
-      /* post-pay states (DB-DECISIONS #18): waiting for the event · window open · window missed */
-      .badge-payment-pending { background: #eef0f2; color: #55606b; }
-      .badge-payment-due { background: #fbf1dd; color: #8a5a00; }
-      .badge-overdue { background: #fcecec; color: #b23a3a; }
-      .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+      .booking-pay-note { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
       .booking-pay-note.is-overdue { color: #b23a3a; }
-      .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); }
-      .booking-overdue-help { flex-basis: 100%; max-width: 26rem; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; }
+      .booking-amount-note { display: block; max-width: 12rem; margin-top: 3px; font-size: 11px; font-weight: 400; line-height: 1.35; color: var(--muted); white-space: normal; }
+      .booking-overdue-help { flex-basis: 100%; margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #6b675f; overflow-wrap: anywhere; white-space: normal; }
+      /* desktop: the notice gets a fixed width and wraps there, with the buttons below it */
+      @media (min-width: 1280px) { .booking-actions:has(.booking-overdue-help) { display: flex; width: 11.5rem; } }
       .booking-overdue-help strong { color: #b23a3a; }
       /* a booking that lapsed: why, in a sentence (bookings.php expiryNote) */
-      .badge-expired, .badge-released { background: #eef0f2; color: #55606b; }
       .booking-status-note { display: block; margin-top: 4px; max-width: 220px; font-size: 11px; line-height: 1.4; color: var(--muted); }
       /* row actions */
-      .booking-actions { display: inline-flex; gap: 6px; }
+      .booking-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
       .booking-action { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid #d7d7d7; background: #fff; color: var(--black); font-family: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
       .booking-action:hover { background: #f4f2ee; border-color: #c9c2b6; }
       .booking-action[disabled] { opacity: .5; cursor: not-allowed; }
@@ -83,7 +73,7 @@
       .booking-action-pay:hover { background: #7d0f1e; border-color: #7d0f1e; }
 
       /* footer / pagination */
-      .booking-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; }
+      .booking-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid #e7e2db; }
       .booking-entries-control { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 8px; }
       .booking-entries-select { height: 32px; border: 1px solid #d7d7d7; border-radius: 8px; padding: 0 8px; font: inherit; font-size: 12.5px; }
       .booking-table-info { font-size: 12.5px; color: var(--muted); margin: 0; }
@@ -101,6 +91,12 @@
       .booking-filter-field label { color: #f2d0cb; }
       .booking-history-panel { box-shadow: 0 18px 44px rgba(10,4,5,.28), 0 2px 6px rgba(10,4,5,.18); border-color: rgba(255,255,255,.18); }
     
+      /* phone: a row's buttons are 44px tall and share the card's width */
+      @media (max-width: 767.98px) {
+        .booking-actions { display: flex; width: 100%; }
+        .booking-action { flex: 1 1 auto; justify-content: center; height: 44px; font-size: 13.5px; }
+      }
+
       /* the active tab and the current page in the pagination: crimson, not black */
       .booking-status-tab.active { background: #a11626; border-color: #a11626; color: #ffffff; }
       .booking-pagination button.active { background: #a11626; border-color: #a11626; color: #ffffff; }
@@ -108,10 +104,13 @@
          shows its column name (data-label) in front, the header row is hidden,
          and the id + status sit on the first line. The sorting/filtering
          script is untouched — it still works on the same rows. ---- */
-      @media (max-width: 1000px) {
+      /* nine columns need about 1245px: below 1280 each booking is a card, phone or laptop */
+      @media (max-width: 1279.98px) {
         .booking-history-table { min-width: 0; }
         .booking-history-table thead { display: none; }
         .booking-history-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 14px 16px; border-bottom: 1px solid #ece8e1; }
+        /* the filters hide rows with the hidden attribute; "display: grid" above would beat it */
+        .booking-history-table tbody tr[hidden] { display: none; }
         .booking-history-table tbody tr:hover { background: transparent; }
         .booking-history-table td { display: block; padding: 0; border: 0; white-space: normal; font-size: 13px; }
         .booking-history-table td::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
@@ -125,12 +124,12 @@
         .booking-history-table td.booking-actions-cell::before { display: none; }
         .booking-empty-state td { grid-column: 1 / -1; }
         .booking-empty-state td::before { display: none; }
-        .booking-actions { flex-wrap: wrap; }
         .booking-history-filters { grid-template-columns: 1fr 1fr; }
         .booking-status-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+        .booking-status-tab { flex: none; white-space: nowrap; }
       }
       /* type floor (readability): nothing on the page below 12px */
-      .booking-badge, .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }
+      .sortable-heading, .booking-filter-field label, .booking-pay-note { font-size: 12px; }
       /* ---- white page (desktop + phone): the cards sit on white, no crimson wash ---- */
       body { background: #fff !important; }
       .app-main { background: #fff !important; }
@@ -159,6 +158,7 @@
 
               <nav class="booking-status-tabs" aria-label="Filter bookings by status" role="tablist">
                 <button class="booking-status-tab active" type="button" role="tab" aria-selected="true" data-booking-status="">All</button>
+                <button class="booking-status-tab" type="button" role="tab" aria-selected="false" data-booking-status="due">Due payments</button>
                 <button class="booking-status-tab" type="button" role="tab" aria-selected="false" data-booking-status="Approved">Approved</button>
                 <button class="booking-status-tab" type="button" role="tab" aria-selected="false" data-booking-status="Completed">Completed</button>
                 <button class="booking-status-tab" type="button" role="tab" aria-selected="false" data-booking-status="Rejected">Rejected</button>
@@ -196,6 +196,19 @@
                 <div class="booking-history-panel-header">
                   <h2 id="previousBookingsTitle">Previous Bookings</h2>
                 </div>
+                <div class="booking-table-footer">
+                  <label class="booking-entries-control" for="booking-history-entries">
+                    Show
+                    <select id="booking-history-entries" class="booking-entries-select">
+                      <option value="10" selected>10</option>
+                      <option value="25">25</option>
+                      <option value="50">50</option>
+                    </select>
+                    entries
+                  </label>
+                  <p id="booking-history-info" class="booking-table-info" aria-live="polite"></p>
+                  <nav id="booking-history-pagination" class="booking-pagination" aria-label="Booking history pages"></nav>
+                </div>
                 <div class="booking-table-scroll">
                   <table id="bookingHistoryTable" class="booking-history-table">
                     <thead>
@@ -225,6 +238,7 @@
                           data-amount="{{ $booking['amountValue'] }}"
                           data-payment-status="{{ $booking['paymentStatus'] }}"
                           data-status="{{ $booking['bookingStatus'] }}"
+                          data-due="{{ $booking['reservationCode'] !== \App\Support\Status::CANCELLED && in_array($booking['paymentCode'], \App\Support\Status::PAYMENT_DUE, true) ? '1' : '' }}"
                         >
                           <td class="booking-id" data-label="Booking"><strong>{{ $booking['bookingId'] }}</strong></td>
                           <td data-label="Venue">{{ $booking['venue'] }}</td>
@@ -291,19 +305,6 @@
                     </tbody>
                     @endfragment
                   </table>
-                </div>
-                <div class="booking-table-footer">
-                  <label class="booking-entries-control" for="booking-history-entries">
-                    Show
-                    <select id="booking-history-entries" class="booking-entries-select">
-                      <option value="10" selected>10</option>
-                      <option value="25">25</option>
-                      <option value="50">50</option>
-                    </select>
-                    entries
-                  </label>
-                  <p id="booking-history-info" class="booking-table-info" aria-live="polite"></p>
-                  <nav id="booking-history-pagination" class="booking-pagination" aria-label="Booking history pages"></nav>
                 </div>
               </section>
             </div>
@@ -381,7 +382,7 @@
           const venue = venueFilter.value, dateFrom = dateFromFilter.value, dateTo = dateToFilter.value;
           filteredRows = sortRows(rows.filter(function (row) {
             const searchable = [row.dataset.bookingId, row.dataset.venue, row.dataset.eventName].join(' ').toLowerCase();
-            return (!activeStatus || row.dataset.status === activeStatus)
+            return (!activeStatus || (activeStatus === 'due' ? row.dataset.due === '1' : row.dataset.status === activeStatus))
               && (!query || searchable.includes(query))
               && (!venue || row.dataset.venue === venue)
               && (!dateFrom || row.dataset.eventDate >= dateFrom)

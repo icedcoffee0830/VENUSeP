@@ -80,7 +80,7 @@
               <div class="input-group password-field"><span class="input-group-text"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><input id="confirmPassword" name="confirm_password" type="password" autocomplete="new-password" placeholder="Confirm password" aria-describedby="confirmPasswordValidation" required /><button class="password-toggle" type="button" data-password-toggle="confirmPassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div>
               <small class="validation-message" id="confirmPasswordValidation" aria-live="polite"></small>
             </div>
-            <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="terms" name="terms" aria-describedby="termsValidation" required /><span class="form-check-label">I agree to the Terms and Conditions</span></label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="terms" name="terms" aria-describedby="termsValidation" required /><span class="form-check-label">I agree to the <a class="auth-link" href="{{ route('terms') }}" target="_blank" rel="noopener">Terms and Conditions</a></span></label>
             <small class="validation-message" id="termsValidation" aria-live="polite"></small>
             <button type="submit" class="btn-auth"><i class="bi bi-person-plus" aria-hidden="true"></i>Create Account</button>
             <small class="success-message" id="registrationSuccessMessage" aria-live="polite"></small>

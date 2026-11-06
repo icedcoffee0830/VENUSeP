@@ -222,7 +222,7 @@
       .vm-mt-tier input { margin-top: .15rem; accent-color: #1f1e1e; cursor: pointer; }
       .vm-mt-tier span { display: block; }
       .vm-mt-tier strong { display: block; font-size: .85rem; font-weight: 650; }
-      .vm-mt-tier em { display: block; font-style: normal; font-size: .76rem; line-height: 1.45; color: #8a857d; margin-top: .15rem; }
+      .vm-mt-tier em { display: block; font-style: normal; font-size: .76rem; line-height: 1.45; color: #6e6a64; margin-top: .15rem; }
       .vm-mt-indef {
         display: inline-flex;
         align-items: center;
@@ -602,16 +602,21 @@
             <input id="roomName" class="vm-control" type="text" value="{{ $roomFormRoom ? $roomFormRoom['name'] : '' }}" placeholder="{{ $isHostel ? 'e.g. Hostel Room 1' : 'e.g. Function Hall' }}" />
           </div>
           <div class="vm-field">
+@if ($rfFixedVenue)
+            <label for="roomLoc">Location (Venue)</label>
+            <input id="roomLoc" class="vm-control" type="text" value="{{ $roomFormRoom['venue'] ?? head($rfVenues) }}" readonly title="{{ $isHostel ? 'A hostel room is always at the hostel' : 'Only an administrator can move a room' }}" />
+@else
             <label>Location (Venue)</label>
-            <!-- Options come from includes/venues.php — every venue, data-driven.
+            <!-- Options come from includes/venues.php — the event venues, data-driven.
                  The summary + saved value come from rooms.venue_id via the DB
-                 overlay in includes/venue-rooms.php / hostel-rooms.php. -->
+                 overlay in includes/venue-rooms.php. -->
             <details class="vm-dd" id="roomLoc">
               <summary class="vm-dd-trigger">{{ $roomFormRoom && isset($roomFormRoom['venue']) ? $roomFormRoom['venue'] : 'Select a venue' }}</summary>
               <ul class="vm-dd-menu" aria-label="Location options">
-                {!! venueOptions($venues) !!}
+                {!! venueOptions($rfVenues) !!}
               </ul>
             </details>
+@endif
           </div>
         </div>
 @if ($rfStaff)
@@ -1049,10 +1054,10 @@
           '<div style="background:#fff;border-radius:14px;max-width:960px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--vm-font);color:var(--vm-text)">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--vm-border)"><div style="font-weight:700">Room photos</div><button type="button" onclick="vmCloseGallery()" style="background:none;border:none;font-size:20px;color:#606a75;cursor:pointer">&times;</button></div>' +
           '<div style="padding:16px 18px;overflow:auto">' +
-          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-weight:700;font-size:.95rem">Venue uploads <span id="vmGalCount" style="font-weight:400;color:#8a857d"></span></div><label id="vmGalAddWrap" class="vm-btn vm-btn-outline vm-pano-btn" style="min-height:2rem;padding:0 .9rem;display:inline-flex;align-items:center"><span id="vmGalAddLabel">Add photos</span><input id="vmGalAddInput" type="file" accept="image/*" multiple onchange="vmGalAdd(this)" /></label></div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-weight:700;font-size:.95rem">Venue uploads <span id="vmGalCount" style="font-weight:400;color:#6e6a64"></span></div><label id="vmGalAddWrap" class="vm-btn vm-btn-outline vm-pano-btn" style="min-height:2rem;padding:0 .9rem;display:inline-flex;align-items:center"><span id="vmGalAddLabel">Add photos</span><input id="vmGalAddInput" type="file" accept="image/*" multiple onchange="vmGalAdd(this)" /></label></div>' +
           '<div id="vmGalBig" class="vm-galbig"></div>' +
           '<div id="vmGalGrid" class="vm-galgrid"></div>' +
-          '<p style="color:#8a857d;font-size:.78rem;margin:10px 2px 0">Click a photo to make it the cover. The &times; on a thumbnail removes it. Up to ' + VM_MAX_PHOTOS + ' photos per room; JPG, PNG or WEBP, 7 MB each.</p>' +
+          '<p style="color:#6e6a64;font-size:.78rem;margin:10px 2px 0">Click a photo to make it the cover. The &times; on a thumbnail removes it. Up to ' + VM_MAX_PHOTOS + ' photos per room; JPG, PNG or WEBP, 7 MB each.</p>' +
           '</div></div>';
         ov.addEventListener('click', function (e) { if (e.target === ov) vmCloseGallery(); });
         document.body.appendChild(ov);
@@ -1157,8 +1162,12 @@
            that code is also the photo folder on disk. */
         var isNew = !VM_ROOM_ID;
         var name = document.getElementById('roomName').value.trim();
+        @if ($rfFixedVenue)
+        var venue = document.getElementById('roomLoc').value;
+        @else
         var venueTrigger = document.querySelector('#roomLoc .vm-dd-trigger');
         var venue = venueTrigger ? venueTrigger.textContent.trim() : '';
+        @endif
         if (!name) { venusepAlert('Enter a room name.'); return; }
         if (!venue || venue === 'Select a venue') { venusepAlert('Choose a location.'); return; }
         var mtv = mtValue();
@@ -1267,7 +1276,7 @@
           var el = document.getElementById('vmAmenityPool');
           if (!el) return;
           el.innerHTML = AMENITY_POOL.map(function (g) {
-            return '<div class="vm-pool-group" style="grid-column:1/-1;margin:.5rem 0 .15rem;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8a857d">' +
+            return '<div class="vm-pool-group" style="grid-column:1/-1;margin:.5rem 0 .15rem;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64">' +
                    esc(g.group) + '</div>' +
                    g.items.map(function (o) {
                      return '<button type="button" class="vm-chip' + (o.on ? ' selected' : '') +

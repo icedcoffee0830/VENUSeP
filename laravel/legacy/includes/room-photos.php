@@ -48,12 +48,8 @@ function rp_db_room_id($code) {
   $cache = request()->attributes->get('rp_db_room_id', []);
   if (!array_key_exists($code, $cache)) {
     $id = null;
-    $pdo = rp_room_id_valid($code) ? venusep_db() : null;
-    if ($pdo !== null) {
-      $stmt = $pdo->prepare('SELECT id FROM rooms WHERE room_code = :code');
-      $stmt->execute([':code' => $code]);
-      $found = $stmt->fetchColumn();
-      $id = $found !== false ? (int) $found : null;
+    if (rp_room_id_valid($code) && venusep_db() !== null) {
+      $id = \App\Queries\RoomMediaQueries::roomId($code);
     }
     $cache[$code] = $id;
     request()->attributes->set('rp_db_room_id', $cache);
@@ -145,12 +141,9 @@ function rp_store_file($tmpPath, $dest, &$error) {
 function rp_list_photos($code) {
   $roomId = rp_db_room_id($code);
   if ($roomId === null) return [];
-  $pdo = venusep_db();
-  if ($pdo === null) return [];
-  $stmt = $pdo->prepare("SELECT file_path FROM room_media WHERE room_id = :r AND media_type = 'photo' ORDER BY display_order ASC, id ASC");
-  $stmt->execute([':r' => $roomId]);
+  if (venusep_db() === null) return [];
   $out = [];
-  foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $url) {
+  foreach (\App\Queries\RoomMediaQueries::photoPaths($roomId) as $url) {
     $out[] = ['file' => basename($url), 'url' => $url];
   }
   return $out;
@@ -163,8 +156,7 @@ function rp_add_photo($code, $tmpPath, $originalName, $uploadedByUserId, &$error
   if (!rp_room_id_valid($code)) { $error = 'Invalid room.'; return null; }
   $roomId = rp_db_room_id($code);
   if ($roomId === null) { $error = 'This room was not found in the database.'; return null; }
-  $pdo = venusep_db();
-  if ($pdo === null) { $error = 'The database is unreachable, so the photo was not saved.'; return null; }
+  if (venusep_db() === null) { $error = 'The database is unreachable, so the photo was not saved.'; return null; }
   if (count(rp_list_photos($code)) >= ROOM_PHOTO_MAX_COUNT) {
     $error = 'This room already has the maximum of ' . ROOM_PHOTO_MAX_COUNT . ' photos. Remove one before adding another.';
     return null;
@@ -182,18 +174,7 @@ function rp_add_photo($code, $tmpPath, $originalName, $uploadedByUserId, &$error
 
   $url = ROOM_PHOTO_WEB_BASE . '/' . $code . '/photos/' . $filename;
   try {
-    $next = $pdo->prepare("SELECT COALESCE(MAX(display_order), 0) + 1 FROM room_media WHERE room_id = :r AND media_type = 'photo'");
-    $next->execute([':r' => $roomId]);
-    $order = (int) $next->fetchColumn();
-
-    $ins = $pdo->prepare(
-      "INSERT INTO room_media (room_id, media_type, file_path, original_filename, display_order, mime_type, file_size_bytes, sha256_hash, uploaded_by_user_id)
-       VALUES (:room_id, 'photo', :path, :orig, :order, :mime, :size, :hash, :uid)"
-    );
-    $ins->execute([
-      ':room_id' => $roomId, ':path' => $url, ':orig' => $originalName, ':order' => $order,
-      ':mime' => $meta['mime'], ':size' => $meta['size'], ':hash' => $meta['hash'], ':uid' => $uploadedByUserId,
-    ]);
+    \App\Queries\RoomMediaQueries::add($roomId, 'photo', $url, $originalName, \App\Queries\RoomMediaQueries::nextPhotoOrder($roomId), $meta, $uploadedByUserId);
   } catch (Throwable $e) {
     @unlink($dest);
     sql_failed($e);
@@ -207,14 +188,12 @@ function rp_add_photo($code, $tmpPath, $originalName, $uploadedByUserId, &$error
 function rp_delete_photo($code, $filename) {
   $roomId = rp_db_room_id($code);
   if ($roomId === null) return false;
-  $pdo = venusep_db();
-  if ($pdo === null) return false;
+  if (venusep_db() === null) return false;
 
   $filename = basename($filename);   // no path traversal
   $url = ROOM_PHOTO_WEB_BASE . '/' . $code . '/photos/' . $filename;
 
-  $pdo->prepare("DELETE FROM room_media WHERE room_id = :r AND media_type = 'photo' AND file_path = :p")
-      ->execute([':r' => $roomId, ':p' => $url]);
+  \App\Queries\RoomMediaQueries::deletePhoto($roomId, $url);
 
   $path = rp_photos_dir($code) . '/' . $filename;
   if (is_file($path)) @unlink($path);
@@ -226,8 +205,7 @@ function rp_delete_photo($code, $filename) {
 function rp_reorder_photos($code, array $files) {
   $roomId = rp_db_room_id($code);
   if ($roomId === null) return false;
-  $pdo = venusep_db();
-  if ($pdo === null) return false;
+  if (venusep_db() === null) return false;
 
   $existing = array_column(rp_list_photos($code), 'file');
   $existingSet = array_flip($existing);
@@ -240,10 +218,9 @@ function rp_reorder_photos($code, array $files) {
   // nothing silently disappears from a partial reorder call.
   foreach ($existing as $f) if (!in_array($f, $clean, true)) $clean[] = $f;
 
-  $upd = $pdo->prepare("UPDATE room_media SET display_order = :o WHERE room_id = :r AND media_type = 'photo' AND file_path = :p");
   $order = 1;
   foreach ($clean as $f) {
-    $upd->execute([':o' => $order, ':r' => $roomId, ':p' => ROOM_PHOTO_WEB_BASE . '/' . $code . '/photos/' . $f]);
+    \App\Queries\RoomMediaQueries::setPhotoOrder($roomId, ROOM_PHOTO_WEB_BASE . '/' . $code . '/photos/' . $f, $order);
     $order++;
   }
   return true;
@@ -256,20 +233,15 @@ function rp_reorder_photos($code, array $files) {
 function rp_pano_url($code) {
   $roomId = rp_db_room_id($code);
   if ($roomId === null) return null;
-  $pdo = venusep_db();
-  if ($pdo === null) return null;
-  $stmt = $pdo->prepare("SELECT file_path FROM room_media WHERE room_id = :r AND media_type = 'panorama_360' ORDER BY id DESC LIMIT 1");
-  $stmt->execute([':r' => $roomId]);
-  $path = $stmt->fetchColumn();
-  return $path !== false ? $path : null;
+  if (venusep_db() === null) return null;
+  return \App\Queries\RoomMediaQueries::panoramaPath($roomId);
 }
 
 function rp_save_pano($code, $tmpPath, $originalName, $uploadedByUserId, &$error) {
   if (!rp_room_id_valid($code)) { $error = 'Invalid room.'; return null; }
   $roomId = rp_db_room_id($code);
   if ($roomId === null) { $error = 'This room was not found in the database.'; return null; }
-  $pdo = venusep_db();
-  if ($pdo === null) { $error = 'The database is unreachable, so the photo was not saved.'; return null; }
+  if (venusep_db() === null) { $error = 'The database is unreachable, so the photo was not saved.'; return null; }
 
   $ext = rp_validate_image($tmpPath, $originalName, $error);
   if ($ext === null) return null;
@@ -284,14 +256,7 @@ function rp_save_pano($code, $tmpPath, $originalName, $uploadedByUserId, &$error
 
   $url = ROOM_PHOTO_WEB_BASE . '/' . $code . '/pano.' . $ext;
   try {
-    $ins = $pdo->prepare(
-      "INSERT INTO room_media (room_id, media_type, file_path, original_filename, display_order, mime_type, file_size_bytes, sha256_hash, uploaded_by_user_id)
-       VALUES (:room_id, 'panorama_360', :path, :orig, 1, :mime, :size, :hash, :uid)"
-    );
-    $ins->execute([
-      ':room_id' => $roomId, ':path' => $url, ':orig' => $originalName,
-      ':mime' => $meta['mime'], ':size' => $meta['size'], ':hash' => $meta['hash'], ':uid' => $uploadedByUserId,
-    ]);
+    \App\Queries\RoomMediaQueries::add($roomId, 'panorama_360', $url, $originalName, 1, $meta, $uploadedByUserId);
   } catch (Throwable $e) {
     @unlink($dest);
     sql_failed($e);
@@ -305,19 +270,16 @@ function rp_save_pano($code, $tmpPath, $originalName, $uploadedByUserId, &$error
 function rp_delete_pano($code) {
   $roomId = rp_db_room_id($code);
   if ($roomId === null) return false;
-  $pdo = venusep_db();
-  if ($pdo === null) return false;
+  if (venusep_db() === null) return false;
 
-  $stmt = $pdo->prepare("SELECT file_path FROM room_media WHERE room_id = :r AND media_type = 'panorama_360'");
-  $stmt->execute([':r' => $roomId]);
   $prefix = ROOM_PHOTO_WEB_BASE . '/' . $code . '/';
-  foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $url) {
+  foreach (\App\Queries\RoomMediaQueries::panoramaPaths($roomId) as $url) {
     if (strpos($url, $prefix) === 0) {
       $local = rp_room_dir($code) . '/' . substr($url, strlen($prefix));
       if (is_file($local)) @unlink($local);
     }
   }
-  $pdo->prepare("DELETE FROM room_media WHERE room_id = :r AND media_type = 'panorama_360'")->execute([':r' => $roomId]);
+  \App\Queries\RoomMediaQueries::deletePanoramas($roomId);
   return true;
 }
 

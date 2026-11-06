@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
    Read only: bookings, rooms, booking_timeline, notifications. */
 class LiveQueries
 {
-    /* The bookings a staff-side session sees: staff_venue_sql() narrows to its offices. */
+    /* The bookings a staff-side session sees: staff_venue_sql() narrows to its offices,
+       staff_hall_sql() to a staff member's halls. */
     public static function staffBookings(): string
     {
         return self::version(DB::selectOne("
@@ -21,7 +22,7 @@ class LiveQueries
             FROM bookings b
             JOIN rooms r ON r.id = b.room_id
             LEFT JOIN booking_timeline t ON t.booking_id = b.id
-        " . staff_venue_sql('r.venue_id IN (%s)')));
+        " . staff_venue_sql('r.venue_id IN (%s)') . staff_hall_sql('r.id')));
     }
 
     /* One customer's own bookings. */
@@ -41,7 +42,7 @@ class LiveQueries
         $row = DB::selectOne("
             SELECT COUNT(*) AS n, MAX(n.id) AS newest, COALESCE(SUM(n.read_at IS NULL), 0) AS unread
             FROM notifications n
-            WHERE n.user_id = ?
+            WHERE n.user_id = ?" . staff_news_sql() . "
         ", [$userId]);
         return $row->n . '.' . $row->newest . '.' . $row->unread;
     }

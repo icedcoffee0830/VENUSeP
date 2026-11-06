@@ -781,3 +781,33 @@ Decision: memory `venusep-teammate-bugs-2026-11-05`, item 11. **All of it is in 
   4. `auth/customer-login.blade.php`: the Google "Finish creating your account" terms checkbox (`gsTerms`).
   Then drop `test_no_page_links_to_it_yet` in `tests/Feature/PrivacyPageTest.php`.
 - The name has no `admin.`/`customer.`/`root.` prefix, so `venusep:check` does not request it; `PrivacyPageTest` covers it.
+
+### 15e. Phase P (2026-11-05, branch `fixes-3`, migration 19)
+**Migration 19 is NOT on the real DB**: Aron runs, in cmd, after the backup in its header,
+`C:\xamp5\mysql\bin\mysql.exe -u root venusep_laravel < venusep_migration_19.sql`; it ends with
+"OK: migration 19 is in: the rounding, the FAQ wording and the written-off label". It replaces `sp_approve_booking`, rewords the FAQ (refund rule, Transaction Receipt; added in phase T2) and changes what customers read on a written-off booking from "Closed" to "Closed by the office" (added 2026-11-06; staff keep "Written off"): the discounted total
+rounds UP to the peso, DOWN when up gives back the full price (₱3 -> ₱2), never 0 (₱1 stays ₱1, no discount).
+`usep_discounted()` / `priceWithDiscount()` use the same rule. The test/flows snapshot is `.before-m19` + a blank line
++ migration 19.
+
+### 15f. Phase Q (2026-11-05, branch `fixes-3`, no migration)
+- **Booking window**: 183 days ahead, every office, online, counter and staff date moves (`BookingRules::lastBookableDay()` / `tooFarAhead()`, checked on the LAST day; a stay's check-out). Replaces the venue year and the hostel's 7-day `hostel_advance_booking_max_days`: that row is still in `system_settings` but nothing reads it. `VENUSEP_MAX_DAYS_AHEAD` exists only so tests can use far dates: it must not be in a real `.env`.
+- **Blocks**: `BookingRules::blockedOfficeNames()` hides the office from the landing page, nav and More rooms; `partials/block-modal` (inside `partials/customer-nav`, so not on the account pages) tells each office once per session (`block_modal_told`) and on every direct link. The landing banner is gone; the direct-link banner stays.
+- **Pagers** are above the rows on all six tables. The four Tabulator pages move `.tabulator-footer` on `tableBuilt`, so Tab reaches it first too.
+- **My bookings** is cards below 1280px (the table needs about 1245px).
+- **Booking Management blank list**: proven to be the written_off row fixed in 1245c9f, for every role (flow `booking-list-roles`). An admin with no group lists nothing, by design (`BookingListRolesTest`).
+- New flows: `booking-dates`, `booking-history-due`, `booking-list-roles`, `table-pagers`, `my-bookings-widths`.
+
+### 15g. Phase S (2026-11-05, branch `fixes-3`, no migration)
+- **Counter price change**: `BookingCreateController` answers like online: 409 `price_changed` (rate differs from `shown_rate`) or `room_changed` (closed or deleted). Both replies live in `BookingRules::priceChanged()` / `roomClosed()`. After a refusal the hostel's cash step says "You already took ₱X" (`state.cashTaken`).
+- **Details modal** (`BookingDetailsController::payStep()`, customers only): Pay now with the amount, or why not. It shows on Transaction History's View too (same modal).
+- **Terms**: `/terms` (`terms.blade.php`), linked from the register and Google finish checkboxes in a new tab. It does not link or name the privacy page, which stays unlinked everywhere. Style shared in `partials/legal-page-style`.
+- **Block strip**: back on the landing page on every load (`blockNoticesForLanding()`); the popup stays once per session.
+- **Photo viewer**: `partials/booking-gallery` is now one native `<dialog>` viewer, `openGallery(i)`. Strip photos are buttons. The hostel page has no summary picture (its `heroTile` is unused).
+- New flow: `photo-viewer` (also covers the Terms link).
+
+### 15h. Cleanup H-K (2026-11-06, branch `cleanup-3`, no migration, behaviour unchanged)
+- **Where the SQL is now**: `app/Queries/*Queries.php`, one file per topic, a plain line per table at the top. Controllers and most of `legacy/includes` only call them. New files: `BookingCreateQueries`, `BookingListQueries`, `CatalogQueries`, `RoomMediaQueries`, `VenueQueries`, `OfficeSettingsQueries`, `FaqQueries`, `EmailQueries`, `DocumentQueries`, `NotificationQueries`, `ReceiptQueries`.
+- **Still plain PDO, on purpose**: `BookingRules::assignBeds` (its race test hands in a PDO); every transaction closed by `reauth_verify()`, which commits a wrong try itself (GCash, refund switch, password change, new admin, counter password, handover, payment reversal, restore); `legacy/includes/two-factor.php`, `password-reset.php`, `remember-me.php` (their bindings are secrets; an uncaught `QueryException` no longer prints bindings, since `bootstrap/app.php` removes them and `AppServiceProvider` removes them from the debug page's query list, but the SQL stays visible); `backup.php`'s two DELETEs after a restore.
+- **`sql_failed()`**: a `DB::` failure is logged with its SQL and `?` marks, never the values, and the app line that ran it.
+- **`venusep_routines.sql`** (repo root): every function, procedure, trigger and view with one plain line each. For reading only: nothing runs it, a change still goes in a new migration. Written from the database at migration 19; the demo seed's routines are left out.

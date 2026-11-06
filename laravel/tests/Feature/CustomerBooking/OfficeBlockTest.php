@@ -76,7 +76,7 @@ class OfficeBlockTest extends TestCase
     {
         $this->block();
         $res = $this->submit()->assertStatus(409)->assertJson(['ok' => false, 'error' => 'blocked']);
-        $this->assertStringStartsWith("You can't make new bookings at USeP Venues right now. Please contact the office. USeP Venues: ", $res->json('message'));
+        $this->assertStringStartsWith("You can't book at USeP Venues right now. Please contact the office. USeP Venues: ", $res->json('message'));
         $this->assertStringContainsString('usep.venues@example.com', $res->json('message'));
         $this->assertStringNotContainsString('Secret', $res->json('message'));
         $this->submit('r1')->assertStatus(400)->assertJson(['message' => 'A valid ID is required to submit a booking.']);
@@ -85,7 +85,7 @@ class OfficeBlockTest extends TestCase
     public function test_the_booking_pages_say_so_up_front_with_the_contact_info(): void
     {
         $this->block();
-        $notice = "You can't make new bookings at USeP Venues right now. Please contact the office.";
+        $notice = "You can't book at USeP Venues right now. Please contact the office.";
         $this->actingAsCustomer(self::EMAIL)->get(route('customer.room-reservation', ['room' => 'r5']))->assertOk()
             ->assertSee($notice)->assertSee('usep.venues@example.com')->assertDontSee('Secret reason');
         $this->get(route('customer.venues'))->assertOk()->assertSee($notice);
@@ -150,13 +150,13 @@ class OfficeBlockTest extends TestCase
             DB::table('booking_timeline')->where(['booking_id' => $blocked, 'new_reservation_status' => 'cancelled'])->value('note'));
 
         legacy('bookings', 'receipt-emails');
-        mail_status_sweep(DB::connection()->getPdo());
+        mail_status_sweep();
         $mail = DB::table('email_outbox')->where(['booking_id' => $blocked, 'kind' => 'booking_block_cancelled'])->first();
         $this->assertNotNull($mail, 'no email to the customer');
         $this->assertSame(self::EMAIL, $mail->to_email);
         $this->assertStringContainsString('Contact USeP Venues: ', $mail->body_text);
         $this->assertStringNotContainsString('Secret', $mail->body_html . $mail->body_text);
-        mail_status_sweep(DB::connection()->getPdo());   /* once only */
+        mail_status_sweep();   /* once only */
         $this->assertSame(1, DB::table('email_outbox')->where(['booking_id' => $blocked, 'kind' => 'booking_block_cancelled'])->count());
     }
 

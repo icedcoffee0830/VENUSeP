@@ -66,6 +66,7 @@ export default {
       await page.locator('[data-rs-open][data-venue="1"]').click();
       await expect.text(page, 'Enable refund requests at Bahay Alumni?');
       await page.locator('#rsPassword').fill(ctx.password);
+      await expect.eye(page.locator('#rsPassword'));
       await page.locator('#rsConfirm').click();
       await expect.url(page, /refunds=saved/, 20_000);
       await expect.text(page, 'Saved. Refund requests at Bahay Alumni are now ON.');

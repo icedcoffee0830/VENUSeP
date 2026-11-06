@@ -7,6 +7,8 @@
 @push('head')
     <!-- shared VENUSeP modal: the password re-entry for a GCash account change -->
     <link rel="stylesheet" href="{{ asset('assets/css/confirm-modal.css') }}" />
+    {{-- in the head: the refund-switch script below the form needs venusepEye --}}
+    <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
 @endpush
 
 @push('styles')
@@ -23,7 +25,7 @@
         --ps-muted: #6b675f;
         --ps-text: #1c1b19;
         --ps-dark: #1f1e1e;
-        --ps-warn: #ff6b12;
+        --ps-warn: #8a5a12;
         --ps-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
       }
       .ps-header { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: 1.4rem; }
@@ -225,7 +227,7 @@
               @endforeach
               <ul class="rs-rules">
                 <li>A change applies to <strong>new bookings at that office only</strong>. Every booking keeps the policy it was made under.</li>
-                <li>Closures by USeP are not affected. Those customers are always offered a replacement room, a new date, or their money back.</li>
+                <li>With refunds OFF, nothing is refundable through VENUSeP, even when the office closes. Staff handle those cases outside the system.</li>
                 <li>Changing it needs your password, and every change is recorded in the office's settings history.</li>
               </ul>
             </section>
@@ -293,7 +295,7 @@
           <div class="rs-modal-body">
             <ul class="rs-list" id="rsModalList"></ul>
             <label class="rs-pw-label" for="rsPassword">Enter your admin password to confirm</label>
-            <input class="ps-control" type="password" id="rsPassword" autocomplete="current-password" />
+            <span class="vz-pw"><input class="ps-control" type="password" id="rsPassword" autocomplete="current-password" /></span>
             <div class="rs-msg" id="rsMsg" role="alert" hidden></div>
           </div>
           <div class="rs-modal-foot">
@@ -324,6 +326,8 @@
         const list = document.getElementById('rsModalList');
         const form = document.getElementById('rsForm');
         const pw = document.getElementById('rsPassword');
+        pw.insertAdjacentHTML('afterend', venusepEye);
+        const hidePw = function () { if (pw.type !== 'password') pw.nextElementSibling.click(); };
         const msg = document.getElementById('rsMsg');
         const confirmBtn = document.getElementById('rsConfirm');
 
@@ -375,7 +379,7 @@
             office.hostel
               ? 'Payment does not change: hostel stays are always paid before the stay.'
               : 'New bookings switch to <strong>post-pay</strong>: nothing is paid until the event is over, then it is due the day after the event. Unpaid bookings go overdue after ' + office.grace + ' days instead of being released.',
-            'Closures by USeP are not affected. Those customers are still offered a replacement or their money back.'
+            'With refunds OFF, nothing is refundable through VENUSeP, even when the office closes. Staff handle those cases outside the system.'
           ];
           list.innerHTML = items.map(function (t) { return '<li>' + t + '</li>'; }).join('');
           pw.value = ''; hideMsg();
@@ -385,7 +389,7 @@
         }
         function close() {
           if (busy) return;
-          modal.hidden = true; pw.value = ''; hideMsg();
+          modal.hidden = true; pw.value = ''; hidePw(); hideMsg();
           if (openBtn) openBtn.focus();
         }
 
@@ -449,7 +453,6 @@
          only; nothing persists and no booking page is affected until
          includes/payment-settings.php is backed by a database.
          ============================================================ -->
-    <script src="{{ asset('assets/js/confirm-modal.js') }}"></script>
     <script>
       /* The checker compares DIGITS, never the pretty form — so a number is
          valid on its digits alone. 11 digits starting 09 is the PH mobile

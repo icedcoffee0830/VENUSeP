@@ -40,4 +40,23 @@ class HeaderPhotoTest extends TestCase
                 ->update(['c.photo_path' => $old]);
         }
     }
+
+    /* The room booking page's "Booking under" card: the profile photo, else the
+       initials; at the counter (a walk-in) never a photo (2026-11-05). */
+    public function test_the_booking_under_card_shows_the_photo_but_not_at_the_counter(): void
+    {
+        $old = DB::table('customers as c')->join('users as u', 'u.id', '=', 'c.user_id')->where('u.email', 'customer@gmail.com')->value('c.photo_path');
+        DB::table('customers as c')->join('users as u', 'u.id', '=', 'c.user_id')->where('u.email', 'customer@gmail.com')
+            ->update(['c.photo_path' => 'assets/img/avatars/c-test.png']);
+        try {
+            $this->actingAsCustomer()->get(route('customer.room-reservation', ['room' => 'r1']))->assertOk()
+                ->assertSee('"photo":"' . asset('assets/img/avatars/c-test.png') . '"', false);
+        } finally {
+            DB::table('customers as c')->join('users as u', 'u.id', '=', 'c.user_id')->where('u.email', 'customer@gmail.com')
+                ->update(['c.photo_path' => $old]);
+        }
+        $this->flushSession();
+        $this->actingAsAdmin()->get(route('customer.room-reservation', ['room' => 'r1', 'counter' => 1]))->assertOk()
+            ->assertSee('"photo":""', false);
+    }
 }

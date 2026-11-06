@@ -1,39 +1,57 @@
-const GAL_GRADS=['#eef1f5,#dfe4ea','#f3eee9,#e6ddd3','#e9eef3,#d5e0ea','#eef3ee,#d9e6da','#f3eef1,#e6d5de','#eaf0f3,#d5e2ea','#f2efe8,#e4dccf','#eef3f0,#dbe7df'];
-function galGrad(i){ return 'background:linear-gradient(135deg,'+GAL_GRADS[i%GAL_GRADS.length]+')'; }
-var GAL_PHOTOS=[];
-function openGallery(){
-  const R=getRoom(); if(!R || document.getElementById('galOverlay')) return;
-  GAL_PHOTOS=R.photoUrls||[];
-  const n=GAL_PHOTOS.length||1;          /* no photos yet -> ONE placeholder tile, never a made-up count */
-  let thumbs='';
-  for(let i=0;i<n;i++){
-    const url=GAL_PHOTOS[i];
-    const bg=url?('background-size:cover;background-position:center;background-image:url(\''+url+'\')'):galGrad(i);
-    thumbs+='<button class="galThumb" data-i="'+i+'" onclick="galSelect('+i+')" style="border:2px solid transparent;border-radius:8px;cursor:pointer;padding:0;aspect-ratio:4/3;'+bg+';display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 10px ui-monospace,monospace">'+(url?'':'Photo '+(i+1))+'</button>';
-  }
-  const ov=document.createElement('div');
-  ov.id='galOverlay';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(20,18,15,.75);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px';
-  ov.innerHTML=
-    '<div style="background:#fff;border-radius:16px;max-width:960px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(0,0,0,.08)"><div style="font-size:15px;font-weight:660">'+esc(R.name)+' · Photos</div><button onclick="closeGallery()" style="background:none;border:none;font-size:22px;line-height:1;color:#8a857d;cursor:pointer">&times;</button></div>'
-    +'<div style="padding:16px 18px;overflow:auto">'
-    +'<div id="galBig"></div>'
-    +'<div style="font-size:12px;font-weight:600;color:#8a857d;text-transform:uppercase;letter-spacing:.04em;margin:16px 0 10px">All photos</div>'
-    +'<div id="galGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">'+thumbs+'</div>'
-    +'</div></div>';
-  ov.addEventListener('click',function(e){ if(e.target===ov) closeGallery(); });
-  document.body.appendChild(ov);
-  galSelect(0);
+/* The photo viewer (Aron 2026-11-05): dark, full screen, the whole photo as big as it fits.
+   ✕, Esc or a tap on the dark area closes it; arrows, swipe and the arrow keys change the photo.
+   No zoom. The 360° tour stays separate. A native <dialog>: it keeps focus inside and hands it back. */
+const PV_CSS=`
+  .pv{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:0;border:0;background:rgba(12,11,10,.94);color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:pan-y;overscroll-behavior:contain}
+  .pv::backdrop{background:transparent}
+  .pv-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:56px 16px}
+  .pv-stage img{max-width:100%;max-height:100%;object-fit:contain;display:block;border-radius:4px;user-select:none;-webkit-user-drag:none}
+  .pv-count{position:absolute;top:0;left:0;height:56px;display:flex;align-items:center;padding:0 18px;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+  .pv-btn{position:absolute;width:44px;height:44px;border:0;border-radius:999px;background:rgba(255,255,255,.14);color:#fff;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .pv-btn:hover{background:rgba(255,255,255,.26)}
+  .pv-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+  .pv-close{top:6px;right:8px}
+  .pv-prev,.pv-next{top:50%;margin-top:-22px}
+  .pv-prev{left:6px}.pv-next{right:6px}
+  @media (min-width:768px){.pv-stage{padding:56px 72px}.pv-prev{left:12px}.pv-next{right:12px}}`;
+
+function openGallery(start){
+  const R=getRoom(), photos=((R&&R.photoUrls)||[]).filter(Boolean);
+  if(!photos.length) return;
+  const pv=document.createElement('dialog');
+  pv.className='pv';
+  pv.id='photoViewer';
+  pv.setAttribute('aria-label',R.name+' photos');
+  pv.innerHTML='<style>'+PV_CSS+'</style><div class="pv-stage"><img alt=""></div>'
+    +'<button type="button" class="pv-btn pv-close" aria-label="Close photos">✕</button>'
+    +(photos.length>1?'<div class="pv-count" aria-live="polite"></div>'
+      +'<button type="button" class="pv-btn pv-prev" aria-label="Previous photo">‹</button>'
+      +'<button type="button" class="pv-btn pv-next" aria-label="Next photo">›</button>':'');
+  const img=pv.querySelector('img'), count=pv.querySelector('.pv-count');
+  let at=0, swipeFrom=null;
+  const show=function(i){
+    at=(i+photos.length)%photos.length;
+    img.src=photos[at];
+    img.alt=R.name+' photo '+(at+1)+' of '+photos.length;
+    if(count) count.textContent=(at+1)+' / '+photos.length;
+  };
+  pv.addEventListener('click',function(e){
+    if(e.target.matches('.pv-stage, .pv-close')) pv.close();
+    if(e.target.matches('.pv-prev')) show(at-1);
+    if(e.target.matches('.pv-next')) show(at+1);
+  });
+  pv.addEventListener('keydown',function(e){
+    if(e.key==='ArrowLeft') show(at-1);
+    if(e.key==='ArrowRight') show(at+1);
+  });
+  pv.addEventListener('touchstart',function(e){ swipeFrom=e.touches[0].clientX; },{passive:true});
+  pv.addEventListener('touchend',function(e){
+    const dx=e.changedTouches[0].clientX-swipeFrom;
+    if(Math.abs(dx)>40) show(at+(dx<0?1:-1));
+  });
+  pv.addEventListener('close',function(){ pv.remove(); document.body.style.overflow=''; });
+  document.body.appendChild(pv);
+  document.body.style.overflow='hidden';
+  show(start||0);
+  pv.showModal();
 }
-function galSelect(i){
-  const big=document.getElementById('galBig');
-  const url=GAL_PHOTOS[i];
-  if(big){
-    if(url){ big.setAttribute('style','background-size:cover;background-position:center;background-image:url(\''+url+'\');border-radius:12px;aspect-ratio:16/9'); big.textContent=''; }
-    else { big.setAttribute('style', galGrad(i)+';border-radius:12px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#8a857d;font:500 14px ui-monospace,monospace'); big.textContent='Photo '+(i+1); }
-  }
-  const g=document.getElementById('galGrid');
-  if(g) g.querySelectorAll('.galThumb').forEach(function(b){ b.style.borderColor=(+b.getAttribute('data-i')===i)?'#a11626':'transparent'; });
-}
-function closeGallery(){ const ov=document.getElementById('galOverlay'); if(ov) ov.remove(); }

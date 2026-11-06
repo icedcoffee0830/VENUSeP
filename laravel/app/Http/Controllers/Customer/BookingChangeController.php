@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\BookingCreateQueries;
+use App\Queries\BookingQueries;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
-use PDO;
 use PDOException;
 use RuntimeException;
 
@@ -19,16 +20,13 @@ class BookingChangeController
     }
 
     /* The session customer's own booking, or null. */
-    private static function own(PDO $pdo, Request $request): ?array
+    private static function own(Request $request): ?array
     {
         $id = booking_id_from_reference((string) $request->input('booking', ''));
         if ($id === null) {
             return null;
         }
-        $st = $pdo->prepare('SELECT b.id, b.room_id, b.booking_type, b.reservation_status, fn_booking_first_day(b.id) AS first_day
-                               FROM bookings b WHERE b.id = :b AND b.customer_id = :c');
-        $st->execute([':b' => $id, ':c' => (int) session('customer_id')]);
-        return $st->fetch() ?: null;
+        return BookingCreateQueries::findOwn($id, (int) session('customer_id'));
     }
 
     private static function begin(): array
@@ -46,27 +44,19 @@ class BookingChangeController
     /* Free until staff approve; after that it goes through the office (force cancel). */
     public function cancel(Request $request)
     {
-        [$pdo, $refused] = self::begin();
+        [, $refused] = self::begin();
         if ($refused) {
             return $refused;
         }
         venusep_expire_due_bookings();
-        $b = self::own($pdo, $request);
+        $b = self::own($request);
         if (!$b) {
             return self::reply(404, ['ok' => false, 'message' => 'That booking was not found.']);
         }
         $user = (int) session('user_id');
-        $pdo->beginTransaction();
-        $pdo->prepare('SET @venusep_actor_user_id = :a, @venusep_action_note = :n')
-            ->execute([':a' => $user, ':n' => 'Request cancelled by the customer.']);
-        $done = $pdo->prepare("UPDATE bookings SET reservation_status = 'cancelled', cancelled_at = NOW() WHERE id = :b AND reservation_status = 'pending'");
-        $done->execute([':b' => $b['id']]);
-        $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
-        if ($done->rowCount() === 0) {
-            $pdo->rollBack();
+        if (!BookingCreateQueries::cancelPending((int) $b['id'], $user)) {
             return self::reply(409, ['ok' => false, 'message' => 'Only a request that has not been approved can be cancelled here. Please contact the office.']);
         }
-        $pdo->commit();
         return self::reply(200, ['ok' => true, 'message' => 'Your request was cancelled.']);
     }
 
@@ -77,7 +67,7 @@ class BookingChangeController
         if ($refused) {
             return $refused;
         }
-        $b = self::own($pdo, $request);
+        $b = self::own($request);
         if (!$b) {
             return self::reply(404, ['ok' => false, 'message' => 'That booking was not found.']);
         }
@@ -94,42 +84,19 @@ class BookingChangeController
         $id = (int) $b['id'];
         $user = (int) session('user_id');
         try {
-            BookingRules::beginBooking($pdo);
-            $pdo->prepare('SET @venusep_actor_user_id = :a, @venusep_action_note = :n')
-                ->execute([':a' => $user, ':n' => 'A new ID was sent; the request is back with staff.']);
-            $pdo->prepare("UPDATE bookings SET reservation_status = 'pending', payment_status = 'locked' WHERE id = :b")->execute([':b' => $id]);
-            $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
-            if ($b['booking_type'] === 'venue') {
-                $slots = $pdo->prepare('SELECT slot_date, start_time, end_time FROM venue_booking_slots WHERE booking_id = :b');
-                $slots->execute([':b' => $id]);
-                $rows = $slots->fetchAll();
-                $pdo->prepare('DELETE FROM venue_booking_slots WHERE booking_id = :b')->execute([':b' => $id]);
-                $add = $pdo->prepare('CALL sp_add_venue_slot(:b, :d, :s, :e)');
-                foreach ($rows as $r) {
-                    $add->execute([':b' => $id, ':d' => $r['slot_date'], ':s' => $r['start_time'], ':e' => $r['end_time']]);
-                    $add->closeCursor();
-                }
-            }
-            $pdo->prepare('UPDATE bookings SET current_deadline_at = fn_payment_deadline(:b) WHERE id = :b2')->execute([':b' => $id, ':b2' => $id]);
-            $pdo->commit();
+            BookingCreateQueries::reopenRejected($id, $b['booking_type'] === 'venue', $user);
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             sql_failed($e);
             return self::reply(409, ['ok' => false, 'message' => $taken]);
         }
 
         if ($b['booking_type'] === 'hostel') {
-            $pdo->prepare('DELETE FROM bed_reservation_nights WHERE booking_id = :b')->execute([':b' => $id]);
-            $pdo->prepare('DELETE FROM bed_reservations WHERE booking_id = :b')->execute([':b' => $id]);
-            $stay = $pdo->prepare('SELECT check_in_date, check_out_date FROM hostel_booking_details WHERE booking_id = :b');
-            $stay->execute([':b' => $id]);
-            $dates = $stay->fetch();
-            $occ = $pdo->prepare('SELECT id FROM hostel_occupants WHERE booking_id = :b ORDER BY id');
-            $occ->execute([':b' => $id]);
+            BookingCreateQueries::clearBeds($id);
+            $stay = BookingQueries::findHostelStay($id);
             try {
-                BookingRules::assignBeds($pdo, (int) $b['room_id'], $id, array_map('intval', $occ->fetchAll(PDO::FETCH_COLUMN)), $dates['check_in_date'], $dates['check_out_date']);
+                BookingRules::assignBeds($pdo, (int) $b['room_id'], $id, BookingQueries::findOccupantIds($id), $stay['check_in_date'], $stay['check_out_date']);
             } catch (RuntimeException | PDOException $e) {
-                $pdo->prepare("UPDATE bookings SET reservation_status = 'rejected', payment_status = 'locked' WHERE id = :b")->execute([':b' => $id]);
+                BookingCreateQueries::putBackRejected($id);
                 if ($e instanceof PDOException) {
                     sql_failed($e);
                 }
@@ -140,7 +107,7 @@ class BookingChangeController
         $docError = '';
         doc_store($id, 'customer_id', $file->getPathname(), $file->getClientOriginalName(), $user, $docError);
         try {
-            notify_new_request($pdo, $id, $user);
+            notify_new_request($id, $user);
         } catch (PDOException $e) {
             sql_failed($e, optional: true);
         }

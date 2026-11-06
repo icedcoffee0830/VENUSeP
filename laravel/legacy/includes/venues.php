@@ -31,17 +31,20 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';   /* staff_sees_venue() — staff list their own venue only */
 
 /* [id => name] for the pages that need the id (venue forms, photo uploads),
-   and $venues as the plain name list every dropdown has always used. */
+   and $venues as the plain name list every dropdown has always used.
+   $venuesByType: the same, per kind of room each venue holds. */
 $venuesById = [];
 $venues = [];
+$venuesByType = ['event' => [], 'hostel' => []];
 
 $stmt = venusep_db_or_fail()->query(
-  'SELECT id, name FROM venues WHERE is_active = 1 ORDER BY id'
+  'SELECT id, name, venue_type FROM venues WHERE is_active = 1 ORDER BY id'
 );
 foreach ($stmt as $row) {
-  if (!staff_sees_venue($row['id'])) continue;
+  if (!staff_sees_venue($row['id']) || !staff_has_hall_in($row['id'])) continue;
   $venuesById[(int) $row['id']] = $row['name'];
   $venues[] = $row['name'];
+  $venuesByType[$row['venue_type']][(int) $row['id']] = $row['name'];
 }
 /* Laravel: legacy() loads this file inside a function, so publish the variable
    venueIdForName() reads with `global`. */

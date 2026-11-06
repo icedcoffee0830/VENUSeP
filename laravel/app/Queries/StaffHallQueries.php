@@ -19,6 +19,35 @@ use Illuminate\Support\Facades\DB;
 class StaffHallQueries
 {
     /* The halls of these offices that are not deleted: [id, name, venue_id], by office. */
+    public static function isSuperAdmin(int $userId): bool
+    {
+        return (bool) (DB::selectOne("SELECT is_super_admin FROM users WHERE id = ? AND account_type = 'admin'", [$userId])->is_super_admin ?? false);
+    }
+
+    /* The offices this session handles: an admin's group, a staff member's office, and any
+       office of a cover going on now. */
+    public static function officeIdsOf(int $userId): array
+    {
+        return array_map(fn ($r) => (int) $r->id, DB::select("
+            SELECT v.id
+            FROM users u
+            LEFT JOIN staff s ON s.user_id = u.id
+            JOIN venues v ON (u.account_type = 'admin' AND v.office_group = u.office_group)
+                          OR (u.account_type = 'staff'
+                              AND (v.id = s.venue_id
+                                   OR EXISTS (SELECT 1 FROM staff_covers c WHERE c.user_id = u.id AND c.venue_id = v.id
+                                                 AND " . STAFF_COVER_ON_SQL . ")))
+            WHERE u.id = ?
+            ORDER BY v.id
+        ", [$userId]));
+    }
+
+    /* The rooms a staff member handles right now: room id => office id. */
+    public static function roomsOf(int $userId): array
+    {
+        return array_map('intval', array_column(DB::select('SELECT r.id, r.venue_id FROM rooms r WHERE fn_staff_on_room(?, r.id)', [$userId]), 'venue_id', 'id'));
+    }
+
     public static function hallsOf(array $venueIds): array
     {
         return array_map(fn ($r) => (array) $r, DB::select("

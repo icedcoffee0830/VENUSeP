@@ -27,7 +27,7 @@ async function customerRow(ctx, page, email) {
   return row;
 }
 
-/* click Disable/Enable in the row, confirm, wait for the save and the reload */
+/* click Suspend/Reactivate in the row, confirm, wait for the save and the reload */
 async function toggleCustomer(ctx, page, row, label, okLabel = label) {
   await row.locator('.btn-cust-toggle', { hasText: label }).click();
   /* .catch: a dangling wait must not crash the runner when the step fails first */
@@ -87,10 +87,10 @@ export default {
 
     await step('The admin disables the account → stored, and the customer is signed out', async () => {
       const page = s.admin;
-      await toggleCustomer(ctx, page, await customerRow(ctx, page, s.email), 'Disable');
-      expect.equal((await dbOne(`SELECT is_active FROM users WHERE id = ?`, [s.userId])).is_active, 0, 'users.is_active after Disable');
+      await toggleCustomer(ctx, page, await customerRow(ctx, page, s.email), 'Suspend');
+      expect.equal((await dbOne(`SELECT is_active FROM users WHERE id = ?`, [s.userId])).is_active, 0, 'users.is_active after Suspend');
       const row = await customerRow(ctx, page, s.email);
-      await expect.visible(row.getByText('Disabled', { exact: true }), 'the row does not say Disabled after the reload');
+      await expect.visible(row.getByText('Suspended', { exact: true }), 'the row does not say Suspended after the reload');
 
       await s.cust.goto(ctx.url('/customer/booking-history'));
       await expect.url(s.cust, /\/customer\/customer-login/);
@@ -99,8 +99,8 @@ export default {
 
     await step('The admin re-enables the account → stored, the customer can sign in again', async () => {
       const page = s.admin;
-      await toggleCustomer(ctx, page, await customerRow(ctx, page, s.email), 'Enable', 'Re-enable');   // the button says Enable, the dialog Re-enable
-      expect.equal((await dbOne(`SELECT is_active FROM users WHERE id = ?`, [s.userId])).is_active, 1, 'users.is_active after Enable');
+      await toggleCustomer(ctx, page, await customerRow(ctx, page, s.email), 'Reactivate');
+      expect.equal((await dbOne(`SELECT is_active FROM users WHERE id = ?`, [s.userId])).is_active, 1, 'users.is_active after Reactivate');
       const again = await ctx.loginCustomer(s.email);
       await expect.url(again, /\/customer\//);
       return again;

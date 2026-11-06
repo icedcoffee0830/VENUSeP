@@ -38,14 +38,13 @@ function venusep_password_hash(string $plain): string
    if it cannot upgrade, the old hash simply keeps working. The UPDATE only
    replaces the exact hash that was checked, so a password changed meanwhile
    in another window is never overwritten. */
-function venusep_password_upgrade(PDO $pdo, int $userId, string $plain, string $hash): void
+function venusep_password_upgrade(int $userId, string $plain, string $hash): void
 {
     if (!venusep_password_ready() || !password_needs_rehash($hash, PASSWORD_ARGON2ID, VENUSEP_PASSWORD_OPTIONS)) {
         return;
     }
     try {
-        $pdo->prepare('UPDATE users SET password_hash = :h WHERE id = :u AND password_hash = :old')
-            ->execute([':h' => venusep_password_hash($plain), ':u' => $userId, ':old' => $hash]);
+        \App\Queries\AccountQueries::upgradeHash($userId, venusep_password_hash($plain), $hash);
     } catch (PDOException $e) {
         sql_failed($e, optional: true);
     }

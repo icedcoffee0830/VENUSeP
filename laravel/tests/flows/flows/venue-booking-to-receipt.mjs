@@ -75,6 +75,12 @@ export default {
       expect.ok(s.date, 'no free date found in the next 60 days');
       ctx.note(`date ${s.date}, 9:00 AM – 1:00 PM`);
 
+      // the "Booking under" card: the photo when there is one (stood in for: this customer has none), else the initials
+      const photo = page.locator('img[width="34"]');
+      expect.equal(await photo.count(), 0, 'a photo for a customer with none');
+      await page.evaluate(() => { ACCOUNT.photo = '/logo/Logo Header 3.png'; render(); });
+      expect.equal(await photo.count(), 1, 'no photo in the Booking under card');
+      await page.evaluate(() => { ACCOUNT.photo = ''; render(); });
       await page.locator('#bk-eventName').fill(s.eventName);
       await page.locator('#bk-date').click();
       const day = page.locator(`.cal-pop button[onclick="calPick('${s.date}')"]`);
@@ -95,6 +101,13 @@ export default {
       await page.getByText('Not affiliated', { exact: true }).click();
       await page.locator('#idFileInput').setInputFiles(await ctx.fixtures.idImage(s.name));
       await expect.text(page, 'Reviewed by staff together with your reservation');
+      // the price changed while the customer was booking (stood in for by an older
+      // fee on the page): refused, and the page redraws with the room's real fee
+      const fee = Number((await dbOne(`SELECT e.fee_per_day AS f FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = ?`, [ROOM_CODE])).f);
+      await page.evaluate(() => { getRoom().fee -= 100; render(); });
+      await page.getByRole('button', { name: 'Submit booking request' }).click();
+      await expect.text(page, /The price of .+ changed to ₱[\d,.]+\. Please check and submit again\./);
+      expect.equal(await page.evaluate(() => getRoom().fee), fee, 'the page did not take the new fee');
       await page.getByRole('button', { name: 'Submit booking request' }).click();
       await expect.text(page, 'Request submitted — awaiting approval', 30_000);
       const refCell = page.locator('div', { hasText: /^Reference$/ }).locator('xpath=following-sibling::div[1]').first();
@@ -193,8 +206,32 @@ export default {
       expect.match(await row.getAttribute('data-payment-status'), /Paid/i, 'payment status in My Bookings');
       await row.locator('a.booking-action-receipt').click();
       await expect.url(page, /\/customer\/receipt\?booking=/);
-      await expect.visible(page.getByRole('heading', { name: 'System Receipt' }), 'no "System Receipt" heading');
+      await expect.visible(page.getByRole('heading', { name: 'Transaction Receipt' }), 'no "Transaction Receipt" heading');
       await expect.text(page, s.ref);
+      // the fixed top nav used to cover the two top buttons (2026-11-05)
+      const under = await page.evaluate(() => {
+        const nav = document.querySelector('nav.app-header').getBoundingClientRect().bottom;
+        return Math.min(...[...document.querySelectorAll('.rc-tools .rc-btn')].map((b) => b.getBoundingClientRect().top)) - nav;
+      });
+      expect.ok(under >= 0, `the receipt's top buttons sit ${-under}px under the nav`);
+    });
+
+    await step('On a phone the receipt has the tab bar, Bookings marked; the bar does not print', async () => {
+      const page = s.cust;
+      const size = page.viewportSize();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect.visible(page.locator('.ct-bar'), 'no tab bar on the receipt');
+      expect.equal(await page.locator('.ct-bar a[aria-current="page"]').getAttribute('data-tab'), 'bookings', 'the marked tab');
+      const m = await page.evaluate(() => {
+        window.scrollTo(0, document.documentElement.scrollHeight);
+        const kids = [...document.querySelectorAll('.app-main *')].filter((e) => e.getClientRects().length);
+        return { barTop: document.querySelector('.ct-bar').getBoundingClientRect().top, end: Math.max(...kids.map((e) => e.getBoundingClientRect().bottom)) };
+      });
+      expect.ok(m.end <= m.barTop + 1, 'the receipt ends behind the bar: ' + JSON.stringify(m));
+      await page.emulateMedia({ media: 'print' });
+      expect.ok(!(await page.locator('.ct-bar').isVisible()), 'the bar prints');
+      await page.emulateMedia({ media: 'screen' });
+      await page.setViewportSize(size);
     });
 
     await step('The receipt PDF downloads', async () => {

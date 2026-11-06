@@ -10,6 +10,7 @@
 @endpush
 @section('content')
       <main class="app-main">
+        @include('partials.no-halls-note')
         <div class="app-content-header">
           <div class="container-fluid">
             <div class="calendar-heading">

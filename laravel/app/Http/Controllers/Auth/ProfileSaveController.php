@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Queries\AccountQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDOException;
@@ -23,6 +24,21 @@ class ProfileSaveController
     private function reply(int $status, array $data): never
     {
         throw new HttpResponseException(response()->json($data, $status)->header('Cache-Control', 'no-store'));
+    }
+
+    /* The one lockout for "type your password again" (reauth_verify, auth.php): a stolen session
+       cannot guess the password through any form here. reauth_verify closes the transaction on a
+       wrong try, so it stays plain PDO. */
+    private function mustKnowPassword($pdo, int $userId, string $password, string $field): void
+    {
+        $pdo->beginTransaction();
+        if ($no = reauth_verify($pdo, AccountQueries::lockForPasswordCheck($userId), $password)) {
+            $this->reply(isset($no['locked']) ? 423 : 401, ['ok' => false, 'field' => $field,
+                'message' => isset($no['locked'])
+                    ? 'Too many wrong passwords. Try again in ' . $no['locked'] . ' seconds.'
+                    : 'That is not your current password.']);
+        }
+        $pdo->commit();
     }
 
     public function __invoke(Request $request)
@@ -96,50 +112,29 @@ class ProfileSaveController
            where reset links go, so a session alone must not be able to move it. A
            Google-only account (no password) shows the fresh Google confirmation
            instead — the same proof as its first password (#23), not spent here. */
-        $acct = $pdo->prepare('SELECT email, password_hash FROM users WHERE id = :u');
-        $acct->execute([':u' => $userId]);
-        $acct = $acct->fetch();
+        $acct = AccountQueries::findEmailAndHash($userId);
         if ($acct && strtolower((string) $acct['email']) !== $email) {
             if ($acct['password_hash'] === null) {
                 if (!($isCustomer && google_proof_valid('google_reauth', $userId))) {
                     $this->reply(403, ['ok' => false, 'field' => 'email', 'reauth' => true,
                         'message' => 'To change your email, first confirm it’s you with Google (Account Security, below).']);
                 }
-            } elseif (!password_verify((string) $post->get('current_password', ''), $acct['password_hash'])) {
-                $this->reply(401, ['ok' => false, 'field' => 'current_password', 'message' => $post->get('current_password', '') === ''
-                    ? 'Enter your current password to change your email.'
-                    : 'That is not your current password.']);
+            } elseif ((string) $post->get('current_password', '') === '') {
+                $this->reply(401, ['ok' => false, 'field' => 'current_password', 'message' => 'Enter your current password to change your email.']);
+            } else {
+                $this->mustKnowPassword($pdo, $userId, (string) $post->get('current_password'), 'current_password');
             }
         }
 
         try {
-            $pdo->beginTransaction();
-            $pdo->prepare('UPDATE users SET email = :e WHERE id = :u')->execute([':e' => $email, ':u' => $userId]);
-            /* a reset link mailed to the old address stops working */
-            $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE user_id = :u AND used_at IS NULL')->execute([':u' => $userId]);
-
             if ($isCustomer) {
-                $pdo->prepare(
-                    'UPDATE customers SET full_name = :n, phone = :p, address = :a, university_id_no = :i
-                      WHERE user_id = :u'
-                )->execute([
-                    ':n' => $name, ':p' => $phoneNorm,
-                    ':a' => mb_substr(trim((string) $post->get('address', '')), 0, 500) ?: null,
-                    ':i' => mb_substr(trim((string) $post->get('university_id_no', '')), 0, 80) ?: null,
-                    ':u' => $userId,
-                ]);
+                AccountQueries::saveCustomerProfile($userId, $email, $name, $phoneNorm,
+                    mb_substr(trim((string) $post->get('address', '')), 0, 500) ?: null,
+                    mb_substr(trim((string) $post->get('university_id_no', '')), 0, 80) ?: null);
             } else {
-                /* The seeded admin has no staff row — created on first save. */
-                $pdo->prepare(
-                    'INSERT INTO staff (user_id, full_name, phone) VALUES (:u, :n, :p)
-                     ON DUPLICATE KEY UPDATE full_name = VALUES(full_name), phone = VALUES(phone)'
-                )->execute([':u' => $userId, ':n' => $name, ':p' => $phoneNorm]);
+                AccountQueries::saveStaffProfile($userId, $email, $name, $phoneNorm);
             }
-            $pdo->commit();
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
             if ($e->getCode() === '23000') {
                 $this->reply(409, ['ok' => false, 'field' => 'email',
                     'message' => 'That email address is already used by another account.']);
@@ -176,14 +171,10 @@ class ProfileSaveController
         }
         try {
             /* FOR UPDATE + reauth_verify(): the one lockout for "type your password again",
-               so a stolen session cannot guess the current password without limit. */
+               so a stolen session cannot guess the current password without limit. The
+               transaction stays plain PDO: reauth_verify closes it itself on a wrong password. */
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare('SELECT id, password_hash, reauth_failed_attempts, reauth_lock_level,
-                                          CASE WHEN reauth_locked_until > NOW()
-                                               THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
-                                     FROM users WHERE id = :u FOR UPDATE');
-            $stmt->execute([':u' => $userId]);
-            $acct = $stmt->fetch();
+            $acct = AccountQueries::lockForPasswordCheck($userId);
             if (!$acct) {
                 $pdo->rollBack();
                 $this->reply(401, ['ok' => false, 'message' => 'Your session has ended. Log in again.']);
@@ -199,9 +190,7 @@ class ProfileSaveController
                     $this->reply(403, ['ok' => false, 'reauth' => true,
                         'message' => 'Confirm with Google first, then choose your password. The confirmation lasts 10 minutes.']);
                 }
-                $upd = $pdo->prepare('UPDATE users SET password_hash = :h, password_changed_at = NOW() WHERE id = :u AND password_hash IS NULL');
-                $upd->execute([':h' => venusep_password_hash($new), ':u' => $userId]);
-                if ($upd->rowCount() !== 1) {
+                if (!AccountQueries::setFirstPassword($userId, venusep_password_hash($new))) {
                     $this->reply(409, ['ok' => false, 'message' => 'A password was set for this account meanwhile. Reload the page.']);
                 }
             } else {
@@ -215,9 +204,7 @@ class ProfileSaveController
                     $pdo->commit();
                     $this->reply(400, ['ok' => false, 'field' => 'new_password', 'message' => 'Choose a password different from your current one.']);
                 }
-                $pdo->prepare('UPDATE users SET password_hash = :h, password_changed_at = NOW() WHERE id = :u')
-                    ->execute([':h' => venusep_password_hash($new), ':u' => $userId]);
-                $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE user_id = :u AND used_at IS NULL')->execute([':u' => $userId]);
+                AccountQueries::changePassword($userId, venusep_password_hash($new));
                 $pdo->commit();
             }
         } catch (PDOException $e) {
@@ -252,9 +239,7 @@ class ProfileSaveController
             $this->reply(403, ['ok' => false, 'message' => 'Google sign-in is for customer accounts only.']);
         }
         try {
-            $stmt = $pdo->prepare('SELECT password_hash, google_sub FROM users WHERE id = :u');
-            $stmt->execute([':u' => $userId]);
-            $acct = $stmt->fetch();
+            $acct = AccountQueries::findPasswordAndGoogle($userId);
         } catch (PDOException $e) {
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
@@ -274,17 +259,14 @@ class ProfileSaveController
         if ($action === 'google_link_begin' && !google_enabled()) {
             $this->reply(409, ['ok' => false, 'message' => 'Google sign-in is not set up on this server yet.']);
         }
-        if (!password_verify((string) $post->get('password', ''), $acct['password_hash'])) {
-            $this->reply(401, ['ok' => false, 'field' => 'password', 'message' => 'That is not your current password.']);
-        }
+        $this->mustKnowPassword($pdo, $userId, (string) $post->get('password', ''), 'password');
 
         if ($action === 'google_link_begin') {
             google_proof_set('google_link', $userId);
             $this->reply(200, ['ok' => true, 'redirect' => route('customer.google-start', ['purpose' => 'link'])]);
         }
         try {
-            $pdo->prepare('UPDATE users SET google_sub = NULL WHERE id = :u AND password_hash IS NOT NULL')
-                ->execute([':u' => $userId]);
+            AccountQueries::unlinkGoogle($userId);
         } catch (PDOException $e) {
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so Google is still connected.']);
@@ -307,13 +289,12 @@ class ProfileSaveController
         $table = $isCustomer ? 'customers' : 'staff';
         /* An admin may have no staff row yet: create it, or the UPDATEs would match nothing. */
         if (!$isCustomer) {
-            $pdo->prepare('INSERT INTO staff (user_id, full_name) SELECT id, username FROM users WHERE id = :u
-                           ON DUPLICATE KEY UPDATE user_id = user_id')->execute([':u' => $userId]);
+            AccountQueries::ensureStaffRow($userId);
         }
 
         if (!empty($request->request->get('remove'))) {
             $clear();
-            $pdo->prepare("UPDATE {$table} SET photo_path = NULL WHERE user_id = :u")->execute([':u' => $userId]);
+            AccountQueries::savePhoto($table, $userId, null);
             $this->reply(200, ['ok' => true, 'photo' => null, 'message' => 'Photo removed.']);
         }
 
@@ -348,8 +329,7 @@ class ProfileSaveController
 
         /* Stored RELATIVE (assets/img/avatars/...): the pages show it with asset(). */
         $path = $webBase . '/' . $name;
-        $pdo->prepare("UPDATE {$table} SET photo_path = :p WHERE user_id = :u")
-            ->execute([':p' => $path, ':u' => $userId]);
+        AccountQueries::savePhoto($table, $userId, $path);
 
         $this->reply(200, ['ok' => true, 'photo' => $path, 'message' => 'Photo updated.']);
     }
@@ -375,16 +355,12 @@ class ProfileSaveController
             }
 
             if ($action === 'tfa_begin' && !$tfa['enabled']) {
-                $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = :u');
-                $stmt->execute([':u' => $userId]);
-                $hash = $stmt->fetchColumn();
-                if ($hash === null) {
+                $acct = AccountQueries::findEmailAndHash($userId);
+                if ($acct && $acct['password_hash'] === null) {
                     $this->reply(409, ['ok' => false, 'field' => 'password',
                         'message' => 'Set a password first (Account Security, above), then turn this on.']);
                 }
-                if ($hash === false || !password_verify((string) $post->get('password', ''), $hash)) {
-                    $this->reply(401, ['ok' => false, 'field' => 'password', 'message' => 'That is not your current password.']);
-                }
+                $this->mustKnowPassword($pdo, $userId, (string) $post->get('password', ''), 'password');
             } elseif ($action !== 'tfa_confirm') {
                 $check = tfa_verify($pdo, $userId, $code);
                 if (!$check['ok']) {
@@ -394,9 +370,7 @@ class ProfileSaveController
                 }
             }
 
-            $stmt = $pdo->prepare('SELECT email FROM users WHERE id = :u');
-            $stmt->execute([':u' => $userId]);
-            $email = (string) $stmt->fetchColumn();
+            $email = (string) (AccountQueries::findEmailAndHash($userId)['email'] ?? '');
 
             if ($action === 'tfa_begin') {
                 $secret = tfa_setup_secret($userId, $tfa['enabled_at']);

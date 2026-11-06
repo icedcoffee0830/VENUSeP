@@ -117,6 +117,13 @@
 }
 .vz-modal-input:focus { outline: none; border-color: #a11626; box-shadow: 0 0 0 3px rgba(161, 22, 38, 0.12); }
 
+/* the show-password eye (window.venusepEye), on any password box wrapped in .vz-pw */
+.vz-pw { display: block; position: relative; }
+.vz-pw > input[type] { padding-right: 42px; }
+.vz-eye { position: absolute; top: 0; right: 0; bottom: 0; width: 42px; padding: 0; border: 0; background: transparent; color: #6e6a64; font-size: 1rem; cursor: pointer; }
+.vz-eye:hover { color: #120809; }
+.vz-eye:focus-visible { outline: 2px solid #a11626; outline-offset: -2px; border-radius: 11px; }
+
 @media (max-width: 420px) {
   .vz-modal { padding: 22px 18px 16px; }
 }

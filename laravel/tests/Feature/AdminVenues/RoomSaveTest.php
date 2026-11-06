@@ -32,9 +32,49 @@ class RoomSaveTest extends VenuesTestCase
             ->assertStatus(400)->assertJson(['error' => 'bad_maintenance']);
     }
 
-    public function test_a_new_room_must_state_its_price_and_maintenance_dates_must_be_real(): void
+    /* Adding a room: the admins of that office's group and the super admin only (Aron 2026-11-05). */
+    public function test_staff_cannot_add_a_hall_but_still_edit_one(): void
     {
         $this->actingAsStaff();
+        $this->postForm('admin.room-save', ['room_id' => '', 'name' => 'Staff Hall', 'venue' => 'Bahay Alumni', 'room_type' => 'event',
+            'capacity' => '40', 'fee' => '1500', 'staff_ids' => json_encode([7])])
+            ->assertStatus(403)->assertJson(['error' => 'admin_only', 'message' => 'Only an administrator can add a room.']);
+        $this->assertSame(0, DB::table('rooms')->where('name', 'Staff Hall')->count());
+        $this->postForm('admin.room-save', ['room_id' => 'r1', 'name' => 'Alumni Grand Ballroom', 'venue' => 'Bahay Alumni', 'room_type' => 'event'])
+            ->assertOk()->assertJson(['ok' => true]);
+    }
+
+    public function test_hostel_staff_cannot_add_a_hostel_room(): void
+    {
+        $this->actingAsStaff('jakemerson@gmail.com');
+        $this->postForm('admin.room-save', $this->newHostelRoom())
+            ->assertStatus(403)->assertJson(['error' => 'admin_only']);
+        $this->assertSame(0, DB::table('rooms')->where('name', 'Port Test Dorm')->count());
+    }
+
+    public function test_an_admin_of_another_group_cannot_add_a_hostel_room(): void
+    {
+        $this->actingAsAdmin('francishubero@gmail.com');
+        $this->postForm('admin.room-save', $this->newHostelRoom())->assertStatus(403)->assertJson(['error' => 'forbidden']);
+        $this->assertSame(0, DB::table('rooms')->where('name', 'Port Test Dorm')->count());
+    }
+
+    public function test_the_cedu_admin_adds_a_hostel_room(): void
+    {
+        $this->actingAsAdmin('cedu.admin@gmail.com');
+        $code = $this->postForm('admin.room-save', $this->newHostelRoom())->assertOk()->assertJson(['created' => true])->json('room_id');
+        $this->dropRoom($code);
+    }
+
+    private function newHostelRoom(): array
+    {
+        return ['room_id' => '', 'name' => 'Port Test Dorm', 'venue' => 'USeP Hostel', 'room_type' => 'hostel',
+            'beds' => '4', 'rate' => '350', 'cr_type' => 'private', 'check_in_time' => '14:00', 'check_out_time' => '11:00'];
+    }
+
+    public function test_a_new_room_must_state_its_price_and_maintenance_dates_must_be_real(): void
+    {
+        $this->actingAsAdmin();
         $this->postForm('admin.room-save', ['room_id' => '', 'name' => 'No Price Room', 'venue' => 'Bahay Alumni', 'room_type' => 'event'])
             ->assertStatus(400)->assertJson(['error' => 'missing_price']);
         $this->postForm('admin.room-save', ['room_id' => '', 'name' => 'No Rate Hostel', 'venue' => 'Bahay Alumni', 'room_type' => 'hostel'])

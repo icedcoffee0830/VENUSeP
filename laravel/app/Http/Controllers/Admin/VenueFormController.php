@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Queries\VenueQueries;
 use Illuminate\Http\Request;
 use PDOException;
 
@@ -25,23 +26,17 @@ class VenueFormController extends Controller
         if ($venueId === 0) {
             return redirect()->route('admin.venue-management');
         }
-        if (!staff_sees_venue($venueId)) {   // another department's venue: not theirs to see (Aron 2026-10-31)
+        if (!admin_may_edit_office($venueId)) {   // staff, or another group's admin
             return redirect()->route('admin.venue-management');
         }
 
         /* ASSIGNED STAFF (2026-10-27): the real staff.venue_id rows. Every staff member
            handles exactly one venue, so the picker MOVES people here from the venue
-           they handle now. Nobody can be removed into "no venue". Only an admin may
-           change it (venue-save re-checks); staff see the list read-only. */
+           they handle now. Nobody can be removed into "no venue". */
         $vfStaff = [];
-        $vfPdo = venusep_db();
-        if ($vfPdo !== null) {
+        if (venusep_db() !== null) {
             try {
-                $vfStaff = $vfPdo->query(
-                    "SELECT u.id, u.is_active, s.full_name, s.position_role, s.venue_id, v.name AS venue_name
-                       FROM users u JOIN staff s ON s.user_id = u.id LEFT JOIN venues v ON v.id = s.venue_id
-                      WHERE u.account_type = 'staff' ORDER BY s.full_name"
-                )->fetchAll();
+                $vfStaff = VenueQueries::allStaff();
             } catch (PDOException $e) {
                 sql_failed($e);
                 $vfStaff = [];
@@ -57,7 +52,6 @@ class VenueFormController extends Controller
             'venueFormCsrf' => csrf_token(),
             'vfHere' => $vfHere,
             'vfOthers' => $vfOthers,
-            'vfCanAssign' => admin_is_admin(),
         ]);
     }
 }

@@ -16,17 +16,37 @@ class VenueManagementTest extends VenuesTestCase
     {
         $this->actingAsStaff()->get(route('admin.venue-management'))->assertOk()
             ->assertSee('<title>VENUSeP | Venue Management</title>', false)
-            ->assertSee('Manage locations and the rooms available under them.')
+            ->assertSee('Your venues and every room customers can book in them.')
             ->assertSee('Bahay Alumni')
             ->assertSee('Alumni Grand Ballroom')
             ->assertSee('Alumni Boardroom')                       // r3 is disabled — still listed here
-            ->assertSee('Hidden from customers')
-            ->assertSee(route('admin.venue-form', ['id' => 1]), false)
+            ->assertSee("Customers can't see or book it", false)
+            ->assertDontSee(route('admin.venue-form', ['id' => 1]), false)
             ->assertSee(route('admin.room-form', ['id' => 'r1']), false)
             ->assertSee('admin\\/room-toggle-active', false)
             ->assertSee('data-toggle-id="r3"', false)
             ->assertDontSee('data-delete-entity="', false)           // delete is admin-only
             ->assertSee('const DISCOUNT_PERCENT = ', false);         // pricing.php's script, now inside the page
+    }
+
+    /* Add buttons: admins only, for the offices they handle (2026-11-05). */
+    public function test_staff_see_no_add_buttons(): void
+    {
+        $this->actingAsStaff('jakemerson@gmail.com')->get(route('admin.venue-management'))->assertOk()
+            ->assertSee('Hostel Room 1')->assertDontSee('Add room')->assertDontSee('Add hostel room');
+    }
+
+    public function test_the_cedu_admin_sees_both_add_buttons(): void
+    {
+        $this->actingAsAdmin('cedu.admin@gmail.com')->get(route('admin.venue-management'))->assertOk()
+            ->assertSee('Add room')->assertSee('Add hostel room')
+            ->assertSee('href="' . route('admin.hostel-room-form') . '"', false);
+    }
+
+    public function test_an_admin_with_no_hostel_sees_no_hostel_button(): void
+    {
+        $this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.venue-management'))->assertOk()
+            ->assertSee('Add room')->assertDontSee('Add hostel room');
     }
 
     /* Aron 2026-10-31: staff (venue 1, Bahay Alumni) see only their own venue —
@@ -44,9 +64,9 @@ class VenueManagementTest extends VenuesTestCase
             ->assertDontSee(route('admin.hostel-room-form', ['id' => 'h1']), false);
     }
 
-    /* Aron 2026-10-30 (round 3): staff see "Edit Details" only on their own venue's
-       card and the long-closure "Reopen" reminder only on their own venue's rooms
-       (r4 is venue 1's, closed since July); admins see every one. */
+    /* Staff never see "Edit Details" (DB-DECISIONS 28), and the long-closure "Reopen"
+       reminder only on their own venue's rooms (r4 is venue 1's, closed since July);
+       admins see every one. */
     /* The legacy room lists load once per PHP process, so staff and admin views
        are checked in separate tests (each test is its own process). */
     private function withLongClosures(callable $check): void
@@ -67,10 +87,10 @@ class VenueManagementTest extends VenuesTestCase
         }
     }
 
-    public function test_staff_get_edit_details_and_reopen_only_on_their_own_venue(): void
+    public function test_staff_get_no_edit_details_and_reopen_only_on_their_own_venue(): void
     {
         $this->withLongClosures(fn ($reopen) => $this->actingAsStaff()->get(route('admin.venue-management'))->assertOk()
-            ->assertSee(route('admin.venue-form', ['id' => 1]), false)
+            ->assertDontSee(route('admin.venue-form', ['id' => 1]), false)
             ->assertDontSee(route('admin.venue-form', ['id' => 2]), false)
             ->assertDontSee(route('admin.venue-form', ['id' => 3]), false)
             ->assertSee($reopen('room-form', 'r4'), false)
@@ -97,8 +117,8 @@ class VenueManagementTest extends VenuesTestCase
         DB::table('hostel_room_details')->where('room_id', $h2)->update(['rate_per_head_per_night' => 350.50]);
         try {
             $this->actingAsStaff('jakemerson@gmail.com')->get(route('admin.venue-management'))->assertOk()   // USeP Hostel staff
-                ->assertSee('₱350.50/head')
-                ->assertDontSee('₱351/head');
+                ->assertSee('₱350.50 / head / night')
+                ->assertDontSee('₱351 / head');
         } finally {
             DB::table('hostel_room_details')->where('room_id', $h2)->update(['rate_per_head_per_night' => $old]);
         }

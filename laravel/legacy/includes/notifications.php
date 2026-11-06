@@ -30,38 +30,23 @@ const NOTIF_GROUP_ADMINS_SQL = "u.account_type = 'admin' AND u.is_super_admin = 
 
 /* A new online request: staff of that hall + its group's normal admins. Counter bookings
    do not call this — staff made those themselves. */
-function notify_new_request(PDO $pdo, int $bookingId, ?int $actorUserId): void
+function notify_new_request(int $bookingId, ?int $actorUserId): void
 {
-    $s = $pdo->prepare('CALL sp_notify_venue_staff(:b, :k, :a, NULL)');
-    $s->execute([':b' => $bookingId, ':k' => 'new_request', ':a' => $actorUserId]);
-    $s->closeCursor();
+    \App\Queries\NotificationQueries::tellVenueStaff($bookingId, 'new_request', $actorUserId);
 }
 
 /* Something only an admin decides (a refund with a missing receipt, a write-off) waits for
    the group's normal admin; a group with no active normal admin is covered by the super
    admin (DB-DECISIONS 28). The NOT EXISTS reads its own users u, not the outer one. */
-function notify_refund_needs_admin(PDO $pdo, int $bookingId, int $actorUserId, string $kind = 'refund_needs_admin'): void
+function notify_refund_needs_admin(int $bookingId, int $actorUserId, string $kind = 'refund_needs_admin'): void
 {
-    $group = sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId);
-    $pdo->prepare(
-        "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id)
-         SELECT u.id, :k, :b, :a FROM users u
-          WHERE u.is_active = 1 AND u.id <> :a2
-            AND (($group) OR (u.is_super_admin = 1 AND NOT EXISTS (SELECT 1 FROM users u WHERE u.is_active = 1 AND $group)))"
-    )->execute([':k' => $kind, ':b' => $bookingId, ':a' => $actorUserId, ':a2' => $actorUserId]);
+    \App\Queries\NotificationQueries::tellGroupAdmins(sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId), $bookingId, $kind, $actorUserId);
 }
 
 /* The customer and the group's normal admins, with the staff member's own words. */
-function notify_booking_parties(PDO $pdo, int $bookingId, string $kind, int $actorUserId, array $detail): void
+function notify_booking_parties(int $bookingId, string $kind, int $actorUserId, array $detail): void
 {
-    $pdo->prepare(
-        "INSERT INTO notifications (user_id, kind, booking_id, actor_user_id, detail)
-         SELECT u.id, :k, :b, :a, :d FROM users u
-          WHERE u.is_active = 1 AND u.id <> :a2
-            AND ((" . sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId) . ")
-                 OR u.id = (SELECT c.user_id FROM bookings b JOIN customers c ON c.id = b.customer_id WHERE b.id = :b2))"
-    )->execute([':k' => $kind, ':b' => $bookingId, ':a' => $actorUserId, ':d' => json_encode($detail, JSON_UNESCAPED_UNICODE),
-                ':a2' => $actorUserId, ':b2' => $bookingId]);
+    \App\Queries\NotificationQueries::tellBookingParties(sprintf(NOTIF_GROUP_ADMINS_SQL, $bookingId), $bookingId, $kind, $actorUserId, json_encode($detail, JSON_UNESCAPED_UNICODE));
 }
 
 /* A staff/admin account event (DB-DECISIONS 28), never for the one who did it.
@@ -69,43 +54,44 @@ function notify_booking_parties(PDO $pdo, int $bookingId, string $kind, int $act
    admins are told; null = a system-level event (an admin account, the handover) —
    the super admin is told. $detail: email, role, venue — whatever the wording needs.
    (Replaces sp_notify_admins, which told every admin; the procedure stays, unused.) */
-function notify_account_event(PDO $pdo, string $kind, int $actorUserId, array $detail, ?array $venueIds): void
+function notify_account_event(string $kind, int $actorUserId, array $detail, ?array $venueIds): void
 {
     $who = $venueIds === null
         ? 'u.is_super_admin = 1'
         : sprintf('u.is_super_admin = 0 AND u.office_group IN (SELECT v.office_group FROM venues v WHERE v.id IN (%s))',
                   implode(',', array_map('intval', $venueIds) ?: [0]));
-    $pdo->prepare(
-        "INSERT INTO notifications (user_id, kind, actor_user_id, detail)
-         SELECT u.id, :k, :a, :d FROM users u
-          WHERE u.account_type = 'admin' AND u.is_active = 1 AND u.id <> :a2 AND $who"
-    )->execute([':k' => $kind, ':a' => $actorUserId, ':d' => json_encode($detail, JSON_UNESCAPED_UNICODE), ':a2' => $actorUserId]);
+    \App\Queries\NotificationQueries::tellAdmins($who, $kind, $actorUserId, json_encode($detail, JSON_UNESCAPED_UNICODE));
 }
 
-function notif_unread_count(PDO $pdo, int $userId): int
+function notif_unread_count(int $userId): int
 {
-    $s = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = :u AND read_at IS NULL');
-    $s->execute([':u' => $userId]);
-    return (int) $s->fetchColumn();
+    return \App\Queries\NotificationQueries::unreadCount($userId);
+}
+
+/* Is something waiting for this customer? The red dot on the phone's Bookings tab. It reads
+   the bell's rows but not their read marks: the dot stays until the thing is done, so
+   "Mark all as read" does not hide a payment that is still due. Waiting = a payment due or
+   a refund returned for correction, or a rejected request that can still take a new ID
+   (the same test as Booking History's "Send a new ID"). */
+function notif_needs_customer(int $userId): bool
+{
+    $waiting = "'" . implode("','", [...\App\Support\Status::PAYMENT_DUE, \App\Support\Status::REFUND_CORRECTION]) . "'";
+    return \App\Queries\NotificationQueries::somethingWaiting($userId, $waiting);
 }
 
 /* $id = null marks them all read. Only ever the viewer's own rows. */
-function notif_mark_read(PDO $pdo, int $userId, ?int $id): void
+function notif_mark_read(int $userId, ?int $id): void
 {
     if ($id === null) {
-        $pdo->prepare('UPDATE notifications SET read_at = NOW() WHERE user_id = :u AND read_at IS NULL')
-            ->execute([':u' => $userId]);
+        \App\Queries\NotificationQueries::markAllRead($userId);
         return;
     }
-    $pdo->prepare('UPDATE notifications SET read_at = COALESCE(read_at, NOW()) WHERE id = :i AND user_id = :u')
-        ->execute([':i' => $id, ':u' => $userId]);
+    \App\Queries\NotificationQueries::markRead($id, $userId);
 }
 
-function notif_cleanup(PDO $pdo, int $userId): void
+function notif_cleanup(int $userId): void
 {
-    $pdo->prepare('DELETE FROM notifications WHERE user_id = :u AND read_at IS NOT NULL
-                    AND read_at < NOW() - INTERVAL ' . NOTIF_KEEP_DAYS . ' DAY')
-        ->execute([':u' => $userId]);
+    \App\Queries\NotificationQueries::cleanUp($userId, NOTIF_KEEP_DAYS);
 }
 
 function notif_ago(string $when): string
@@ -119,26 +105,10 @@ function notif_ago(string $when): string
 }
 
 /* The newest notifications for one person, worded for them. */
-function notif_items(PDO $pdo, int $userId, string $accountType): array
+function notif_items(int $userId, string $accountType): array
 {
-    $s = $pdo->prepare(
-        "SELECT n.id, n.kind, n.booking_id, n.detail, n.created_at, n.read_at,
-                b.submitted_at, b.booking_type, b.payment_status, b.approved_at, b.current_deadline_at,
-                r.name AS room_name, v.name AS venue_name, c.full_name AS customer_name,
-                COALESCE(sa.full_name, ua.email) AS actor_name
-           FROM notifications n
-           LEFT JOIN bookings b  ON b.id = n.booking_id
-           LEFT JOIN rooms r     ON r.id = b.room_id
-           LEFT JOIN venues v    ON v.id = r.venue_id
-           LEFT JOIN customers c ON c.id = b.customer_id
-           LEFT JOIN users ua    ON ua.id = n.actor_user_id
-           LEFT JOIN staff sa    ON sa.user_id = n.actor_user_id
-          WHERE n.user_id = :u
-          ORDER BY n.id DESC LIMIT " . NOTIF_LIST_SIZE
-    );
-    $s->execute([':u' => $userId]);
     $out = [];
-    foreach ($s->fetchAll() as $row) {
+    foreach (\App\Queries\NotificationQueries::newest($userId, NOTIF_LIST_SIZE) as $row) {
         [$text, $link] = notif_words($row, $accountType);
         $out[] = ['id' => (int) $row['id'], 'kind' => $row['kind'], 'text' => $text, 'link' => $link,
                   'unread' => $row['read_at'] === null, 'ago' => notif_ago($row['created_at'])];
@@ -260,7 +230,7 @@ function notif_span(array $d): string
    requests waiting 3 days. $offices: null = the super admin, who gets no booking
    reminders (DB-DECISIONS 28). $staffId: a staff member hears only of their own halls
    and covers, like the stored news (sp_notify_venue_staff). */
-function notif_reminders(PDO $pdo, ?array $offices, bool $isAdmin, ?int $staffId = null): array
+function notif_reminders(?array $offices, bool $isAdmin, ?int $staffId = null): array
 {
     if ($offices === null) {
         return [];
@@ -268,25 +238,14 @@ function notif_reminders(PDO $pdo, ?array $offices, bool $isAdmin, ?int $staffId
     $officeIds = implode(',', array_map('intval', $offices) ?: [0]);
     $waiting = [];
     if ($isAdmin) {
-        foreach ($pdo->query("SELECT b.id, b.submitted_at, DATEDIFF(NOW(), b.submitted_at) AS days FROM bookings b
-                               JOIN rooms r ON r.id = b.room_id
-                               WHERE b.reservation_status = 'pending' AND b.submitted_at <= NOW() - INTERVAL 3 DAY
-                                 AND r.venue_id IN ($officeIds)
-                               ORDER BY b.submitted_at LIMIT 5")->fetchAll() as $w) {
+        foreach (\App\Queries\NotificationQueries::longWaiting($officeIds) as $w) {
             $ref = booking_reference($w['id'], $w['submitted_at']);
             $waiting[] = ['text' => 'Request ' . $ref . ' has waited ' . (int) $w['days'] . ' days for an answer.',
                           'link' => 'admin/booking-request.php?id=' . rawurlencode($ref)];
         }
     }
-    $sql = "SELECT b.id, b.submitted_at, r.name AS room_name, fn_request_expiry(b.id, b.booking_type) AS expires_at
-              FROM bookings b JOIN rooms r ON r.id = b.room_id
-             WHERE b.reservation_status = 'pending'
-               AND fn_request_expiry(b.id, b.booking_type) BETWEEN NOW() AND NOW() + INTERVAL 24 HOUR"
-         . " AND r.venue_id IN ($officeIds)" . ($staffId === null ? '' : ' AND fn_staff_on_room(' . $staffId . ', r.id)') . ' ORDER BY expires_at LIMIT 10';
-    $s = $pdo->prepare($sql);
-    $s->execute();
     $out = $waiting;
-    foreach ($s->fetchAll() as $row) {
+    foreach (\App\Queries\NotificationQueries::expiringSoon($officeIds, $staffId) as $row) {
         $ref  = booking_reference($row['id'], $row['submitted_at']);
         $left = max(0, strtotime($row['expires_at']) - time());
         $in   = $left < 3600 ? max(1, floor($left / 60)) . ' min' : floor($left / 3600) . ' h';

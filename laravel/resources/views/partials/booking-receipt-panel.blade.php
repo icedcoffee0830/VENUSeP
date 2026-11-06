@@ -14,7 +14,7 @@ function receiptPanelHtml(){
     <div style="border:1px solid rgba(0,0,0,.12);border-radius:11px;padding:14px;background:#fff">
       <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:9px">
         <span style="font-size:13px;font-weight:600;color:#4a463f;overflow-wrap:anywhere">${esc(o.fileName)}</span>
-        <span id="gcBarLabel" style="font-size:12px;color:#8a857d;flex:none">${esc(o.label)} · ${Math.round((o.pct||0)*100)}%</span>
+        <span id="gcBarLabel" style="font-size:12px;color:#6e6a64;flex:none">${esc(o.label)} · ${Math.round((o.pct||0)*100)}%</span>
       </div>
       <div style="height:6px;border-radius:999px;background:#e7e4de;overflow:hidden">
         <div id="gcBar" style="height:100%;width:${Math.round((o.pct||0)*100)}%;background:#a11626;border-radius:999px;transition:width .25s"></div>
@@ -54,7 +54,7 @@ function receiptPanelHtml(){
     <div style="display:flex;gap:13px;padding:13px 14px">
       ${o.thumb?`<img src="${o.thumb}" alt="receipt" style="width:64px;height:84px;object-fit:cover;border-radius:8px;border:1px solid rgba(0,0,0,.1);flex:none">`:''}
       <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;align-content:start">
-        ${kv.map(([k,v])=>`<div><div style="font-size:12px;color:#8a857d">${k}</div><div style="font-size:13px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${esc(v)}</div></div>`).join('')}
+        ${kv.map(([k,v])=>`<div><div style="font-size:12px;color:#6e6a64">${k}</div><div style="font-size:13px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${esc(v)}</div></div>`).join('')}
       </div>
     </div>
     ${issues.length?`

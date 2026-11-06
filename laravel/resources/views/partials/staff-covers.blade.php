@@ -23,7 +23,10 @@
   .sm-btn-main { border-color: #a11626; background: #a11626; color: #fff; }
   .sm-btn-main:hover { background: #7d0f1e; }
   .sm-btn:disabled { opacity: .5; cursor: not-allowed; }
-  .sm-section { margin-top: 1.25rem; }
+  .sm-hall-note { margin-left: auto; color: #6e6a64; font-size: .76rem; font-weight: 400; }
+  .sm-check.is-warn .sm-hall-note { color: #8a5a12; font-weight: 600; }
+  .sm-dlg .sm-warn { margin: .5rem 0 0; color: #8a5a12; font-weight: 600; }
+  .sm-warn:empty { display: none; }
   .sm-dlg { width: min(460px, calc(100vw - 32px)); overscroll-behavior: contain; padding: 1.25rem; border: 0; border-radius: 12px; color: #1f1e1e; }
   .sm-dlg::backdrop { background: rgba(0, 0, 0, .45); }
   .sm-dlg h3 { margin: 0 0 .25rem; font-size: 1.05rem; font-weight: 700; }
@@ -35,10 +38,14 @@
   .sm-foot { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .9rem; }
   .sm-error { color: #b23a3a; font-size: .84rem; font-weight: 600; }
   .sm-error:empty { display: none; }
+  @media (max-width: 767.98px) {
+    .sm-btn, .sm-check { min-height: 44px; }
+    .sm-field select, .sm-field input { min-height: 44px; }
+  }
 </style>
 @endpush
 
-<section class="staff-panel sm-section" aria-labelledby="smCoversTitle">
+<section class="staff-panel" aria-labelledby="smCoversTitle" data-tab-panel="covers"@if ($smTab !== 'covers') hidden @endif>
   <div class="staff-panel-header">
     <h2 id="smCoversTitle">Covers</h2>
     <div class="staff-panel-tools"><button type="button" class="btn-staff-add" style="border:0;cursor:pointer" id="smCoverOpen"><i class="bi bi-calendar-plus" aria-hidden="true"></i>Set up a cover</button></div>
@@ -78,7 +85,7 @@
   @endfragment
 </section>
 
-<section class="staff-panel sm-section" aria-labelledby="smMovesTitle">
+<section class="staff-panel" aria-labelledby="smMovesTitle" data-tab-panel="moves"@if ($smTab !== 'moves') hidden @endif>
   <div class="staff-panel-header"><h2 id="smMovesTitle">Moves between groups</h2></div>
   @fragment('sm-moves')
   <div class="staff-panel-body" data-live="sm-moves">
@@ -105,7 +112,7 @@
       </table>
     </div>
 @else
-    <p class="sm-empty">No moves waiting. Start one with Move group on a staff member's row.</p>
+    <p class="sm-empty">No moves waiting. Start one with Move group on a staff member's row under People.</p>
 @endif
   </div>
   @endfragment
@@ -114,8 +121,9 @@
 <dialog class="sm-dlg" id="smHallsDlg" aria-labelledby="smHallsTitle">
   <form method="dialog">
     <h3 id="smHallsTitle">Halls</h3>
-    <p>They still see the whole office. Their notifications and My halls list follow these halls.</p>
+    <p>They see and handle only these halls, plus any hall they cover. Every hall needs at least one staff member.</p>
     <div id="smHallsList"></div>
+    <p class="sm-warn" id="smHallsWarn" role="alert"></p>
     <div class="sm-error" role="alert"></div>
     <div class="sm-foot">
       <button type="button" class="sm-btn" data-close>Cancel</button>
@@ -212,15 +220,37 @@
       hallsFor = row;
       document.getElementById('smHallsTitle').textContent = 'Halls of ' + row.name;
       const list = document.getElementById('smHallsList');
+      const othersOn = (hall) => ROWS.filter((r) => r.id !== row.id && r.halls.includes(Number(hall.id))).map((r) => r.name.split(' ')[0]);
+      const held = (hall) => row.status === 'Active' && row.halls.includes(Number(hall.id));
+      /* the server's rule, shown before Save: a hall they hold alone cannot be unticked */
+      const checkLast = () => {
+        const stranded = [];
+        list.querySelectorAll('.sm-check').forEach((label) => {
+          const lost = !label.querySelector('input').checked && label.dataset.last === '1';
+          label.classList.toggle('is-warn', lost);
+          if (lost) stranded.push(label.dataset.hall);
+        });
+        document.getElementById('smHallsWarn').textContent = stranded.length
+          ? stranded.join(', ') + ' would have no staff. Give it to someone else first, or keep it ticked.' : '';
+        hallsDlg.querySelector('button[type=submit]').disabled = stranded.length > 0;
+      };
       list.replaceChildren(...COVER.halls.filter((h) => String(h.venue_id) === String(row.venueId)).map((hall) => {
         const label = document.createElement('label');
         const box = document.createElement('input');
+        const note = document.createElement('small');
+        const others = othersOn(hall);
         label.className = 'sm-check';
+        label.dataset.hall = hall.name;
+        label.dataset.last = held(hall) && !others.length ? '1' : '0';
         box.type = 'checkbox'; box.name = 'hall'; box.value = hall.id;
         box.checked = row.halls.includes(Number(hall.id));
-        label.append(box, ' ' + hall.name);
+        box.addEventListener('change', checkLast);
+        note.className = 'sm-hall-note';
+        note.textContent = others.length ? 'also ' + others.join(', ') : (held(hall) ? 'only them' : 'no one yet');
+        label.append(box, ' ' + hall.name, note);
         return label;
       }));
+      checkLast();
       open(hallsDlg);
     };
     submits(hallsDlg, (data) => Live.post(STAFF_URL, { action: 'set_halls', user_id: hallsFor.id,
@@ -240,12 +270,15 @@
     }
     coverForm.user_id.addEventListener('change', coverChanged);
     coverForm.venue_id.addEventListener('change', coverChanged);
-    document.getElementById('smCoverOpen').addEventListener('click', () => {
+    /* row: the Set up cover button on one person's row, already picked */
+    window.smOpenCover = function (row) {
       fill(coverForm.user_id, ROWS.map((r) => [r.id, r.name + ' (' + r.venue + ')']));
       fill(coverForm.venue_id, COVER.offices.map((o) => [o.id, o.name]));
+      if (row) coverForm.user_id.value = row.id;
       coverChanged();
       open(coverDlg);
-    });
+    };
+    document.getElementById('smCoverOpen').addEventListener('click', () => window.smOpenCover());
     submits(coverDlg, (data) => Live.post(COVER_URL, Object.assign({ action: 'cover_create' }, Object.fromEntries(data))));
 
     /* ---- a permanent move to the other group ---- */

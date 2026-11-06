@@ -76,7 +76,8 @@
   /* custom date-picker dropdown (booking panel) */
   .cal-pop{position:absolute;top:calc(100% + 6px);z-index:70;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.14);padding:12px;width:274px}
   .cal-nav{width:28px;height:28px;border:none;background:none;border-radius:8px;cursor:pointer;color:#5c584f;font-size:15px;line-height:1}
-  .cal-nav:hover{background:#f0eeea}
+  .cal-nav:hover:not(:disabled){background:#f0eeea}
+  .cal-nav:disabled{color:#c6c2ba;cursor:default}
   .cal-day{width:32px;height:32px;border:none;background:none;border-radius:999px;display:flex;align-items:center;justify-content:center;font:500 12.5px 'Inter',system-ui,sans-serif;color:#1c1b19;cursor:pointer;padding:0}
   .cal-day:hover:not(:disabled){background:#eef0f4}
   .cal-day:disabled{color:#c6c2ba;text-decoration:line-through;cursor:default;background:none}
@@ -225,6 +226,10 @@ const ROOMS = {!! json_encode($mrRoomsWithPhotos, JSON_UNESCAPED_SLASHES | JSON_
    advance rule and the earliest selectable date are both measured from here. */
 const NOW = new Date();
 const TODAY = isoOf(NOW);
+/* THE BOOKING WINDOW (BookingRules::lastBookableDay): no date past LAST_DAY is bookable;
+   booking-submit / booking-create refuse it too. One booking covers at most MAX_DAYS days. */
+const LAST_DAY = @json($lastDay);
+const MAX_DAYS = {{ \App\Http\Controllers\Customer\BookingRules::MAX_DAYS }};
 
 /* Each office's own lead time (Office Settings), online and at the counter. */
 function leadMsFor(room){ return (room && room.office ? room.office.lead : 12) * 3600000; }
@@ -261,6 +266,8 @@ const ACCOUNT = {!! json_encode([
   'role'  => $customerContact['universityId'] !== '' ? 'USeP · ' . $customerContact['universityId'] : 'Customer',
   'email' => $customerContact['email'],
   'phone' => $customerContact['phone'],
+  /* the profile photo for the "Booking under" card, else '' (initials); never at the counter (a walk-in) */
+  'photo' => !counter_mode() && ($customerContact['photo'] ?? '') !== '' ? asset($customerContact['photo']) : '',
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!};
 const CSRF = {!! json_encode(csrf_token()) !!};
 
@@ -342,8 +349,8 @@ function getRoom(){ return ROOMS.find(r=>r.id===state.roomId) || null; }
 function initials(name){ return name.split(' ').map(w=>w[0]).slice(0,2).join(''); }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function svgUsers(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`; }
-function svgCalendar(s){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#8a857d"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; }
-function svgClock(s){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#8a857d"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`; }
+function svgCalendar(s){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#6e6a64"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`; }
+function svgClock(s){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#6e6a64"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`; }
 function svgCaret(s){ return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#a5a19a;margin-left:auto"><polyline points="6 9 12 15 18 9"/></svg>`; }
 
 /* line icons for amenities, matched by keyword to our event-venue scope */
@@ -579,6 +586,8 @@ function derive(){
   const totalFee=pr.total, discountPercent=pr.discountPercent, discountAmount=pr.discountAmount;
 
   const sr=slotStatus();
+  /* counted from the dates: rangeDates stops at the longest booking */
+  const tooLong=!!(b.date && b.dateEnd && (Date.parse(b.dateEnd)-Date.parse(b.date))/864e5+1>MAX_DAYS);
   const multi = allDates.length>1;                    // the range spans several days (per-day editor shows)
 
   /* precise wording for an incomplete/out-of-order day */
@@ -600,7 +609,9 @@ function derive(){
   /* status card: neutral surface + a small colored dot (amber = fix something,
      green = good to go) — calmer than the old solid red/green boxes */
   let slot={show:false};
-  if(sr.show){
+  if(tooLong){
+    slot={show:true,dot:'#d9930d',title:'A booking can cover at most '+MAX_DAYS+' days',detail:'Pick an earlier end date to continue.'};
+  } else if(sr.show){
     if(sr.badRange){
       slot={show:true,dot:'#d9930d',title:'End date must be on or after the start date',detail:'Adjust your reservation dates to check availability.'};
     } else if(sr.allBlocked){
@@ -639,10 +650,11 @@ function derive(){
   const bEnd=b.dateEnd||b.date;
   const dateOk=b.date && bEnd && bEnd>=b.date;
   const slotFree=sr.show && sr.ok && !tooSoon;
-  const ready=R && b.eventName && dateOk && slotFree && !isNaN(ba) && ba>0 && !over;
+  const ready=R && b.eventName && dateOk && !tooLong && slotFree && !isNaN(ba) && ba>0 && !over;
 
   let hint='';
-  if(!b.eventName) hint='Enter an event name to continue';
+  if(tooLong) hint='A booking can cover at most '+MAX_DAYS+' days';
+  else if(!b.eventName) hint='Enter an event name to continue';
   else if(!dateOk) hint='Pick valid reservation dates';
   else if(sr.show && sr.badRange) hint='End date must be on or after the start date';
   else if(sr.show && sr.allBlocked) hint = sr.why==='maintenance' ? 'Closed on these dates — pick different dates' : 'These dates are already booked — pick different ones';
@@ -737,7 +749,7 @@ function calHtml(field){
     /* a booked day stays pickable — other hours can still be booked
        (2026-10-27); it is marked, and says what is taken */
     const taken=R ? R.booked.filter(k=>k.date===iso) : [];
-    const off=iso<min;
+    const off=iso<min || iso>LAST_DAY;
     const cls='cal-day'+(inMonth?'':' out')+(iso===sel?' sel':'')+(iso===TODAY?' today':'')+(taken.length&&!off?' part':'');
     cells+=off
       ? `<button type="button" class="${cls}" disabled>${cur.getDate()}</button>`
@@ -748,14 +760,15 @@ function calHtml(field){
   <div onclick="closeCal()" style="position:fixed;inset:0;z-index:69"></div>
   <div class="cal-pop" style="${field==='dateEnd'?'right:0':'left:0'}" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <button type="button" class="cal-nav" onclick="calNav(-1)">‹</button>
+      <button type="button" class="cal-nav" aria-label="Previous month" onclick="calNav(-1)">‹</button>
       <span style="font-size:13.5px;font-weight:650;color:#1c1b19">${monthLabel}</span>
-      <button type="button" class="cal-nav" onclick="calNav(1)">›</button>
+      <button type="button" class="cal-nav" aria-label="Next month" ${state.cal.month>=LAST_DAY.slice(0,7)?'disabled':''} onclick="calNav(1)">›</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);justify-items:center;margin-bottom:4px">
       ${['S','M','T','W','T','F','S'].map(d=>`<span style="font-size:12px;font-weight:600;color:#a5a19a;width:32px;text-align:center">${d}</span>`).join('')}
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;justify-items:center">${cells}</div>
+    <div style="font-size:12px;color:#77736c;margin-top:6px;text-align:center">Bookable up to ${calDateLabel(LAST_DAY)}</div>
   </div>`;
 }
 
@@ -856,6 +869,7 @@ async function submitRequest(){
   fd.append('affiliated', state.affiliated ? '1' : '0');
   fd.append('method', state.payMethod);
   fd.append('agree_no_refund', state.agreeNoRefund ? '1' : '0');
+  fd.append('shown_rate', String(getRoom().fee));   /* a price changed meanwhile is refused (409 price_changed) */
 
   /* COUNTER: who it is for travels with the booking, and no ID file does. The
      server re-checks every one of these — that the customer id exists, that
@@ -879,6 +893,7 @@ async function submitRequest(){
     const out = await res.json().catch(function(){ return { ok:false, message:'The server sent an unreadable reply.' }; });
     if(!out.ok){
       submitting = false;
+      if(out.room) Object.assign(getRoom(), out.room);   /* price_changed: redraw with the room as it is now */
       state.submitError = out.message || 'Your booking was not submitted.';
       render();
       return;
@@ -1005,8 +1020,8 @@ const PHOTO_TILE = 'background:#e9e7e2;background-image:repeating-linear-gradien
 function heroTile(R,i,extraStyle,inner){
   const url=(R.photoUrls||[])[i];
   extraStyle=extraStyle||''; inner=inner||'';
-  if(url) return `<div onclick="openGallery()" style="cursor:pointer;background-size:cover;background-position:center;background-image:url('${url}');${extraStyle}">${inner}</div>`;
-  return `<div onclick="openGallery()" style="cursor:pointer;${PHOTO_TILE};${extraStyle}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>${inner}</div>`;
+  if(url) return `<button type="button" onclick="openGallery(${i})" aria-label="Open ${esc(R.name)} photos" style="border:0;padding:0;cursor:pointer;background-size:cover;background-position:center;background-image:url('${url}');${extraStyle}">${inner}</button>`;
+  return `<div style="${PHOTO_TILE};${extraStyle}"><span style="font:500 11px/1 ui-monospace,Menlo,monospace;color:#9a958c">room photo</span>${inner}</div>`;
 }
 
 /* The maintenance chip — DERIVED from the window, never stored, and shown only
@@ -1056,7 +1071,7 @@ function detailScreen(){
   /* tabs */
   const tabDefs=[['overview','Overview'],['availability','Availability'],['policies','Policies']];
   const tabs=tabDefs.map(([k,label])=>`
-    <button onclick="setTab('${k}')" style="background:none;border:none;padding:12px 14px;font-size:14px;font-weight:${state.tab===k?680:550};color:${state.tab===k?'#1c1b19':'#8a857d'};border-bottom:2px solid ${state.tab===k?'#a11626':'transparent'};cursor:pointer;margin-bottom:-1px">${label}</button>`).join('');
+    <button onclick="setTab('${k}')" style="background:none;border:none;padding:12px 14px;font-size:14px;font-weight:${state.tab===k?680:550};color:${state.tab===k?'#1c1b19':'#6e6a64'};border-bottom:2px solid ${state.tab===k?'#a11626':'transparent'};cursor:pointer;margin-bottom:-1px">${label}</button>`).join('');
 
   /* tab content */
   let content='';
@@ -1073,7 +1088,7 @@ function detailScreen(){
     const facts=[
       /* USeP account: crossed-out full price + USeP price with a short "20% off" tag */
       { icon:I.tag,    text:'Reservation fee: '+peso(R.fee)+' per day',
-        html: isUsepAccount(ACCOUNT.email)
+        html: isUsepAccount(ACCOUNT.email) && priceWithDiscount(R.fee,true).discountAmount>0
           ? 'Reservation fee: <s style="color:#a5a19a">'+peso(R.fee)+'</s> <strong style="color:#1c7a4f">'+peso(priceWithDiscount(R.fee,true).total)+'</strong> per day <span style="font-size:12px;color:#1c7a4f">· '+DISCOUNT_PERCENT+'% off</span>'
           : null },
       { icon:I.clock,  text:'Bookable hours: 7 AM – 10 PM daily' },
@@ -1098,7 +1113,7 @@ function detailScreen(){
       <h3 style="margin:0 0 6px;font-size:16px;font-weight:660">Availability</h3>
       <p style="margin:0 0 22px;font-size:13.5px;color:#7a766f;max-width:70ch">Bookable hours are 7:00 AM – 10:00 PM daily. The times listed below are already booked. The rest of those days is still open, as long as your booking keeps a <strong>${gapWords()} gap</strong> before and after for cleanup. Pick your dates and time in the booking panel to check a specific slot.</p>
       <div style="font-size:12.5px;font-weight:600;color:#7a766f;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Existing bookings for this room</div>
-      ${list.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:13.5px;max-width:520px"><span style="color:#3a372f">${esc(x.d)}</span><span style="color:#8a857d">${esc(x.t)}</span></div>`).join('')}`;
+      ${list.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:13.5px;max-width:520px"><span style="color:#3a372f">${esc(x.d)}</span><span style="color:#6e6a64">${esc(x.t)}</span></div>`).join('')}`;
   } else {
     const policy=(title,body)=>`<div style="padding:18px 0;border-top:1px solid rgba(0,0,0,.08)"><div style="font-weight:640;font-size:14px;margin-bottom:5px">${title}</div><p style="margin:0;font-size:13.5px;line-height:1.6;color:#4a463f;max-width:70ch">${body}</p></div>`;
     content=`
@@ -1111,8 +1126,8 @@ function detailScreen(){
         ? policy('Payment — GCash or cash (after approval)','Once approved, pay online through GCash (send the <strong>exact amount</strong> shown at checkout — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment is due at least <strong>1 day before your event</strong>; bookings made closer than that pay immediately upon approval. Unpaid reservations may be released after the deadline.')
         : policy('Payment — GCash or cash (after your event)','You pay <strong>after the event</strong>, not before: payment opens and is due <strong>the day after your last booked day</strong>. Pay online through GCash (send the <strong>exact amount</strong> shown — not more, not less; incorrect amounts are automatically rejected) or <strong>in cash at the venue office</strong>. Payment cannot be made earlier. A booking left unpaid is marked <strong>overdue</strong>; it can still be paid, but overdue accounts may not be able to book again until settled.')}
       ${!REFUNDS_ENABLED
-        ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your date, room and details before you submit and pay. If USeP has to close or cancel your venue, the venue office will offer you a <strong>replacement room or a new date</strong> instead; if you cannot accept either, your payment is returned.')
-        : policy('Refunds','A refund needs the VENUSeP System Receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
+        ? policy('Non-refundable','All bookings are <strong>final and non-refundable</strong> once paid. Please check your date, room and details before you submit and pay. If USeP has to close or cancel your venue, the venue office will offer you a <strong>replacement room or a new date</strong> instead.')
+        : policy('Refunds','A refund needs the VENUSeP Transaction Receipt, your proof of payment (the GCash receipt, or the official cashier receipt if you paid in cash), and the <strong>Official Receipt</strong>. You may file the request before the Official Receipt arrives — but the refund cannot be paid until you provide it. Requesting a refund does <strong>not</strong> cancel your booking: it stays yours while staff review, you can withdraw the request at any time, and the date is released only once the refund has been completed.')}
       ${policy('Confirmation','After you pay, staff verify the payment — the GCash reference in the business account, or the cashier record — and give the final confirmation. You are notified at each step.')}`;
   }
 
@@ -1219,7 +1234,7 @@ function detailScreen(){
   const tour=`<button type="button" class="bk-gal-slide bk-gal-360s${solo}" onclick="openRoomPano()" aria-label="Open the 360° tour of ${esc(R.name)}" style="background-image:url('${esc(R.panorama||SAMPLE_PANO)}')">
       <span class="bk-360-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>
       <strong>360° tour</strong><small>Tap to look around</small></button>`;
-  const slides = tour + photos.map((u,i)=>`<div class="bk-gal-slide" role="img" aria-label="${esc(R.name)} — photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></div>`).join('');
+  const slides = tour + photos.map((u,i)=>`<button type="button" class="bk-gal-slide bk-gal-photo" onclick="openGallery(${i})" aria-label="Open ${esc(R.name)} photo ${i+1} of ${photos.length}" style="background-image:url('${esc(u)}')"></button>`).join('');
   const gallery = `
       <div class="bk-gal">
         <div class="bk-gal-track" tabindex="0" aria-label="${esc(R.name)} — 360° tour and photos, swipe to browse">${slides}</div>
@@ -1298,7 +1313,9 @@ function detailScreen(){
         <div style="border-top:1px solid rgba(255,255,255,.16);padding-top:14px;margin-bottom:12px">
           <div style="${LBL};margin-bottom:8px">Booking under</div>
           <div style="display:flex;align-items:center;gap:10px;padding:2px 0">
-            <div style="width:34px;height:34px;flex:none;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#8a1222">${esc(initials(ACCOUNT.name))}</div>
+            ${ACCOUNT.photo
+              ? `<img src="${esc(ACCOUNT.photo)}" alt="" width="34" height="34" style="width:34px;height:34px;flex:none;border-radius:999px;object-fit:cover;background:#fff">`
+              : `<div style="width:34px;height:34px;flex:none;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#8a1222">${esc(initials(ACCOUNT.name))}</div>`}
             <div style="line-height:1.3;min-width:0">
               <div style="font-size:13.5px;font-weight:640;color:#fff">${esc(ACCOUNT.name)}</div>
               <div style="font-size:12px;color:#d5b8b5;overflow-wrap:anywhere">${esc(ACCOUNT.email)}</div>
@@ -1376,7 +1393,7 @@ function reviewScreen(){
   const x=bookingRows(); const R=x.R; if(!R) return '';
   /* key-value blocks (same visual language as the payment card) — left-aligned
      label-over-value cells instead of a long label…value ping-pong list */
-  const blk=(label,value,span)=>`<div style="min-width:0;${span?'grid-column:1 / -1;':''}"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+  const blk=(label,value,span)=>`<div style="min-width:0;${span?'grid-column:1 / -1;':''}"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
   const blocks=[
     blk('Event name', esc(x.b.eventName||'—')),
     blk('Attendees', esc(x.b.attendees||'—')+(x.d.over?' <span style="color:#8a5a12;font-weight:600">· over capacity</span>':'')),
@@ -1386,13 +1403,13 @@ function reviewScreen(){
     blk('Booked by ('+esc(x.bookerType)+')', esc(x.bookerName)),
     blk('Contact', esc(x.bookerContact), true),
   ].join('');
-  const step=(n,active,done)=>`<span style="width:26px;height:26px;border-radius:999px;background:${done?'#1c7a4f':active?'#a11626':'#e7e4de'};color:${(active||done)?'#fff':'#8a857d'};font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">${n}</span>`;
+  const step=(n,active,done)=>`<span style="width:26px;height:26px;border-radius:999px;background:${done?'#1c7a4f':active?'#a11626':'#e7e4de'};color:${(active||done)?'#fff':'#6e6a64'};font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">${n}</span>`;
   return `
   <main style="max-width:720px;margin:0 auto;padding:26px 24px 72px">
     <a onclick="backToDetail()" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:16px">← Back to room</a>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
       <div style="display:flex;gap:6px">${step(1,true,false)}${step(2,false,false)}${step(3,false,false)}</div>
-      <span style="font-size:12.5px;color:#8a857d;font-weight:600">Step 1 of 3 · Review &amp; submit</span>
+      <span style="font-size:12.5px;color:#6e6a64;font-weight:600">Step 1 of 3 · Review &amp; submit</span>
     </div>
     <h1 style="margin:0 0 18px;font-size:24px;font-weight:700;letter-spacing:-.01em">Review your reservation</h1>
 
@@ -1401,7 +1418,7 @@ function reviewScreen(){
         ${heroTile(R,0,'width:72px;height:72px;border-radius:12px;flex:none')}
         <div>
           <div style="font-size:17px;font-weight:680">${esc(R.name)}</div>
-          <div style="font-size:13px;color:#8a857d;margin-top:3px">${esc(R.venue)} · Up to ${R.capacity} people</div>
+          <div style="font-size:13px;color:#6e6a64;margin-top:3px">${esc(R.venue)} · Up to ${R.capacity} people</div>
         </div>
       </div>
       <div style="padding:16px">
@@ -1409,7 +1426,7 @@ function reviewScreen(){
         ${scheduleHtml(x)}
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 16px;border-top:1px solid rgba(0,0,0,.07)">
-        <span style="font-size:13.5px;font-weight:600;color:#4a463f">${x.d.discountAmount>0?'Total to pay':'Reservation fee'} <span style="font-weight:500;color:#8a857d">· GCash or cash at the venue</span></span>
+        <span style="font-size:13.5px;font-weight:600;color:#4a463f">${x.d.discountAmount>0?'Total to pay':'Reservation fee'} <span style="font-weight:500;color:#6e6a64">· GCash or cash at the venue</span></span>
         <span style="font-size:20px;font-weight:750;letter-spacing:-.01em">${peso(x.d.totalFee)}</span>
       </div>
       ${x.d.discountAmount>0?`
@@ -1418,7 +1435,7 @@ function reviewScreen(){
           <span>${peso(x.d.roomPrice)} less USeP discount &minus;${x.d.discountPercent}%</span>
           <span style="flex:none;color:#1c7a4f;font-weight:650">&minus;${peso(x.d.discountAmount)}</span>
         </div>
-        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed rgba(0,0,0,.12);font-size:12.5px;color:#8a857d;line-height:1.6">Provisional &mdash; staff confirm the discount when they check your USeP ID. Payment only opens after that, so this figure is settled before you pay anything.</div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed rgba(0,0,0,.12);font-size:12.5px;color:#6e6a64;line-height:1.6">Provisional &mdash; staff confirm the discount when they check your USeP ID. Payment only opens after that, so this figure is settled before you pay anything.</div>
       </div>`:''}
     </div>
 
@@ -1433,7 +1450,7 @@ function reviewScreen(){
     ${COUNTER?'':`
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
       <div style="font-size:14px;font-weight:660;margin-bottom:3px">USeP affiliation <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px">USeP students, faculty, employees and alumni get <strong>${DISCOUNT_PERCENT}% off</strong>. Staff confirm this from your ID before you pay.</div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:11px">USeP students, faculty, employees and alumni get <strong>${DISCOUNT_PERCENT}% off</strong>. Staff confirm this from your ID before you pay.</div>
       ${[[true,'I am USeP-affiliated','Student, faculty or employee &mdash; upload your <strong>USeP ID</strong> below'],
          [false,'Not affiliated','Upload any valid government-issued ID below']].map(function(o){
         const on = state.affiliated === o[0];
@@ -1442,7 +1459,7 @@ function reviewScreen(){
               ${on?`<span style="width:8px;height:8px;border-radius:999px;background:#a11626"></span>`:''}</span>
             <span style="min-width:0">
               <span style="display:block;font-size:13.5px;font-weight:640;color:#1c1b19">${o[1]}</span>
-              <span style="display:block;font-size:12.5px;color:#8a857d;margin-top:2px">${o[2]}</span>
+              <span style="display:block;font-size:12.5px;color:#6e6a64;margin-top:2px">${o[2]}</span>
             </span>
           </div>`;
       }).join('')}
@@ -1467,7 +1484,7 @@ function reviewScreen(){
     </div>`:`
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.05)">
       <div style="font-size:14px;font-weight:660;margin-bottom:3px">Valid ID <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px">Staff verify your identity before approving the reservation. USeP ID or any government-issued ID.</div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:11px">Staff verify your identity before approving the reservation. USeP ID or any government-issued ID.</div>
       <input type="file" id="idFileInput" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadId(this)">
       ${state.idFile?`
       <div style="display:flex;align-items:center;gap:12px;border:1px solid #d4ebdd;background:#f2faf5;border-radius:11px;padding:11px 13px">
@@ -1476,7 +1493,7 @@ function reviewScreen(){
           <div style="font-size:13px;color:#1c7a4f;overflow-wrap:anywhere">${esc(state.idFile.name)}</div>
           <div style="font-size:12.5px;color:#4f7a63">Reviewed by staff together with your reservation</div>
         </div>
-        <button onclick="removeId()" style="flex:none;background:none;border:none;color:#8a857d;font-size:12.5px;font-weight:600;cursor:pointer">Remove</button>
+        <button onclick="removeId()" style="flex:none;background:none;border:none;color:#6e6a64;font-size:12.5px;font-weight:600;cursor:pointer">Remove</button>
       </div>`:`
       <div onclick="document.getElementById('idFileInput').click()" style="border:1.5px dashed rgba(0,0,0,.18);border-radius:11px;padding:22px 14px;text-align:center;cursor:pointer;background:#fff">
         <div style="font-size:13.5px;font-weight:600;color:#4a463f">Upload a photo of your valid ID</div>
@@ -1487,7 +1504,7 @@ function reviewScreen(){
     ${REFUNDS_ENABLED?'':`
     <div style="background:#fff;border:1px solid ${state.agreeNoRefund?'#d4ebdd':'#f0d9b8'};border-radius:16px;padding:16px;margin-top:14px">
       <div style="font-size:14px;font-weight:660;margin-bottom:3px">Non-refundable booking <span style="color:#b23a3a">*</span></div>
-      <div style="font-size:12.5px;color:#8a857d;margin-bottom:11px;line-height:1.55">USeP does not give refunds. Once you pay, this booking is final. If USeP has to close or cancel the venue, you will be offered a replacement room or a new date instead.</div>
+      <div style="font-size:12.5px;color:#6e6a64;margin-bottom:11px;line-height:1.55">USeP does not give refunds. Once you pay, this booking is final. If USeP has to close or cancel the venue, you will be offered a replacement room or a new date instead.</div>
       <label style="display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.55;color:#1c1b19;cursor:pointer">
         <input type="checkbox" id="agreeNoRefund" ${state.agreeNoRefund?'checked':''} onchange="toggleAgreeNoRefund(this)" style="width:15px;height:15px;margin-top:2px;flex:none;accent-color:#a11626">
         <span>I understand this booking is <strong>non-refundable</strong> once paid.</span>
@@ -1548,12 +1565,12 @@ function pendingScreen(){
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:16px;margin-top:14px;text-align:left">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Reference</div><div style="font-size:13.5px;font-weight:640">${esc(state.reference)}</div></div>
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:13.5px;font-weight:640">${esc(R.name)}</div></div>
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${x.d.days>1?'Dates':'Date'}</div><div style="font-size:13.5px;font-weight:640">${esc(x.rangeLabel)}</div></div>
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${PAY_POLICY.prepay?'Fee (pay after approval)':'Fee (pay after your event)'}</div><div style="font-size:13.5px;font-weight:640">${peso(x.d.totalFee)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Reference</div><div style="font-size:13.5px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Room</div><div style="font-size:13.5px;font-weight:640">${esc(R.name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${x.d.days>1?'Dates':'Date'}</div><div style="font-size:13.5px;font-weight:640">${esc(x.rangeLabel)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${PAY_POLICY.prepay?'Fee (pay after approval)':'Fee (pay after your event)'}</div><div style="font-size:13.5px;font-weight:640">${peso(x.d.totalFee)}</div></div>
       </div>
-      <div style="font-size:12px;color:#8a857d;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">${payWhenText()}${PAY_POLICY.prepay?' — unpaid reservations may be released after the deadline.':'. Bookings not paid by then are marked overdue.'}</div>
+      <div style="font-size:12px;color:#6e6a64;line-height:1.6;margin-top:14px;border-top:1px solid rgba(0,0,0,.06);padding-top:12px">${payWhenText()}${PAY_POLICY.prepay?' — unpaid reservations may be released after the deadline.':'. Bookings not paid by then are marked overdue.'}</div>
     </div>
 
         <!-- Live system: a real coordinator does this, and the request is already
@@ -1563,7 +1580,7 @@ function pendingScreen(){
       <div style="font-size:12.5px;color:#6b675f;line-height:1.6">Your request is with the venue coordinators now. You will see the decision on this booking in <a href="{{ route('customer.booking-history') }}" style="color:#1f1e1e;font-weight:640">My Bookings</a>, and payment unlocks there once it is approved.</div>
     </div>
 
-    <button onclick="restart()" style="background:none;border:none;color:#8a857d;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse more rooms</button>
+    <button onclick="restart()" style="background:none;border:none;color:#6e6a64;font-size:13px;font-weight:600;cursor:pointer;margin-top:18px;text-decoration:underline">Browse more rooms</button>
   </main>`;
 }
 
@@ -1584,7 +1601,7 @@ function paymentScreen(){
         <span style="width:15px;height:15px;border-radius:999px;border:1.5px solid ${on?'#a11626':'#b7b3ab'};display:flex;align-items:center;justify-content:center;flex:none">${on?'<span style="width:7px;height:7px;border-radius:999px;background:#a11626"></span>':''}</span>
         <span style="font-size:14px;font-weight:680;color:#1c1b19">${title}</span>
       </div>
-      <div style="font-size:12px;color:#8a857d;margin-top:3px;padding-left:23px">${sub}</div>
+      <div style="font-size:12px;color:#6e6a64;margin-top:3px;padding-left:23px">${sub}</div>
     </div>`;
   };
 
@@ -1599,17 +1616,17 @@ function paymentScreen(){
     <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:20px">
       <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
         <div>
-          <div style="font-size:12.5px;color:#8a857d">Amount to send</div>
+          <div style="font-size:12.5px;color:#6e6a64">Amount to send</div>
           <div style="font-size:30px;font-weight:780;letter-spacing:-.02em;color:#a11626">${peso(x.d.totalFee)}</div>
         </div>
         <div style="width:60px;height:60px;border-radius:14px;background:#0a6cf0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750;text-align:center;line-height:1.1">GCash</div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin:16px 0;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">GCash account name</div><div style="font-size:14px;font-weight:640">${esc(gcAccount().name)}</div></div>
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">GCash number <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#a3a09a">· ${esc(R.venue)}</span></div><div style="font-size:14px;font-weight:640">${esc(gcAccount().number.replace(/^(\d{4})(\d{3})(\d{4})$/,'$1 $2 $3'))}</div></div>
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Reference to include</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">GCash account name</div><div style="font-size:14px;font-weight:640">${esc(gcAccount().name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">GCash number <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#6e6a64">· ${esc(R.venue)}</span></div><div style="font-size:14px;font-weight:640">${esc(gcAccount().number.replace(/^(\d{4})(\d{3})(\d{4})$/,'$1 $2 $3'))}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Reference to include</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
       </div>
 
       <div style="margin-top:4px">
@@ -1633,22 +1650,22 @@ function paymentScreen(){
     <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:20px">
       <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(0,0,0,.08)">
         <div>
-          <div style="font-size:12.5px;color:#8a857d">Amount to pay</div>
+          <div style="font-size:12.5px;color:#6e6a64">Amount to pay</div>
           <div style="font-size:30px;font-weight:780;letter-spacing:-.02em;color:#a11626">${peso(x.d.totalFee)}</div>
         </div>
         <div style="width:60px;height:60px;border-radius:14px;background:#a11626;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:750;text-align:center;line-height:1.1">Cash</div>
       </div>
 
       <div style="margin:16px 0">
-        <div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Where to pay</div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Where to pay</div>
         <div style="font-size:15px;font-weight:680;color:#1c1b19">${esc(CASH_PAY.office)}</div>
         <div style="font-size:13px;color:#4a463f;margin-top:3px">${esc(CASH_PAY.address)}</div>
-        <div style="font-size:12.5px;color:#8a857d;margin-top:3px">${esc(CASH_PAY.hours)}</div>
+        <div style="font-size:12.5px;color:#6e6a64;margin-top:3px">${esc(CASH_PAY.hours)}</div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin-bottom:16px">
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Quote your reference</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Quote your reference</div><div style="font-size:14px;font-weight:640">${esc(state.reference)}</div></div>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">Room</div><div style="font-size:14px;font-weight:640">${esc(R.name)}</div></div>
       </div>
 
       <div style="font-size:12.5px;color:#4a463f;line-height:1.7;border-top:1px solid rgba(0,0,0,.07);padding-top:13px">Bring your booking reference and a valid ID. ${PAY_POLICY.prepay?'Pay <strong>before your event date</strong> — unpaid reservations may be released.':'Pay by <strong>'+payByInfo().label+'</strong> — after that the booking is marked overdue.'} You will receive the official transaction receipt at the counter; keep it${REFUNDS_ENABLED?' (it is required for any refund)':''}.</div>
@@ -1661,9 +1678,9 @@ function paymentScreen(){
       <div style="display:flex;gap:6px">
         <span style="width:26px;height:26px;border-radius:999px;background:#1c7a4f;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">1</span>
         <span style="width:26px;height:26px;border-radius:999px;background:#a11626;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span>
-        <span style="width:26px;height:26px;border-radius:999px;background:#e7e4de;color:#8a857d;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span>
+        <span style="width:26px;height:26px;border-radius:999px;background:#e7e4de;color:#6e6a64;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span>
       </div>
-      <span style="font-size:12.5px;color:#8a857d;font-weight:600">Step 2 of 3 · Payment</span>
+      <span style="font-size:12.5px;color:#6e6a64;font-weight:600">Step 2 of 3 · Payment</span>
     </div>
     <h1 style="margin:0 0 18px;font-size:24px;font-weight:700;letter-spacing:-.01em">${cash?'Pay at the venue':'Pay with GCash'}</h1>
 
@@ -1685,7 +1702,7 @@ function paymentScreen(){
     ${cash?cashBody:gcashBody}
 
     <button onclick="confirmBooking()" ${paid?'':'disabled'} style="width:100%;height:50px;border:none;border-radius:12px;background:${paid?'#a11626':'#b7b3ab'};color:#fff;font-size:15px;font-weight:700;cursor:${paid?'pointer':'not-allowed'};opacity:${paid?'1':'.85'};margin-top:20px">${cash?'Submit reservation — pay at the office':'Submit payment &amp; reservation'}</button>
-    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:9px">${cash?'Your booking stays pending until the cashier records your payment.':'Your booking will be pending staff confirmation after submission.'} Need help? <a href="{{ route('customer.faq') }}{{ counter_mode() ? '?counter=1' : '' }}" target="_blank" rel="noopener" style="cursor:pointer;color:#a11626;font-weight:600;text-decoration:underline">Check the FAQ</a>${cash?'':' · <a onclick="clearGcashHistory()" style="cursor:pointer;color:#8a857d;text-decoration:underline">Reset receipt history (demo)</a>'}</div>
+    <div style="font-size:12.5px;color:#a5a19a;text-align:center;margin-top:9px">${cash?'Your booking stays pending until the cashier records your payment.':'Your booking will be pending staff confirmation after submission.'} Need help? <a href="{{ route('customer.faq') }}{{ counter_mode() ? '?counter=1' : '' }}" target="_blank" rel="noopener" style="cursor:pointer;color:#a11626;font-weight:600;text-decoration:underline">Check the FAQ</a>${cash?'':' · <a onclick="clearGcashHistory()" style="cursor:pointer;color:#6e6a64;text-decoration:underline">Reset receipt history (demo)</a>'}</div>
   </main>`;
 }
 
@@ -1695,7 +1712,7 @@ function paymentScreen(){
    owes and when, and a way into the booking itself to take the payment. */
 function counterDoneScreen(x){
   const r = state.counterResult || {};
-  const blk=(label,value)=>`<div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#a3a09a;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
+  const blk=(label,value)=>`<div style="min-width:0"><div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6e6a64;margin-bottom:3px">${label}</div><div style="font-size:13.5px;font-weight:640;color:#1c1b19;overflow-wrap:anywhere">${value}</div></div>`;
   return `
   <main style="max-width:620px;margin:0 auto;padding:40px 18px 80px;text-align:center">
     <div style="width:54px;height:54px;border-radius:999px;background:#eaf6ef;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#1c7a4f">&check;</div>
@@ -1709,9 +1726,9 @@ function counterDoneScreen(x){
         ${blk('Room', esc(x.R.name))}
         ${blk(x.d.days>1?'Dates':'Date', esc(x.rangeLabel))}
         ${blk('Total', peso(x.d.total))}
-        ${blk('Pay by', esc(r.payBy || '—') + (r.overdueAfter ? '<div style="font-size:12px;font-weight:500;color:#8a857d">Overdue after '+esc(r.overdueAfter)+'</div>' : ''))}
+        ${blk('Pay by', esc(r.payBy || '—') + (r.overdueAfter ? '<div style="font-size:12px;font-weight:500;color:#6e6a64">Overdue after '+esc(r.overdueAfter)+'</div>' : ''))}
       </div>
-      <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:12px;font-size:12.5px;color:#8a857d;line-height:1.6">
+      <div style="border-top:1px solid #f0efec;margin-top:14px;padding-top:12px;font-size:12.5px;color:#6e6a64;line-height:1.6">
         ${state.booker.mode==='walkin'
           ? 'No account, so this can only be paid <strong>at the counter</strong> and refunded by staff. It will not appear in anyone&rsquo;s My Bookings.'
           : 'Linked to <strong>'+esc(state.booker.name)+'</strong>&rsquo;s account &mdash; they can also pay online from My Bookings.'}
@@ -1722,7 +1739,7 @@ function counterDoneScreen(x){
       <a href="{{ route('admin.booking-request') }}?id=${encodeURIComponent(state.reference)}" style="flex:1;min-width:180px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:680;text-decoration:none">Open the booking &mdash; take payment</a>
       <a href="{{ route('customer.room-reservation') }}?room=${encodeURIComponent(state.roomId)}&counter=1" style="flex:none;height:48px;padding:0 20px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(0,0,0,.16);border-radius:11px;background:#fff;color:#1c1b19;font-size:14px;font-weight:640;text-decoration:none">Another booking</a>
     </div>
-    <a href="{{ route('admin.dashboard') }}" style="display:inline-block;margin-top:16px;color:#8a857d;font-size:13px;font-weight:600">Back to the dashboard</a>
+    <a href="{{ route('admin.dashboard') }}" style="display:inline-block;margin-top:16px;color:#6e6a64;font-size:13px;font-weight:600">Back to the dashboard</a>
   </main>`;
 }
 
@@ -1768,17 +1785,17 @@ function doneScreen(){
     <div style="display:inline-block;margin:16px auto 0;padding:8px 16px;border-radius:999px;background:${pill.bg};color:${pill.fg};font-size:13px">Status: ${pill.t}</div>
 
     <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:6px 18px 8px;margin-top:26px;text-align:left">
-      ${rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.06)"><span style="font-size:13.5px;color:#8a857d">${r.label}</span><span style="font-size:13.5px;font-weight:600;text-align:right">${esc(r.value)}</span></div>`).join('')}
+      ${rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.06)"><span style="font-size:13.5px;color:#6e6a64">${r.label}</span><span style="font-size:13.5px;font-weight:600;text-align:right">${esc(r.value)}</span></div>`).join('')}
       ${scheduleHtml(x)}
     </div>
 
-    <div style="font-size:12.5px;color:#8a857d;line-height:1.6;margin-top:16px">${!REFUNDS_ENABLED
+    <div style="font-size:12.5px;color:#6e6a64;line-height:1.6;margin-top:16px">${!REFUNDS_ENABLED
       ? (cash
         ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter as your proof of payment. This booking is non-refundable.'
         : 'Keep your GCash receipt and this reference number as your proof of payment. This booking is non-refundable.')
       : cash
-      ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the VENUSeP System Receipt and the Official Receipt.'
-      : 'Keep your GCash receipt and this reference number. A refund request needs the VENUSeP System Receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
+      ? 'Bring your booking reference and a valid ID when paying. Keep the official cashier receipt you receive at the counter — a refund request needs it, together with the VENUSeP Transaction Receipt and the Official Receipt.'
+      : 'Keep your GCash receipt and this reference number. A refund request needs the VENUSeP Transaction Receipt, your GCash receipt, and the Official Receipt — the last of these may follow later.'}
 
     <button onclick="restart()" style="height:48px;padding:0 26px;border:none;border-radius:11px;background:#a11626;color:#fff;font-size:14.5px;font-weight:660;cursor:pointer;margin-top:24px">Browse more rooms</button>
   </main>`;
@@ -1844,7 +1861,7 @@ function clashModalHtml(){
       <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px 14px;margin-bottom:18px">
         <div style="font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a5a19a;margin-bottom:3px">${boxLabel}</div>
         <div style="font-size:15px;font-weight:680;color:#a11626">${esc(boxValue)||'—'}</div>
-        ${boxNote?`<div style="font-size:12px;color:#8a857d;margin-top:3px">${esc(boxNote)}</div>`:''}
+        ${boxNote?`<div style="font-size:12px;color:#6e6a64;margin-top:3px">${esc(boxNote)}</div>`:''}
       </div>
       <button onclick="closeModal()" style="width:100%;height:46px;border:none;border-radius:12px;background:#a11626;color:#fff;font-size:14px;font-weight:650;cursor:pointer">${okLabel}</button>
     </div>

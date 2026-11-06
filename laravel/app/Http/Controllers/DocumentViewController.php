@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Queries\DocumentQueries;
 use Illuminate\Http\Request;
 
 /* =====================================================================
@@ -46,22 +47,7 @@ class DocumentViewController extends Controller
         }
 
         /* Fetch the row AND the booking's owner in one query. */
-        if ($docId) {
-            $stmt = $pdo->prepare(
-                'SELECT d.file_path, d.original_filename, d.mime_type, d.document_type AS kind, d.encrypted, d.removed_at, b.customer_id, b.id AS booking_id
-                   FROM booking_documents d JOIN bookings b ON b.id = d.booking_id
-                  WHERE d.id = :i'
-            );
-            $stmt->execute([':i' => $docId]);
-        } else {
-            $stmt = $pdo->prepare(
-                "SELECT g.file_path, g.original_filename, NULL AS mime_type, 'gcash_receipt' AS kind, 0 AS encrypted, NULL AS removed_at, b.customer_id, b.id AS booking_id
-                   FROM gcash_receipts g JOIN bookings b ON b.id = g.booking_id
-                  WHERE g.id = :i"
-            );
-            $stmt->execute([':i' => $receiptId]);
-        }
-        $row = $stmt->fetch();
+        $row = $docId ? DocumentQueries::findDocument($docId) : DocumentQueries::findGcashUpload($receiptId);
         if (!$row) {
             return $this->deny();
         }
@@ -95,8 +81,7 @@ class DocumentViewController extends Controller
         }
         /* Who opened someone's ID, for the admins' history. */
         if ($row['kind'] === 'customer_id' && $isStaff) {
-            $pdo->prepare('INSERT INTO document_access_log (document_id, user_id) VALUES (:d, :u)')
-                ->execute([':d' => $docId, ':u' => (int) session('user_id')]);
+            DocumentQueries::logAccess($docId, (int) session('user_id'));
         }
 
         return response($bytes, 200, [

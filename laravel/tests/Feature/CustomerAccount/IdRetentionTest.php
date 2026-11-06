@@ -67,7 +67,7 @@ class IdRetentionTest extends TestCase
         [$id] = $this->seedVenueBooking('r1', 'approved', 'await_gcash');
         $doc = $this->storeId($id);
         try {
-            doc_remove_finished_ids(venusep_db());
+            doc_remove_finished_ids();
             $this->assertNull(DB::table('booking_documents')->where('id', $doc)->value('removed_at'));
             $this->assertTrue(is_file($this->diskPath($doc)));
         } finally {

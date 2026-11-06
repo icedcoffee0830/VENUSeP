@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
-use PDO;
+use App\Queries\PaymentQueries;
 use PDOException;
 
 /* BOOKING HISTORY (was customer/booking-history.php) — the session customer's
@@ -20,10 +20,9 @@ class BookingHistoryController
            for the whole list, so the "Receipt" button never costs a query per row. */
         $bhReceipts = [];
         $bhIds = array_filter(array_map(function ($b) { return (int) ($b['id'] ?? 0); }, $bookingHistory));
-        if ($bhIds && ($bhPdo = venusep_db()) !== null) {
+        if ($bhIds && venusep_db() !== null) {
             try {
-                $bhStmt = $bhPdo->query('SELECT DISTINCT booking_id FROM system_receipts WHERE booking_id IN (' . implode(',', $bhIds) . ')');
-                $bhReceipts = array_flip(array_map('intval', $bhStmt->fetchAll(PDO::FETCH_COLUMN)));
+                $bhReceipts = array_flip(PaymentQueries::bookingsWithReceipt($bhIds));
             } catch (PDOException $e) {
                 sql_failed($e);
                 // no Receipt buttons rather than a broken page

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Queries\AccountQueries;
+use App\Queries\VenueQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDOException;
@@ -68,7 +70,8 @@ class RegisterSubmitController
         if ($pass !== $confirm) {
             $this->reply(400, ['ok' => false, 'field' => 'confirm_password', 'message' => 'The two passwords do not match.']);
         }
-        if (empty($post->get('terms'))) {
+        /* customers only: an admin making someone else's account agrees to nothing for them */
+        if ($kind === 'customer' && empty($post->get('terms'))) {
             $this->reply(400, ['ok' => false, 'field' => 'terms', 'message' => 'Please accept the terms to continue.']);
         }
         /* A phone is optional, but if given it must be a PH mobile (GCash refunds). */
@@ -93,16 +96,13 @@ class RegisterSubmitController
             if (!is_scalar($venueRaw) || !ctype_digit((string) $venueRaw) || (int) $venueRaw < 1) {
                 $this->reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'Select a valid venue.']);
             }
-            $venueCheck = $pdo->prepare('SELECT id FROM venues WHERE id = :id');
-            $venueCheck->execute([':id' => (int) $venueRaw]);
-            $venueId = $venueCheck->fetchColumn();
-            if ($venueId === false) {
+            $venueId = (int) $venueRaw;
+            if (!VenueQueries::exists($venueId)) {
                 $this->reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'That venue does not exist.']);
             }
             if (!staff_may_handle_venue($venueId)) {   // a normal admin: its own offices only
                 $this->reply(403, ['ok' => false, 'field' => 'venue_id', 'message' => "You can only add staff to your own offices."]);
             }
-            $venueId = (int) $venueId;
         }
 
         /* A NEW ADMIN needs the creating admin's own password, with the shared
@@ -115,14 +115,7 @@ class RegisterSubmitController
             }
             try {
                 $pdo->beginTransaction();
-                $u = $pdo->prepare(
-                    'SELECT id, password_hash, account_type, is_active, is_super_admin, reauth_failed_attempts, reauth_lock_level,
-                            CASE WHEN reauth_locked_until > NOW()
-                                 THEN TIMESTAMPDIFF(SECOND, NOW(), reauth_locked_until) ELSE 0 END AS lock_seconds
-                       FROM users WHERE id = :id FOR UPDATE'
-                );
-                $u->execute([':id' => (int) session('user_id')]);
-                $creator = $u->fetch();
+                $creator = AccountQueries::lockForPasswordCheck((int) session('user_id'));
                 if (!$creator || !(bool) $creator['is_active'] || $creator['account_type'] !== 'admin' || !(bool) $creator['is_super_admin']) {
                     $pdo->rollBack();
                     $this->reply(403, ['ok' => false, 'message' => 'Only the super admin can create an admin account.']);
@@ -148,7 +141,7 @@ class RegisterSubmitController
         /* A unique username derived from the email — the same rule Google sign-up uses. */
         legacy('accounts');
         try {
-            $username = venusep_unique_username($pdo, $email);
+            $username = venusep_unique_username($email);
         } catch (PDOException $e) {
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
@@ -160,32 +153,12 @@ class RegisterSubmitController
         }
 
         try {
-            $pdo->beginTransaction();
-            $pdo->prepare(
-                'INSERT INTO users (email, username, password_hash, account_type, office_group)
-                 VALUES (:e, :u, :p, :t, :g)'
-            )->execute([':e' => $email, ':u' => $username, ':p' => venusep_password_hash($pass), ':t' => $kind,
-                        ':g' => $kind === 'admin' ? $group : null]);
-            $userId = (int) $pdo->lastInsertId();
-
-            if ($kind !== 'customer') {
-                /* staff: their one venue; admin: none — its group decides its offices */
-                $pdo->prepare(
-                    'INSERT INTO staff (user_id, venue_id, full_name, phone) VALUES (:u, :v, :n, :p)'
-                )->execute([':u' => $userId, ':v' => $kind === 'staff' ? $venueId : null, ':n' => $name, ':p' => $phoneNorm]);
-            } else {
-                $pdo->prepare(
-                    'INSERT INTO customers (user_id, full_name, phone) VALUES (:u, :n, :p)'
-                )->execute([':u' => $userId, ':n' => $name, ':p' => $phoneNorm]);
-            }
-            $pdo->commit();
+            AccountQueries::create($email, $username, venusep_password_hash($pass), $kind, $kind === 'admin' ? $group : null,
+                $kind === 'staff' ? $venueId : null, $name, $phoneNorm);
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
             /* 23000: normally uq_users_email; a venue deleted meanwhile is reported on the venue field. */
             if ($e->getCode() === '23000') {
-                if ($kind === 'staff' && strpos($e->getMessage(), 'fk_staff_venue') !== false) {
+                if ($kind === 'staff' && strpos((string) ($e->errorInfo[2] ?? ''), 'fk_staff_venue') !== false) {
                     $this->reply(400, ['ok' => false, 'field' => 'venue_id', 'message' => 'That venue no longer exists.']);
                 }
                 $this->reply(409, ['ok' => false, 'field' => 'email',
@@ -202,11 +175,9 @@ class RegisterSubmitController
             try {
                 $venueName = '';
                 if ($venueId !== null) {
-                    $vn = $pdo->prepare('SELECT name FROM venues WHERE id = :v');
-                    $vn->execute([':v' => $venueId]);
-                    $venueName = (string) $vn->fetchColumn();
+                    $venueName = (string) (VenueQueries::find($venueId)['name'] ?? '');
                 }
-                notify_account_event($pdo, 'account_created', (int) session('user_id'),
+                notify_account_event('account_created', (int) session('user_id'),
                     ['email' => $email, 'role' => $kind, 'venue' => $venueName], $kind === 'staff' ? [(int) $venueId] : null);
             } catch (PDOException $e) {
                 sql_failed($e, optional: true);

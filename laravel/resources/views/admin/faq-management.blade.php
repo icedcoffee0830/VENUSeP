@@ -20,7 +20,7 @@
       .fq-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--fq-border); flex-wrap: wrap; }
       .fq-card-head h2 { margin: 0; font-size: 1rem; font-weight: 700; display: flex; align-items: center; }
       .fq-card-head h2 small { font-weight: 600; color: var(--fq-muted); font-size: .8rem; margin-left: 8px; }
-      .fq-num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: #fbe9ec; color: var(--fq-crimson); font-size: .75rem; font-weight: 800; margin-right: 10px; }
+      .fq-num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: #fbe9ec; color: var(--fq-crimson); font-size: .75rem; font-weight: 700; margin-right: 10px; }
       /* the preview switch */
       .fq-preview { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; }
       .fq-preview-label { font-size: .86rem; font-weight: 700; }
@@ -102,7 +102,7 @@
       .fq-modal.open { display: flex; }
       .fq-dialog { width: 100%; max-width: 440px; background: #fff; border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.35); padding: 26px 26px 22px; }
       .fq-dialog-icon { width: 46px; height: 46px; border-radius: 999px; background: #fcecec; color: #b23a3a; display: grid; place-items: center; font-size: 1.3rem; margin-bottom: 14px; }
-      .fq-dialog h3 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; letter-spacing: -.01em; }
+      .fq-dialog h3 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
       .fq-dialog p { margin: 0; color: var(--fq-muted); font-size: .88rem; line-height: 1.55; }
       .fq-dialog-q { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--fq-border); border-radius: 10px; font-size: .86rem; font-weight: 600; color: var(--fq-text); }
       .fq-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }

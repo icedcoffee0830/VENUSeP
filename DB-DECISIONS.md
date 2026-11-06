@@ -164,7 +164,7 @@ system_settings(setting_key PK, setting_value, value_type, description,
 - Seed keys:
   - `discount_percent = 20`  — the dynamic discount
   - `hostel_pos_deadline_hours = 72`
-  - `hostel_advance_booking_max_days = 7`  — hostel can't be reserved more than ~1 week before check-in; **events can be booked any time ahead.**
+  - `hostel_advance_booking_max_days = 7`  — **RETIRED 2026-11-05, nothing reads it.** Replaced by the booking window: every office, venue and hostel, online and at the counter, books at most 183 days ahead (fixed, `BookingRules::lastBookableDay()`). Bookings already further out stay.
 
 ## 11. Maintenance — KEEP, system-wide (all venues AND the hostel)
 A **maintenance window is a dated closure attached to a room.** There is no room
@@ -934,9 +934,17 @@ Agreed with Aron on 2026-11-03 and 2026-11-04.
 - **Staff per hall:** one or more halls, only inside their own office; the hostel counts as one unit.
   Every hall always keeps a staff member: a new hall names its staff; taking a hall from, suspending
   or moving its last staff member is refused. Covers do not count towards this.
-- Staff still see the whole office. Their booking list opens on My halls (their halls, covers going
-  on, what they made at the counter), and booking news goes to the hall's staff and the group's
-  normal admin.
+- **Staff see and act on their own halls only** (Aron 2026-11-05, option B; replaces "staff still
+  see the whole office"): their halls plus the halls they cover right now, the hostel being one unit,
+  all or nothing. The server refuses the rest: booking list, booking page and every action on it,
+  counter, Venue Management, notifications, Dashboard and Transaction History follow it. A booking
+  they made at the counter on a hall that is no longer theirs goes too. An office's own details
+  (name, description, photo) are for the admins of its group and the super admin only: never staff,
+  not even hostel staff or staff who hold every hall of it, through a cover or not (Aron 2026-11-06;
+  replaces "need every hall of it"). Staff never move a hall to another office: a covered hall moved home would stay theirs after the cover. At the counter a customer's unpaid booking on another hall reads "Another room at <office>", nothing more. On the calendar the other halls of the office are
+  plain "Busy": dates only. Reports stay whole office, money included. A cover that ends removes the
+  access at once. Staff with no halls can sign in and are told to ask their admin for one. Booking
+  news goes to the hall's staff and the group's normal admin. Admins and the super admin: unchanged.
 - **Covers:** an admin sets staff member + hall or office + from-to + reason, 7 days at most. It ends
   by itself. Inside a group one admin is enough and it counts at once. Across groups the staff
   member's office admin sets it up, the destination's admin approves or rejects (with a reason), and

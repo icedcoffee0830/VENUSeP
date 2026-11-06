@@ -49,7 +49,7 @@ class VenuePhotoApiController extends Controller
                 ->header('Cache-Control', 'no-store')->header('Allow', 'GET, POST'));
         }
 
-        $this->requireVenueScope($venueId, 'venue');   /* #24: staff change only their own venue */
+        $this->requireOfficeAdmin($venueId);
 
         switch ($action) {
             case 'upload':

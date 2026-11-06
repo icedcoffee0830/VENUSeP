@@ -49,7 +49,7 @@ class BookingCreateTest extends TestCase
     public function test_staff_cannot_book_another_venues_room(): void
     {
         $this->actingAsStaff()->create($this->walkInVenue('r5'))->assertStatus(403)
-            ->assertJson(['message' => 'This room belongs to another venue. Only that venue\'s staff or an administrator can book it at the counter.']);
+            ->assertJson(['message' => 'This room is not one you handle. Only its staff or an administrator can book it at the counter.']);
     }
 
     public function test_an_account_booking_needs_the_password_proof(): void
@@ -133,11 +133,6 @@ class BookingCreateTest extends TestCase
     public function test_hostel_stay_needs_the_cash_first_then_is_paid(): void
     {
         $in = now()->addDays(random_int(400, 4000));
-        /* a far, free date: lift the hostel advance limit for this test only */
-        $limit = DB::table('system_settings')->where('setting_key', 'hostel_advance_booking_max_days')->value('setting_value');
-        DB::update("UPDATE system_settings SET setting_value = '5000' WHERE setting_key = 'hostel_advance_booking_max_days'");
-        $this->beforeApplicationDestroyed(fn () => DB::update(
-            "UPDATE system_settings SET setting_value = ? WHERE setting_key = 'hostel_advance_booking_max_days'", [$limit]));
         $data = [
             'type' => 'hostel', 'room' => 'h1', 'id_checked' => '1', 'usep_id' => '0', 'agree_no_refund' => '1',
             'booker_mode' => 'walkin', 'walkin_name' => 'Hostel Walk-in', 'walkin_phone' => '09171234567', 'walkin_no_email' => '1',
@@ -153,5 +148,53 @@ class BookingCreateTest extends TestCase
         $this->assertEquals(700, (float) $b->total_amount);            // 350 x 1 bed x 2 nights
         $this->assertSame(1, DB::table('system_receipts')->where('booking_id', $b->id)->count());
         $this->assertSame(1, DB::table('booking_timeline')->where('booking_id', $b->id)->where('action_code', 'counter_no_email')->count());
+    }
+
+    /* The page sends the rate it showed: a price changed meanwhile is refused and nothing is
+       saved, the same as online (2026-11-05). The new price wins once staff submit again. */
+    public function test_a_hall_price_changed_at_the_counter_is_refused_and_saves_nothing(): void
+    {
+        [$bookings, $customers] = [DB::table('bookings')->count(), DB::table('customers')->count()];
+        $fee  = (float) DB::selectOne("SELECT e.fee_per_day f FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = 'r1'")->f;
+        $name = DB::table('rooms')->where('room_code', 'r1')->value('name');
+        $data = $this->walkInVenue();
+        $res = $this->actingAsStaff()->create(['shown_rate' => (string) ($fee - 100)] + $data);
+        $res->assertStatus(409)->assertJson(['ok' => false, 'error' => 'price_changed', 'room' => ['id' => 'r1', 'name' => $name, 'fee' => $fee],
+            'message' => 'The price of ' . $name . ' changed to ₱' . number_format($fee, fmod($fee, 1.0) == 0.0 ? 0 : 2) . '. Please check with the customer and submit again.']);
+        $this->assertSame([$bookings, $customers], [DB::table('bookings')->count(), DB::table('customers')->count()]);
+
+        $this->create(['shown_rate' => (string) $fee] + $data)->assertOk()->assertJson(['ok' => true]);
+    }
+
+    public function test_a_hostel_price_changed_at_the_counter_is_refused_before_the_cash_is_recorded(): void
+    {
+        $bookings = DB::table('bookings')->count();
+        $rate = (float) DB::selectOne("SELECT h.rate_per_head_per_night r FROM rooms x JOIN hostel_room_details h ON h.room_id = x.id WHERE x.room_code = 'h1'")->r;
+        $in = now()->addDays(random_int(400, 4000));
+        $data = [
+            'type' => 'hostel', 'room' => 'h1', 'id_checked' => '1', 'usep_id' => '0', 'agree_no_refund' => '1', 'cash_received' => '1',
+            'booker_mode' => 'walkin', 'walkin_name' => 'Hostel Walk-in', 'walkin_phone' => '09171234567', 'walkin_no_email' => '1',
+            'check_in' => $in->toDateString(), 'check_out' => $in->copy()->addDays(2)->toDateString(),
+            'occupants' => json_encode([['name' => 'Guest One', 'gender' => 'female']]),
+        ];
+        $res = $this->actingAsAdmin()->create(['shown_rate' => (string) ($rate + 50)] + $data);
+        $res->assertStatus(409)->assertJson(['ok' => false, 'error' => 'price_changed', 'room' => ['id' => 'h1', 'rate' => $rate]]);
+        $this->assertStringEndsWith('Please check with the customer and submit again.', $res->json('message'));
+        $this->assertSame($bookings, DB::table('bookings')->count());
+
+        $this->create(['shown_rate' => (string) $rate] + $data)->assertOk()->assertJson(['paid' => true]);
+    }
+
+    public function test_a_room_closed_at_the_counter_gets_the_room_changed_reply(): void
+    {
+        $name = DB::table('rooms')->where('room_code', 'r1')->value('name');
+        DB::update("UPDATE rooms SET is_active = 0 WHERE room_code = 'r1'");
+        try {
+            $this->actingAsStaff()->create($this->walkInVenue())->assertStatus(409)
+                ->assertExactJson(['ok' => false, 'error' => 'room_changed', 'room' => null,
+                    'message' => $name . ' was closed for booking while you were booking. Please pick another room.']);
+        } finally {
+            DB::update("UPDATE rooms SET is_active = 1 WHERE room_code = 'r1'");
+        }
     }
 }

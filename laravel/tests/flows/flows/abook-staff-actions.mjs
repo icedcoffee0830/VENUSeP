@@ -61,6 +61,17 @@ export default {
       await expect.visible(row, `${s.refA} is not in the customer's booking history`);
       expect.equal(await row.locator('a.booking-action-pay').count(), 0, 'Pay now on the overdue booking');
       await expect.visible(row.getByText('Payment overdue. Please contact the office.'), 'no "contact the office" line on the overdue row');
+      // the notice wraps inside its cell: no sideways scroll, View stays clear (2026-11-05)
+      const fit = await row.evaluate((tr) => {
+        const box = (el) => el.getBoundingClientRect();
+        const help = box(tr.querySelector('.booking-overdue-help'));
+        const cell = box(tr.querySelector('.booking-actions-cell'));
+        const view = box([...tr.querySelectorAll('.booking-action')].find((b) => b.textContent.includes('View')));
+        const scroll = document.querySelector('.booking-table-scroll');
+        return { inCell: help.right <= cell.right + 1, viewClear: view.top >= help.bottom || view.left >= help.right,
+                 wide: scroll.scrollWidth - scroll.clientWidth };
+      });
+      expect.ok(fit.inCell && fit.viewClear && fit.wide <= 0, 'the overdue notice does not fit its cell: ' + JSON.stringify(fit));
       await page.goto(ctx.url('/customer/pay?booking=' + encodeURIComponent(s.refA)));
       await expect.text(page, 'Payment overdue. Please contact the office.');
       expect.equal(await page.locator('#payApp').count(), 0, 'the payment form on the overdue booking');

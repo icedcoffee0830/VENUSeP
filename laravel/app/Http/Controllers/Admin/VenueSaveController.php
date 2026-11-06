@@ -5,10 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use App\Queries\StaffHallQueries;
+use App\Queries\VenueQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use PDO;
 use PDOException;
 
 /* =====================================================================
@@ -51,8 +52,7 @@ class VenueSaveController extends Controller
             $this->reply(400, ['ok' => false, 'error' => 'bad_name', 'message' => 'Enter a venue name (up to 150 characters).']);
         }
 
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so the venue was not saved.']);
         }
 
@@ -60,7 +60,7 @@ class VenueSaveController extends Controller
            handles exactly one venue, so this only ever moves people HERE. Nobody can
            be taken off into "no venue" (trg_staff_venue_required_upd refuses that
            too). Which venue someone handles decides whose bookings they may act on
-           (staff_may_handle_venue()), so only an admin may change it. */
+           (staff_may_handle_venue()); only an admin gets this far (requireOfficeAdmin). */
         $moveRaw = json_decode((string) ($post->get('move_staff') ?? '[]'), true);
         if (!is_array($moveRaw)) {
             $this->reply(400, ['ok' => false, 'error' => 'bad_staff', 'message' => 'Invalid staff selection.']);
@@ -73,37 +73,28 @@ class VenueSaveController extends Controller
             $moveIds[] = (int) $m;
         }
         $moveIds = array_values(array_unique($moveIds));
-        if ($moveIds && !admin_is_admin()) {
-            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only an administrator can change which venue a staff member handles.']);
-        }
 
         try {
-            $venue = $pdo->prepare('SELECT id FROM venues WHERE id = :id');
-            $venue->execute([':id' => $venueId]);
-            if (!$venue->fetch()) {
+            if (!VenueQueries::exists($venueId)) {
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Venue not found.']);
             }
-            $this->requireVenueScope($venueId, 'venue');   /* #24: staff change only their own venue */
+            $this->requireOfficeAdmin($venueId);
 
-            $pdo->beginTransaction();
-            $pdo->prepare('UPDATE venues SET name = :name, description = :description WHERE id = :id')
-                ->execute([':name' => $name, ':description' => $description, ':id' => $venueId]);
             $movedEmails = [];
-            $moved = $this->moveStaff($pdo, $venueId, $moveIds, $movedEmails);
-            $pdo->commit();
-            $this->notifyMoves($pdo, $movedEmails, $name, (int) $venueId);
+            $moved = DB::transaction(function () use ($venueId, $name, $description, $moveIds, &$movedEmails) {
+                VenueQueries::saveNameAndDescription($venueId, $name, $description);
+                return $this->moveStaff($venueId, $moveIds, $movedEmails);
+            });
+            $this->notifyMoves($movedEmails, $name, (int) $venueId);
 
             $this->reply(200, ['ok' => true, 'created' => false, 'name' => $name, 'description' => $description, 'moved' => $moved]);
         } catch (HttpResponseException $e) {
             throw $e;
         } catch (RoomSaveRefusal $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $this->reply(409, ['ok' => false, 'error' => 'last_staff', 'message' => $e->getMessage()]);
         } catch (InvalidArgumentException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             $this->reply(400, ['ok' => false, 'error' => 'bad_staff', 'message' => 'One of the selected people is not a staff member you manage, so nothing was saved.']);
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             /* uq_venues_name — two venues sharing a name would make every "Location"
                dropdown ambiguous, which is exactly what the constraint is for. */
             if ($e->getCode() === '23000') {
@@ -113,7 +104,6 @@ class VenueSaveController extends Controller
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the venue was not saved.']);
         } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Something went wrong, so the venue was not saved.']);
         }
@@ -121,16 +111,12 @@ class VenueSaveController extends Controller
 
     /* Move the chosen staff accounts here; returns their names. Every id must be
        a STAFF account, never an admin's or a customer's row. */
-    private function moveStaff(PDO $pdo, $venueId, array $ids, array &$movedEmails = [])
+    private function moveStaff($venueId, array $ids, array &$movedEmails = [])
     {
         if (!$ids) {
             return [];
         }
-        $in = implode(',', array_map('intval', $ids));
-        $rows = $pdo->query(
-            "SELECT s.user_id, s.full_name, s.venue_id, u.email FROM staff s JOIN users u ON u.id = s.user_id
-              WHERE u.account_type = 'staff' AND s.user_id IN ($in) ORDER BY s.full_name"
-        )->fetchAll();
+        $rows = VenueQueries::findStaff($ids);
         /* only staff this admin manages: a normal admin moves its own offices' staff (DB-DECISIONS 28) */
         if (count($rows) !== count($ids) || array_filter($rows, fn ($r) => !staff_may_handle_venue($r['venue_id']))) {
             throw new InvalidArgumentException('not_staff');
@@ -142,7 +128,7 @@ class VenueSaveController extends Controller
             }
         }
         /* their new office's halls come with them (trg_staff_halls_follow_upd) */
-        $pdo->prepare("UPDATE staff SET venue_id = :v WHERE user_id IN ($in)")->execute([':v' => (int) $venueId]);
+        VenueQueries::moveStaff($ids, (int) $venueId);
         /* who actually changed venue — for the admins' notifications */
         foreach ($rows as $r) {
             if ((int) $r['venue_id'] !== (int) $venueId) {
@@ -154,7 +140,7 @@ class VenueSaveController extends Controller
 
     /* Tell the admins of the offices each one left and joined who was moved (2026-10-28;
        DB-DECISIONS 28). A failure costs a notification, never the save. */
-    private function notifyMoves(PDO $pdo, array $emails, $venueName, int $venueId)
+    private function notifyMoves(array $emails, $venueName, int $venueId)
     {
         if (!$emails) {
             return;
@@ -162,7 +148,7 @@ class VenueSaveController extends Controller
         legacy('notifications');
         try {
             foreach ($emails as $email => $from) {
-                notify_account_event($pdo, 'staff_moved', (int) session('user_id'), ['email' => $email, 'venue' => $venueName], [$from, $venueId]);
+                notify_account_event('staff_moved', (int) session('user_id'), ['email' => $email, 'venue' => $venueName], [$from, $venueId]);
             }
         } catch (PDOException $e) {
             sql_failed($e, optional: true);

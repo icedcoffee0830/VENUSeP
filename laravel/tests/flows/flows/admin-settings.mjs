@@ -29,7 +29,7 @@ async function modal(ctx, page, { expect: re, fill, ok } = {}) {
   return text;
 }
 
-/* the room card on Venue Management, found by its Enable/Disable button's room code */
+/* the room card on Venue Management, found by its Hide/Show button's room code */
 const roomCard = (page, code) => page.locator('.vm-card', { has: page.locator(`[data-toggle-id="${code}"]`) });
 
 export default {
@@ -69,7 +69,7 @@ export default {
       const after = await dbOne(`SELECT r.description, e.attendee_capacity FROM rooms r JOIN event_room_details e ON e.room_id = r.id WHERE r.room_code = ?`, [EVENT_ROOM]);
       expect.equal(after.description, s.eventDesc, 'rooms.description');
       expect.equal(after.attendee_capacity, s.eventCap, 'event_room_details.attendee_capacity');
-      await expect.visible(roomCard(page, EVENT_ROOM).getByText(`Capacity: ${s.eventCap} persons`), 'the card does not show the new capacity');
+      await expect.visible(roomCard(page, EVENT_ROOM).getByText(`Up to ${s.eventCap} people`), 'the card does not show the new capacity');
 
       await page.goto(ctx.url('/admin/room-form?id=' + EVENT_ROOM));
       expect.equal(await page.locator('#roomDesc').inputValue(), s.eventDesc, 'description after a reload');
@@ -109,10 +109,10 @@ export default {
       expect.equal(room.is_active, 1, `${TOGGLE_ROOM} should start enabled`);
 
       await page.goto(ctx.url('/admin/venue-management'));
-      await roomCard(page, TOGGLE_ROOM).locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Disable' }).click();
-      await modal(ctx, page, { expect: /hidden from customers/, ok: 'Disable' });
-      await expect.visible(page.locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Enable' }), 'the button did not turn into "Enable"');
-      await expect.visible(roomCard(page, TOGGLE_ROOM).getByText('Hidden from customers'), 'the card does not say "Hidden from customers"');
+      await roomCard(page, TOGGLE_ROOM).locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Hide from customers' }).click();
+      await modal(ctx, page, { expect: /hidden from customers/, ok: 'Hide' });
+      await expect.visible(page.locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Show to customers' }), 'the button did not turn into "Show to customers"');
+      await expect.visible(roomCard(page, TOGGLE_ROOM).getByText('Hidden', { exact: true }), 'the card does not say "Hidden"');
       expect.equal((await dbOne(`SELECT is_active FROM rooms WHERE room_code = ?`, [TOGGLE_ROOM])).is_active, 0, 'rooms.is_active after Disable');
 
       await roomCard(page, TOGGLE_ROOM).locator('a.vm-edit-link').click();
@@ -122,11 +122,11 @@ export default {
       expect.equal(await page.locator('#roomName').inputValue(), room.name, 'room name on the form');
 
       await page.goto(ctx.url('/admin/venue-management'));
-      await page.locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Enable' }).click();
-      await expect.visible(page.locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Disable' }), 'the button did not turn back into "Disable"');
+      await page.locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Show to customers' }).click();
+      await expect.visible(page.locator(`[data-toggle-id="${TOGGLE_ROOM}"]`, { hasText: 'Hide from customers' }), 'the button did not turn back into "Hide from customers"');
       expect.equal((await dbOne(`SELECT is_active FROM rooms WHERE room_code = ?`, [TOGGLE_ROOM])).is_active, 1, 'rooms.is_active after Enable');
       await page.reload();
-      expect.equal(await roomCard(page, TOGGLE_ROOM).getByText('Hidden from customers').count(), 0, '"Hidden from customers" after a reload');
+      expect.equal(await roomCard(page, TOGGLE_ROOM).getByText('Hidden', { exact: true }).count(), 0, '"Hidden" after a reload');
       return page;
     });
 
@@ -240,6 +240,10 @@ export default {
       await page.goto(ctx.url('/admin/staff'));
       await page.getByRole('link', { name: 'Add account' }).click();
       await expect.url(page, /\/admin\/admin-register/);
+      await page.getByRole('link', { name: 'Back to Staff Management' }).click();
+      await expect.url(page, /\/admin\/staff$/);
+      await page.getByRole('link', { name: 'Add account' }).click();
+      await expect.url(page, /\/admin\/admin-register/);
       await page.locator('input[name="account_role"][value="staff"]').check();
       await page.locator('#staffVenue').selectOption(String(venue.id));
       await page.locator('#adminFullName').fill(s.newName);
@@ -247,7 +251,6 @@ export default {
       await page.locator('#adminContactNumber').fill('09171234321');
       await page.locator('#adminPassword').fill(ctx.password);
       await page.locator('#adminConfirmPassword').fill(ctx.password);
-      await page.locator('#adminTerms').check();
       await page.getByRole('button', { name: 'Create Account' }).click();
       await expect.text(page, 'Staff account created');
 

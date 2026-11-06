@@ -33,7 +33,9 @@ class HostelReservationController extends Controller
                 break;
             }
         }
-        $mrOthers = array_values(array_filter($hostelRooms, function ($r) use ($mrCurrent) { return $r['id'] !== $mrCurrent; }));
+        /* blocked at the hostel: no other rooms to offer on a direct link */
+        $mrOthers = in_array($HOSTEL_VENUE, BookingRules::blockedOfficeNames(), true) ? []
+            : array_values(array_filter($hostelRooms, function ($r) use ($mrCurrent) { return $r['id'] !== $mrCurrent; }));
         if ($mrHere) {
             usort($mrOthers, function ($a, $b) use ($mrHere) { return ($b['cr_type'] === $mrHere['cr_type']) - ($a['cr_type'] === $mrHere['cr_type']); });
         }
@@ -66,8 +68,8 @@ class HostelReservationController extends Controller
             'REFUNDS_ENABLED'   => $REFUNDS_ENABLED,
             'DISCOUNT_PERCENT'  => $DISCOUNT_PERCENT,
             'customerContact'   => $customerContact,
-            /* the advance limit greys out later check-ins in the date picker */
-            'HOSTEL_ADVANCE_DAYS' => ($pdo = venusep_db()) ? BookingRules::hostelAdvanceDays($pdo) : null,
+            /* the date picker greys out everything past the booking window */
+            'lastDay'           => BookingRules::lastBookableDay(),
         ]);
     }
 }

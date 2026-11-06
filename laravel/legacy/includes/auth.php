@@ -118,9 +118,7 @@ function staff_session_refresh(): void
         return;                       // offline: do not log anyone out over a hiccup
     }
     try {
-        $stmt = $pdo->prepare('SELECT account_type, is_active, password_changed_at IS NULL AS must_change, UNIX_TIMESTAMP(password_changed_at) AS changed_ts FROM users WHERE id = :u');
-        $stmt->execute([':u' => (int) session('user_id')]);
-        $row = $stmt->fetch();
+        $row = \App\Queries\AccountQueries::findStaffSession((int) session('user_id'));
     } catch (PDOException $e) {
         sql_failed($e);
         return;
@@ -154,6 +152,11 @@ function admin_is_admin()
      staff: staff.venue_id, plus the office of any cover going on now (staff_covers,
        migration 18: it ends by itself, so it is read here on every request).
    Customers and guests are never narrowed: staff_list_venue() is null for them.
+
+   INSIDE an office staff see and act on their HALLS only (Aron 2026-11-05, option B):
+   their own halls and the halls they cover right now, the hostel being one unit. That is
+   staff_me()['halls'] (fn_staff_on_room), and staff_may_handle_room() is the one check.
+   The office list above stays for Reports (whole office) and the calendar's "Busy" days.
    ===================================================================== */
 const OFFICE_GROUPS = ['bahay_alumni' => 'Bahay Alumni', 'cedu' => 'USeP CEDU'];   // users/venues.office_group
 
@@ -167,25 +170,16 @@ function staff_me(): array
     if (request()->attributes->has($key)) {
         return request()->attributes->get($key);
     }
-    $me = ['super' => false, 'offices' => []];   // unknown = no office: refuse rather than allow
-    $pdo = venusep_db();
-    if ($uid > 0 && $pdo !== null && venusep_is_staff_session()) {
+    /* unknown = no office, no hall: refuse rather than allow. halls: room id => office id;
+       null = not narrowed below the office (admins, customers, guests). */
+    $me = ['super' => false, 'offices' => [], 'halls' => session('account_type') === 'staff' ? [] : null];
+    if ($uid > 0 && venusep_db() !== null && venusep_is_staff_session()) {
         try {
-            $st = $pdo->prepare("SELECT is_super_admin FROM users WHERE id = :u AND account_type = 'admin'");
-            $st->execute([':u' => $uid]);
-            $me['super'] = (bool) $st->fetchColumn();
-            $st = $pdo->prepare(
-                "SELECT v.id FROM users u
-                   LEFT JOIN staff s ON s.user_id = u.id
-                   JOIN venues v ON (u.account_type = 'admin' AND v.office_group = u.office_group)
-                                 OR (u.account_type = 'staff'
-                                     AND (v.id = s.venue_id
-                                          OR EXISTS (SELECT 1 FROM staff_covers c WHERE c.user_id = u.id AND c.venue_id = v.id
-                                                        AND " . STAFF_COVER_ON_SQL . ")))
-                  WHERE u.id = :u ORDER BY v.id"
-            );
-            $st->execute([':u' => $uid]);
-            $me['offices'] = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+            $me['super'] = \App\Queries\StaffHallQueries::isSuperAdmin($uid);
+            $me['offices'] = \App\Queries\StaffHallQueries::officeIdsOf($uid);
+            if ($me['halls'] !== null) {
+                $me['halls'] = \App\Queries\StaffHallQueries::roomsOf($uid);
+            }
         } catch (PDOException $e) {
             sql_failed($e);
         }
@@ -242,27 +236,79 @@ function staff_venue_sql($sql, $glue = 'WHERE')
     return $offices === null ? '' : " $glue " . sprintf($sql, implode(',', $offices ?: [0]));
 }
 
-/* A staff member's "My halls" bookings (Aron 2026-11-05): booking id => true for each
-   booking on one of their halls or a cover going on (fn_staff_on_room, migration 18), and
-   each one they made at the counter. null = not a staff member: no such view. */
-function booking_my_hall_ids() {
-    $pdo = venusep_db();
-    if ($pdo === null || session('account_type') !== 'staff') {
-        return null;
+/* THE ONE CHECK: may this session see / act on this room, and so on its bookings? Staff:
+   one of their halls, the hostel, or a cover going on now. Admins: the room's office. */
+function staff_may_handle_room($roomId, $venueId)
+{
+    $halls = staff_me()['halls'];
+    return $halls === null ? staff_may_handle_venue($venueId) : isset($halls[(int) $roomId]);
+}
+
+/* The same check from a room code (the counter's pages). An unknown room is refused. */
+function staff_may_handle_room_code($roomCode)
+{
+    if (venusep_db() === null || !is_string($roomCode)) {
+        return false;
     }
-    try {
-        $st = $pdo->prepare(
-            "SELECT b.id FROM bookings b
-              WHERE fn_staff_on_room(:u, b.room_id)
-                 OR EXISTS (SELECT 1 FROM booking_timeline t WHERE t.booking_id = b.id
-                               AND t.action_code = 'counter_created' AND t.performed_by_user_id = :u2)"
-        );
-        $st->execute([':u' => (int) session('user_id'), ':u2' => (int) session('user_id')]);
-        return array_fill_keys(array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)), true);
-    } catch (PDOException $e) {
-        sql_failed($e);
-        return null;
-    }
+    $room = \App\Queries\RoomQueries::findIdAndOffice($roomCode);
+    return $room !== null && staff_may_handle_room($room['id'], $room['venue_id']);
+}
+
+/* Does a list shown to this session include the room? Customers and guests: always. */
+function staff_sees_room($roomId, $venueId)
+{
+    return !venusep_is_staff_session() || staff_may_handle_room($roomId, $venueId);
+}
+
+/* An office's own details (name, description, photo): its group's admins and the super
+   admin only. Staff never, whatever halls or covers they hold (DB-DECISIONS 28). */
+function admin_may_edit_office($venueId): bool
+{
+    return admin_is_admin() && staff_may_handle_venue($venueId);
+}
+
+/* The staff member's room ids; null = not narrowed below the office. */
+function staff_hall_ids()
+{
+    $halls = staff_me()['halls'];
+    return $halls === null ? null : array_keys($halls);
+}
+
+/* Does this office hold a hall of this session? Everyone else's lists: yes. */
+function staff_has_hall_in($venueId)
+{
+    $halls = staff_me()['halls'];
+    return $halls === null || in_array((int) $venueId, $halls, true);
+}
+
+const STAFF_NO_HALLS_NOTE = 'You have no halls yet. Ask your admin to assign you one.';
+
+function staff_has_no_halls(): bool
+{
+    return staff_me()['halls'] === [];
+}
+
+/* The hall rule inside SQL, added after staff_venue_sql(): " AND $column IN (...)" for
+   staff, '' for anyone else. */
+function staff_hall_sql($column)
+{
+    $ids = staff_hall_ids();
+    return $ids === null ? '' : " AND $column IN (" . (implode(',', $ids) ?: '0') . ')';
+}
+
+/* The same for an office column: only offices holding one of the staff member's halls. */
+function staff_hall_office_sql($column)
+{
+    $halls = staff_me()['halls'];
+    return $halls === null ? '' : " AND $column IN (" . (implode(',', array_unique($halls)) ?: '0') . ')';
+}
+
+/* The bell (notifications n): staff keep news of their halls only, so a hall taken away or a
+   cover that ended takes its news with it. News about no booking stays. */
+function staff_news_sql()
+{
+    return staff_me()['halls'] === null ? ''
+        : ' AND (n.booking_id IS NULL OR n.booking_id IN (SELECT b2.id FROM bookings b2 WHERE 1' . staff_hall_sql('b2.room_id') . '))';
 }
 
 /* May this session see / handle the booking? Customers: yes (their own checks
@@ -272,14 +318,11 @@ function staff_may_handle_booking($bookingId)
     if (staff_list_venue() === null) {
         return true;
     }
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return false;
     }
-    $st = $pdo->prepare('SELECT r.venue_id FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE b.id = :b');
-    $st->execute([':b' => (int) $bookingId]);
-    $venue = $st->fetchColumn();
-    return $venue === false || staff_may_handle_venue($venue);
+    $room = \App\Queries\RoomQueries::findRoomOfBooking((int) $bookingId);
+    return $room === null || staff_may_handle_room($room['id'], $room['venue_id']);
 }
 
 /* May this admin manage (edit, move, reset the password of, suspend) that
@@ -320,23 +363,19 @@ function reauth_verify(PDO $pdo, array $user, string $password): ?array
         return ['locked' => (int) $user['lock_seconds'], 'justLocked' => false];
     }
     if (password_verify($password, (string) $user['password_hash'])) {
-        $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = 0, reauth_locked_until = NULL WHERE id = :id')
-            ->execute([':id' => $user['id']]);
+        \App\Queries\AccountQueries::clearPasswordTries((int) $user['id']);
         return null;
     }
     $attempts = (int) $user['reauth_failed_attempts'] + 1;
     if ($attempts < 5) {
-        $pdo->prepare('UPDATE users SET reauth_failed_attempts = :a WHERE id = :id')
-            ->execute([':a' => $attempts, ':id' => $user['id']]);
+        \App\Queries\AccountQueries::countPasswordTry((int) $user['id'], $attempts);
         $pdo->commit();
         return ['attemptsLeft' => 5 - $attempts];
     }
     $ladder = [10, 30, 60, 300, 900];
     $level = min((int) $user['reauth_lock_level'] + 1, 255);
     $seconds = $ladder[min($level, count($ladder)) - 1];
-    $pdo->prepare('UPDATE users SET reauth_failed_attempts = 0, reauth_lock_level = :l,
-                          reauth_locked_until = DATE_ADD(NOW(), INTERVAL :s SECOND) WHERE id = :id')
-        ->execute([':l' => $level, ':s' => $seconds, ':id' => $user['id']]);
+    \App\Queries\AccountQueries::lockPasswordTries((int) $user['id'], $level, $seconds);
     $pdo->commit();
     return ['locked' => $seconds, 'justLocked' => true];
 }
@@ -376,18 +415,14 @@ function customer_session_heal()
         return;
     }
     try {
-        $stmt = $pdo->prepare(
-            'SELECT c.id, u.is_active FROM customers c JOIN users u ON u.id = c.user_id WHERE c.user_id = :u LIMIT 1'
-        );
-        $stmt->execute([':u' => $uid]);
-        $row = $stmt->fetch();
-        if ($row !== false && (bool) $row['is_active']) {
+        $row = \App\Queries\AccountQueries::findCustomerOfUser($uid);
+        if ($row !== null && (bool) $row['is_active']) {
             session(['customer_id' => (int) $row['id']]);
         } else {
             venusep_logout();
             /* disabled by an admin: the sign-in page says so once (Bug 2) — the
                customer side's ?suspended=1, kept in the new session instead */
-            if ($row !== false) {
+            if ($row !== null) {
                 session(['customer_disabled_notice' => true]);
             }
             return;
@@ -398,10 +433,8 @@ function customer_session_heal()
     }
 
     try {
-        $stmt = $pdo->prepare('SELECT UNIX_TIMESTAMP(password_changed_at) FROM users WHERE id = :u');
-        $stmt->execute([':u' => $uid]);
-        $changed = $stmt->fetchColumn();
-        if ($changed !== false && $changed !== null && (int) $changed > (int) session('auth_at', 0)) {
+        $changed = \App\Queries\AccountQueries::passwordChangedAt($uid);
+        if ($changed !== null && $changed > (int) session('auth_at', 0)) {
             venusep_logout();
         }
     } catch (PDOException $e) {
@@ -433,14 +466,7 @@ function counter_staff_name()
         return 'Staff';
     }
     try {
-        $stmt = $pdo->prepare(
-            'SELECT COALESCE(s.full_name, u.username, u.email) AS who
-               FROM users u LEFT JOIN staff s ON s.user_id = u.id
-              WHERE u.id = :u LIMIT 1'
-        );
-        $stmt->execute([':u' => (int) session('user_id')]);
-        $who = $stmt->fetchColumn();
-        return $who === false ? 'Staff' : (string) $who;
+        return \App\Queries\VenueQueries::displayName((int) session('user_id')) ?? 'Staff';
     } catch (PDOException $e) {
         sql_failed($e);
         return 'Staff';

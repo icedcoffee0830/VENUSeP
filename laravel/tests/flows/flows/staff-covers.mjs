@@ -24,6 +24,7 @@ async function modal(ctx, page, { expect: re, fill, ok } = {}) {
 /* Fill the form; times come from the database clock, not the browser's time zone. */
 async function fillCover(ctx, page, { staff, office, fromSql, toSql }) {
   const t = await ctx.dbOne(`SELECT DATE_FORMAT(${fromSql}, '%Y-%m-%dT%H:%i') AS f, DATE_FORMAT(${toSql}, '%Y-%m-%dT%H:%i') AS t`);
+  await page.locator('.lp-seg [data-tab="covers"]').click();
   await page.locator('#smCoverOpen').click();
   const form = page.locator('#smCoverDlg');
   await ctx.expect.visible(form, 'the cover form did not open');
@@ -62,14 +63,13 @@ export default {
       return page;
     });
 
-    await step('The staff member opens a USeP Venues booking during the cover; the list opens on My halls', async () => {
+    await step('The staff member opens a USeP Venues booking during the cover; the list has no office tabs', async () => {
       const b = await dbOne(`SELECT b.id, YEAR(b.submitted_at) AS y FROM bookings b JOIN rooms r ON r.id = b.room_id WHERE r.venue_id = 2 ORDER BY b.id DESC LIMIT 1`);
       s.ref = `VB-${b.y}-${String(b.id).padStart(3, '0')}`;
       const page = s.jakePage = await ctx.loginStaff(HOSTEL_STAFF);
       await page.goto(ctx.url('/admin/booking-requests'));
-      await expect.visible(page.locator('.br-scope button[aria-pressed="true"]', { hasText: 'My halls' }), 'the list did not open on My halls');
-      await page.locator('.br-scope button', { hasText: 'Whole office' }).click();
-      await expect.visible(page.locator('.br-scope button[aria-pressed="true"]', { hasText: 'Whole office' }), 'one click did not show the whole office');
+      await expect.visible(page.locator('#brTabBtns .br-tab').first(), 'the list has no tabs');
+      if (await page.getByRole('button', { name: 'Whole office' }).count()) throw new Error('staff still have a Whole office tab');
       await page.goto(ctx.url('/admin/booking-request?id=' + s.ref));
       await expect.text(page, s.ref);
       return page;
@@ -110,7 +110,7 @@ export default {
       expect.equal(await coverRow(page, 'waiting').getByRole('button', { name: 'Approve' }).count(), 0, 'Approve buttons for the admin who asked');
 
       const bahay = s.bahay = await ctx.loginAdmin(BAHAY_ADMIN);
-      await bahay.goto(ctx.url('/admin/staff'));
+      await bahay.goto(ctx.url('/admin/staff?tab=covers'));
       const reloaded = bahay.waitForResponse((r) => r.url().includes('part=1'));
       await coverRow(bahay, 'waiting').getByRole('button', { name: 'Reject' }).click();
       await modal(ctx, bahay, { expect: /Reject this request/, fill: 'Flow test: no room for it', ok: 'Reject' });
@@ -125,7 +125,7 @@ export default {
       const form = await fillCover(ctx, page, { staff: s.jake, office: 'Bahay Alumni', fromSql: 'NOW() + INTERVAL 1 DAY', toSql: 'NOW() + INTERVAL 2 DAY' });
       await saveCover(page, form);
       const bahay = s.bahay;
-      await bahay.goto(ctx.url('/admin/staff'));
+      await bahay.goto(ctx.url('/admin/staff?tab=covers'));
       const reloaded = bahay.waitForResponse((r) => r.url().includes('part=1'));
       await coverRow(bahay, 'waiting').getByRole('button', { name: 'Approve' }).click();
       await reloaded;

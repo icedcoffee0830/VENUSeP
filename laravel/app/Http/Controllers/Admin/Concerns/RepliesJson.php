@@ -36,16 +36,40 @@ trait RepliesJson
         }
     }
 
-    /* STAFF HANDLE ONLY THEIR OWN VENUE (DB-DECISIONS #24): the catalog writes
-       (rooms, venues, their photos) are refused for another venue's things, the
-       same way booking-action refuses another venue's bookings. Admins pass. */
-    protected function requireVenueScope($venueId, string $what = 'room'): void
+    /* STAFF HANDLE ONLY THEIR OWN HALLS (DB-DECISIONS 28): the catalog writes (rooms,
+       venues, their photos) are refused for anything else, the same way booking-action
+       refuses another hall's bookings. Admins: their offices.
+
+       The office a room is filed under. */
+    protected function requireVenueScope($venueId): void
     {
         legacy('auth');
         if (!staff_may_handle_venue($venueId)) {
-            $this->reply(403, ['ok' => false, 'error' => 'forbidden',
-                'message' => 'This ' . $what . ' belongs to another venue. Only that venue\'s staff or an administrator can change it.']);
+            $this->refuseScope('This room belongs to another venue. Only that venue\'s staff or an administrator can change it.');
         }
+    }
+
+    /* A room itself. */
+    protected function requireRoomScope($roomId, $venueId): void
+    {
+        legacy('auth');
+        if (!staff_may_handle_room($roomId, $venueId)) {
+            $this->refuseScope('This room is not one you handle. Only its staff or an administrator can change it.');
+        }
+    }
+
+    /* An office's own details and photo (admin_may_edit_office). */
+    protected function requireOfficeAdmin($venueId): void
+    {
+        legacy('auth');
+        if (!admin_may_edit_office($venueId)) {
+            $this->refuseScope('Only an administrator of this office can change its details.');
+        }
+    }
+
+    private function refuseScope(string $message): never
+    {
+        $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => $message]);
     }
 
     protected function requirePost(Request $request): void

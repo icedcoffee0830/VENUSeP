@@ -87,7 +87,7 @@ function mountGallery(){
     t.classList.add('drag');
     window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp); window.addEventListener('pointercancel',onUp);
   });
-  /* a drag that ends over the 360° tile must not count as a tap on it */
+  /* a drag that ends over a tile must not count as a tap on it: 360° tour or photo */
   t.addEventListener('click',function(e){ if(moved){ e.preventDefault(); e.stopPropagation(); } },true);
 }
 

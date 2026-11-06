@@ -397,7 +397,7 @@ if (!function_exists('vf_initials')) {
         <div data-live="vf-staff">
         <div class="vm-staff-list" id="staffList">
           @if (!$vfHere)
-            <div class="vm-staff-empty" id="staffEmpty">No staff handle this venue yet{{ $vfCanAssign ? ' — add someone below.' : '.' }}</div>
+            <div class="vm-staff-empty" id="staffEmpty">No staff handle this venue yet — add someone below.</div>
           @endif
           @foreach ($vfHere as $s)
             <div class="vm-staff-item">
@@ -408,7 +408,6 @@ if (!function_exists('vf_initials')) {
           @endforeach
         </div>
 
-        @if ($vfCanAssign)
         <button type="button" class="vm-add-staff" onclick="togglePicker()">➕ Add Staff</button>
 
         <div class="vm-picker" id="staffPicker" hidden>
@@ -428,7 +427,6 @@ if (!function_exists('vf_initials')) {
           <div class="vm-staff-empty" id="pickerEmpty"{{ $vfOthers ? ' hidden' : '' }}>No other staff to add. Create a staff account in Staff Management first.</div>
           <button type="button" class="vm-picker-done" onclick="togglePicker()">Done</button>
         </div>
-        @endif
         </div>
         @endfragment
 

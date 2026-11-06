@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Queries\ReportQueries;
+use App\Queries\VenueQueries;
 use PDOException;
 
 /* Admin Dashboard (was admin/Admin_Dashboard.php). Route middleware: staff. */
@@ -23,31 +24,17 @@ class DashboardController
         $adWho = session('account_type') === 'admin' ? 'Administrator' : 'Staff';
         $adManaging = '';
         try {
-            $adPdo = venusep_db_or_fail();
-            $adToday = (int) $adPdo->query(
-                "SELECT COUNT(*) FROM bookings b
-                   LEFT JOIN venue_booking_details vd ON vd.booking_id = b.id
-                   LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
-                  WHERE (CURDATE() BETWEEN vd.start_date AND vd.end_date
-                         OR (hd.check_in_date <= CURDATE() AND hd.check_out_date > CURDATE()))
-                    AND b.reservation_status IN ('approved', 'completed')"
-                 . staff_venue_sql('b.room_id IN (SELECT id FROM rooms WHERE venue_id IN (%s))', 'AND')
-            )->fetchColumn();
-            /* Money COLLECTED this quarter in this person's offices: the Quarterly Reports'
-               own figure (ReportQueries::quarters()), so the tile and the report agree. */
-            $adRevenue = (float) ReportQueries::quarters(array_column(ReportQueries::offices(staff_venue_scope()), 'id'), 1)[0]['revenue'];
-            $adVenues = $adPdo->query(
-                "SELECT v.name, v.description, COUNT(r.id) AS rooms
-                   FROM venues v LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
-                  WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . " GROUP BY v.id ORDER BY v.id"
-            )->fetchAll();
+            venusep_db_or_fail();
+            $adToday = VenueQueries::countBookingsToday();
+            /* Money COLLECTED this quarter in this person's offices (staff: their halls): the
+               Quarterly Reports' own figure (ReportQueries::quarters()), so an admin's tile and
+               report agree. */
+            $adRevenue = (float) ReportQueries::quarters(array_column(ReportQueries::offices(staff_venue_scope()), 'id'), 1, null, staff_hall_ids())[0]['revenue'];
+            $adVenues = VenueQueries::officesWithRooms();
 
             /* "Welcome, <who> | Managing: <what>" — the header's name rule (staff
                full name, else username), and for staff only their own venue. */
-            $who = $adPdo->prepare('SELECT COALESCE(s.full_name, u.username, u.email) FROM users u
-                                      LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = :id');
-            $who->execute([':id' => (int) session('user_id')]);
-            $adWho = (string) ($who->fetchColumn() ?: $adWho);
+            $adWho = (string) (VenueQueries::displayName((int) session('user_id')) ?: $adWho);
             /* $adVenues is already narrowed to the offices this person handles */
             $names = array_column($adVenues, 'name');
             $last = array_pop($names);
@@ -57,6 +44,9 @@ class DashboardController
             $adManaging = 'No venue assigned';
         }
 
-        return live_view('admin.dashboard', compact('adRows', 'adToday', 'adRevenue', 'adVenues', 'adWho', 'adManaging'));
+        /* staff: their halls only, so it is not taken for the whole-office figure on Reports */
+        $adRevenueNote = staff_hall_ids() === null ? 'Current quarter' : 'Your halls · current quarter';
+
+        return live_view('admin.dashboard', compact('adRows', 'adToday', 'adRevenue', 'adRevenueNote', 'adVenues', 'adWho', 'adManaging'));
     }
 }

@@ -64,6 +64,21 @@ class CustomerProfileTest extends TestCase
         $this->assertSame($c->email, DB::table('users')->where('id', $c->id)->value('email'));
     }
 
+    /* The email is where reset links go: a stolen session must not get unlimited guesses at the
+       password through this form. Same lockout as the password change. */
+    public function test_wrong_passwords_on_an_email_change_count_towards_the_lock(): void
+    {
+        $c = $this->makeAccount('customer');
+        $this->signInAs($c, 'customer');
+        $try = fn (string $password) => $this->save(['action' => 'details', 'full_name' => 'X', 'email' => 'new-' . $c->email, 'current_password' => $password]);
+        foreach ([1, 2, 3, 4] as $n) {
+            $try('wrong-' . $n)->assertStatus(401)->assertJson(['field' => 'current_password', 'message' => 'That is not your current password.']);
+        }
+        $try('wrong-5')->assertStatus(423)->assertJson(['field' => 'current_password']);
+        $try(self::PASSWORD)->assertStatus(423);
+        $this->assertSame($c->email, DB::table('users')->where('id', $c->id)->value('email'));
+    }
+
     public function test_details_are_saved_and_the_session_follows(): void
     {
         $c = $this->makeAccount('customer');

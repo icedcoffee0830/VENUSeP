@@ -27,9 +27,21 @@ require_once __DIR__ . '/documents.php';   /* doc_ensure_dir() for the log trans
 
 use PHPMailer\PHPMailer\PHPMailer;
 
-const MAIL_KINDS = ['walkin_booking', 'walkin_receipt', 'receipt_copy', 'password_reset',
-                    'booking_approved', 'booking_rejected', 'payment_due', 'payment_overdue', 'booking_cancelled',
-                    'super_admin_handover', 'booking_block_cancelled', 'counter_welcome'];
+/* Every email kind => the name staff see for it (the booking page's "Receipt & emails" panel). */
+const MAIL_KINDS = [
+    'walkin_booking'          => 'Booking confirmation',
+    'walkin_receipt'          => 'Transaction Receipt',
+    'receipt_copy'            => 'Transaction Receipt',
+    'password_reset'          => 'Password reset',
+    'booking_approved'        => 'Booking approved',
+    'booking_rejected'        => 'Booking rejected',
+    'payment_due'             => 'Payment reminder',
+    'payment_overdue'         => 'Payment overdue',
+    'booking_cancelled'       => 'Booking cancelled',
+    'super_admin_handover'    => 'Super admin handover',
+    'booking_block_cancelled' => 'Booking cancelled (office block)',
+    'counter_welcome'         => 'New account welcome',
+];
 
 /* The settings file's array over the defaults. A missing or broken file means
    'log' — the safe direction. Takes a path so the tests can point it anywhere. */
@@ -73,30 +85,25 @@ function mail_base_url(): string
    $m: kind, to_email, subject, body_html, body_text, and the nullable
    booking_id, receipt_id, requested_by_user_id. A bad address is a caller bug
    (the counter form validates first), so it throws rather than queueing junk. */
-function mail_enqueue(PDO $pdo, array $m): int
+function mail_enqueue(array $m): int
 {
     $to = trim((string) ($m['to_email'] ?? ''));
-    if (!in_array($m['kind'] ?? '', MAIL_KINDS, true)) {
+    if (!isset(MAIL_KINDS[$m['kind'] ?? ''])) {
         throw new InvalidArgumentException('Unknown email kind.');
     }
     if ($to === '' || mb_strlen($to) > 190 || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
         throw new InvalidArgumentException('Not a usable email address.');
     }
-    $pdo->prepare(
-        'INSERT INTO email_outbox (kind, booking_id, receipt_id, requested_by_user_id,
-                                   to_email, subject, body_html, body_text)
-         VALUES (:k, :b, :r, :u, :t, :s, :h, :x)'
-    )->execute([
-        ':k' => $m['kind'],
-        ':b' => $m['booking_id'] ?? null,
-        ':r' => $m['receipt_id'] ?? null,
-        ':u' => $m['requested_by_user_id'] ?? null,
-        ':t' => $to,
-        ':s' => mb_substr((string) $m['subject'], 0, 255),
-        ':h' => (string) $m['body_html'],
-        ':x' => (string) $m['body_text'],
+    return \App\Queries\EmailQueries::add([
+        'kind' => $m['kind'],
+        'booking' => $m['booking_id'] ?? null,
+        'receipt' => $m['receipt_id'] ?? null,
+        'by' => $m['requested_by_user_id'] ?? null,
+        'to' => $to,
+        'subject' => mb_substr((string) $m['subject'], 0, 255),
+        'html' => (string) $m['body_html'],
+        'text' => (string) $m['body_text'],
     ]);
-    return (int) $pdo->lastInsertId();
 }
 
 /* Files to attach to an outbox row: the System Receipt PDF when the row names
@@ -108,7 +115,7 @@ function mail_attachments_for(array $row): array
         return [];
     }
     require_once __DIR__ . '/system-receipt.php';
-    $receipt = receipt_load(venusep_db(), (int) $row['receipt_id']);
+    $receipt = receipt_load((int) $row['receipt_id']);
     if ($receipt === null) {
         throw new RuntimeException('Receipt ' . (int) $row['receipt_id'] . ' no longer exists.');
     }
@@ -118,14 +125,12 @@ function mail_attachments_for(array $row): array
 /* Send one queued email and record what happened. Returns true when it went
    out (or already had). NEVER throws: whoever called this has already done
    the real work, and a mail problem must not reach them. */
-function mail_send(PDO $pdo, int $outboxId, ?array $config = null): bool
+function mail_send(int $outboxId, ?array $config = null): bool
 {
     $config = $config ?? mail_config();
     $mail = null;
     try {
-        $stmt = $pdo->prepare('SELECT * FROM email_outbox WHERE id = :id');
-        $stmt->execute([':id' => $outboxId]);
-        $row = $stmt->fetch();
+        $row = \App\Queries\EmailQueries::find($outboxId);
         if (!$row) {
             return false;
         }
@@ -140,10 +145,7 @@ function mail_send(PDO $pdo, int $outboxId, ?array $config = null): bool
             mail_write_log($mail, (int) $row['id']);
         }
 
-        $pdo->prepare(
-            "UPDATE email_outbox SET status = 'sent', sent_at = NOW(), last_error = NULL,
-                    attempts = attempts + 1 WHERE id = :id"
-        )->execute([':id' => $outboxId]);
+        \App\Queries\EmailQueries::markSent($outboxId);
         return true;
     } catch (\Throwable $e) {
         $error = ($mail !== null && $mail->ErrorInfo !== '') ? $mail->ErrorInfo : $e->getMessage();
@@ -153,10 +155,7 @@ function mail_send(PDO $pdo, int $outboxId, ?array $config = null): bool
             $error = str_replace((string) $config['password'], '[hidden]', $error);
         }
         try {
-            $pdo->prepare(
-                "UPDATE email_outbox SET status = 'failed', last_error = :e,
-                        attempts = attempts + 1 WHERE id = :id"
-            )->execute([':e' => mb_substr($error, 0, 500), ':id' => $outboxId]);
+            \App\Queries\EmailQueries::markFailed($outboxId, mb_substr($error, 0, 500));
         } catch (\Throwable $dbErr) {
             sql_failed($dbErr, optional: true);   // the database itself is the problem; the send must still answer false
         }

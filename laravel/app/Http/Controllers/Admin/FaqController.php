@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Queries\FaqQueries;
 use Illuminate\Http\Request;
 use PDOException;
 
@@ -93,8 +94,7 @@ class FaqController
         if (!$request->isMethod('post')) {
             return $this->back('method');
         }
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             return $this->back('db');
         }
 
@@ -120,68 +120,43 @@ class FaqController
                     if ($answer === '' || mb_strlen($answer) > 4000) {
                         return $this->back('answer', '&keep=1');
                     }
-                    $nextSql = "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM faqs WHERE section_key = " . $pdo->quote($section);
                     if ($action === 'add') {
-                        $next = (int) $pdo->query($nextSql)->fetchColumn();
-                        $stmt = $pdo->prepare("INSERT INTO faqs (section_key, question, answer, policy, sort_order, created_by_user_id, updated_by_user_id)
-                                               VALUES (:s, :q, :a, :p, :o, :u, :u2)");
-                        $stmt->execute([':s' => $section, ':q' => $question, ':a' => $answer, ':p' => $policy, ':o' => $next, ':u' => $userId, ':u2' => $userId]);
+                        FaqQueries::add($section, $question, $answer, $policy, FaqQueries::nextPosition($section), $userId);
                         return $this->back('added', '&show=' . $policy . '#' . $section);   /* the page previews that policy so the new row is visible */
                     }
-                    $cur = $pdo->prepare("SELECT section_key, sort_order FROM faqs WHERE id = :id");
-                    $cur->execute([':id' => $id]);
-                    $cur = $cur->fetch();
+                    $cur = FaqQueries::findPosition($id);
                     if (!$cur) {
                         return $this->back('missing');
                     }
                     /* moved to another section: it goes to the end of that one, never sharing a position there */
-                    $order = $cur['section_key'] === $section ? (int) $cur['sort_order'] : (int) $pdo->query($nextSql)->fetchColumn();
-                    $stmt = $pdo->prepare("UPDATE faqs SET section_key = :s, question = :q, answer = :a, policy = :p, sort_order = :o, updated_by_user_id = :u WHERE id = :id");
-                    $stmt->execute([':s' => $section, ':q' => $question, ':a' => $answer, ':p' => $policy, ':o' => $order, ':u' => $userId, ':id' => $id]);
+                    $order = $cur['section_key'] === $section ? (int) $cur['sort_order'] : FaqQueries::nextPosition($section);
+                    FaqQueries::save($id, $section, $question, $answer, $policy, $order, $userId);
                     return $this->back('saved', '&show=' . $policy . '#' . $section);
 
                 case 'toggle':
-                    $stmt = $pdo->prepare("UPDATE faqs SET is_active = NOT is_active, updated_by_user_id = :u WHERE id = :id");
-                    $stmt->execute([':u' => $userId, ':id' => $id]);
-                    return $this->back($stmt->rowCount() ? 'toggled' : 'missing');   /* NOT is_active always changes a row that exists */
+                    return $this->back(FaqQueries::toggle($id, $userId) ? 'toggled' : 'missing');   /* NOT is_active always changes a row that exists */
 
                 case 'delete':
                     /* built-ins ship with the system: hide them, never delete them */
-                    $stmt = $pdo->prepare("DELETE FROM faqs WHERE id = :id AND is_builtin = 0");
-                    $stmt->execute([':id' => $id]);
-                    if ($stmt->rowCount()) {
+                    if (FaqQueries::delete($id)) {
                         return $this->back('deleted');
                     }
-                    $left = $pdo->prepare("SELECT 1 FROM faqs WHERE id = :id");
-                    $left->execute([':id' => $id]);
-                    return $this->back($left->fetchColumn() ? 'builtin' : 'missing');   /* gone already: a second click, or another admin */
+                    return $this->back(FaqQueries::exists($id) ? 'builtin' : 'missing');   /* gone already: a second click, or another admin */
 
                 case 'restore':
-                    $stmt = $pdo->prepare("UPDATE faqs SET question = default_question, answer = default_answer, updated_by_user_id = :u
-                                            WHERE id = :id AND is_builtin = 1 AND default_question IS NOT NULL");
-                    $stmt->execute([':u' => $userId, ':id' => $id]);
+                    FaqQueries::restore($id, $userId);
                     return $this->back('restored');
 
                 case 'move':
                     $dir = $request->input('dir') === 'up' ? 'up' : 'down';
-                    $row = $pdo->prepare("SELECT section_key, sort_order FROM faqs WHERE id = :id");
-                    $row->execute([':id' => $id]);
-                    $me = $row->fetch();
+                    $me = FaqQueries::findPosition($id);
                     if (!$me) {
                         return $this->back('missing');
                     }
                     /* the neighbour in the same section, just above or just below */
-                    $nb = $pdo->prepare($dir === 'up'
-                        ? "SELECT id, sort_order FROM faqs WHERE section_key = :s AND sort_order < :o ORDER BY sort_order DESC, id DESC LIMIT 1"
-                        : "SELECT id, sort_order FROM faqs WHERE section_key = :s AND sort_order > :o ORDER BY sort_order ASC, id ASC LIMIT 1");
-                    $nb->execute([':s' => $me['section_key'], ':o' => $me['sort_order']]);
-                    $other = $nb->fetch();
+                    $other = FaqQueries::findNeighbour($me['section_key'], (int) $me['sort_order'], $dir === 'up');
                     if ($other) {
-                        $pdo->beginTransaction();
-                        $swap = $pdo->prepare("UPDATE faqs SET sort_order = :o WHERE id = :id");
-                        $swap->execute([':o' => $other['sort_order'], ':id' => $id]);
-                        $swap->execute([':o' => $me['sort_order'], ':id' => $other['id']]);
-                        $pdo->commit();
+                        FaqQueries::swap($id, (int) $me['sort_order'], (int) $other['id'], (int) $other['sort_order']);
                     }
                     return $this->back('moved', '#' . $me['section_key']);
 

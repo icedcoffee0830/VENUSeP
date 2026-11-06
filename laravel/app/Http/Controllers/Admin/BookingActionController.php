@@ -65,11 +65,10 @@ class BookingActionController extends Controller
         $ref    = (string) ($request->post('booking') ?? '');
         $note   = trim((string) ($request->post('note') ?? ''));
 
-        /* STAFF ACT ONLY ON THEIR OWN VENUE'S BOOKINGS (decided 2026-10-27).
-           Admins handle every venue. */
+        /* STAFF ACT ONLY ON THEIR OWN HALLS' BOOKINGS (DB-DECISIONS 28). Admins: their offices. */
         $scopeId = booking_id_from_reference($ref);
         if ($scopeId !== null && !staff_may_handle_booking($scopeId)) {
-            $this->reply(403, ['ok' => false, 'message' => 'This booking belongs to another venue. Only that venue\'s staff or an administrator can act on it.']);
+            $this->reply(403, ['ok' => false, 'message' => 'This booking is on a hall you do not handle. Only that hall\'s staff or an administrator can act on it.']);
         }
 
         $bookingId = booking_id_from_reference($ref);
@@ -85,6 +84,9 @@ class BookingActionController extends Controller
         /* Apply the deadline rules first, so staff act on what the booking IS now. */
         venusep_expire_due_bookings();
 
+        if (!BookingQueries::waitForTurn($bookingId)) {
+            $this->reply(409, ['ok' => false, 'message' => 'Someone else is working on this booking. Reload it and try again.']);
+        }
         $bk = BookingQueries::findForStaffAction($bookingId);
         if (!$bk) {
             $this->reply(404, ['ok' => false, 'message' => 'That booking no longer exists.']);
@@ -96,8 +98,8 @@ class BookingActionController extends Controller
         } catch (HttpResponseException $r) {
             /* A refusal mid-action. The old endpoint exit()ed here, which closed its
                connection: no open transaction survived. The query files' saves undo
-               themselves; the two that keep a plain PDO transaction (the payment
-               reversal, the date move) are undone here. */
+               themselves; the one that keeps a plain PDO transaction (the payment
+               reversal) is undone here. */
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
@@ -119,13 +121,13 @@ class BookingActionController extends Controller
         $statusEmail = ['approve' => 'booking_approved', 'reject' => 'booking_rejected', 'force_cancel' => 'booking_cancelled'][$action] ?? null;
         if ($statusEmail !== null && $queued === null) {
             try {
-                $queued = queue_status_email($pdo, $bookingId, $statusEmail, $note, $actor);
+                $queued = queue_status_email($bookingId, $statusEmail, $note, $actor);
             } catch (\Throwable $mailErr) {
                 sql_failed($mailErr, optional: true);
             }
         }
         if ($queued !== null) {
-            mail_send($pdo, $queued);
+            mail_send($queued);
         }
 
         /* Hand back the booking's new state so the page can redraw from the truth. */
@@ -139,7 +141,7 @@ class BookingActionController extends Controller
                 'resLabel'   => $after['bookingStatusStaff'],
                 'payLabel'   => $after['paymentStatusStaff'],
                 'total'      => $after['amount'],
-                'discount'   => $after['discountPercent'],
+                'discount'   => $after['discountAmount'] > 0 ? $after['discountPercent'] : 0,   /* rounding can leave no discount: the rate stays on the row, unsaid */
                 'payBy'      => $after['payment']['payByLabel'],
                 'graceEnds'  => $after['payment']['graceEndsLabel'] ?? null,
                 'method'     => $after['method'],          /* Cash received turns a stay into a cash booking */
@@ -517,7 +519,7 @@ class BookingActionController extends Controller
             $this->reply(400, ['ok' => false, 'message' => 'Attach the proof you found, so an administrator can approve it.']);
         }
         if (!$lost) {
-            $issued = receipt_for_booking(venusep_db(), $id);
+            $issued = receipt_for_booking($id);
             if (!$issued || strcasecmp(trim((string) $request->post('receipt_number')), $issued['number']) !== 0) {
                 $this->reply(400, ['ok' => false, 'message' => 'That receipt number does not match this booking. Check it, or tick "The receipt was lost".']);
             }
@@ -612,6 +614,10 @@ class BookingActionController extends Controller
     {
         // Check
         $refund = $this->openRefund($booking, false, $note);
+        /* Sent back for correction: it is with the customer until they resubmit (Aron 2026-11-06). */
+        if ($refund['refund_status'] === Status::RETURNED_FOR_CORRECTION) {
+            $this->reply(409, ['ok' => false, 'message' => 'This refund is with the customer to correct. It can be paid once they send it back.']);
+        }
         /* A missing receipt needs an administrator's approval first (Aron 2026-11-01). */
         if ($refund['refund_status'] === Status::UNDER_REVIEW || ($refund['official_receipt_pending'] && $refund['refund_status'] !== Status::APPROVED)) {
             $this->reply(403, ['ok' => false, 'message' => 'The receipt is missing: an administrator has to approve the proof before this is paid.']);

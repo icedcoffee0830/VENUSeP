@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
+use App\Queries\RoomQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /* =====================================================================
    ROOM TOGGLE ACTIVE (was admin/room-toggle-active.php) — flips
@@ -38,41 +40,31 @@ class RoomToggleActiveController extends Controller
         }
 
         legacy('db', 'bookings');   /* booking_reference() */
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             $this->reply(503, ['ok' => false, 'error' => 'db', 'message' => 'The database is unreachable, so nothing changed.']);
         }
 
         try {
-            $pdo->beginTransaction();
-            $room = $pdo->prepare('SELECT id, name, is_active, venue_id FROM rooms WHERE room_code = :code AND deleted_at IS NULL FOR UPDATE');
-            $room->execute([':code' => $roomCode]);
-            $roomRow = $room->fetch();
-            if (!$roomRow) {
-                $pdo->rollBack();
-                $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
-            }
-            $this->requireVenueScope($roomRow['venue_id']);
-
-            $newActive = $roomRow['is_active'] ? 0 : 1;
-            $pdo->prepare('UPDATE rooms SET is_active = :a WHERE id = :id')
-                ->execute([':a' => $newActive, ':id' => (int) $roomRow['id']]);
-            /* Disabling keeps the room's upcoming bookings, but names them (the
-               same way room-save names bookings over a lowered capacity). */
-            $notes = [];
-            if (!$newActive) {
-                $up = $pdo->prepare(
-                    "SELECT b.id, b.submitted_at FROM bookings b
-                      WHERE b.room_id = :r AND b.reservation_status IN ('pending','approved')
-                        AND fn_booking_last_day(b.id) >= CURDATE() ORDER BY b.id"
-                );
-                $up->execute([':r' => (int) $roomRow['id']]);
-                $refs = array_map(function ($b) { return booking_reference($b['id'], $b['submitted_at']); }, $up->fetchAll());
-                if ($refs) {
-                    $notes[] = 'These upcoming bookings are kept as booked: ' . implode(', ', $refs) . '.';
+            [$roomRow, $newActive, $notes] = DB::transaction(function () use ($roomCode) {
+                $roomRow = RoomQueries::lockForToggle($roomCode);
+                if (!$roomRow) {
+                    $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Room not found.']);
                 }
-            }
-            $pdo->commit();
+                $this->requireRoomScope($roomRow['id'], $roomRow['venue_id']);
+
+                $newActive = $roomRow['is_active'] ? 0 : 1;
+                RoomQueries::setActive((int) $roomRow['id'], $newActive);
+                /* Disabling keeps the room's upcoming bookings, but names them (the
+                   same way room-save names bookings over a lowered capacity). */
+                $notes = [];
+                if (!$newActive) {
+                    $refs = array_map(function ($b) { return booking_reference($b['id'], $b['submitted_at']); }, RoomQueries::upcomingBookings((int) $roomRow['id']));
+                    if ($refs) {
+                        $notes[] = 'These upcoming bookings are kept as booked: ' . implode(', ', $refs) . '.';
+                    }
+                }
+                return [$roomRow, $newActive, $notes];
+            });
 
             $this->reply(200, [
                 'ok' => true, 'active' => (bool) $newActive, 'name' => $roomRow['name'], 'notes' => $notes,
@@ -80,10 +72,8 @@ class RoomToggleActiveController extends Controller
                     . ($notes ? "\n\n" . implode("\n\n", $notes) : ''),
             ]);
         } catch (HttpResponseException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             sql_failed($e);
             $this->reply(500, ['ok' => false, 'error' => 'server', 'message' => 'Nothing changed because the request could not be completed safely.']);
         }

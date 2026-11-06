@@ -9,8 +9,8 @@ use PDOException;
 
 /* ROOM FORM (was admin/room-form.php + admin/hostel-room-form.php) — Add / Edit
    an EVENT room, or (hostel()) a HOSTEL room: one controller, one view.
-   Venues come from the ONE shared source so the Location dropdown lists
-   every venue that exists. Room photos are keyed by the room's id — see
+   Venues come from the ONE shared source: the event form's Location lists the
+   event venues, the hostel form is fixed to the hostel. Room photos are keyed by the room's id — see
    room-photos.php (DB row in room_media + the file on disk). */
 class RoomFormController extends Controller
 {
@@ -34,6 +34,13 @@ class RoomFormController extends Controller
             }
         }
         if ($roomFormRoom === null) $roomId = '';   // unknown id — behaves like Add
+
+        /* Only the admins of the office's group and the super admin ADD a room
+           (Aron 2026-11-05; room-save refuses the rest). Staff still edit theirs. */
+        $rfVenues = $venuesByType[$isHostel ? 'hostel' : 'event'];
+        if ($roomId === '' && (!admin_is_admin() || !$rfVenues)) {
+            return redirect()->route('admin.venue-management');
+        }
 
         /* THE AMENITY PICKER, built from the real vocabulary (amenities.php)
            rather than a list of its own. The vocabulary stays PHP-coded
@@ -66,7 +73,7 @@ class RoomFormController extends Controller
         /* a new hall names its staff (partials/room-form-staff): office name => [id => name] */
         $rfStaff = [];
         if (!$isHostel && $roomId === '') {
-            foreach ($venuesById as $rfVenueId => $rfVenueName) {
+            foreach ($rfVenues as $rfVenueId => $rfVenueName) {
                 $rfStaff[$rfVenueName] = StaffHallQueries::staffOf((int) $rfVenueId);
             }
         }
@@ -74,10 +81,11 @@ class RoomFormController extends Controller
         return view('admin.room-form', [
             'rfStaff' => $rfStaff,
             'isHostel' => $isHostel,
+            'rfFixedVenue' => $isHostel || !admin_is_admin(),   // staff never move a room (room-save refuses it)
             'roomId' => $roomId,
             'roomFormRoom' => $roomFormRoom,
             'roomFormCsrf' => csrf_token(),
-            'venues' => $venues,
+            'rfVenues' => $rfVenues,
             'rfPool' => $rfPool,
         ]);
     }

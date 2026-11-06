@@ -35,6 +35,9 @@ class PayTest extends TestCase
             ->assertSee('Payment overdue. Please contact the office.')
             ->assertSee($contact)
             ->assertSee('Was due')
+            ->assertSee('<a class="pay-back" href="' . route('customer.booking-history') . '">', false)
+            ->assertSee('Back to My bookings')
+            ->assertSee('<a class="pay-back" href="' . route('customer.venues') . '">', false)
             ->assertDontSee('id="payApp"', false)->assertDontSee('function evaluateReceipt', false);
         $this->get(route('customer.booking-history'))->assertOk()
             ->assertSee('Payment overdue. Please contact the office.')->assertSee($contact)

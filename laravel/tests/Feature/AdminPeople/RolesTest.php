@@ -174,7 +174,7 @@ class RolesTest extends TestCase
     public function test_only_the_super_admin_creates_admins_and_each_needs_a_group(): void
     {
         $form = ['full_name' => 'New Admin', 'email' => 'lvtest-na-' . bin2hex(random_bytes(4)) . '@test.local',
-                 'password' => 'Long-enough-1', 'confirm_password' => 'Long-enough-1', 'terms' => '1', 'kind' => 'admin'];
+                 'password' => 'Long-enough-1', 'confirm_password' => 'Long-enough-1', 'kind' => 'admin'];
         $this->actingAsAdmin('cedu.admin@gmail.com');
         $this->postForm('root.register-submit', $form + ['office_group' => 'cedu'])->assertStatus(403);
         $this->actingAsAdmin()->get(route('admin.admin-register'))->assertSee('name="office_group"', false);
@@ -183,9 +183,10 @@ class RolesTest extends TestCase
 
     public function test_a_normal_admin_adds_staff_to_its_own_offices_only(): void
     {
-        $form = ['full_name' => 'New Staff', 'password' => 'Long-enough-1', 'confirm_password' => 'Long-enough-1', 'terms' => '1', 'kind' => 'staff'];
+        $form = ['full_name' => 'New Staff', 'password' => 'Long-enough-1', 'confirm_password' => 'Long-enough-1', 'kind' => 'staff'];   // no terms: the admin agrees to nothing for them
         $this->actingAsAdmin('cedu.admin@gmail.com');
-        $this->get(route('admin.admin-register'))->assertOk()->assertDontSee('value="admin"', false)->assertDontSee('>Bahay Alumni<', false);
+        $this->get(route('admin.admin-register'))->assertOk()->assertDontSee('value="admin"', false)->assertDontSee('>Bahay Alumni<', false)
+            ->assertDontSee('name="terms"', false)->assertDontSee('Terms and Conditions');
         $this->postForm('root.register-submit', $form + ['email' => 'lvtest-' . bin2hex(random_bytes(4)) . '@test.local', 'venue_id' => self::BAHAY])
             ->assertStatus(403);
         $email = 'lvtest-' . bin2hex(random_bytes(4)) . '@test.local';

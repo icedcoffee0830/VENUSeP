@@ -36,7 +36,7 @@ class ReceiptTest extends TestCase
         $this->actingAsStaff()->get(route('admin.receipt', ['booking' => $ref]))->assertNotFound();
         $this->flushSession();
         $this->actingAsAdmin()->get(route('admin.receipt', ['booking' => $ref]))->assertOk()
-            ->assertSee('System Receipt')->assertSee($ref)->assertSee('Amount paid')
+            ->assertSee('Transaction Receipt')->assertDontSee('System Receipt')->assertSee($ref)->assertSee('Amount paid')
             ->assertSee(route('root.receipt-pdf', ['booking' => $ref]), false)
             ->assertSee('class="receipt-page"', false);
     }

@@ -5,8 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Concerns\RepliesJson;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Customer\BookingRules;
+use App\Queries\OfficeSettingsQueries;
 use Illuminate\Http\Request;
-use PDO;
+use Illuminate\Support\Facades\DB;
 
 /* OFFICE SETTINGS (Aron, 2026-11-01): each office's hours, closed days, closures,
    USeP discount, grace days, lead time and cleanup gap, and its contact info (phone,
@@ -58,8 +59,7 @@ class OfficeSettingsController extends Controller
         if (session('account_type') !== 'admin') {
             $this->reply(403, ['ok' => false, 'error' => 'not_admin', 'message' => 'Only an administrator can change office settings.']);
         }
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             $this->reply(503, ['ok' => false, 'message' => 'The database is unreachable, so nothing was changed.']);
         }
         $venueId = (int) $request->post('venue_id');
@@ -74,19 +74,18 @@ class OfficeSettingsController extends Controller
 
         switch ((string) $request->post('action')) {
             case 'save':
-                $this->saveSettings($request, $pdo, $office, $actor);
+                $this->saveSettings($request, $office, $actor);
                 $this->reply(200, ['ok' => true, 'message' => 'Saved. New bookings use these settings.']);
             case 'closure_add':
-                $this->addClosure($request, $pdo, $venueId, $actor);
+                $this->addClosure($request, $venueId, $actor);
             case 'closure_remove':
-                $pdo->prepare('DELETE FROM venue_closures WHERE id = :i AND venue_id = :v')
-                    ->execute([':i' => (int) $request->post('closure_id'), ':v' => $venueId]);
+                OfficeSettingsQueries::removeClosure((int) $request->post('closure_id'), $venueId);
                 $this->reply(200, ['ok' => true, 'message' => 'Closure removed.']);
         }
         $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
     }
 
-    private function saveSettings(Request $request, PDO $pdo, array $office, int $actor): void
+    private function saveSettings(Request $request, array $office, int $actor): void
     {
         $isHostel = $office['type'] === 'hostel';
         $int = function (string $field, int $max, string $what) use ($request) {
@@ -141,20 +140,18 @@ class OfficeSettingsController extends Controller
             $this->reply(400, ['ok' => false, 'message' => 'A reason is required when the discount or grace days change.']);
         }
 
-        $pdo->beginTransaction();
-        $log = $pdo->prepare('INSERT INTO venue_settings_history (venue_id, field, old_value, new_value, note, changed_by_user_id) VALUES (:v, :f, :o, :n, :w, :u)');
-        foreach ($changed as $field => $value) {
-            $column = self::FIELDS[$field][1];
-            $pdo->prepare("UPDATE venues SET $column = :x WHERE id = :v")->execute([':x' => $value, ':v' => $office['id']]);
-            /* the history columns hold 100 characters; a location may have 500 */
-            $log->execute([':v' => $office['id'], ':f' => $field, ':o' => mb_substr((string) $old[$field], 0, 100), ':n' => mb_substr((string) $value, 0, 100),
-                           ':w' => $reason !== '' ? $reason : null, ':u' => $actor]);
-        }
-        $pdo->commit();
+        DB::transaction(function () use ($changed, $old, $office, $reason, $actor) {
+            foreach ($changed as $field => $value) {
+                OfficeSettingsQueries::saveSetting($office['id'], self::FIELDS[$field][1], $value);
+                /* the history columns hold 100 characters; a location may have 500 */
+                OfficeSettingsQueries::addHistory($office['id'], $field, mb_substr((string) $old[$field], 0, 100), mb_substr((string) $value, 0, 100),
+                    $reason !== '' ? $reason : null, $actor);
+            }
+        });
     }
 
     /* Nothing is cancelled: the reply names the bookings inside the dates, for staff to sort out. */
-    private function addClosure(Request $request, PDO $pdo, int $venueId, int $actor): never
+    private function addClosure(Request $request, int $venueId, int $actor): never
     {
         $from = (string) $request->post('from');
         $until = (string) $request->post('until');
@@ -168,18 +165,9 @@ class OfficeSettingsController extends Controller
         if ($reason === '') {
             $this->reply(400, ['ok' => false, 'message' => 'Write the reason. Customers see it on the booking page.']);
         }
-        $pdo->prepare('INSERT INTO venue_closures (venue_id, from_date, until_date, reason, created_by_user_id) VALUES (:v, :f, :u, :r, :a)')
-            ->execute([':v' => $venueId, ':f' => $from, ':u' => $until, ':r' => $reason, ':a' => $actor]);
+        OfficeSettingsQueries::addClosure($venueId, $from, $until, $reason, $actor);
 
-        $st = $pdo->prepare(
-            "SELECT DISTINCT b.id, b.submitted_at FROM bookings b JOIN rooms r ON r.id = b.room_id
-               LEFT JOIN venue_booking_slots s ON s.booking_id = b.id AND s.released_at IS NULL
-               LEFT JOIN bed_reservation_nights n ON n.booking_id = b.id AND n.released_at IS NULL
-              WHERE r.venue_id = :v AND b.reservation_status IN ('pending', 'approved')
-                AND ((s.slot_date BETWEEN :f AND :u) OR (n.night_date BETWEEN :f2 AND :u2))"
-        );
-        $st->execute([':v' => $venueId, ':f' => $from, ':u' => $until, ':f2' => $from, ':u2' => $until]);
-        $refs = array_map(fn ($b) => booking_reference($b['id'], $b['submitted_at']), $st->fetchAll());
+        $refs = array_map(fn ($b) => booking_reference($b['id'], $b['submitted_at']), OfficeSettingsQueries::bookingsInside($venueId, $from, $until));
         $this->reply(200, ['ok' => true, 'affected' => $refs, 'message' => $refs
             ? 'Closure saved. These bookings fall inside it and were not changed, so staff need to contact the customers: ' . implode(', ', $refs) . '.'
             : 'Closure saved. No bookings fall inside it.']);

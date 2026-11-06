@@ -36,8 +36,8 @@
       .b-amber::before { background: #d9930d; }
       .b-red   { background: #fcecec; color: #b23a3a; }
       .b-red::before   { background: #cf4a4a; }
-      .b-navy  { background: #eef1f8; color: #1f2a44; }
-      .b-navy::before  { background: #1f2a44; }
+      .b-navy  { background: #eef0f2; color: #55606b; }
+      .b-navy::before  { background: #55606b; }
 
       /* needs-action tabs + search */
       .br-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: 0.55rem; margin-bottom: 1rem; }
@@ -46,7 +46,6 @@
       .br-tab .n { background: var(--vm-strip); border-radius: 999px; font-size: 0.7rem; margin-left: 0.35rem; padding: 0.05rem 0.42rem; }
       .br-tab.active { background: var(--vm-dark); border-color: var(--vm-dark); color: #ffffff; }
       .br-tab.active .n { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
-      .br-scope { display: inline-flex; gap: 0.3rem; padding-right: 0.6rem; margin-right: 0.3rem; border-right: 1px solid var(--vm-border); }
       .br-search { border: 1px solid var(--vm-border); border-radius: 9px; font-family: inherit; font-size: 0.84rem; height: 38px; margin-left: auto; padding: 0 0.8rem; width: 260px; }
       .br-search:focus { outline: 2px solid rgba(31, 30, 30, 0.25); }
 
@@ -72,7 +71,7 @@
          button styling. The queue is a list of links rather than a table, so
          it cannot BE that table, but it should not behave like a different
          product either. 157 rows on one endless page was the complaint. */
-      .br-foot { align-items: center; background: #faf9f7; border-top: 1px solid var(--vm-border); display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; padding: 0.6rem 1.1rem; }
+      .br-foot { align-items: center; background: #faf9f7; border-bottom: 1px solid var(--vm-border); display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; padding: 0.6rem 1.1rem; }
       .br-foot[hidden] { display: none; }
       .br-pagesize { align-items: center; color: var(--vm-muted); display: flex; font-size: 0.76rem; gap: 0.4rem; }
       .br-pagesize select { border: 1px solid #d7d7d7; border-radius: 7px; background: #fff; color: #1f1e1e; font-family: inherit; font-size: 0.78rem; padding: 0.2rem 0.4rem; }
@@ -94,6 +93,7 @@
 @endpush
 @section('content')
       <main class="app-main">
+        @include('partials.no-halls-note')
         <div class="app-content">
           <div class="container-fluid">
             <div class="br-page">
@@ -106,16 +106,6 @@
               </div>
 
               <div class="br-card br-list">
-                <div class="br-hd">
-                  <span>Request · Customer</span>
-                  <span class="hide-md">Room</span>
-                  <span class="hide-md">Event date(s)</span>
-                  <span class="hide-md">Reservation</span>
-                  <span>Payment</span>
-                  <span class="hide-md">Next action</span>
-                  <span></span>
-                </div>
-                <div id="brRows"></div>
                 <div class="br-foot" id="brFoot" hidden>
                   <label class="br-pagesize">Page Size
                     <select id="brPageSize">
@@ -128,6 +118,16 @@
                   <span class="br-shown" id="brShown"></span>
                   <div class="br-pages" id="brPages"></div>
                 </div>
+                <div class="br-hd">
+                  <span>Request · Customer</span>
+                  <span class="hide-md">Room</span>
+                  <span class="hide-md">Event date(s)</span>
+                  <span class="hide-md">Reservation</span>
+                  <span>Payment</span>
+                  <span class="hide-md">Next action</span>
+                  <span></span>
+                </div>
+                <div id="brRows"></div>
               </div>
             </div>
           </div>
@@ -216,21 +216,17 @@
       ];
       /* deep-link support: the dashboard cards link here as ?tab=id / confirm /
          review / overdue — open with that tab already active */
-      const TAB_PARAM = new URLSearchParams(location.search).get('tab');
-      let tab = TABS.some((t) => t.k === TAB_PARAM) ? TAB_PARAM : 'all', q = '';
-      /* Staff open on their own halls (and the bookings they made at the counter); one click
-         shows the whole office. Admins have no such view: every row is theirs. */
-      const MY_HALLS = @json($brMyHalls);
-      let scope = MY_HALLS ? 'mine' : 'all';
-      function inScope() { return scope === 'mine' ? BR.filter(r => r.mine) : BR; }
-      function setScope(k) { scope = k; page = 1; draw(); }
+      const PARAMS = new URLSearchParams(location.search);
+      const TAB_PARAM = PARAMS.get('tab');
+      let tab = TABS.some((t) => t.k === TAB_PARAM) ? TAB_PARAM : 'all', q = (PARAMS.get('q') || '').trim().toLowerCase();
+      document.getElementById('brSearch').value = PARAMS.get('q') || '';
 
       function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
       const AWAITING = ['await_gcash', 'await_cash', 'await_pos'];
       function inTab(r, k) { return k === 'all' || (k === 'awaiting' ? AWAITING.includes(r.pay) : r.cat === k); }
-      function countOf(k) { return inScope().filter(r => inTab(r, k)).length; }
+      function countOf(k) { return BR.filter(r => inTab(r, k)).length; }
       function rowsOf() {
-        const list = inScope().filter(r => inTab(r, tab))
+        const list = BR.filter(r => inTab(r, tab))
                        .filter(r => !q || (r.name + ' ' + r.room + ' ' + r.id).toLowerCase().includes(q));
         /* Newest request first (seq = the booking's id). The refunds tab keeps its
            soonest-event-first order: a near event is a date nobody can rebook. */
@@ -242,8 +238,16 @@
          so both send you back to page 1 — staying on page 4 of a list that now
          has two pages reads as an empty queue. */
       let page = 1, pageSize = 10;
-      function setTab(k) { tab = k; page = 1; draw(); }
-      function setQ(v) { q = v.trim().toLowerCase(); page = 1; drawRows(); }
+      /* The address keeps the tab and the search, so Back, a refresh and a link all land here again. */
+      function keepInAddress() {
+        const to = new URL(location.href);
+        const typed = document.getElementById('brSearch').value.trim();
+        if (tab === 'all') to.searchParams.delete('tab'); else to.searchParams.set('tab', tab);
+        if (typed) to.searchParams.set('q', typed); else to.searchParams.delete('q');
+        history.replaceState(null, '', to);
+      }
+      function setTab(k) { tab = k; page = 1; keepInAddress(); draw(); }
+      function setQ(v) { q = v.trim().toLowerCase(); page = 1; keepInAddress(); drawRows(); }
       function setPage(n) { page = n; drawRows(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
       function setPageSize(n) { pageSize = parseInt(n, 10) || 10; page = 1; drawRows(); }
 
@@ -317,18 +321,14 @@
             <span><span class="br-badge ${payBadge(r.pay).c}">${r.pay === 'paid_cash' ? esc(r.payLabel) : esc(payBadge(r.pay).t)}</span></span>
             <span class="hide-md r-act ${r.cls}">${esc(actLabel(r))}</span>
             <span class="r-chev">&rsaquo;</span>
-          </a>`).join('') || '<div style="padding:1.2rem;color:#8a857d;font-size:.85rem">No requests match.</div>';
+          </a>`).join('') || '<div style="padding:1.2rem;color:#6e6a64;font-size:.85rem">No requests match.</div>';
         drawPager(all.length);
       }
       function draw() {
-        const scopes = MY_HALLS ? '<span class="br-scope" role="group" aria-label="Which bookings">'
-          + [['mine', 'My halls'], ['all', 'Whole office']].map(([k, t]) => `
-          <button type="button" class="br-tab${scope === k ? ' active' : ''}" aria-pressed="${scope === k}" onclick="setScope('${k}')">${t}</button>`).join('')
-          + '</span>' : '';
-        document.getElementById('brTabBtns').innerHTML = scopes + TABS.map(t => `
+        document.getElementById('brTabBtns').innerHTML = TABS.map(t => `
           <button type="button" class="br-tab${tab === t.k ? ' active' : ''}" onclick="setTab('${t.k}')">${t.t}<span class="n">${countOf(t.k)}</span></button>`).join('');
-        const need = inScope().filter(r => ['id', 'confirm', 'review', 'overdue', 'refund', 'pos'].includes(r.cat)).length;
-        document.getElementById('brCount').textContent = inScope().length + ' booking requests · ' + need + ' need action';
+        const need = BR.filter(r => ['id', 'confirm', 'review', 'overdue', 'refund', 'pos'].includes(r.cat)).length;
+        document.getElementById('brCount').textContent = BR.length + ' booking requests · ' + need + ' need action';
         drawRows();
       }
       /* A refund the customer filed used to reach this queue through
@@ -337,6 +337,12 @@
          row, so it arrives here the same way every other booking does: it is
          simply in BR above. The injection that used to live here is gone. */
       document.getElementById('brPageSize').addEventListener('change', function () { setPageSize(this.value); });
+      /* Opening a row: the booking page reads this for its back link, its place and Next. */
+      document.getElementById('brRows').addEventListener('click', (e) => {
+        if (!e.target.closest('a.br-row')) return;
+        const list = { tab: tab, label: TABS.find((t) => t.k === tab).t, url: location.href, ids: rowsOf().map((r) => r.id) };
+        try { sessionStorage.setItem('venusep_queue', JSON.stringify(list)); } catch (err) {}
+      });
       draw();
       /* the 30-second check: fresh rows under the same tab, search and page */
       Live.watch('queue', () => Live.refresh().then(() => { BR = Live.data('br-rows'); draw(); }));

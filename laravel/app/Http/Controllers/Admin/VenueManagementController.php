@@ -37,29 +37,20 @@ class VenueManagementController extends Controller
         ));
         $pricingScript = ob_get_clean();
 
-        /* Venue cards must start from venues, not rooms: a newly created venue has no
-           rooms yet and still belongs on this page. LEFT JOINs keep that venue in the
-           result while deriving its active room, hostel-bed and assigned-staff counts. */
+        /* The sections start from venues, not rooms: a new venue has no rooms yet and still belongs here. */
         $vmVenueRows = venusep_db_or_fail()->query(
-            "SELECT v.id, v.name, v.venue_type, v.description, v.cover_photo,
-                    COUNT(DISTINCT r.id) AS room_count,
-                    COUNT(DISTINCT hb.id) AS bed_count,
-                    COUNT(DISTINCT s.user_id) AS staff_count
+            "SELECT v.id, v.name, v.venue_type, v.description, v.cover_photo
                FROM venues v
-               LEFT JOIN rooms r ON r.venue_id = v.id AND r.is_active = 1
-               LEFT JOIN hostel_beds hb ON hb.room_id = r.id AND hb.is_active = 1
-               LEFT JOIN staff s ON s.venue_id = v.id
-              WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . "
-              GROUP BY v.id, v.name, v.venue_type, v.description, v.cover_photo
+              WHERE v.is_active = 1" . staff_venue_sql('v.id IN (%s)', 'AND') . staff_hall_office_sql('v.id') . "
               ORDER BY v.id"
         )->fetchAll();
 
-        /* Staff change only their own venue's rooms (DB-DECISIONS #24; the JSON
-           endpoints refuse the rest), so the cards hide Edit/Disable on other
-           venues' rooms. null = the super admin (every room); otherwise the names of
-           the offices this person handles ($vmVenueRows is already narrowed to them). */
+        /* The lists are already narrowed to the rooms this person handles (staff: their
+           halls; the JSON endpoints refuse the rest). null = the super admin (every room);
+           otherwise the names of the offices shown. Edit Details is for admins only. */
         legacy('auth');
         $vmMyVenue = staff_venue_scope() === null ? null : array_map('strval', array_column($vmVenueRows, 'name'));
+        $vmVenueRows = array_map(fn ($v) => $v + ['may_edit' => admin_may_edit_office($v['id'])], $vmVenueRows);
 
         $vmStaffByVenue = [];
         $vmStaffRows = venusep_db_or_fail()->query(
@@ -71,15 +62,16 @@ class VenueManagementController extends Controller
 
         return live_view('admin.venue-management', [
             'TODAY' => date('Y-m-d'),
-            'venues' => $venues,
             'rooms' => $venueRooms,   // the event rooms, same data the booking page shows
             'hostelRooms' => $hostelRooms,
-            'HOSTEL_VENUE' => $HOSTEL_VENUE,
             'HOSTEL_CR_LABEL' => $HOSTEL_CR_LABEL,
             'DISCOUNT_PERCENT' => $DISCOUNT_PERCENT,
             'vmVenueRows' => $vmVenueRows,
             'vmStaffByVenue' => $vmStaffByVenue,
             'vmMyVenue' => $vmMyVenue,
+            /* who sees the Add buttons: admins, for the offices they handle (room-save checks again) */
+            'vmAddHall' => admin_is_admin() && $venuesByType['event'],
+            'vmAddHostel' => admin_is_admin() && $venuesByType['hostel'],
             'pricingScript' => $pricingScript,
         ]);
     }

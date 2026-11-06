@@ -20,7 +20,7 @@ class StaffChromeTest extends TestCase
 
     private function sidebar(string $html): string
     {
-        $this->assertSame(1, preg_match('~<aside class="sidebar" id="hdSidebar">(.*?)</aside>~s', $html, $m), 'sidebar not found');
+        $this->assertSame(1, preg_match('~<aside class="sidebar[^"]*" id="hdSidebar">(.*?)</aside>~s', $html, $m), 'sidebar not found');
 
         return $m[1];
     }

@@ -17,6 +17,11 @@ Route::redirect('/customer', '/customer/venues')->name('customer.index');
    tests/Feature/PrivacyPageTest.php checks it is not linked yet: update that test then. */
 Route::view('/privacy', 'privacy')->name('privacy');
 
+/* Terms and Conditions: public, static. Linked from the customer register checkbox and the Google
+   "Finish creating your account" checkbox (gsTerms), in a new tab so a half-filled form is kept.
+   Not in any footer, and it does not link the privacy page (Aron 2026-11-05). */
+Route::view('/terms', 'terms')->name('terms');
+
 require __DIR__ . '/areas/auth.php';
 require __DIR__ . '/areas/cbook.php';
 require __DIR__ . '/areas/cacct.php';

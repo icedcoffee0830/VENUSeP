@@ -51,12 +51,11 @@ function faq_sections()
         return $cache;
     }
     $cache = [];
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return $cache;
     }
     try {
-        foreach ($pdo->query("SELECT section_key, label FROM faq_sections ORDER BY sort_order, section_key") as $row) {
+        foreach (\App\Queries\FaqQueries::sections() as $row) {
             $cache[$row['section_key']] = $row['label'];
         }
     } catch (PDOException $e) {
@@ -71,21 +70,11 @@ function faq_sections()
 function faqs_by_section($includeHidden = false)
 {
     $out = [];
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return $out;
     }
-    $where = [];
-    if (!$includeHidden) {
-        $where[] = "is_active = 1";
-    }
-
     try {
-        $sql = "SELECT id, section_key, question, answer, sort_order, is_active, is_builtin, policy,
-                       default_question, default_answer, updated_at
-                  FROM faqs" . ($where ? " WHERE " . implode(" AND ", $where) : "") . "
-                 ORDER BY section_key, sort_order, id";
-        foreach ($pdo->query($sql) as $row) {
+        foreach (\App\Queries\FaqQueries::all($includeHidden) as $row) {
             $row['is_active']  = (bool) $row['is_active'];
             $row['is_builtin'] = (bool) $row['is_builtin'];
             $row['is_changed'] = $row['is_builtin']

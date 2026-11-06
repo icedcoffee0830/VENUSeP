@@ -53,13 +53,8 @@
       /* table wrapper — horizontal scroll for the wide 11-column table */
       .th-table-wrap { padding: 14px 18px 18px; overflow-x: auto; }
 
-      /* status badges — team soft-tint palette (no loud fills, no bold) */
-      .t-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
-      .t-green { background: #eaf6ef; color: #1c7a4f; }
-      .t-amber { background: #fbf1dd; color: #8a5a00; }
-      .t-red   { background: #fcecec; color: #b23a3a; }
-      .t-navy  { background: #e9eff8; color: #2b4a7e; }
-      .t-gray  { background: #eef0f2; color: #55606b; }
+      /* status badges — team soft-tint palette (no loud fills, no bold); the staff words are long, so they wrap */
+      .tabulator-cell .vz-chip { white-space: normal; }
 
       /* row action buttons */
       .th-actions { display: inline-flex; gap: 6px; }
@@ -93,6 +88,7 @@
 @endpush
 @section('content')
       <main class="app-main">
+        @include('partials.no-halls-note')
         <div class="app-content">
           <div class="container-fluid">
             <div class="th-page">
@@ -109,7 +105,7 @@
                   <h3>All Transactions</h3>
                   <div class="th-search">
                     <i class="bi bi-search" aria-hidden="true"></i>
-                    <input id="table-filter" type="search" placeholder="Filter rows..." aria-label="Filter rows" />
+                    <input id="table-filter" type="search" placeholder="Search customer, venue or booking no.…" aria-label="Search customer, venue or booking number" />
                   </div>
                 </div>
 
@@ -124,24 +120,18 @@
                     <label for="payment-status-filter">Payment Status</label>
                     <select id="payment-status-filter">
                       <option value="">All</option>
-                      <option value="Paid">Paid</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Payment pending">Payment pending</option>
-                      <option value="Payment due">Payment due</option>
-                      <option value="Overdue">Overdue</option>
-                      <option value="Unpaid">Unpaid</option>
-                      <option value="Refunded">Refunded</option>
+                      @foreach ($paymentLabels as $label)
+                      <option value="{{ $label }}">{{ $label }}</option>
+                      @endforeach
                     </select>
                   </div>
                   <div class="th-field">
                     <label for="booking-status-filter">Booking Status</label>
                     <select id="booking-status-filter">
                       <option value="">All</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Approved">Approved</option>
-                      <option value="Rejected">Rejected</option>
-                      <option value="Completed">Completed</option>
-                      <option value="Cancelled">Cancelled</option>
+                      @foreach ($bookingLabels as $label)
+                      <option value="{{ $label }}">{{ $label }}</option>
+                      @endforeach
                     </select>
                   </div>
                   <div class="th-field">
@@ -193,18 +183,10 @@
           return Number.isNaN(parsed) ? 0 : parsed;
         };
 
-        // status → team soft-tint badge
-        const badgeClass = (value) => ({
-          Paid: 't-green', Approved: 't-green',
-          Pending: 't-amber',
-          'Payment pending': 't-gray', 'Payment due': 't-amber', Overdue: 't-red',   /* post-pay states */
-          Rejected: 't-red',
-          Unpaid: 't-gray', Cancelled: 't-gray',
-          Refunded: 't-navy', Completed: 't-navy',
-        }[value] || 't-gray');
+        const TONES = @json(\App\Support\Status::CHIP_TONES);
         const statusBadge = (cell) => {
           const v = cell.getValue();
-          return `<span class="t-badge ${badgeClass(v)}">${v}</span>`;
+          return `<span class="vz-chip vz-chip-${TONES[v] || 'grey'}">${v}</span>`;
         };
 
         const actionButtons = (cell) => {
@@ -222,7 +204,7 @@
           // it here would never let staff just LOOK at the receipt in the tab.
           const receiptBtn = row.hasReceipt
             ? `<a class="th-act" href="{{ route('admin.receipt') }}?booking=${encodeURIComponent(row.bookingId)}"><i class="bi bi-receipt"></i>Receipt</a>`
-            : `<span class="th-act is-disabled" title="No System Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
+            : `<span class="th-act is-disabled" title="No Transaction Receipt yet — issued once payment is confirmed"><i class="bi bi-receipt"></i>Receipt</span>`;
           return `
             <div class="th-actions">
               ${viewBtn}
@@ -238,6 +220,8 @@
           paginationSize: 10,          /* the size box is assets/js/table-page-size.js: type a number, or pick 10 / 25 / 50 / 100 / All */
           movableColumns: true,
           initialSort: [{ column: 'transactionDate', dir: 'desc' }],
+          /* A customer's name like =HYPERLINK(...) must not run as a formula when the CSV is opened in a spreadsheet. */
+          columnDefaults: { accessorDownload: (v) => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v) },
           columns: [
             { title: 'Transaction ID', field: 'transactionId', minWidth: 150, width: 150 },
             { title: 'Booking ID', field: 'bookingId', minWidth: 140, width: 140 },
@@ -247,8 +231,8 @@
             { title: 'Transaction Date', field: 'transactionDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 150, width: 150 },
             { title: 'Amount', field: 'amount', minWidth: 110, width: 110, hozAlign: 'right' },
             { title: 'Payment Method', field: 'paymentMethod', minWidth: 150, width: 150 },
-            { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
-            { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 130, width: 130, hozAlign: 'center' },
+            { title: 'Payment Status', field: 'paymentStatus', formatter: statusBadge, minWidth: 170, width: 170, hozAlign: 'center' },
+            { title: 'Booking Status', field: 'bookingStatus', formatter: statusBadge, minWidth: 170, width: 170, hozAlign: 'center' },
             { title: 'Actions', field: 'actions', formatter: actionButtons, headerSort: false, minWidth: 180, width: 180, hozAlign: 'center', print: false },   /* buttons mean nothing on paper */
           ],
         });
@@ -305,6 +289,7 @@
            size to print the whole (filtered) list. */
         document.getElementById('print-table').addEventListener('click', () => table.print('visible', true));
         venusepPageSize(table, [10, 25, 50, 100]);
+        table.on('tableBuilt', () => table.element.prepend(table.element.querySelector('.tabulator-footer')));   /* the pager goes above the rows */
       });
     </script>
     @php include base_path('legacy/includes/booking-details-modal.php'); /* "View" */ @endphp

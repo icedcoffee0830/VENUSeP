@@ -1,0 +1,50 @@
+{{-- The look of the public legal pages (privacy, terms): the FAQ page's colours and fonts. --}}
+<style>
+  /* The FAQ page's tokens. */
+  :root {
+    --crimson: #a11626; --gold: #d9930d; --yellow: #ffd166;
+    --paper: #f5e9e7; --muted: #d5b8b5; --muted-2: #ac8f8d;
+    --line: rgba(255,255,255,.14);
+    --font-display: Archivo, Inter, system-ui, sans-serif;
+    --font-body: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--paper); font-family: var(--font-body); -webkit-font-smoothing: antialiased; overflow-x: hidden;
+         background: #3c0c14 linear-gradient(162deg, #7d1120 0%, #3c0c14 40%, #120809 100%) fixed; }
+  a { color: var(--yellow); text-underline-offset: 3px; }
+  a:hover { color: #fff; }
+  a:focus-visible { outline: 2px solid var(--yellow); outline-offset: 3px; border-radius: 4px; }
+  h1, h2 { font-family: var(--font-display); margin: 0; color: #fff; text-wrap: balance; }
+
+  main { padding: 64px 0 80px; scroll-margin-top: 96px; }
+  main:focus { outline: none; }
+  .pv-wrap { max-width: 760px; margin: 0 auto; padding: 0 28px; }
+  .pv-draft { margin: 0 0 28px; padding: 14px 18px; border-radius: 14px; border: 1px solid rgba(255,209,102,.35); background: rgba(255,209,102,.1);
+    font-size: 14px; line-height: 1.6; font-weight: 600; color: var(--yellow); }
+  h1 { font-size: 48px; line-height: 1.05; letter-spacing: -.03em; font-weight: 800; }
+  .pv-lead { margin: 16px 0 0; font-size: 16px; line-height: 1.72; color: var(--muted); }
+  .pv-back { display: inline-block; margin-top: 18px; font-size: 13.5px; font-weight: 700; text-decoration: none; }
+
+  section { margin-top: 44px; scroll-margin-top: 96px; }   /* clear of the sticky nav */
+  .pv-skip { position: absolute; left: 12px; top: -60px; z-index: 100; padding: 10px 16px; border-radius: 10px; background: var(--yellow); color: #1d1214; font-weight: 700; text-decoration: none; }
+  .pv-skip:focus { top: 12px; color: #1d1214; }
+  .pv-tel { white-space: nowrap; }
+  h2 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  section p, section li, address { font-size: 15.5px; line-height: 1.72; }
+  section p { margin: 14px 0 0; max-width: 68ch; }
+  section ul { margin: 14px 0 0; padding-left: 22px; max-width: 68ch; }
+  section li + li { margin-top: 6px; }
+  strong { color: #fff; }
+  address { margin-top: 14px; font-style: normal; }
+  .pv-updated { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--muted-2); }
+
+  .pv-footer { border-top: 1px solid var(--line); background: rgba(8,3,4,.35); }
+  .pv-footer .pv-wrap { padding-top: 18px; padding-bottom: 22px; font-size: 12.5px; color: var(--muted-2); }
+
+  @media (max-width: 720px) {
+    .pv-wrap { padding: 0 16px; }
+    main { padding: 40px 0 60px; }
+    h1 { font-size: 34px; }
+    h2 { font-size: 20px; }
+  }
+</style>

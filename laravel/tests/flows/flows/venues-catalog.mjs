@@ -43,11 +43,28 @@ export default {
       return s.admin;
     });
 
+    await step('Adds a hostel room from the hostel section: its form is fixed to the hostel', async () => {
+      const page = s.admin;
+      const name = `Flow Dorm ${ctx.uniq}`.slice(0, 60);
+      await page.goto(ctx.url('/admin/venue-management'));
+      await page.getByRole('link', { name: 'Add hostel room' }).click();
+      await expect.url(page, /\/admin\/hostel-room-form$/);
+      expect.equal(await page.locator('#roomLoc').inputValue(), 'USeP Hostel', 'the fixed location');
+      await page.locator('#roomName').fill(name);
+      await page.getByRole('button', { name: 'Save Changes' }).click();
+      await modal(ctx, page, { expect: /Room created as h\d+/ });
+      await expect.url(page, /\/admin\/venue-management$/);
+      await expect.text(page, name);
+      const beds = await dbOne(`SELECT COUNT(*) AS n FROM hostel_beds b JOIN rooms r ON r.id = b.room_id WHERE r.name = ?`, [name]);
+      expect.ok(Number(beds.n) > 0, 'the new hostel room has no beds');
+      return page;
+    });
+
     await step('Adds an event room to Bahay Alumni (capacity 40, P2,500/day)', async () => {
       const page = s.admin;
       s.roomName = `Flow Room ${ctx.uniq}`.slice(0, 60);
       await page.goto(ctx.url('/admin/venue-management'));
-      await page.getByRole('link', { name: '+ Add Room' }).click();
+      await page.getByRole('link', { name: 'Add room', exact: true }).first().click();
       await expect.url(page, /\/admin\/room-form$/);
       await page.locator('#roomName').fill(s.roomName);
       await page.locator('#roomLoc .vm-dd-trigger').click();
@@ -151,9 +168,9 @@ export default {
     await step('Disabled: the room leaves the customer list and its direct link goes back to the list', async () => {
       const page = s.admin;
       await page.goto(ctx.url('/admin/venue-management'));
-      await roomCard(page, s.code).locator(`[data-toggle-id="${s.code}"]`, { hasText: 'Disable' }).click();
-      await modal(ctx, page, { expect: /hidden from customers/, ok: 'Disable' });
-      await expect.visible(roomCard(page, s.code).getByText('Hidden from customers'), 'the card does not say "Hidden from customers"');
+      await roomCard(page, s.code).locator(`[data-toggle-id="${s.code}"]`, { hasText: 'Hide from customers' }).click();
+      await modal(ctx, page, { expect: /hidden from customers/, ok: 'Hide' });
+      await expect.visible(roomCard(page, s.code).getByText('Hidden', { exact: true }), 'the card does not say "Hidden"');
       expect.equal((await dbOne(`SELECT is_active FROM rooms WHERE room_code = ?`, [s.code])).is_active, 0, 'rooms.is_active');
 
       const cust = s.cust;

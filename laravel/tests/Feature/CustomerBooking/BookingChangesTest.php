@@ -81,11 +81,11 @@ class BookingChangesTest extends TestCase
             [$id] = $this->seedVenueBooking('r1', 'approved', 'await_gcash');
             DB::table('bookings')->where('id', $id)->update(['customer_id' => $customer]);
         }
-        $this->assertNull(BookingRules::tooManyUnpaid(venusep_db(), $customer, 1));
+        $this->assertNull(BookingRules::tooManyUnpaid($customer, 1));
         [$id] = $this->seedVenueBooking('r1', 'pending', 'locked');
         DB::table('bookings')->where('id', $id)->update(['customer_id' => $customer]);
-        $this->assertNotNull(BookingRules::tooManyUnpaid(venusep_db(), $customer, 1));
-        $this->assertNull(BookingRules::tooManyUnpaid(venusep_db(), $customer, 2));
+        $this->assertNotNull(BookingRules::tooManyUnpaid($customer, 1));
+        $this->assertNull(BookingRules::tooManyUnpaid($customer, 2));
     }
 
     public function test_only_an_admin_changes_a_price(): void

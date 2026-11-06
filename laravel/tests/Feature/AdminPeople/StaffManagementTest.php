@@ -27,6 +27,17 @@ class StaffManagementTest extends TestCase
         $this->actingAsCustomer()->get(route('admin.staff'))->assertRedirect(route('admin.admin-login'));
     }
 
+    public function test_the_tab_comes_from_the_address(): void
+    {
+        $this->actingAsAdmin();
+        $this->get(route('admin.staff'))->assertOk()
+            ->assertSee('data-tab-panel="people">', false)->assertSee('data-tab-panel="covers" hidden', false);
+        $this->get(route('admin.staff', ['tab' => 'covers']))->assertOk()
+            ->assertSee('data-tab-panel="covers">', false)->assertSee('data-tab-panel="people" hidden', false);
+        /* an unknown tab is the first one */
+        $this->get(route('admin.staff', ['tab' => 'nope']))->assertOk()->assertSee('data-tab-panel="people">', false);
+    }
+
     public function test_admin_sees_the_roster(): void
     {
         $this->actingAsAdmin()->get(route('admin.staff'))->assertOk()
@@ -67,7 +78,7 @@ class StaffManagementTest extends TestCase
                 ->getContent();
             $this->assertStringContainsString('formatter: function (cell) { return escText(cell.getRow().getData().venue); }', $html);
             $this->assertStringContainsString('editorParams: { values: venueEditorValues, itemFormatter: escText }', $html);
-            $this->assertStringContainsString('headerFilterParams: { values: venueFilterValues, clearable: true, itemFormatter: escText }', $html);
+            $this->assertStringContainsString('<option value="1">Hall &lt;img src=x onerror=alert(1)&gt;</option>', $html);   // the Office filter box
         } finally {
             DB::table('venues')->where('id', 1)->update(['name' => $old]);
         }
@@ -77,6 +88,7 @@ class StaffManagementTest extends TestCase
     {
         $this->actingAsAdmin()->get(route('admin.admin-register'))->assertOk()
             ->assertSee('Create a staff or admin account')
+            ->assertSee('<a class="auth-back" href="' . route('admin.staff') . '">', false)
             ->assertSee('<option value="3">USeP Hostel</option>', false)
             ->assertSee(json_encode(route('root.register-submit')), false)
             ->assertSee(asset('logo/Logo Header 3.png'), false);

@@ -125,6 +125,14 @@ export function makeCtx({ cfg, browser, flow, record }) {
       if (String(actual) !== String(expected)) fail(`${msg ? msg + ': ' : ''}expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
     },
     match: (actual, re, msg) => { if (!re.test(String(actual))) fail(`${msg ? msg + ': ' : ''}${JSON.stringify(String(actual).slice(0, 200))} does not match ${re}`); },
+    /* a password box's eye: shows what was typed, then hides it again */
+    eye: async (input) => {
+      const eye = input.locator('xpath=following-sibling::button[@data-vz-eye]');
+      await eye.click();
+      expect.equal(await input.getAttribute('type'), 'text', 'the eye did not show the password');
+      await eye.click();
+      expect.equal(await input.getAttribute('type'), 'password', 'the eye did not hide the password');
+    },
     /* waits until the locator is visible */
     visible: async (locator, msg, timeout = 15_000) => {
       try { await locator.first().waitFor({ state: 'visible', timeout }); }

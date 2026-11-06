@@ -14,6 +14,7 @@ async function modal(ctx, page, { expect: re, fill, ok } = {}) {
   const text = ((await box.textContent()) || '').replace(/\s+/g, ' ').trim();
   if (re) ctx.expect.match(text, re, 'dialog text');
   if (fill !== undefined) await box.locator('#vzPromptInput').fill(fill);
+  if (fill !== undefined && await box.locator('#vzPromptInput[type="password"]').count()) await ctx.expect.eye(box.locator('#vzPromptInput'));
   const el = await box.elementHandle();
   await box.locator(ok ? `button[data-vz="ok"]:has-text("${ok}")` : 'button[data-vz="ok"]').click();
   await el.waitForElementState('hidden').catch(() => {});

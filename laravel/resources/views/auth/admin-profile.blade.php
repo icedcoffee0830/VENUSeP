@@ -171,7 +171,7 @@
 
       .profile-content { min-height: calc(100vh - var(--venusep-header-height)); padding: 1.2rem 1.55rem 3rem; background: var(--venusep-cream); }
       .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2.2rem; }
-      .page-heading h1 { margin: 0; font-size: 1.35rem; font-weight: 800; }
+      .page-heading h1 { margin: 0; font-size: 1.35rem; font-weight: 700; }
       .breadcrumb { display: flex; gap: 0.4rem; margin: 0; padding: 0; list-style: none; font-size: 0.82rem; }
       .breadcrumb-item + .breadcrumb-item::before { content: "/"; margin-right: 0.4rem; color: #777; }
       .breadcrumb a { color: #005dff; text-decoration: none; }
@@ -179,8 +179,8 @@
       .profile-layout { display: grid; grid-template-columns: minmax(210px, 270px) 1fr; gap: 1.35rem; align-items: start; }
       .profile-card, .settings-panel { background: #fff; border: 1px solid var(--venusep-border); border-radius: 10px; box-shadow: 0 18px 34px rgba(31, 30, 30, 0.06); }
       .profile-card { min-height: 174px; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 1.6rem 1rem; text-align: center; }
-      .profile-avatar { width: 70px; height: 70px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 0.75rem; border-radius: 50%; background: #1d1b1b; color: #fff5db; font-size: 1.45rem; font-weight: 800; }
-      .profile-card h2 { margin: 0; font-size: 1rem; font-weight: 800; }
+      .profile-avatar { width: 70px; height: 70px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 0.75rem; border-radius: 50%; background: #1d1b1b; color: #fff5db; font-size: 1.45rem; font-weight: 700; }
+      .profile-card h2 { margin: 0; font-size: 1rem; font-weight: 700; }
       .profile-card p { margin: 0.25rem 0 0; color: #67605a; font-size: 0.78rem; }
       /* the real card (2026-10-27): photo or initials, email, photo buttons */
       .profile-avatar-img { object-fit: cover; padding: 0; }
@@ -191,7 +191,7 @@
       .profile-photo-msg { min-height: 1.1em; margin-top: 0.4rem; font-size: 0.74rem; color: #6b675f; }
       .settings-panel { overflow: hidden; }
       .settings-panel-header { padding: 0.9rem 1rem; background: #fff; border-bottom: 1px solid var(--venusep-border); }
-      .settings-panel-header h2 { margin: 0; font-size: 0.95rem; font-weight: 800; }
+      .settings-panel-header h2 { margin: 0; font-size: 0.95rem; font-weight: 700; }
       .settings-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem 1rem; padding: 1rem; }
       .form-field-full, .form-actions { grid-column: 1 / -1; }
       .form-label { display: inline-block; margin-bottom: 0.35rem; color: #111; font-weight: 700; font-size: 0.78rem; }
@@ -204,7 +204,7 @@
       .pw-eye:focus-visible { outline: 2px solid #1d1b1b; outline-offset: -2px; border-radius: 6px; }
       .form-control:focus { outline: none; border-color: #1d1b1b; box-shadow: 0 0 0 0.15rem rgba(29, 27, 27, 0.14); }
       .form-actions { display: flex; gap: 0.55rem; margin-top: 0.1rem; }
-      .btn-primary-dark, .btn-outline-dark { min-height: 34px; padding: 0.35rem 0.75rem; border-radius: 6px; font-weight: 800; font-size: 0.78rem; }
+      .btn-primary-dark, .btn-outline-dark { min-height: 34px; padding: 0.35rem 0.75rem; border-radius: 6px; font-weight: 700; font-size: 0.78rem; }
       .btn-primary-dark { background: #1d1b1b; border: 1px solid #000; color: #fff; }
       .btn-primary-dark:hover, .btn-primary-dark:focus { background: #000; color: #fff; }
       .btn-outline-dark { background: var(--venusep-cream); border: 1px solid #d8c7ae; color: #111; }

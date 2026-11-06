@@ -78,10 +78,10 @@
       .rr-aside { position: sticky; top: calc(var(--venusep-header-height) + 20px); }
       .rr-kv { padding: 11px 0; border-bottom: 1px solid #f2efe9; }
       .rr-kv:last-of-type { border-bottom: 0; }
-      .rr-kv span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #a3a09a; margin-bottom: 3px; }
+      .rr-kv span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6a64; margin-bottom: 3px; }
       .rr-kv strong { font-size: 13.5px; font-weight: 640; }
       .rr-total { margin-top: 6px; padding: 13px 14px; background: #faf9f7; border: 1px solid #f0ece4; border-radius: 10px; }
-      .rr-total span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #a3a09a; margin-bottom: 3px; }
+      .rr-total span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6e6a64; margin-bottom: 3px; }
       .rr-total b { font-size: 24px; font-weight: 760; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
       .rr-total small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 
@@ -317,7 +317,7 @@
                       <div class="rr-kv"><span>Amount refunded</span><strong id="rr-proof-amt">&mdash;</strong></div>
                       <div class="rr-kv"><span>Sent to</span><strong id="rr-proof-to">&mdash;</strong></div>
                     </div>
-                    <div id="rr-proof-tile" style="max-width:420px;margin:0 auto 18px;padding:30px 14px;border:1px dashed #d7d2c8;border-radius:10px;background:#fbfaf8;color:#a3a09a;font-size:12px">GCash refund receipt &mdash; image</div>
+                    <div id="rr-proof-tile" style="max-width:420px;margin:0 auto 18px;padding:30px 14px;border:1px dashed #d7d2c8;border-radius:10px;background:#fbfaf8;color:#6e6a64;font-size:12px">GCash refund receipt &mdash; image</div>
                   </div>
                   <a class="rr-btn rr-btn-primary" href="{{ route('customer.booking-history') }}">Back to Booking History</a>
                 </div>

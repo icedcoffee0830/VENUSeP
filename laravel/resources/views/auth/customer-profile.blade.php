@@ -68,6 +68,8 @@
       .form-check-input { width: 16px; height: 16px; accent-color: var(--black); flex: none; }
 
       .account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+      .account-faq { display: none; }   /* phones: the tab bar has no FAQ tab, so it is here (desktop has it in the header) */
+      @media (max-width: 767.98px) { .account-faq { display: inline-flex; } .account-actions .btn-profile { min-height: 44px; } }
 
       /* ways of signing in (#23): password + Google, then the controls for each */
       .signin-notice { margin: 0 0 14px; padding: 10px 13px; border-radius: 10px; background: #fcf6f4; border: 1px solid #efe0db; color: #4a4440; font-size: .84rem; line-height: 1.5; }
@@ -201,14 +203,14 @@
                         @fragment('cp-email-password')
                         <div data-live="cp-email-password" style="display:contents">
                         @if ($cpHasPassword)
-                        <div class="profile-form-group" id="emailPasswordGroup" hidden><label for="emailPassword">Current Password <span style="font-weight:400;color:#8a857d">(to change your email)</span></label><input class="form-control" id="emailPassword" name="current_password" type="password" autocomplete="current-password" aria-describedby="emailPasswordValidation"><small class="profile-validation" id="emailPasswordValidation" aria-live="polite"></small></div>
+                        <div class="profile-form-group" id="emailPasswordGroup" hidden><label for="emailPassword">Current Password <span style="font-weight:400;color:#6e6a64">(to change your email)</span></label><input class="form-control" id="emailPassword" name="current_password" type="password" autocomplete="current-password" aria-describedby="emailPasswordValidation"><small class="profile-validation" id="emailPasswordValidation" aria-live="polite"></small></div>
                         @elseif (!$cpReauthOk)
                         <div class="profile-form-group" id="emailPasswordGroup" hidden><p class="signin-note" role="status">To change your email, first confirm it&rsquo;s you with Google (Account Security, below).</p></div>
                         @endif
                         </div>
                         @endfragment
                         <div class="profile-form-group"><label for="contactNumber">Contact Number</label><input class="form-control" id="contactNumber" name="contact_number" type="tel" autocomplete="tel" value="{{ $customerProfile['phone'] }}" aria-describedby="contactNumberValidation" required><small class="profile-validation" id="contactNumberValidation" aria-live="polite"></small></div>
-                        <div class="profile-form-group"><label for="universityId">USeP ID number <span style="font-weight:400;color:#8a857d">(optional)</span></label><input class="form-control" id="universityId" name="university_id_no" type="text" value="{{ $customerProfile['universityId'] }}" placeholder="e.g. 2023-00412"><small class="profile-validation">Staff check your uploaded ID against this when applying the USeP discount.</small></div>
+                        <div class="profile-form-group"><label for="universityId">USeP ID number <span style="font-weight:400;color:#6e6a64">(optional)</span></label><input class="form-control" id="universityId" name="university_id_no" type="text" value="{{ $customerProfile['universityId'] }}" placeholder="e.g. 2023-00412"><small class="profile-validation">Staff check your uploaded ID against this when applying the USeP discount.</small></div>
                         <div class="profile-form-group full-width"><label for="address">Address</label><input class="form-control" id="address" name="address" type="text" autocomplete="street-address" value="{{ $customerProfile['address'] }}" required></div>
                       </div>
                       <div class="profile-actions"><button class="btn-profile btn-profile-primary" type="submit"><i class="bi bi-check2" aria-hidden="true"></i>Save Changes</button><button class="btn-profile" type="reset">Cancel</button></div>
@@ -319,7 +321,7 @@
 
                   <section class="profile-section" aria-labelledby="accountActionsTitle">
                     <div class="profile-section-header"><h2 id="accountActionsTitle">Account Actions</h2><p>Manage access to your VENUSeP account.</p></div>
-                    <div class="account-actions"><a class="btn-profile" href="{{ route('customer.logout') }}"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>Log Out</a><!-- [SIM] deactivate not built --><button class="btn-profile btn-profile-danger" type="button" disabled title="Account deactivation is under development"><i class="bi bi-person-x" aria-hidden="true"></i>Deactivate Account</button></div>
+                    <div class="account-actions"><a class="btn-profile account-faq" href="{{ route('customer.faq', ['in' => 'app']) }}"><i class="bi bi-question-circle" aria-hidden="true"></i>FAQ</a><a class="btn-profile" href="{{ route('customer.logout') }}"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>Log Out</a><!-- [SIM] deactivate not built --><button class="btn-profile btn-profile-danger" type="button" disabled title="Account deactivation is under development"><i class="bi bi-person-x" aria-hidden="true"></i>Deactivate Account</button></div>
                   </section>
                 </div>
               </div>

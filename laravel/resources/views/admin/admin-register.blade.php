@@ -5,8 +5,9 @@
   ==================================================================
   Ported from the teammate's admin-register.php. Standalone AUTH page:
   NO sidebar/header. Restyled to the team palette; fields + validation
-  preserved (venue, full name, email, contact, password + confirm,
-  terms).
+  preserved (venue, full name, email, contact, password + confirm).
+  No terms box: the admin makes someone else's account, so agreeing for
+  them would mean nothing (Aron 2026-11-05).
 
   WIRED: posts to register-submit.php, which creates the users + staff rows,
   then returns to the dashboard. The admin stays signed in as themselves —
@@ -95,7 +96,8 @@
       .form-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
       .form-check-input { width: 15px; height: 15px; accent-color: var(--crimson); }
       .form-check-label { color: var(--muted); }
-      form > .form-check { margin: 4px 0 4px; }                 /* the register page's terms box stands alone */
+      .auth-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: #4a4440; text-decoration: none; }
+      .auth-back:hover { color: var(--crimson); }
       .auth-link { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
       .auth-link:hover { color: var(--crimson); }
       .btn-auth { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border: 0; border-radius: 999px;
@@ -150,6 +152,7 @@
       </aside>
       <section class="auth-panel" aria-labelledby="adminRegisterTitle">
         <div class="auth-card">
+          <a class="auth-back" href="{{ route('admin.staff') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to Staff Management</a>
           <a class="auth-brand" href="{{ route('admin.admin-login') }}" title="VENUSeP staff"><img src="{{ asset('logo/Logo Header 3.png') }}" alt="VENUSeP" /></a>
           <div class="auth-heading">
             <h1 class="auth-title" id="adminRegisterTitle">Create a staff or admin account</h1>
@@ -224,8 +227,6 @@
               <div class="input-group password-field"><span class="input-group-text"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><input id="adminConfirmPassword" name="confirm_password" type="password" autocomplete="new-password" placeholder="Confirm password" aria-describedby="confirmPasswordValidation" required /><button class="password-toggle" type="button" data-password-toggle="adminConfirmPassword" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div>
               <small class="validation-message" id="confirmPasswordValidation" aria-live="polite"></small>
             </div>
-            <label class="form-check"><input class="form-check-input" type="checkbox" value="1" id="adminTerms" name="terms" aria-describedby="termsValidation" required /><span class="form-check-label">I agree to the Terms and Conditions</span></label>
-            <small class="validation-message" id="termsValidation" aria-live="polite"></small>
 
             <button type="submit" class="btn-auth"><i class="bi bi-person-plus" aria-hidden="true"></i>Create Account</button>
             <small class="success-message" id="registrationSuccessMessage" aria-live="polite"></small>
@@ -299,19 +300,16 @@
             const fullName = form.querySelector('[name="full_name"]');
             const contactNumber = form.querySelector('[name="contact_number"]');
             const confirmPassword = form.querySelector('[name="confirm_password"]');
-            const terms = form.querySelector('[name="terms"]');
             const fullNameError = fullName.value.trim() ? '' : 'Please enter your full name.';
             const contactError = contactNumber.value.trim() ? '' : 'Please enter your contact number.';
             const passwordError = password.value.length >= 8 ? '' : 'Password must be at least 8 characters.';
             const confirmError = confirmPassword.value && confirmPassword.value === password.value ? '' : 'Passwords must match.';
-            const termsError = terms.checked ? '' : 'You must agree to the Terms and Conditions.';
 
             setFieldState(fullName, 'fullNameValidation', fullNameError);
             setFieldState(contactNumber, 'contactNumberValidation', contactError);
             setFieldState(password, 'passwordValidation', passwordError);
             setFieldState(confirmPassword, 'confirmPasswordValidation', confirmError);
-            setFieldState(terms, 'termsValidation', termsError);
-            hasError = hasError || Boolean(fullNameError || contactError || passwordError || confirmError || termsError);
+            hasError = hasError || Boolean(fullNameError || contactError || passwordError || confirmError);
             /* every staff account handles one venue — no unassigned staff.
                An administrator handles all of them, so has none. */
             const isAdmin = regRole() === 'admin';
@@ -364,7 +362,7 @@
                 if (!out.ok) {
                   const map = { full_name: 'fullNameValidation', email: 'emailValidation',
                                 contact_number: 'contactNumberValidation', password: 'passwordValidation',
-                                confirm_password: 'confirmPasswordValidation', terms: 'termsValidation',
+                                confirm_password: 'confirmPasswordValidation',
                                 venue_id: 'venueValidation', office_group: 'groupValidation' };
                   const target = out.field && form.querySelector('[name="' + out.field + '"]');
                   if (target) { setFieldState(target, map[out.field], out.message); target.focus(); }

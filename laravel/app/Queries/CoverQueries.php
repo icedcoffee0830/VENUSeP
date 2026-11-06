@@ -38,6 +38,20 @@ class CoverQueries
             WHEN m." . self::MOVE_WAITING . " THEN 'waiting'
             ELSE 'expired' END";
 
+    /* What waits for the signed-in admin to answer, for the sidebar: the group of the office that
+       gets the cover or the person answers; the super admin, every one. */
+    public static function waitingForMe(): array
+    {
+        $mine = admin_is_super() ? '' : ' AND v.office_group = (SELECT office_group FROM users WHERE id = ?)';
+        $args = admin_is_super() ? [] : [(int) session('user_id')];
+        return [
+            'covers' => (int) DB::selectOne('SELECT COUNT(*) AS n FROM staff_covers c JOIN venues v ON v.id = c.venue_id WHERE c.'
+                . str_replace(' AND ', ' AND c.', self::COVER_WAITING) . $mine, $args)->n,
+            'moves'  => (int) DB::selectOne('SELECT COUNT(*) AS n FROM staff_moves m JOIN venues v ON v.id = m.to_venue_id WHERE m.'
+                . str_replace(' AND ', ' AND m.', self::MOVE_WAITING) . $mine, $args)->n,
+        ];
+    }
+
     /* One cover with its state and both sides' groups, or null. */
     public static function findCover(int $id): ?array
     {

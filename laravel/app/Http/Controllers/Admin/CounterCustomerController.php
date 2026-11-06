@@ -67,6 +67,9 @@ class CounterCustomerController
         if (!venusep_is_staff_session() || !self::staffStillActive()) {
             return $this->reply(403, ['ok' => false, 'results' => [], 'message' => 'Staff only.']);
         }
+        if (staff_has_no_halls()) {   // no hall, no counter: nothing to book a customer on
+            return $this->reply(403, ['ok' => false, 'results' => [], 'message' => STAFF_NO_HALLS_NOTE]);
+        }
 
         /* Exact email, exact mobile, or a name of three letters or more; anything else finds nothing. */
         $q = trim((string) $request->query('q', ''));
@@ -128,8 +131,8 @@ class CounterCustomerController
         $name   = trim((string) $request->input('full_name', ''));
         $email  = mb_strtolower(trim((string) $request->input('email', '')));
         $mobile = ph_mobile_strict($request->input('phone', ''));
-        if ($office === null || !staff_may_handle_venue($office['id'])) {
-            return $this->reply(403, ['ok' => false, 'message' => 'This room belongs to another office. Only that office\'s counter can make the account here.']);
+        if ($office === null || !staff_may_handle_room_code($request->input('room'))) {
+            return $this->reply(403, ['ok' => false, 'message' => 'This room is not one you handle. Only its staff can make the account here.']);
         }
         if ($name === '' || mb_strlen($name) > 190) {
             return $this->reply(400, ['ok' => false, 'field' => 'name', 'message' => 'Enter the customer’s full name.']);
@@ -153,8 +156,8 @@ class CounterCustomerController
         $pdo = venusep_db_or_fail();
         try {
             [$customerId, $outboxId] = DB::transaction(fn () => [
-                CustomerQueries::createAtCounter($email, venusep_unique_username($pdo, $email), $name, $mobile, $office['id']),
-                queue_counter_welcome($pdo, $name, $email, $office, (int) session('user_id')),
+                CustomerQueries::createAtCounter($email, venusep_unique_username($email), $name, $mobile, $office['id']),
+                queue_counter_welcome($name, $email, $office, (int) session('user_id')),
             ]);
         } catch (QueryException $e) {
             if (($e->errorInfo[1] ?? null) !== 1062) {
@@ -163,7 +166,7 @@ class CounterCustomerController
             /* the same email registered a moment ago: uq_users_email */
             return $this->reply(409, ['ok' => false, 'field' => 'email', 'error' => 'email_taken', 'message' => self::ALREADY_HAS_ACCOUNT]);
         }
-        mail_send($pdo, $outboxId);   // never throws
+        mail_send($outboxId);   // never throws
 
         return $this->reply(200, ['ok' => true, 'customerId' => $customerId, 'name' => $name,
             'phone' => self::maskPhone($mobile), 'warning' => $warning,
@@ -204,6 +207,9 @@ class CounterCustomerController
         if (!venusep_is_staff_session() || !self::staffStillActive()) {
             return $this->reply(403, ['ok' => false, 'message' => 'Staff only.']);
         }
+        if (staff_has_no_halls()) {
+            return $this->reply(403, ['ok' => false, 'message' => STAFF_NO_HALLS_NOTE]);
+        }
         $token = $request->input('csrf', $request->input('_token', $request->header('X-CSRF-TOKEN')));
         if (!csrf_valid($token)) {
             return $this->reply(400, ['ok' => false, 'message' => 'This page has expired. Reload it and try again.']);
@@ -223,15 +229,7 @@ class CounterCustomerController
         try {
             /* FOR UPDATE: two wrong passwords sent at the same moment must both count. */
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare(
-                'SELECT u.id, u.password_hash, u.is_active, u.reauth_failed_attempts, u.reauth_lock_level,
-                        CASE WHEN u.reauth_locked_until > NOW()
-                             THEN TIMESTAMPDIFF(SECOND, NOW(), u.reauth_locked_until) ELSE 0 END AS lock_seconds
-                   FROM customers c JOIN users u ON u.id = c.user_id
-                  WHERE c.id = :c LIMIT 1 FOR UPDATE'
-            );
-            $stmt->execute([':c' => $customerId]);
-            $user = $stmt->fetch();
+            $user = CustomerQueries::lockForPasswordCheck($customerId);
 
             if (!$user) {
                 $pdo->rollBack();

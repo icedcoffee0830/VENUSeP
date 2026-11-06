@@ -40,18 +40,11 @@ function customer_contact() {
     if (!customer_logged_in()) {
         return $contact;
     }
-    $pdo = venusep_db();
-    if ($pdo === null) {
+    if (venusep_db() === null) {
         return $contact;
     }
     try {
-        $stmt = $pdo->prepare(
-            'SELECT c.id, c.full_name, c.phone, c.university_id_no, c.photo_path, u.email
-               FROM customers c LEFT JOIN users u ON u.id = c.user_id
-              WHERE c.id = :id LIMIT 1'
-        );
-        $stmt->execute([':id' => (int) session('customer_id')]);
-        $row = $stmt->fetch();
+        $row = \App\Queries\CustomerQueries::findContact((int) session('customer_id'));
         if ($row) {
             $contact = [
                 'id'           => (int) $row['id'],

@@ -32,8 +32,9 @@ class ReportQueries
        the office totals. Quarters with no business still appear, as zeroes: a missing
        quarter would compress the x-axis and make a quiet period look like growth.
        $now (a timestamp) is "today"; tests pass a fixed date.
-       customers: each customer once, however many offices of the list they booked at. */
-    public static function quarters(array $offices, int $count = 4, ?int $now = null): array
+       customers: each customer once, however many offices of the list they booked at.
+       $halls: narrow to these rooms (a staff member's dashboard); Reports leaves it null. */
+    public static function quarters(array $offices, int $count = 4, ?int $now = null, ?array $halls = null): array
     {
         $now ??= time();
         /* The window starts from the FIRST DAY of the current quarter: "-9 months" from a
@@ -64,7 +65,7 @@ class ReportQueries
                    SUM(x.written_off > 0) AS write_offs,
                    SUM(x.written_off) AS written_off
             FROM (" . self::base($offices) . ") x
-            WHERE x.event_date IS NOT NULL
+            WHERE x.event_date IS NOT NULL" . ($halls === null ? '' : ' AND x.room_id IN (' . self::idList($halls) . ')') . "
             GROUP BY y, q
         ");
         foreach ($rows as $r) {

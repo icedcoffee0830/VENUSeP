@@ -19,6 +19,8 @@
   .bk-gal-track.drag{scroll-snap-type:none;cursor:grabbing;user-select:none}
   .bk-gal-slide{position:relative;flex:0 0 auto;height:100%;aspect-ratio:3/2;border-radius:20px;overflow:hidden;background-color:#e9e7e2;background-size:cover;background-position:center;scroll-snap-align:start}
   .bk-gal-slide::after{content:"";position:absolute;inset:auto 0 0 0;height:38%;background:linear-gradient(180deg,transparent,rgba(14,5,6,.5));pointer-events:none}
+  .bk-gal-photo{appearance:none;border:0;padding:0;cursor:pointer}
+  .bk-gal-photo:focus-visible{outline:2px solid #fff;outline-offset:-5px}
   .bk-gal-slide.solo{flex-basis:100%;aspect-ratio:auto}
   .bk-gal-slide.ph{display:flex;align-items:center;justify-content:center;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.035) 0 11px,transparent 11px 22px)}
   .bk-gal-slide.ph span{font:500 12px/1 ui-monospace,Menlo,monospace;color:#9a958c}

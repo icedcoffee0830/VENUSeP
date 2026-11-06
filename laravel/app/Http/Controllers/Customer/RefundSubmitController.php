@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Queries\BookingQueries;
+use App\Queries\RefundQueries;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use PDOException;
@@ -48,32 +50,21 @@ class RefundSubmitController
             return self::reply(400, ['ok' => false, 'message' => 'Invalid request.']);
         }
 
-        $pdo = venusep_db();
-        if ($pdo === null) {
+        if (venusep_db() === null) {
             return self::reply(503, ['ok' => false, 'message' => 'The database is unreachable, so nothing was changed.']);
         }
 
         /* Scoped to the session customer. */
-        $bStmt = $pdo->prepare(
-            'SELECT b.id, b.payment_method, b.payment_status, b.total_amount, b.refunds_allowed,
-                    COALESCE(vd.start_date, hd.check_in_date) AS first_day,
-                    (SELECT p.id FROM payments p WHERE p.booking_id = b.id
-                      AND p.payment_record_status = \'confirmed\' ORDER BY p.id DESC LIMIT 1) AS payment_id
-               FROM bookings b
-               LEFT JOIN venue_booking_details vd  ON vd.booking_id = b.id
-               LEFT JOIN hostel_booking_details hd ON hd.booking_id = b.id
-              WHERE b.id = :b AND b.customer_id = :c'
-        );
-        $bStmt->execute([':b' => $id, ':c' => (int) session('customer_id')]);
-        $booking = $bStmt->fetch();
+        if (!BookingQueries::waitForTurn($id)) {
+            return self::reply(409, ['ok' => false, 'message' => 'Someone else is working on this booking. Reload the page and try again.']);
+        }
+        $booking = RefundQueries::findForCustomer($id, (int) session('customer_id'));
         if (!$booking) {
             return self::reply(404, ['ok' => false, 'message' => 'That booking was not found.']);
         }
 
         /* The latest refund on this booking, if any. */
-        $rStmt = $pdo->prepare('SELECT * FROM refunds WHERE booking_id = :b ORDER BY id DESC LIMIT 1');
-        $rStmt->execute([':b' => $id]);
-        $refund = $rStmt->fetch();
+        $refund = RefundQueries::findLatestRefund($id);
 
         /* What the booking's payment goes back to when a request ends without a payout. */
         $paidState = $booking['payment_method'] === 'cash' ? 'paid_cash' : 'confirmed';
@@ -84,17 +75,8 @@ class RefundSubmitController
                 return self::reply(409, ['ok' => false, 'message' => 'There is no open refund request to withdraw.']);
             }
             try {
-                $pdo->beginTransaction();
-                $pdo->prepare("UPDATE refunds SET refund_status = 'withdrawn', withdrawn_at = NOW() WHERE id = :r")
-                    ->execute([':r' => $refund['id']]);
-                $pdo->prepare('SET @venusep_actor_user_id = :u, @venusep_action_note = :n')
-                    ->execute([':u' => (int) session('user_id'), ':n' => 'Refund request withdrawn by the customer.']);
-                $pdo->prepare('UPDATE bookings SET payment_status = :s WHERE id = :b')
-                    ->execute([':s' => $paidState, ':b' => $id]);
-                $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
-                $pdo->commit();
+                RefundQueries::withdraw((int) $refund['id'], $id, $paidState, (int) session('user_id'));
             } catch (PDOException $e) {
-                if ($pdo->inTransaction()) { $pdo->rollBack(); }
                 sql_failed($e);
                 return self::reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
             }
@@ -156,44 +138,16 @@ class RefundSubmitController
             }
         }
 
+        $words = mb_substr($reason, 0, 2000);
         try {
-            $pdo->beginTransaction();
-
+            /* The booking is NOT cancelled by filing: it keeps its date until the refund COMPLETES. */
             if ($action === 'file') {
-                $pdo->prepare(
-                    "INSERT INTO refunds (booking_id, payment_id, refund_status, reason_category, reason,
-                                          amount_requested, refund_to_number, official_receipt_pending, requested_by_user_id)
-                     VALUES (:b, :p, 'requested', :c, :r, :a, :t, :o, :u)"
-                )->execute([
-                    ':b' => $id, ':p' => $booking['payment_id'] ?: null, ':c' => $reasonCat,
-                    ':r' => mb_substr($reason, 0, 2000), ':a' => $booking['total_amount'],
-                    ':t' => $refundTo, ':o' => $orPending, ':u' => (int) session('user_id'),
-                ]);
-                $refundId = (int) $pdo->lastInsertId();
+                $refundId = RefundQueries::fileRequest($id, $booking['payment_id'] ?: null, $reasonCat, $words, $booking['total_amount'], $refundTo, $orPending, (int) session('user_id'));
             } else {
                 $refundId = (int) $refund['id'];
-                $pdo->prepare(
-                    "UPDATE refunds SET refund_status = 'requested', reason_category = :c, reason = :r,
-                            refund_to_number = :t, official_receipt_pending = :o,
-                            resubmitted_at = NOW(), correction_attempts = correction_attempts + 1
-                      WHERE id = :i"
-                )->execute([':c' => $reasonCat, ':r' => mb_substr($reason, 0, 2000),
-                            ':t' => $refundTo, ':o' => $orPending, ':i' => $refundId]);
+                RefundQueries::resubmit($refundId, $id, $reasonCat, $words, $refundTo, $orPending, (int) session('user_id'));
             }
-
-            /* The booking is NOT cancelled by filing — it keeps its date until the
-               refund COMPLETES. */
-            $pdo->prepare('SET @venusep_actor_user_id = :u, @venusep_action_note = :n')
-                ->execute([':u' => (int) session('user_id'),
-                           ':n' => $action === 'file' ? 'Refund requested by the customer.' : 'Corrected documents resubmitted.']);
-            $pdo->prepare("UPDATE bookings SET payment_status = 'refund_requested' WHERE id = :b")->execute([':b' => $id]);
-            $pdo->exec('SET @venusep_actor_user_id = NULL, @venusep_action_note = NULL');
-            if ($orPending) {
-                notify_refund_needs_admin($pdo, $id, (int) session('user_id'));
-            }
-            $pdo->commit();
         } catch (PDOException $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             sql_failed($e);
             return self::reply(500, ['ok' => false, 'message' => 'Something went wrong, so your request was not filed.']);
         }

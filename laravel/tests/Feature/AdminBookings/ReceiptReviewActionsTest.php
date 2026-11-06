@@ -61,7 +61,7 @@ class ReceiptReviewActionsTest extends TestCase
         $this->assertSame($said, DB::table('gcash_receipts')->where('id', $receiptId)->value('override_note'));
         /* the customer's bell, where the fixed text used to appear */
         legacy('notifications');
-        $texts = array_column(notif_items(venusep_db(), $this->customerUserId(), 'customer'), 'text');
+        $texts = array_column(notif_items($this->customerUserId(), 'customer'), 'text');
         $this->assertContains('Your GCash receipt for ' . $ref . ' was not accepted: ' . $said . ' Please upload another.', $texts);
     }
 

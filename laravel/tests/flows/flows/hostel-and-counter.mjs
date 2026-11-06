@@ -80,9 +80,8 @@ export default {
     await step('Picks two nights a few days out and names two guests', async () => {
       const page = s.cust;
       const room = await dbOne(`SELECT id FROM rooms WHERE room_code = ?`, [HOSTEL_ROOM]);
-      const maxDays = Number((await dbOne(`SELECT setting_value AS v FROM system_settings WHERE setting_key = 'hostel_advance_booking_max_days'`))?.v ?? 7);
-      // the first check-in from 3 days out (inside the advance window) with 2 beds free on both nights
-      for (let off = 3; off + 2 <= Math.max(maxDays, 3) + 2 && !s.checkIn; off++) {
+      // the first check-in from 3 days out with 2 beds free on both nights
+      for (let off = 3; off <= 7 && !s.checkIn; off++) {
         const n1 = iso(addDays(off)), n2 = iso(addDays(off + 1));
         const r = await dbOne(`SELECT
             (SELECT COUNT(*) FROM hostel_beds WHERE room_id = ?) -
@@ -91,7 +90,7 @@ export default {
           [room.id, room.id, n1, n2, room.id, n2, n1]);
         if (Number(r.free) >= 2 && Number(r.closed) === 0) { s.checkIn = n1; s.checkOut = iso(addDays(off + 2)); }
       }
-      expect.ok(s.checkIn, 'no two free nights in the advance-booking window');
+      expect.ok(s.checkIn, 'no two free nights in the next week');
       ctx.note(`stay ${s.checkIn} → ${s.checkOut}`);
 
       await pickHostelDate(page, 'checkIn', s.checkIn);
@@ -202,6 +201,13 @@ export default {
       await page.goto(ctx.url('/customer/booking-history'));
       const pay = page.locator(`tr[data-booking-id="${s.ref}"] a.booking-action-pay`);
       await expect.visible(pay, 'no Pay now on the approved stay');
+      /* the details modal offers the same payment page */
+      await page.locator(`tr[data-booking-id="${s.ref}"] button`, { hasText: 'View' }).click();
+      const modalPay = page.locator('.bdm-link-pay');
+      await expect.visible(modalPay, 'no Pay now in the details modal');
+      expect.match(await modalPay.textContent(), /^Pay now · ₱[\d,]+\.\d\d$/, 'modal Pay now label');
+      expect.equal(await modalPay.getAttribute('href'), await pay.getAttribute('href'), 'modal Pay now link');
+      await page.locator('[data-bdm-close]').click();
       await pay.click();
       await expect.url(page, /\/customer\/pay\?booking=/);
       await page.getByRole('button', { name: /Cash — hostel front desk/ }).click();
@@ -366,9 +372,17 @@ export default {
     await step('Takes the cash and books the stay — paid on creation', async () => {
       const page = s.admin;
       await page.locator('#agreeNoRefund').check();
+      /* a price that changed since the page opened: refused, the page redraws at the real rate */
+      await page.evaluate(() => { getRoom().rate -= 50; render(); });
       await page.getByRole('button', { name: /Cash received — book it/ }).click();
       const ok = page.locator('.vz-modal [data-vz="ok"]');
       await expect.visible(ok, 'no "Cash received?" confirmation');
+      await ok.click();
+      await expect.text(page, 'Please check with the customer and submit again.', 20_000);
+      /* staff already hold the old amount: the second cash step says so */
+      await ok.waitFor({ state: 'hidden' });
+      await page.getByRole('button', { name: /Cash received — book it/ }).click();
+      await expect.text(page, /You already took .*collect or return the difference/);
       await ok.click();
       await expect.text(page, 'Stay booked and paid', 30_000);
       const refCell = page.locator('div', { hasText: /^Reference$/ }).locator('xpath=following-sibling::div[1]').first();

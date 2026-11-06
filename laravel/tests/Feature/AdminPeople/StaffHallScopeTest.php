@@ -231,20 +231,37 @@ class StaffHallScopeTest extends TestCase
         $this->assertEquals($r2, DB::table('rooms')->where('room_code', 'r2')->first());
     }
 
-    /* An office's own details touch every hall: some of the halls is not enough, all of them is. */
-    public function test_the_office_details_need_every_hall_of_it(): void
+    /* An office's own details are for admins only (DB-DECISIONS 28): no link, no form and a 403
+       for staff, however many halls they hold. */
+    private function assertOfficeDetailsRefused(object $staff, int $office): void
     {
-        $venue = DB::table('venues')->where('id', self::BAHAY)->first();
-        $form = ['venue_id' => self::BAHAY, 'name' => 'Scope Rename', 'description' => 'x'];
-        $this->asStaff()->get(route('admin.venue-form', ['id' => self::BAHAY]))->assertRedirect(route('admin.venue-management'));
-        $this->asStaff()->postWithToken(route('admin.venue-save'), $form)->assertStatus(403);
-        $this->asStaff()->postWithToken(route('admin.venue-photo-api'), ['action' => 'delete', 'venue_id' => self::BAHAY])->assertStatus(403);
-        $this->assertSame($venue->name, DB::table('venues')->where('id', self::BAHAY)->value('name'));
+        $venue = DB::table('venues')->where('id', $office)->first();
+        $form = ['venue_id' => $office, 'name' => 'Scope Rename', 'description' => 'x'];
+        $this->asStaff($staff)->get(route('admin.venue-management'))->assertOk()->assertDontSee(route('admin.venue-form', ['id' => $office]));
+        $this->asStaff($staff)->get(route('admin.venue-form', ['id' => $office]))->assertRedirect(route('admin.venue-management'));
+        $this->asStaff($staff)->postWithToken(route('admin.venue-save'), $form)->assertStatus(403)->assertJson(['error' => 'forbidden']);
+        $this->asStaff($staff)->postWithToken(route('admin.venue-photo-api'), ['action' => 'delete', 'venue_id' => $office])->assertStatus(403);
+        $this->assertEquals($venue, DB::table('venues')->where('id', $office)->first());
+    }
+
+    public function test_staff_never_change_the_office_details_with_some_or_every_hall(): void
+    {
+        $this->assertOfficeDetailsRefused($this->staff, self::BAHAY);
 
         $all = DB::table('rooms')->where('venue_id', self::BAHAY)->whereNull('deleted_at')->pluck('id')->all();
-        $whole = $this->staffWith(self::BAHAY, $all);
-        $this->asStaff($whole)->get(route('admin.venue-form', ['id' => self::BAHAY]))->assertOk();
-        $this->asStaff($whole)->get(route('admin.venue-management'))->assertSee(route('admin.venue-form', ['id' => self::BAHAY]));
+        $this->assertOfficeDetailsRefused($this->staffWith(self::BAHAY, $all), self::BAHAY);
+    }
+
+    public function test_hostel_staff_never_change_the_office_details(): void
+    {
+        $rooms = DB::table('rooms')->where('venue_id', self::HOSTEL)->pluck('id')->all();
+        $this->assertOfficeDetailsRefused($this->staffWith(self::HOSTEL, $rooms), self::HOSTEL);
+    }
+
+    public function test_a_cover_of_the_whole_office_does_not_open_the_office_details(): void
+    {
+        $this->cover(self::VENUES, null);
+        $this->assertOfficeDetailsRefused($this->staff, self::VENUES);
     }
 
     /* ---------------------------------------------------------------- the bell */

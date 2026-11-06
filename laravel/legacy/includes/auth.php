@@ -260,16 +260,11 @@ function staff_sees_room($roomId, $venueId)
     return !venusep_is_staff_session() || staff_may_handle_room($roomId, $venueId);
 }
 
-/* An office's own details (name, description, photo) touch all its halls, so staff need
-   every one of them: a staff member with some of the halls changes those halls only. */
-function staff_may_handle_whole_venue($venueId)
+/* An office's own details (name, description, photo): its group's admins and the super
+   admin only. Staff never, whatever halls or covers they hold (DB-DECISIONS 28). */
+function admin_may_edit_office($venueId): bool
 {
-    $halls = staff_me()['halls'];
-    if ($halls === null) {
-        return staff_may_handle_venue($venueId);
-    }
-    $rooms = \App\Queries\RoomQueries::idsOfOffice((int) $venueId);
-    return $rooms !== [] && !array_diff($rooms, array_keys($halls));
+    return admin_is_admin() && staff_may_handle_venue($venueId);
 }
 
 /* The staff member's room ids; null = not narrowed below the office. */

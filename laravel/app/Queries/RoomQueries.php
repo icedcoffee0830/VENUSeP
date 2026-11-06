@@ -300,12 +300,6 @@ class RoomQueries
         return $row ? (array) $row : null;
     }
 
-    /* The rooms of an office, not deleted. */
-    public static function idsOfOffice(int $venueId): array
-    {
-        return array_map(fn ($r) => (int) $r->id, DB::select('SELECT id FROM rooms WHERE venue_id = ? AND deleted_at IS NULL', [$venueId]));
-    }
-
     /* The room of a booking: its id and office; or null. */
     public static function findRoomOfBooking(int $bookingId): ?array
     {

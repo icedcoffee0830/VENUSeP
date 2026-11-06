@@ -21,7 +21,7 @@ class VenueManagementTest extends VenuesTestCase
             ->assertSee('Alumni Grand Ballroom')
             ->assertSee('Alumni Boardroom')                       // r3 is disabled — still listed here
             ->assertSee("Customers can't see or book it", false)
-            ->assertSee(route('admin.venue-form', ['id' => 1]), false)
+            ->assertDontSee(route('admin.venue-form', ['id' => 1]), false)
             ->assertSee(route('admin.room-form', ['id' => 'r1']), false)
             ->assertSee('admin\\/room-toggle-active', false)
             ->assertSee('data-toggle-id="r3"', false)
@@ -64,9 +64,9 @@ class VenueManagementTest extends VenuesTestCase
             ->assertDontSee(route('admin.hostel-room-form', ['id' => 'h1']), false);
     }
 
-    /* Aron 2026-10-30 (round 3): staff see "Edit Details" only on their own venue's
-       card and the long-closure "Reopen" reminder only on their own venue's rooms
-       (r4 is venue 1's, closed since July); admins see every one. */
+    /* Staff never see "Edit Details" (DB-DECISIONS 28), and the long-closure "Reopen"
+       reminder only on their own venue's rooms (r4 is venue 1's, closed since July);
+       admins see every one. */
     /* The legacy room lists load once per PHP process, so staff and admin views
        are checked in separate tests (each test is its own process). */
     private function withLongClosures(callable $check): void
@@ -87,10 +87,10 @@ class VenueManagementTest extends VenuesTestCase
         }
     }
 
-    public function test_staff_get_edit_details_and_reopen_only_on_their_own_venue(): void
+    public function test_staff_get_no_edit_details_and_reopen_only_on_their_own_venue(): void
     {
         $this->withLongClosures(fn ($reopen) => $this->actingAsStaff()->get(route('admin.venue-management'))->assertOk()
-            ->assertSee(route('admin.venue-form', ['id' => 1]), false)
+            ->assertDontSee(route('admin.venue-form', ['id' => 1]), false)
             ->assertDontSee(route('admin.venue-form', ['id' => 2]), false)
             ->assertDontSee(route('admin.venue-form', ['id' => 3]), false)
             ->assertSee($reopen('room-form', 'r4'), false)

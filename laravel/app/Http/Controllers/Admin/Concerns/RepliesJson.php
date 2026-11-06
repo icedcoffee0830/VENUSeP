@@ -58,12 +58,12 @@ trait RepliesJson
         }
     }
 
-    /* A venue's own details and photo (staff_may_handle_whole_venue). */
-    protected function requireWholeVenueScope($venueId): void
+    /* An office's own details and photo (admin_may_edit_office). */
+    protected function requireOfficeAdmin($venueId): void
     {
         legacy('auth');
-        if (!staff_may_handle_whole_venue($venueId)) {
-            $this->refuseScope('This venue is not one you handle as a whole. Only its staff or an administrator can change it.');
+        if (!admin_may_edit_office($venueId)) {
+            $this->refuseScope('Only an administrator of this office can change its details.');
         }
     }
 

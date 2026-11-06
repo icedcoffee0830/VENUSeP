@@ -244,7 +244,7 @@ function vmMaint($m, $today) {
             </div>
           </div>
           <div class="vm-venue-acts">
-@if ($venue['may_edit']) {{-- staff: only an office whose halls are all theirs --}}
+@if ($venue['may_edit']) {{-- admins only --}}
             <a class="vm-btn" href="{{ route('admin.venue-form', ['id' => $venue['id']]) }}"><i class="bi bi-pencil" aria-hidden="true"></i>Edit venue</a>
 @endif
 @if ($isHostel ? $vmAddHostel : $vmAddHall)

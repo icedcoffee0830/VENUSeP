@@ -47,10 +47,10 @@ class VenueManagementController extends Controller
 
         /* The lists are already narrowed to the rooms this person handles (staff: their
            halls; the JSON endpoints refuse the rest). null = the super admin (every room);
-           otherwise the names of the offices shown. Edit Details needs the whole office. */
+           otherwise the names of the offices shown. Edit Details is for admins only. */
         legacy('auth');
         $vmMyVenue = staff_venue_scope() === null ? null : array_map('strval', array_column($vmVenueRows, 'name'));
-        $vmVenueRows = array_map(fn ($v) => $v + ['may_edit' => staff_may_handle_whole_venue($v['id'])], $vmVenueRows);
+        $vmVenueRows = array_map(fn ($v) => $v + ['may_edit' => admin_may_edit_office($v['id'])], $vmVenueRows);
 
         $vmStaffByVenue = [];
         $vmStaffRows = venusep_db_or_fail()->query(

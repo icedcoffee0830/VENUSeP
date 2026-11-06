@@ -22,7 +22,7 @@ class VenueSaveTest extends VenuesTestCase
     }
 
     /* The offices are fixed (DB-DECISIONS 28): nobody adds one, the super admin included;
-       staff and admins still edit their own. */
+       admins still edit their own. */
     public function test_nobody_adds_an_office_and_the_buttons_are_gone(): void
     {
         $before = DB::table('venues')->count();
@@ -35,12 +35,12 @@ class VenueSaveTest extends VenuesTestCase
             $this->get(route('admin.venue-management'))->assertOk()->assertDontSee('+ Add Venue');
         }
         $this->assertSame($before, DB::table('venues')->count());
+        $this->flushSession();
+        $this->actingAsAdmin();
         $v1 = DB::table('venues')->where('id', 1)->first();
         $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => $v1->name, 'description' => (string) $v1->description])
             ->assertOk()->assertJson(['ok' => true, 'created' => false]);
         /* a duplicate name is the old 409 */
-        $this->flushSession();
-        $this->actingAsAdmin();
         $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => 'USeP Venues'])
             ->assertStatus(409)->assertJson(['error' => 'duplicate']);
     }

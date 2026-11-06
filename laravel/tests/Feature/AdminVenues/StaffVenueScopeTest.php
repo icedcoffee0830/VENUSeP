@@ -106,7 +106,7 @@ class StaffVenueScopeTest extends VenuesTestCase
             ->assertStatus(403)->assertJson(['error' => 'forbidden']);
     }
 
-    public function test_staff_cannot_rename_another_venue(): void
+    public function test_staff_cannot_rename_a_venue_their_own_included(): void
     {
         $this->actingAsStaff();
         $name = DB::table('venues')->where('id', 2)->value('name');
@@ -114,9 +114,10 @@ class StaffVenueScopeTest extends VenuesTestCase
             ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden']);
         $this->assertSame($name, DB::table('venues')->where('id', 2)->value('name'));
 
-        /* their own venue still saves */
+        /* their own venue too: office details are for admins (DB-DECISIONS 28) */
         $own = DB::table('venues')->where('id', 1)->first();
-        $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => $own->name, 'description' => (string) $own->description])
-            ->assertOk()->assertJson(['ok' => true]);
+        $this->postForm('admin.venue-save', ['venue_id' => '1', 'name' => 'Scope Test Venue', 'description' => 'x'])
+            ->assertStatus(403)->assertJson(['ok' => false, 'error' => 'forbidden']);
+        $this->assertEquals($own, DB::table('venues')->where('id', 1)->first());
     }
 }

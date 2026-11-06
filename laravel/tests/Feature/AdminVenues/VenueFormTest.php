@@ -24,19 +24,19 @@ class VenueFormTest extends VenuesTestCase
             ->assertSee('admin\\/venue-photo-api', false);
     }
 
-    public function test_staff_see_the_list_read_only(): void
+    /* Office details are for admins only (DB-DECISIONS 28): staff are sent back from every form. */
+    public function test_staff_are_kept_out_of_every_venue_form(): void
     {
-        $this->actingAsStaff()->get(route('admin.venue-form', ['id' => 1]))->assertOk()
-            ->assertSee('Edit Venue (Location)')
-            ->assertSee('Marites Robles')
-            ->assertDontSee('➕ Add Staff');
+        $this->actingAsStaff()->get(route('admin.venue-form', ['id' => 1]))->assertRedirect(route('admin.venue-management'));
+        $this->actingAsStaff()->get(route('admin.venue-form', ['id' => 2]))->assertRedirect(route('admin.venue-management'));
     }
 
     /* The departments never see each other's things (Aron 2026-10-31). */
-    public function test_staff_are_kept_out_of_another_venues_form_and_see_only_their_own_people(): void
+    public function test_a_group_admin_edits_its_own_offices_only_and_sees_only_their_people(): void
     {
-        $this->actingAsStaff()->get(route('admin.venue-form', ['id' => 2]))->assertRedirect(route('admin.venue-management'));
-        $this->get(route('admin.venue-form', ['id' => 1]))->assertOk()->assertDontSee('Jake Emerson');
+        $this->actingAsAdmin('francishubero@gmail.com');
+        $this->get(route('admin.venue-form', ['id' => 1]))->assertOk()->assertSee('Marites Robles')->assertDontSee('Jake Emerson');
+        $this->get(route('admin.venue-form', ['id' => 2]))->assertRedirect(route('admin.venue-management'));
     }
 
     /* Add Venue is admin-only (Aron 2026-10-30): staff opening the Add page (no id,

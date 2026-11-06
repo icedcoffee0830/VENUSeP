@@ -60,7 +60,7 @@ class VenueSaveController extends Controller
            handles exactly one venue, so this only ever moves people HERE. Nobody can
            be taken off into "no venue" (trg_staff_venue_required_upd refuses that
            too). Which venue someone handles decides whose bookings they may act on
-           (staff_may_handle_venue()), so only an admin may change it. */
+           (staff_may_handle_venue()); only an admin gets this far (requireOfficeAdmin). */
         $moveRaw = json_decode((string) ($post->get('move_staff') ?? '[]'), true);
         if (!is_array($moveRaw)) {
             $this->reply(400, ['ok' => false, 'error' => 'bad_staff', 'message' => 'Invalid staff selection.']);
@@ -73,15 +73,12 @@ class VenueSaveController extends Controller
             $moveIds[] = (int) $m;
         }
         $moveIds = array_values(array_unique($moveIds));
-        if ($moveIds && !admin_is_admin()) {
-            $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only an administrator can change which venue a staff member handles.']);
-        }
 
         try {
             if (!VenueQueries::exists($venueId)) {
                 $this->reply(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Venue not found.']);
             }
-            $this->requireWholeVenueScope($venueId);
+            $this->requireOfficeAdmin($venueId);
 
             $movedEmails = [];
             $moved = DB::transaction(function () use ($venueId, $name, $description, $moveIds, &$movedEmails) {

@@ -26,14 +26,13 @@ class VenueFormController extends Controller
         if ($venueId === 0) {
             return redirect()->route('admin.venue-management');
         }
-        if (!staff_may_handle_whole_venue($venueId)) {   // another department's venue, or staff with only some of its halls
+        if (!admin_may_edit_office($venueId)) {   // staff, or another group's admin
             return redirect()->route('admin.venue-management');
         }
 
         /* ASSIGNED STAFF (2026-10-27): the real staff.venue_id rows. Every staff member
            handles exactly one venue, so the picker MOVES people here from the venue
-           they handle now. Nobody can be removed into "no venue". Only an admin may
-           change it (venue-save re-checks); staff see the list read-only. */
+           they handle now. Nobody can be removed into "no venue". */
         $vfStaff = [];
         if (venusep_db() !== null) {
             try {
@@ -53,7 +52,6 @@ class VenueFormController extends Controller
             'venueFormCsrf' => csrf_token(),
             'vfHere' => $vfHere,
             'vfOthers' => $vfOthers,
-            'vfCanAssign' => admin_is_admin(),
         ]);
     }
 }

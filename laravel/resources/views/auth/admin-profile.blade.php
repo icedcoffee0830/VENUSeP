@@ -18,12 +18,6 @@
       <div class="container-fluid">
         <div class="page-heading">
           <h1>Settings</h1>
-          <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-              <li class="breadcrumb-item">Dashboard</li>
-              <li aria-current="page" class="breadcrumb-item active">Settings</li>
-            </ol>
-          </nav>
         </div>
         <section class="profile-layout">
           <aside class="profile-card">

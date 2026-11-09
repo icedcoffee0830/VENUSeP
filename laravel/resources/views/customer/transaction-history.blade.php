@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/list-page.css') }}" />
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/customer/transaction-history.css') }}" />
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/tabulator-pager.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/print-letterhead.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/transaction-print.css') }}" />
 @endpush
 @section('content')
       <!-- [4] PAGE CONTENT -->
@@ -80,6 +82,8 @@
                 <div id="transaction-history-table" class="lp-table"></div>
               </div>
             </div>
+
+            @include('partials.transaction-print', ['letterhead' => $thLetterhead, 'printedBy' => $thPrintedBy])
           </div>
         </div>
       </main>
@@ -88,6 +92,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
     <script src="{{ asset_stamped('assets/js/table-page-size.js') }}"></script>
     <script src="{{ asset_stamped('assets/js/list-page.js') }}"></script>
+    <script src="{{ asset_stamped('assets/js/transaction-print.js') }}"></script>
 
     <!-- [6] PAGE SCRIPT -->
     <script>

@@ -8,6 +8,7 @@
 @endpush
 
 @push('styles')
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/print-letterhead.css') }}" />
     <style>
         :root {
             --primary: #1f1e1e;
@@ -501,10 +502,9 @@
          PDF or Ctrl+P), so the charts can be measured and redrawn at the
          width they will have on paper; it is a class rather than only
          @media print so that measuring happens in the same layout.
-         The content is 186mm wide — A4 or Letter with 12mm margins.
+         The content is 186mm wide — A4 or Letter with 12mm at each side.
          ============================================================ */
       .rp-print-meta { display: none; }
-      @page { margin: 12mm; }
       @media print {
         html, body { background: #fff !important; }
         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -540,21 +540,22 @@
       html.rp-print td { padding: 5px 12px; font-size: 11.5px; }
       html.rp-print tr { break-inside: avoid; }
 
-      /* THE LETTERHEAD (2026-10-28) — USeP's own header and footer, on paper
-         only: the seal + "University of Southeastern Philippines · CEDU" at
-         the top, the vision / address / certifications strip at the bottom
-         (assets/img/reports/). The footer is pinned to the foot of the page;
-         the page keeps room for it. Charts print a little shorter so the
-         whole report still fits on one page. */
-      .rp-letterhead, .rp-letterfoot { display: none; }
-      html.rp-print .rp-letterhead { display: block; text-align: center; margin: 0 0 6px; }
-      html.rp-print .rp-letterhead img { height: 62px; width: auto; }
+      /* THE LETTERHEAD (2026-10-28; header 2026-11-08, first page only 2026-11-09) —
+         USeP's own header on the first printed page and footer on every printed page
+         (assets/css/print-letterhead.css): the seal, the university and the report's
+         office at the top (App\Support\Letterhead),
+         the vision / address / certifications strip at the bottom
+         (assets/img/reports/). Charts print shorter so the whole report still
+         fits on one page. */
+      .rp-letterfoot { display: none; }
       html.rp-print .header p { display: none; }
+      html.rp-print .main { --pl-foot-room: 34mm; }   /* the footer below: 7mm up, about 24mm tall */
+      /* the old print rules above make .main the paper's full width; .pl-body's 12mm sides
+         bring it back to the 186mm the charts are measured at */
       html.rp-print .rp-letterfoot { display: block; border-top: 1.5px solid #1f1e1e; padding-top: 6px; margin-top: 10px; }
       html.rp-print .rp-letterfoot img { display: block; width: 100%; height: auto; }
       @media print {
-        html.rp-print .rp-letterfoot { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; background: #fff; }
-        html.rp-print .main { padding-bottom: 98px !important; }   /* room above the pinned footer */
+        html.rp-print .rp-letterfoot { margin: 0; }
       }
     </style>
 @endpush
@@ -562,8 +563,9 @@
 @section('content')
         <div class="app-container">
             <main class="main">
-                <!-- printed only: the university letterhead -->
-                <div class="rp-letterhead"><img src="{{ asset('assets/img/reports/print-header.png') }}" alt="University of Southeastern Philippines — CEDU"></div>
+                <!-- printed only: the university letterhead, at the top of the first page -->
+                <div class="pl-head"><img src="{{ asset($rpLetterhead[0]) }}" alt="{{ $rpLetterhead[1] }}"></div>
+                <div class="pl-body">
                 <div class="header">
                     <div>
                         <h1>Quarterly Reports</h1>
@@ -753,8 +755,9 @@
                     <p class="panel-content" id="bathroomTypes"></p>
                 </div>
 @endif
-                <!-- printed only: the university footer — vision, address, certifications -->
-                <div class="rp-letterfoot"><img src="{{ asset('assets/img/reports/print-footer.png') }}" alt="USeP vision: Premier research university transforming communities in the ASEAN and beyond. University of Southeastern Philippines, Iñigo St., Bo. Obrero, Davao City, Philippines 8000 · (082) 227-8192 local 255 · www.usep.edu.ph · president@usep.edu.ph"></div>
+                </div>
+                <!-- printed only: the university footer — vision, address, certifications, at the foot of every page -->
+                <div class="rp-letterfoot pl-foot"><img src="{{ asset('assets/img/reports/print-footer.png') }}" alt="USeP vision: Premier research university transforming communities in the ASEAN and beyond. University of Southeastern Philippines, Iñigo St., Bo. Obrero, Davao City, Philippines 8000 · (082) 227-8192 local 255 · www.usep.edu.ph · president@usep.edu.ph"></div>
             </main>
         </div>
 @endsection
@@ -1222,14 +1225,14 @@
         const flatLabels  = { labels: { rotate: 0, rotateAlways: false, hideOverlappingLabels: false, trim: false, style: { fontSize: '8px' } } };
         const slantLabels = (deg) => ({ labels: { rotate: deg, hideOverlappingLabels: true, style: { fontSize: '12px' } } });
         const printCharts = [
-            { chart: revenueGrowthChart,         el: '#revenueGrowthChart',         screen: 320, paper: 150 },
-            { chart: venueRevenueChart,          el: '#venueRevenueChart',          screen: 320, paper: 150 },
-            { chart: eventsByVenueChart,         el: '#eventsByVenueChart',         screen: 280, paper: 140 },
-            { chart: discountedBookingsChart,    el: '#discountedBookingsChart',    screen: 280, paper: 140,
+            { chart: revenueGrowthChart,         el: '#revenueGrowthChart',         screen: 320, paper: 125 },
+            { chart: venueRevenueChart,          el: '#venueRevenueChart',          screen: 320, paper: 125 },
+            { chart: eventsByVenueChart,         el: '#eventsByVenueChart',         screen: 280, paper: 115 },
+            { chart: discountedBookingsChart,    el: '#discountedBookingsChart',    screen: 280, paper: 115,
               paperX: { xaxis: flatLabels }, screenX: { xaxis: slantLabels(-35) } },
             /* this chart takes its x values from top-level `labels`; they are passed
                again, or changing the axis drops them and it prints "1 2 3 4" */
-            { chart: cancelledReservationsChart, el: '#cancelledReservationsChart', screen: 280, paper: 140,
+            { chart: cancelledReservationsChart, el: '#cancelledReservationsChart', screen: 280, paper: 115,
               paperX: { labels: quarterLabels, xaxis: flatLabels }, screenX: { labels: quarterLabels, xaxis: slantLabels(-45) } },
         ];
         let printPrepared = false;

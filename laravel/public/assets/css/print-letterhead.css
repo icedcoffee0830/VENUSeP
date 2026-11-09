@@ -1,0 +1,35 @@
+/* THE PRINTED LETTERHEAD (2026-11-08; header on the first page only 2026-11-09): USeP's
+   header at the top of the first printed page and its footer at the foot of every page,
+   on Quarterly Reports and on both Transaction Histories (admin and customer).
+   App\Support\Letterhead picks the header.
+
+   The paper has no margins, so Chrome, Edge and Brave leave out their own date, title,
+   URL and page-number lines. The space those margins gave is put back here instead:
+   - .pl-head is the first thing on the paper, in the flow, so only the first page has it.
+   - .pl-foot is pinned to the foot of every page.
+   - .pl-body holds the page. Its padding is repeated on every page (box-decoration-break):
+     12mm at the top and at each side, and room for the footer below. On the first page
+     the header comes before that top padding (see .pl-head's margin).
+   On screen .pl-head and .pl-foot are hidden and .pl-body is an ordinary block.
+
+     <div class="pl-head"><img ...></div>
+     <div class="pl-body"> the page </div>
+     <div class="pl-foot"> the footer </div>
+
+   --pl-foot-room: the footer's height plus a gap (the page sets it). */
+.pl-head, .pl-foot { display: none; }
+
+@media print {
+  @page { margin: 0; }
+  html, body { background: #fff !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* the header: 8mm from the paper's top edge, 140mm wide, the size in USeP's template.
+     The -6mm takes back half of .pl-body's 12mm top, so the page starts 6mm under it. */
+  .pl-head { display: block; margin: 0 12mm -6mm; padding-top: 8mm; text-align: center; break-after: avoid; }
+  .pl-head img { display: inline-block; width: 140mm; height: auto; }
+
+  .pl-body { padding: 12mm 12mm var(--pl-foot-room, 34mm); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+
+  .pl-foot { display: block; position: fixed; left: 12mm; right: 12mm; bottom: 7mm; background: #fff; }
+}

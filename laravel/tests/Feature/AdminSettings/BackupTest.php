@@ -35,7 +35,9 @@ class BackupTest extends TestCase
     {
         $this->actingAsAdmin()->get(route('admin.backup-restore'))->assertOk()
             ->assertSee('Restore from a downloaded backup')->assertSee('The newest 10 are kept.')
-            ->assertSee(json_encode(route('admin.backup-action')), false);
+            ->assertSee(json_encode(route('admin.backup-action')), false)
+            /* the sidebar marks this tab: the label's "&" once kept it from matching */
+            ->assertSee('<a href="' . route('admin.backup-restore') . '" class="active" aria-current="page">', false);
     }
 
     public function test_action_guards(): void

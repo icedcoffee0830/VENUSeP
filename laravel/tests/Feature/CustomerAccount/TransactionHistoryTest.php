@@ -26,6 +26,25 @@ class TransactionHistoryTest extends TestCase
             ->assertSee(json_encode(route('customer.receipt')), false);
     }
 
+    /* The printout (partials/transaction-print) is the admin's paper: the university's
+       header with no office line, the same footer, and the customer as who printed it. */
+    public function test_the_printout_is_the_admins_paper_without_an_office(): void
+    {
+        $name = DB::selectOne(
+            "SELECT c.full_name FROM customers c JOIN users u ON u.id = c.user_id WHERE u.email = 'msantos@usep.edu.ph'")->full_name;
+        $this->actingAsCustomer('msantos@usep.edu.ph')->get(route('customer.transaction-history'))->assertOk()
+            ->assertSee(asset('assets/css/print-letterhead.css'), false)
+            ->assertSee(asset('assets/css/transaction-print.css'), false)
+            ->assertSee(asset('assets/js/transaction-print.js'), false)
+            ->assertSee(asset('assets/img/reports/print-header-usep.png'), false)
+            ->assertDontSee(asset('assets/img/reports/print-header-bahay-alumni.png'), false)
+            ->assertDontSee(asset('assets/img/reports/print-header-cedu.png'), false)
+            ->assertDontSee('Office: <strong>', false)
+            ->assertSee(asset('assets/img/reports/print-footer-text.png'), false)
+            ->assertSee(asset('assets/img/reports/print-footer-logos.png'), false)
+            ->assertSee('Printed by <strong>' . e($name) . '</strong>', false);
+    }
+
     /* The status filters match a row's label exactly, so they must offer the labels
        rows actually carry (payment_statuses / reservation_statuses customer_label),
        not mockup words like "Unpaid" that never match a row. */

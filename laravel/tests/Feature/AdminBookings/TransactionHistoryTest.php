@@ -56,6 +56,28 @@ class TransactionHistoryTest extends TestCase
         $this->actingAsAdmin()->get(route('admin.transaction-history'))->assertOk()->assertSee('Back to Dashboard');
     }
 
+    /* The printout (App\Support\Letterhead): the header and office line follow the offices
+       the list covers, and it says who printed it. */
+    public function test_the_printout_names_the_office_and_who_printed_it(): void
+    {
+        $page = fn ($res) => $res->assertOk()
+            ->assertSee(asset('assets/css/print-letterhead.css'), false)
+            ->assertSee(asset('assets/img/reports/print-footer-text.png'), false)
+            ->assertSee(asset('assets/img/reports/print-footer-logos.png'), false);
+
+        $page($this->actingAsAdmin()->get(route('admin.transaction-history')))
+            ->assertSee(asset('assets/img/reports/print-header-usep.png'), false)
+            ->assertSee('Office: <strong>All offices</strong>', false)
+            ->assertSee('Printed by <strong>' . e(DB::selectOne(
+                "SELECT COALESCE(s.full_name, u.username, u.email) AS who FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.email = 'admin@gmail.com'")->who) . '</strong>', false);
+        $page($this->actingAsAdmin('francishubero@gmail.com')->get(route('admin.transaction-history')))
+            ->assertSee(asset('assets/img/reports/print-header-bahay-alumni.png'), false)
+            ->assertSee('Office: <strong>Bahay Alumni</strong>', false);
+        $page($this->actingAsAdmin('cedu.admin@gmail.com')->get(route('admin.transaction-history')))
+            ->assertSee(asset('assets/img/reports/print-header-cedu.png'), false)
+            ->assertSee('Office: <strong>USeP Venues, USeP Hostel</strong>', false);
+    }
+
     /* The ledger's rows, read back out of the page, and the options of one filter. */
     private function rows($page): array
     {

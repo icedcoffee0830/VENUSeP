@@ -32,7 +32,8 @@ class ReportsTest extends TestCase
         $this->actingAsAdmin()->get(route('admin.reports'))->assertOk()
             ->assertSee('Quarterly Reports')->assertSee('Halls')->assertSee('Hostel Rooms')
             ->assertSee('<option value="' . $q . '" selected>', false)       // newest quarter first, selected
-            ->assertSee(asset('assets/img/reports/print-header.png'), false)
+            ->assertSee(asset('assets/img/reports/print-header-usep.png'), false)      // every office: the university alone
+            ->assertSee(asset('assets/css/print-letterhead.css'), false)
             ->assertSee('const venueByQuarter = [', false)
             ->assertSee('const currentQuarter = "' . $q . '"', false);
     }
@@ -302,6 +303,16 @@ class ReportsTest extends TestCase
         }
         $this->assertSame('cedu', $this->signInRole('cedu_na')->get('/admin/reports?office[]=all')->assertOk()->viewData('rpOffice'));
         $this->assertSame('usep-hostel', $this->signInRole('cedu_na')->get(route('admin.reports', ['office' => 'usep-hostel']))->viewData('rpOffice'));
+    }
+
+    /* The printed header names the report's office (App\Support\Letterhead): Bahay Alumni,
+       CEDU for USeP Venues and USeP Hostel, and the university alone for every office. */
+    public function test_the_printed_header_names_the_reports_office(): void
+    {
+        foreach (['bahay-alumni' => 'bahay-alumni', 'usep-venues' => 'cedu', 'usep-hostel' => 'cedu', 'cedu' => 'cedu', 'all' => 'usep'] as $office => $header) {
+            $html = $this->actingAsAdmin()->get(route('admin.reports', ['office' => $office]))->assertOk()->getContent();
+            $this->assertStringContainsString(asset("assets/img/reports/print-header-$header.png"), $html, $office);
+        }
     }
 
     /* Venue-only and hostel-only sections follow the choice. */

@@ -62,7 +62,7 @@ export default {
     await step('The page title stays Transaction History; the tab says Payments', async () => {
       const page = s.page;
       await page.goto(ctx.url('/customer/transaction-history'));
-      expect.equal((await page.locator('h1').textContent()).trim(), 'Transaction History', 'the title');
+      expect.equal((await page.locator('h1:visible').textContent()).trim(), 'Transaction History', 'the title');
       expect.equal((await tab(page, 'payments').textContent()).trim(), 'Payments', 'the tab');
     });
 

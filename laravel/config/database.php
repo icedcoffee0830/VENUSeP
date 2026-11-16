@@ -47,7 +47,8 @@ return [
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
+            /* VENUSeP failover: the super admin's server file wins over .env (App\Failover\ServerFile) */
+            'host' => \App\Failover\ServerFile::dbHost() ?? env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
@@ -69,6 +70,9 @@ return [
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 /* "rows changed" counts rows MATCHED, so saving the same values is not mistaken for a broken WHERE */
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_FOUND_ROWS : PDO::MYSQL_ATTR_FOUND_ROWS) => true,
+                /* give up connecting after 3 s: an unreachable database server (a laptop that
+                   left the hotspot) otherwise hangs every page for about 20 s */
+                PDO::ATTR_TIMEOUT => 3,
             ]) : [],
         ],
 

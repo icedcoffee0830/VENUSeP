@@ -79,7 +79,7 @@
       .rr-total small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 
       /* refusal + confirmation */
-      .rr-panel { max-width: 620px; border: 1px solid var(--border); border-radius: 12px; padding: 30px 26px; text-align: center; }
+      .rr-panel { max-width: 620px; border: 1px solid var(--border); border-radius: 12px; padding: 30px 26px; text-align: center; background: #fff; }   /* white card: the page behind it is dark */
       .rr-panel i { font-size: 34px; }
       .rr-panel h2 { margin: 12px 0 8px; font-size: 17px; font-weight: 680; }
       .rr-panel p { margin: 0 auto 18px; max-width: 46ch; font-size: 13px; line-height: 1.65; color: var(--muted); }

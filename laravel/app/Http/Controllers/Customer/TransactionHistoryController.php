@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Customer;
 
 use App\Queries\BookingQueries;
+use App\Support\Letterhead;
 use PDOException;
 
 /* TRANSACTION HISTORY (was customer/transaction-history.php) — the customer's
@@ -24,6 +25,9 @@ class TransactionHistoryController
                word for a request released before anyone approved it). */
             'paymentLabels' => self::labels('payment_statuses'),
             'bookingLabels' => array_values(array_unique(array_merge(self::labels('reservation_statuses'), ['Expired']))),
+            /* The printout: the admin's paper, with the university's header alone (no office line). */
+            'thLetterhead' => Letterhead::university(),
+            'thPrintedBy' => $customerContact['name'] !== '' ? $customerContact['name'] : $customerContact['email'],
         ]);
     }
 

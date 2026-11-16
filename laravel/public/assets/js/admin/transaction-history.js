@@ -111,9 +111,20 @@
 
         document.getElementById('export-csv').addEventListener('click', () => table.download('csv', 'transaction-history.csv'));
         document.getElementById('export-json').addEventListener('click', () => table.download('json', 'transaction-history.json'));
-        /* Print exactly the rows on the current page; pick "All rows" in the page
-           size to print the whole (filtered) list. */
-        document.getElementById('print-table').addEventListener('click', () => table.print('visible', true));
+        /* PRINTING: the printout is assets/js/transaction-print.js, shared with the customer's page. */
+        const printTable = venusepTransactionPrint(table, () => {
+          const parts = [];
+          const query = globalFilter.value.trim();
+          if (query) parts.push(`search "${query}"`);
+          if (paymentStatusFilter.value) parts.push(`payment status ${paymentStatusFilter.value}`);
+          if (bookingStatusFilter.value) parts.push(`booking status ${bookingStatusFilter.value}`);
+          if (paymentMethodFilter.value) parts.push(`paid by ${paymentMethodFilter.value}`);
+          if (dateFromFilter.value && dateToFilter.value) parts.push(`transactions ${venusepPrintDay(dateFromFilter.value)} to ${venusepPrintDay(dateToFilter.value)}`);
+          else if (dateFromFilter.value) parts.push(`transactions from ${venusepPrintDay(dateFromFilter.value)}`);
+          else if (dateToFilter.value) parts.push(`transactions up to ${venusepPrintDay(dateToFilter.value)}`);
+          return parts;
+        });
+        document.getElementById('print-table').addEventListener('click', printTable);
         venusepPageSize(table, [10, 25, 50, 100]);
         table.on('tableBuilt', () => table.element.prepend(table.element.querySelector('.tabulator-footer')));   /* the pager goes above the rows */
       });

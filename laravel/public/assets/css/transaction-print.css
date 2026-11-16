@@ -1,0 +1,35 @@
+/* THE TRANSACTION HISTORY PRINTOUT (2026-11-08; the customer's page prints it too since
+   2026-11-09): partials/transaction-print, filled in by assets/js/transaction-print.js.
+   Only .th-print goes on paper, 12mm at each side, with USeP's header on the first page
+   and its footer on every page (assets/css/print-letterhead.css). The paper direction is
+   left to the print window's Layout choice: a page that sets it hides that choice.
+   Landscape fits the columns best. The footer is split, its text at the left and its
+   logos at the right, so it spans either page width at the height it has on the
+   reports. The column names repeat at the top of every page. */
+.th-print { display: none; }
+@media print {
+  html.th-printing body > :not(.th-print) { display: none !important; }
+  html.th-printing .th-print { display: block; color: #1f1e1e; --pl-foot-room: 34mm; }   /* the footer: 7mm up, about 24mm tall */
+
+  .th-print-title { margin: 0 0 4mm; padding-bottom: 2.5mm; border-bottom: 1.5px solid #1f1e1e; }
+  .th-print-title h1 { font-size: 16pt; font-weight: 700; margin: 0 0 1.5mm; }
+  .th-print-title p { display: flex; flex-wrap: wrap; gap: 1mm 6mm; margin: 0; font-size: 9pt; color: #4a463f; }
+  .th-print-title strong { color: #1f1e1e; }
+
+  .th-print table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+  .th-print th { padding: 1.8mm 2mm; background: #f4f2ee; border-bottom: 1.5px solid #1f1e1e; color: #4a463f; font-size: 7.5pt; font-weight: 700; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
+  .th-print td { padding: 1.5mm 2mm; border-bottom: 1px solid #ddd7ce; vertical-align: middle; white-space: nowrap; }
+  .th-print td.th-print-wrap { white-space: normal; }   /* names, venues and statuses wrap; IDs, dates and amounts stay on one line */
+  .th-print tr { break-inside: avoid; }
+  .th-print .vz-chip { display: inline-block; font-size: 7.5pt; padding: .4mm 1.8mm; white-space: normal; }
+  /* portrait is too narrow for ten columns kept on one line: everything may wrap, a little smaller */
+  @media (orientation: portrait) {
+    .th-print table { font-size: 7.5pt; }
+    .th-print th { padding: 1.5mm 1.2mm; font-size: 6.5pt; letter-spacing: .02em; }
+    .th-print td { padding: 1.3mm 1.2mm; white-space: normal; }
+    .th-print .vz-chip { font-size: 6.5pt; padding: .3mm 1.2mm; }
+  }
+
+  .th-print-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1.5px solid #1f1e1e; padding-top: 2mm; }
+  .th-print-foot img { display: block; width: auto; height: 21mm; }
+}

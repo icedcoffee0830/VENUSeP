@@ -8,6 +8,8 @@
 @push('styles')
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/admin/transaction-history-shell.css') }}" />
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/tabulator-pager.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/print-letterhead.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/transaction-print.css') }}" />
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/admin/transaction-history.css') }}" />
 @endpush
 @section('content')
@@ -84,6 +86,8 @@
                 </div>
               </div>
             </div>
+
+            @include('partials.transaction-print', ['letterhead' => $thLetterhead, 'office' => $thOffice, 'printedBy' => $thPrintedBy])
           </div>
         </div>
       </main>
@@ -92,6 +96,7 @@
     <!-- Tabulator library (the only third-party script this page needs) -->
     <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
     <script src="{{ asset_stamped('assets/js/table-page-size.js') }}"></script>
+    <script src="{{ asset_stamped('assets/js/transaction-print.js') }}"></script>
 
     <!-- ============================================================
          [6] PAGE SCRIPT — builds the table, filters, exports.

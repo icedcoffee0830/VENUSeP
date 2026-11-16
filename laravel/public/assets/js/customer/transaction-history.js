@@ -60,6 +60,9 @@
             el.querySelector('.th-card')?.remove();
             el.insertAdjacentHTML('beforeend', card(row.getData()));
           },
+          /* not on paper: left unset, the printout reuses rowFormatter, and on portrait paper
+             (narrower than the phone breakpoint) the phone cards printed under the list */
+          rowFormatterPrint: false,
           /* A hidden column still goes to the CSV, JSON and paper: each fact keeps its own column there. */
           columns: [
             { title: 'Transaction ID', field: 'transactionId', visible: false, download: true, print: true },
@@ -84,9 +87,9 @@
             {
               title: 'Status', titleDownload: 'Payment Status', titlePrint: 'Payment Status', field: 'paymentStatus', width: 142,
               formatter: (cell) => { const r = cell.getRow().getData(); return `<div class="th-chips">${chip(r.paymentStatus)}${chip(r.bookingStatus)}</div>`; },
-              formatterPrint: (cell) => cell.getValue(),
+              formatterPrint: (cell) => chip(cell.getValue()),
             },
-            { title: 'Booking Status', field: 'bookingStatus', visible: false, download: true, print: true },
+            { title: 'Booking Status', field: 'bookingStatus', visible: false, download: true, print: true, formatterPrint: (cell) => chip(cell.getValue()) },
             { title: 'Actions', field: 'actions', formatter: (cell) => actionButtons(cell.getRow().getData()), headerSort: false, width: 226, print: false, download: false },   /* buttons mean nothing on paper */
           ],
         }, venusepPager('payments')));
@@ -126,12 +129,23 @@
         sheet.addEventListener('click', (event) => {
           if (event.target === sheet || event.target.closest('[data-sheet-close]')) sheet.close();   /* the dim area, the X, Show */
         });
-        /* The Download menu and the sheet's links. Print: exactly the rows on the current
-           page; pick "All rows" in the page size to print the whole list. */
+        /* The Download menu and the sheet's links. Print: the admin's printout
+           (assets/js/transaction-print.js), the rows on the current page. */
         const exports = {
           csv: () => table.download('csv', 'my-transactions.csv'),
           json: () => table.download('json', 'my-transactions.json'),
-          print: () => table.print('visible', true),
+          print: venusepTransactionPrint(table, () => {
+            const parts = [];
+            const query = globalFilter.value.trim();
+            if (query) parts.push(`search "${query}"`);
+            if (paymentStatusFilter.value) parts.push(`payment ${paymentStatusFilter.value}`);
+            if (bookingStatusFilter.value) parts.push(`booking ${bookingStatusFilter.value}`);
+            if (paymentMethodFilter.value) parts.push(`paid by ${paymentMethodFilter.value}`);
+            if (dateFromFilter.value && dateToFilter.value) parts.push(`paid ${venusepPrintDay(dateFromFilter.value)} to ${venusepPrintDay(dateToFilter.value)}`);
+            else if (dateFromFilter.value) parts.push(`paid from ${venusepPrintDay(dateFromFilter.value)}`);
+            else if (dateToFilter.value) parts.push(`paid up to ${venusepPrintDay(dateToFilter.value)}`);
+            return parts;
+          }),
         };
         document.addEventListener('click', (event) => {
           if (event.target.closest('[data-reset]')) resetFilters();

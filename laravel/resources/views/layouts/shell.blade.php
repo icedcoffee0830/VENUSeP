@@ -44,7 +44,9 @@
   <body @hasSection('body-class') class="@yield('body-class')" @endif>
     <div class="app-wrapper">
       @include('partials.header', ['portal' => $portal])
-      @include('partials.sidebar', ['portal' => $portal, 'active' => trim($__env->yieldContent('active'))])
+      {{-- @section('active', '...') stores the label HTML-escaped ("Backup &amp; Restore"), so it is
+           decoded back before the sidebar compares it with its own labels --}}
+      @include('partials.sidebar', ['portal' => $portal, 'active' => html_entity_decode(trim($__env->yieldContent('active')), ENT_QUOTES | ENT_HTML5, 'UTF-8')])
       @yield('content')
     </div>
     @stack('body-end')

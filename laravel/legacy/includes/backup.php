@@ -261,17 +261,9 @@ function backup_delete($file) {
    BACKUP_KEEP others, so a week of daily ones never pushes out a backup someone made
    on purpose. A pre-restore copy is the way back from a bad restore: never pruned. */
 function backup_prune() {
-    $auto = $others = [];
-    foreach (backup_list() as $b) {           // newest first
-        if (strpos($b['file'], '-pre-restore.') !== false) {
-            continue;
-        }
-        if (strpos($b['file'], '-auto.') !== false) {
-            $auto[] = $b;
-        } else {
-            $others[] = $b;
-        }
-    }
+    $all = backup_list();   // newest first
+    $auto = array_filter($all, fn ($b) => str_contains($b['file'], '-auto.'));
+    $others = array_filter($all, fn ($b) => !str_contains($b['file'], '-auto.') && !str_contains($b['file'], '-pre-restore.'));
     foreach (array_merge(array_slice($auto, BACKUP_KEEP_AUTO), array_slice($others, BACKUP_KEEP)) as $b) {
         backup_delete($b['file']);
     }

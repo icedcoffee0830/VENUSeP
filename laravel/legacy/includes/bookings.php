@@ -283,12 +283,10 @@ function booking_shape(array $row) {
 
 /* What to tell someone whose venue slot sp_add_venue_slot() refused (45000).
    The procedure says why; this turns it into a sentence for a person. */
-function venue_slot_refusal_message(PDOException $e, ?int $gapMinutes = null) {
+function venue_slot_refusal_message(PDOException $e, int $gap) {
     $m = $e->getMessage();
     if (stripos($m, 'cleanup gap') !== false) {
-        /* The procedure refuses with the OFFICE's own gap (migration 16), so callers pass that
-           office's minutes; the old site-wide setting is only the fallback. */
-        $gap = $gapMinutes ?? venue_cleanup_gap_minutes();
+        /* $gap = the OFFICE's own minutes, the ones the procedure refused with (migration 16) */
         return 'That time is too close to another booking on the same day. Bookings need '
              . ($gap % 60 === 0 ? ($gap / 60) . ' hour' . ($gap === 60 ? '' : 's') : $gap . ' minutes')
              . ' free before and after them for cleanup. Please pick another time.';

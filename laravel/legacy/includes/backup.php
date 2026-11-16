@@ -92,7 +92,7 @@ function backup_mysql_bin($tool) {
    The password (if any) travels in the environment, never on a command line
    another process could read. Returns '' on success, else the error text. */
 function backup_run(array $cmd, $stdinFile = null, $stdoutFile = null) {
-    $cfg = venusep_db_config();
+    $cfg = venusep_db_admin_config();
     $desc = [
         0 => $stdinFile !== null ? ['file', $stdinFile, 'r'] : ['pipe', 'r'],
         1 => $stdoutFile !== null ? ['file', $stdoutFile, 'w'] : ['pipe', 'w'],
@@ -170,7 +170,7 @@ function backup_create($kind, $userId, $userLabel, &$error) {
         $error = 'mysqldump was not found (looked in XAMPP\'s mysql/bin).';
         return null;
     }
-    $cfg  = venusep_db_config();
+    $cfg  = venusep_db_admin_config();
     $work = backup_tempdir();
     try {
         $err = backup_run([$dump, '--host=' . $cfg['host'], '--user=' . $cfg['user'],
@@ -326,7 +326,7 @@ function backup_restore($archivePath, $userId, $userLabel, &$error, bool $safety
         /* the dump names its database itself (USE / CREATE / DROP DATABASE), and
            the mysql client follows it — a backup of another copy (the old site's
            `venusep`, a test copy) would overwrite THAT database, not this one */
-        $cfg = venusep_db_config();
+        $cfg = venusep_db_admin_config();
         $other = backup_dump_other_database($work . '/database.sql', $cfg['name']);
         if ($other !== null) {
             $error = 'That backup is of the database "' . $other . '", and this system runs on "' . $cfg['name']

@@ -37,6 +37,15 @@ function venusep_db_config()
     ];
 }
 
+/* The same, signed in as the fuller account backups and restores need (config venusep.db_admin_*):
+   once the website's own account is a plain one, it cannot dump or reload stored routines. */
+function venusep_db_admin_config()
+{
+    $cfg = venusep_db_config();
+    $user = (string) config('venusep.db_admin_user');
+    return $user === '' ? $cfg : ['user' => $user, 'pass' => (string) config('venusep.db_admin_pass')] + $cfg;
+}
+
 function venusep_db()
 {
     try {

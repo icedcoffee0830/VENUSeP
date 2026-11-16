@@ -40,4 +40,18 @@ class ServerFileTest extends TestCase
         $this->assertSame(env('DB_HOST', '127.0.0.1'), config('database.connections.mysql.host'));
         $this->assertSame(3, config('database.connections.mysql.options')[PDO::ATTR_TIMEOUT], 'an unreachable server fails in 3 s, not 20');
     }
+
+    /* The website's own account becomes a plain one that read-only copies stop; backups and
+       restores sign in as the fuller account when it is set, and as the website's until then. */
+    public function test_backups_sign_in_as_the_admin_account_once_it_is_set(): void
+    {
+        legacy('db');
+        $site = venusep_db_config();
+        $this->assertSame($site, venusep_db_admin_config(), 'not set yet: the same account as the website');
+
+        config(['venusep.db_admin_user' => 'venusep_admin', 'venusep.db_admin_pass' => 'admin-pass']);
+        $admin = venusep_db_admin_config();
+        $this->assertSame(['venusep_admin', 'admin-pass'], [$admin['user'], $admin['pass']]);
+        $this->assertSame([$site['host'], $site['name']], [$admin['host'], $admin['name']], 'same server, same database');
+    }
 }

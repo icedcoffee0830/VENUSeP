@@ -7,4 +7,8 @@ return [
     'max_unpaid' => (int) env('VENUSEP_MAX_UNPAID', 5),             // unpaid upcoming bookings per office, online
     'mail_config' => env('VENUSEP_MAIL_CONFIG'),   // tests only: fake mail settings instead of legacy/includes/mail-config.php
     'mysql_bin' => env('VENUSEP_MYSQL_BIN'),   // mysqldump / mysql folder; empty = XAMPP's own
+    /* failover (SETUP.md): the website signs in as a plain account that read-only copies
+       can stop; backups and restores need this fuller one. Empty = the website's own. */
+    'db_admin_user' => env('DB_ADMIN_USERNAME'),
+    'db_admin_pass' => env('DB_ADMIN_PASSWORD', ''),
 ];

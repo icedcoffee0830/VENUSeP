@@ -29,7 +29,7 @@ class BookingCreateQueries
     public static function findRoom(string $roomCode): ?array
     {
         $row = DB::selectOne("
-            SELECT r.id, r.venue_id, r.name, r.room_type, r.is_active, v.discount_percent,
+            SELECT r.id, r.venue_id, r.name, r.room_type, r.is_active, v.discount_percent, v.cleanup_gap_minutes,
                    erd.attendee_capacity, erd.fee_per_day,
                    hrd.rate_per_head_per_night
             FROM rooms r

@@ -87,4 +87,17 @@ class BugFixesTest extends TestCase
             DB::table('users')->where('email', 'francishubero@gmail.com')->update(['is_active' => 1]);
         }
     }
+
+    /* The procedure refuses with the office's own cleanup gap (migration 16); the sentence
+       once read the old site-wide setting, so an office with 30 minutes was told "1 hour". */
+    public function test_the_cleanup_gap_refusal_says_the_offices_own_minutes(): void
+    {
+        legacy('db', 'bookings');
+        $e = new \PDOException('That time is too close to another booking: bookings need a cleanup gap before and after them.');
+        $this->assertStringContainsString('need 30 minutes free', venue_slot_refusal_message($e, 30));
+        $this->assertStringContainsString('need 2 hours free', venue_slot_refusal_message($e, 120));
+        $this->assertStringContainsString('need 1 hour free', venue_slot_refusal_message($e, 60));
+        $room = \App\Queries\BookingCreateQueries::findRoom((string) DB::table('rooms')->where('room_type', 'event')->value('room_code'));
+        $this->assertArrayHasKey('cleanup_gap_minutes', $room);   // the booking pages pass this in
+    }
 }

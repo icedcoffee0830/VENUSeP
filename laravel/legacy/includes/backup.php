@@ -40,9 +40,10 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/documents.php';   /* doc_root() */
 
-const BACKUP_KEEP = 10;
+const BACKUP_KEEP = 10;       // made by hand or uploaded
+const BACKUP_KEEP_AUTO = 7;   // made by the daily task (artisan venusep:backup), counted on their own
 const BACKUP_APP  = 'VENUSeP';
-const BACKUP_NAME_RE = '/^venusep-backup-\d{8}-\d{6}-(manual|pre-restore|uploaded)\.tar\.gz$/';
+const BACKUP_NAME_RE = '/^venusep-backup-\d{8}-\d{6}-(manual|auto|pre-restore|uploaded)\.tar\.gz$/';
 
 function backup_dir() {
     $d = doc_root() . '/backups';
@@ -256,11 +257,22 @@ function backup_delete($file) {
     return true;
 }
 
-/* Keep the newest BACKUP_KEEP. */
+/* Keep the newest BACKUP_KEEP_AUTO daily-task backups and, separately, the newest
+   BACKUP_KEEP others, so a week of daily ones never pushes out a backup someone made
+   on purpose. A pre-restore copy is the way back from a bad restore: never pruned. */
 function backup_prune() {
-    /* A pre-restore copy is the way back from a bad restore: routine backups never push it out. */
-    $all = array_filter(backup_list(), function ($b) { return strpos($b['file'], '-pre-restore.') === false; });
-    foreach (array_slice($all, BACKUP_KEEP) as $b) {
+    $auto = $others = [];
+    foreach (backup_list() as $b) {           // newest first
+        if (strpos($b['file'], '-pre-restore.') !== false) {
+            continue;
+        }
+        if (strpos($b['file'], '-auto.') !== false) {
+            $auto[] = $b;
+        } else {
+            $others[] = $b;
+        }
+    }
+    foreach (array_merge(array_slice($auto, BACKUP_KEEP_AUTO), array_slice($others, BACKUP_KEEP)) as $b) {
         backup_delete($b['file']);
     }
 }

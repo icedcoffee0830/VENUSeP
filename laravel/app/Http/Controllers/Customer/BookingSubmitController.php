@@ -206,7 +206,7 @@ class BookingSubmitController extends Controller
                     sql_failed($e);
                 }
                 $msg = $refused
-                    ? venue_slot_refusal_message($e)
+                    ? venue_slot_refusal_message($e, (int) $room['cleanup_gap_minutes'])
                     : 'Something went wrong, so your booking was not submitted.';
                 return self::reply($refused ? 409 : 500, ['ok' => false, 'message' => $msg]);
             }

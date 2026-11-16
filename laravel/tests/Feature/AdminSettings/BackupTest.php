@@ -103,6 +103,35 @@ class BackupTest extends TestCase
         }
     }
 
+    /* The daily task names its files "-auto": they once failed the name check, so they never
+       showed on the page and were never pruned. Now they show, and are kept 7 on their own. */
+    public function test_daily_backups_show_and_never_push_out_hand_made_ones(): void
+    {
+        legacy('backup');
+        $dir = backup_dir();
+        $before = glob($dir . '/*') ?: [];
+        for ($i = 0; $i < 9; $i++) {
+            file_put_contents($dir . sprintf('/venusep-backup-20000102-0000%02d-auto.tar.gz', $i), 'x');
+        }
+        $manual = $dir . '/venusep-backup-20000101-000000-manual.tar.gz';
+        file_put_contents($manual, 'x');
+        try {
+            $this->assertContains('venusep-backup-20000102-000008-auto.tar.gz', array_column(backup_list(), 'file'));
+            $this->assertNotNull(backup_path('venusep-backup-20000102-000008-auto.tar.gz'));
+            backup_prune();
+            $this->assertFileExists($manual);    // older than every daily one, still kept
+            $this->assertFileExists($dir . '/venusep-backup-20000102-000002-auto.tar.gz');
+            $this->assertFileDoesNotExist($dir . '/venusep-backup-20000102-000001-auto.tar.gz');
+            $this->assertFileDoesNotExist($dir . '/venusep-backup-20000102-000000-auto.tar.gz');
+            $this->actingAsAdmin()->get(route('admin.backup-restore'))->assertOk()
+                ->assertSee('Automatic daily backup')->assertSee('the newest 7');
+        } finally {
+            foreach (array_diff(glob($dir . '/*') ?: [], $before) as $f) {
+                @unlink($f);
+            }
+        }
+    }
+
     public function test_restore_refuses_a_backup_of_another_database(): void
     {
         legacy('backup');

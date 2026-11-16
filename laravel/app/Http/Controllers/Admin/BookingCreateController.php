@@ -461,7 +461,7 @@ class BookingCreateController extends Controller
             }
             $this->reply($refused ? 409 : 500, ['ok' => false,
                 'message' => $refused
-                    ? venue_slot_refusal_message($e)
+                    ? venue_slot_refusal_message($e, (int) $c['room']['cleanup_gap_minutes'])
                     : 'Something went wrong, so nothing was created.']);
         }
 

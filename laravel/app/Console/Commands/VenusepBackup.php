@@ -15,7 +15,7 @@ class VenusepBackup extends Command
     {
         legacy('auth', 'backup');
         $err = '';
-        $file = backup_create('auto', 0, 'nightly task', $err);
+        $file = backup_create('auto', 0, 'automatic daily backup', $err);
         if ($file === null) {
             $this->error('The backup failed: ' . $err);
             return self::FAILURE;

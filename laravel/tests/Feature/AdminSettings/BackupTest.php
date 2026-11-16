@@ -137,15 +137,7 @@ class BackupTest extends TestCase
         legacy('backup');
         $dir = backup_dir();
         $before = glob($dir . '/*') ?: [];
-        $src = sys_get_temp_dir() . '/venusep-admina-' . bin2hex(random_bytes(4));
-        mkdir($src);
-        file_put_contents($src . '/manifest.json', json_encode(['app' => 'VENUSeP', 'kind' => 'manual',
-            'schema_version' => backup_schema_version(), 'database' => 'venusep_admina_zz_other']));
-        file_put_contents($src . '/database.sql', "USE `venusep_admina_zz_other`;\n");
-        $tar = new \PharData($src . '.tar');
-        $tar->buildFromDirectory($src);
-        $tar->compress(\Phar::GZ);
-        unset($tar);
+        $src = $this->otherDatabaseBackup();
         /* older backups up to ten (a real one may already be here): storing the upload makes eleven, pruned to the newest 10 */
         $older = 10 - count(glob($dir . '/*.tar.gz') ?: []);
         for ($i = 0; $i < $older; $i++) {
@@ -169,7 +161,57 @@ class BackupTest extends TestCase
             foreach (array_diff(glob($dir . '/*') ?: [], $before) as $f) {
                 @unlink($f);
             }
-            foreach ([$src . '/manifest.json', $src . '/database.sql', $src . '.tar', $src . '.tar.gz'] as $f) {
+            foreach ([$src . '/manifest.json', $src . '/database.sql', $src . '.tar', $src . '.tar.gz', $src . '-usb.tar.gz'] as $f) {
+                @unlink($f);
+            }
+            @rmdir($src);
+        }
+    }
+
+    /* A VENUSeP backup of ANOTHER database: $src.tar.gz (the caller removes $src.*). */
+    private function otherDatabaseBackup(): string
+    {
+        $src = sys_get_temp_dir() . '/venusep-admina-' . bin2hex(random_bytes(4));
+        mkdir($src);
+        file_put_contents($src . '/manifest.json', json_encode(['app' => 'VENUSeP', 'kind' => 'manual',
+            'schema_version' => backup_schema_version(), 'database' => 'venusep_admina_zz_other']));
+        file_put_contents($src . '/database.sql', "USE `venusep_admina_zz_other`;\n");
+        $tar = new \PharData($src . '.tar');
+        $tar->buildFromDirectory($src);
+        $tar->compress(\Phar::GZ);
+        unset($tar);
+        return $src;
+    }
+
+    /* The command line restores when nobody can sign in. It lists, asks for the database
+       name, and goes through the same checks as the page. */
+    public function test_the_command_line_restore_lists_asks_and_refuses_like_the_page(): void
+    {
+        legacy('backup');
+        $dir = backup_dir();
+        $before = glob($dir . '/*') ?: [];
+        $src = $this->otherDatabaseBackup();
+        /* read from a copy: phar keeps a stale index for the path it just compressed (see backup_create) */
+        copy($src . '.tar.gz', $src . '-usb.tar.gz');
+        file_put_contents($dir . '/venusep-backup-20000103-000000-manual.tar.gz', 'x');
+        $db = DB::connection()->getDatabaseName();
+        try {
+            $this->artisan('venusep:restore')->expectsOutputToContain('venusep-backup-20000103-000000-manual.tar.gz')->assertExitCode(0);
+            $this->artisan('venusep:restore', ['file' => 'nope.tar.gz'])->expectsOutputToContain('No such backup')->assertExitCode(1);
+            $this->artisan('venusep:restore', ['file' => 'venusep-backup-20000103-000000-manual.tar.gz'])
+                ->expectsOutputToContain('not a VENUSeP backup')->assertExitCode(1);
+            $this->artisan('venusep:restore', ['file' => $src . '-usb.tar.gz'])
+                ->expectsQuestion('Type the database name (' . $db . ') to go on', 'wrong')
+                ->expectsOutputToContain('Nothing was restored')->assertExitCode(1);
+            $this->artisan('venusep:restore', ['file' => $src . '-usb.tar.gz', '--force' => true])
+                ->expectsOutputToContain('Restoring it would overwrite "venusep_admina_zz_other", so it was refused')->assertExitCode(1);
+            $made = array_diff(glob($dir . '/*') ?: [], $before);
+            $this->assertSame([], array_values(array_filter($made, fn ($f) => str_contains($f, 'pre-restore'))), 'nothing got as far as a safety copy');
+        } finally {
+            foreach (array_diff(glob($dir . '/*') ?: [], $before) as $f) {
+                @unlink($f);
+            }
+            foreach ([$src . '/manifest.json', $src . '/database.sql', $src . '.tar', $src . '.tar.gz', $src . '-usb.tar.gz'] as $f) {
                 @unlink($f);
             }
             @rmdir($src);

@@ -284,10 +284,10 @@ function backup_read_manifest($archivePath) {
     }
 }
 
-/* Restore one backup file. Returns the pre-restore backup's name, or null
-   with $error set. Everyone — including the admin who asked — is signed out
-   at the end. */
-function backup_restore($archivePath, $userId, $userLabel, &$error) {
+/* Restore one backup file. Returns the pre-restore backup's name ('' when
+   $safetyCopy is false), or null with $error set. Everyone — including the
+   admin who asked — is signed out at the end. */
+function backup_restore($archivePath, $userId, $userLabel, &$error, bool $safetyCopy = true) {
     @set_time_limit(900);
     $error = '';
     $manifest = backup_read_manifest($archivePath);
@@ -334,18 +334,23 @@ function backup_restore($archivePath, $userId, $userLabel, &$error) {
             return null;
         }
 
-        /* 1. the safety copy — no safety copy, no restore */
-        $pre = backup_create('pre-restore', $userId, $userLabel, $preErr);
-        if ($pre === null) {
-            $error = 'A safety backup of the current data could not be made, so nothing was restored. ' . $preErr;
-            return null;
+        /* 1. the safety copy — no safety copy, no restore. Only the command line may skip it
+           ($safetyCopy false, artisan venusep:restore --no-safety-copy): for a database too
+           damaged to dump, which is exactly when a restore is needed most. */
+        $pre = '';
+        if ($safetyCopy) {
+            $pre = backup_create('pre-restore', $userId, $userLabel, $preErr);
+            if ($pre === null) {
+                $error = 'A safety backup of the current data could not be made, so nothing was restored. ' . $preErr;
+                return null;
+            }
         }
 
         /* 2. the database (the dump drops and recreates it itself) */
         $err = backup_run([$mysql, '--host=' . $cfg['host'], '--user=' . $cfg['user'], '--default-character-set=utf8mb4'],
                           $work . '/database.sql', null);
         if ($err !== '') {
-            $error = 'The database could not be restored: ' . $err . ' The safety backup ' . $pre . ' holds the data from just before.';
+            $error = 'The database could not be restored: ' . $err . ($pre !== '' ? ' The safety backup ' . $pre . ' holds the data from just before.' : '');
             return null;
         }
 

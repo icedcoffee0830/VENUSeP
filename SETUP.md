@@ -93,15 +93,31 @@ These are development accounts only. Change them before any real use.
 
 Admins set each office's hours, closed days, closures, USeP discount, grace days, minimum notice and cleanup gap on **Office Settings**. Bahay Alumni and USeP Venues start with weekends closed; the hostel stays open.
 
-## Nightly backup (on the real server)
+## Automatic daily backup
 
-Add this in Windows Task Scheduler, every night, with `laravel` as the "Start in" folder:
+Run this once in **PowerShell** (change the two paths to your own XAMPP and project folders). It backs up every day at 12:00, or as soon as the laptop is on if it was off at 12:00. MySQL must be running.
 
 ```
-C:\xampp\php\php.exe artisan venusep:backup
+$a = New-ScheduledTaskAction -Execute "C:\xampp\php\php.exe" -Argument "artisan venusep:backup" -WorkingDirectory "C:\xampp\htdocs\VENUSeP-laravel\laravel"
+$t = New-ScheduledTaskTrigger -Daily -At 12:00
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable
+Register-ScheduledTask -TaskName "VENUSeP daily backup" -Action $a -Trigger $t -Settings $s
 ```
+
+These show on Backup & Restore as "Automatic daily backup". The newest 7 are kept, apart from the newest 10 made by hand.
 
 IDs are left out of backups on purpose. After a restore, customers with open bookings upload theirs again.
+
+## Restore without signing in
+
+When the site is broken and nobody can sign in, restore from **cmd** in the `laravel` folder:
+
+```
+C:\xampp\php\php.exe artisan venusep:restore
+C:\xampp\php\php.exe artisan venusep:restore venusep-backup-20261116-120000-auto.tar.gz
+```
+
+The first line lists the backups; the second restores one (a path to a `.tar.gz`, for example on a USB stick, works too). It asks you to type the database name first. It makes a safety copy before it starts; if the database is too damaged for that, add `--no-safety-copy`.
 
 ## If the system is down
 

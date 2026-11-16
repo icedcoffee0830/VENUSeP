@@ -293,13 +293,23 @@ class StaffHallScopeTest extends TestCase
 
     public function test_the_calendar_shows_other_halls_as_busy_and_leaks_nothing(): void
     {
+        /* Each booking gets a day nobody else holds: a random day once landed on a leftover
+           booking in the staff's own hall, and the calendar rightly showed that one. */
+        $ownDay = function (int $id): string {
+            do {
+                $d = now()->addDays(random_int(4001, 9000))->toDateString();
+            } while (DB::table('venue_booking_slots')->where('slot_date', $d)->exists());
+            DB::table('venue_booking_details')->where('booking_id', $id)->update(['start_date' => $d, 'end_date' => $d]);
+            DB::table('venue_booking_slots')->where('booking_id', $id)->update(['slot_date' => $d]);
+            return $d;
+        };
         [$other] = $this->seedVenueBooking('r2', 'approved', 'confirmed');
         DB::table('venue_booking_details')->where('booking_id', $other)->update(['event_name' => 'Other hall secret']);
-        $day = DB::table('venue_booking_details')->where('booking_id', $other)->value('start_date');
+        $day = $ownDay($other);
         [$gone] = $this->seedVenueBooking('r2', 'cancelled', 'locked');
-        $goneDay = DB::table('venue_booking_details')->where('booking_id', $gone)->value('start_date');
+        $goneDay = $ownDay($gone);
         [$office] = $this->seedVenueBooking('r5', 'approved', 'confirmed');
-        $officeDay = DB::table('venue_booking_details')->where('booking_id', $office)->value('start_date');
+        $officeDay = $ownDay($office);
 
         $page = $this->asStaff()->get(route('admin.calendar'))->assertOk()->assertDontSee('Other hall secret');
         $page->assertDontSee(DB::table('rooms')->where('room_code', 'r2')->value('name'));

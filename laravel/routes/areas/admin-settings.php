@@ -22,3 +22,6 @@ Route::match(['get', 'post'], '/admin/gcash-account-save', Admin\GcashAccountSav
 /* Server (failover): the laptops' database servers. The super admin only; the action endpoint guards itself. */
 Route::middleware('staff:super')->get('/admin/server', [Admin\ServerController::class, 'index'])->name('admin.server');
 Route::post('/admin/server-action', [Admin\ServerController::class, 'action'])->name('admin.server-action');
+/* The emergency way in while the database is down (App\Failover\Outage lets these two through). */
+Route::match(['get', 'post'], '/server-emergency', [Admin\ServerController::class, 'emergency'])->name('failover.emergency');
+Route::post('/server-emergency/action', [Admin\ServerController::class, 'action'])->name('failover.emergency-action');

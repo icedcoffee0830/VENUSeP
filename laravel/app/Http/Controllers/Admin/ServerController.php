@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Failover\ServerFile;
+use App\Failover\SuperAdminCopy;
 use App\Failover\Servers;
 use App\Http\Controllers\Admin\Concerns\JsonEndpoint;
 use App\Queries\AccountQueries;
@@ -23,6 +24,11 @@ use Illuminate\Support\Facades\DB;
      rebuild ip         reload a copy from the main   } the authenticator app
      saving on=0|1      allow saving without a copy   }
    Every action re-checks who is asking: the page is never trusted.
+
+   EMERGENCY (failover.emergency): while the database can't be reached, or the main is locked
+   (read-only after a restart, so no sign-in can save), the super admin signs in with the
+   locked copy (SuperAdminCopy: email, password, authenticator code) and gets this same panel,
+   nothing else, for 10 minutes. Its buttons post to failover.emergency-action.
    ===================================================================== */
 class ServerController
 {
@@ -31,6 +37,39 @@ class ServerController
     public function index()
     {
         return view('admin.server', self::panel());
+    }
+
+    public function emergency(Request $request)
+    {
+        if (self::databaseWorks()) {
+            session()->forget('failover_emergency');
+            return redirect()->route('admin.server');   // the normal way in
+        }
+        $error = null;
+        if ($request->isMethod('post')) {
+            $error = SuperAdminCopy::check((string) $request->input('email', ''), (string) $request->input('password', ''), (string) $request->input('code', ''));
+            if ($error === null) {
+                SuperAdminCopy::open();
+                return redirect()->route('failover.emergency');
+            }
+        }
+        return response()->view('failover.emergency', [
+            'emSignedIn' => SuperAdminCopy::session() !== null,
+            'emError' => $error,
+            'emEmail' => (string) $request->input('email', ''),
+            'emMain' => Servers::main(),
+            'emHasCopy' => SuperAdminCopy::exists(),
+        ] + (SuperAdminCopy::session() ? self::panel() : ['svCsrf' => csrf_token()]), 503);
+    }
+
+    /* Reachable AND taking saves: then nobody needs the emergency way in. */
+    private static function databaseWorks(): bool
+    {
+        try {
+            return (int) DB::connection()->getPdo()->query('SELECT @@read_only')->fetchColumn() === 0;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /* What the panel shows (the Server page, and the emergency page in piece 7). */
@@ -148,9 +187,12 @@ class ServerController
         return $this->reply(200, ['ok' => true, 'protected' => $on]);
     }
 
-    /* The signed-in super admin, or null. */
+    /* The signed-in super admin (or the emergency session), or null. */
     private function actor(): ?array
     {
+        if ($em = SuperAdminCopy::session()) {
+            return ['id' => (int) $em['id'], 'email' => (string) $em['email'], 'emergency' => true];
+        }
         if (!admin_is_super()) {
             return null;
         }
@@ -165,6 +207,10 @@ class ServerController
         $code = (string) $request->input('code', '');
         if ($password === '' || trim($code) === '') {
             return $this->reply(400, ['ok' => false, 'message' => 'Type your password and the code from your authenticator app.']);
+        }
+        if (!empty($actor['emergency'])) {   // no database: the locked copy checks both
+            $no = SuperAdminCopy::check($actor['email'], $password, $code);
+            return $no === null ? null : $this->reply(401, ['ok' => false, 'message' => $no]);
         }
         $pdo = venusep_db_or_fail();
         $pdo->beginTransaction();

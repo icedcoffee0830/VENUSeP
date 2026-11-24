@@ -74,12 +74,17 @@ class PasswordResetController
             if ($found !== null) {
                 session()->migrate(true);   // the old session_regenerate_id(true)
                 session(['pw_reset' => ['id' => $found['id'], 'user_id' => $found['user_id']]]);
+            } elseif ($pdo !== null && is_string($token) && pr_closed($pdo, 'r.token_hash = :k', [':k' => pr_hash($token)])) {
+                session()->flash('pw_reset_closed', true);   // a link sent before the account was revoked
             }
             return $this->noLeak(redirect()->route($pr['reset']));
         }
 
         $state = session('pw_reset');
         $reset = ($pdo !== null && is_array($state)) ? pr_find_id($pdo, (int) $state['id'], (int) $state['user_id'], $staff) : null;
+        $closed = (bool) session('pw_reset_closed')
+            || ($reset === null && $pdo !== null && is_array($state)
+                && pr_closed($pdo, 'r.id = :k AND r.user_id = :u', [':k' => (int) $state['id'], ':u' => (int) $state['user_id']]));
 
         $rpErrors = [];
         if ($reset !== null && $request->isMethod('post')) {
@@ -114,7 +119,7 @@ class PasswordResetController
             session()->forget('pw_reset');
         }
 
-        return $this->noLeak(response()->view('auth.reset-password', compact('reset', 'rpErrors', 'pr')));
+        return $this->noLeak(response()->view('auth.reset-password', compact('reset', 'closed', 'rpErrors', 'pr')));
     }
 
     private function noLeak($response)

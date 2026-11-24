@@ -29,7 +29,10 @@
        customer with two-step verification on is still asked for the code.
      - Each side sends links for its own accounts only: the customer pages never
        for a staff or admin account, the staff pages never for a customer. A
-       suspended account or a former super admin (handed over) gets none.
+       suspended account, a revoked one (closed for good, migration 21) or a
+       former super admin (handed over) gets none, with the same reply. A link
+       sent before a revoke shows "This account was closed and can’t be used
+       again." instead of the form: only whoever holds the link learns it.
    ===================================================================== */
 
 require_once __DIR__ . '/db.php';
@@ -43,12 +46,13 @@ const PR_RESET_THROTTLE_MIN = 5;    // minutes between emails to one account
 const PR_NOT_SET_UP_REPLY   = 'Not sent: email isn’t set up on this laptop, so no reset link can arrive.';
 const PR_REQUEST_REPLY      = 'If that email belongs to a VENUSeP account, we’ve sent it a link to reset the password. The link works for 30 minutes. Check your spam folder if it doesn’t arrive.';
 
-/* The accounts one side's links are for. */
+/* The accounts one side's links are for: never a revoked one (revokedAt() is NULL before migration 21). */
 function pr_side_sql(bool $staff): string
 {
-    return $staff
+    return ($staff
         ? "u.account_type IN ('admin', 'staff') AND u.is_active = 1 AND u.handed_over_at IS NULL"
-        : "u.account_type = 'customer' AND u.is_active = 1";
+        : "u.account_type = 'customer' AND u.is_active = 1")
+        . ' AND ' . \App\Queries\AccountQueries::revokedAt() . ' IS NULL';
 }
 
 function pr_hash(string $token): string
@@ -140,6 +144,18 @@ function pr_find(PDO $pdo, string $token, bool $staff = false): ?array
 function pr_find_id(PDO $pdo, int $resetId, int $userId, bool $staff = false): ?array
 {
     return pr_row($pdo, 'r.id = :k AND r.user_id = :u', [':k' => $resetId, ':u' => $userId], $staff);
+}
+
+/* Is the link ($where as in pr_row) for an account that was revoked? Whatever the link's
+   state: the page then says the account is closed, not that the link expired. */
+function pr_closed(PDO $pdo, string $where, array $args): bool
+{
+    if (!\App\Queries\SchemaQueries::has('users', 'revoked_at')) {
+        return false;
+    }
+    $stmt = $pdo->prepare("SELECT 1 FROM password_resets r JOIN users u ON u.id = r.user_id WHERE {$where} AND u.revoked_at IS NOT NULL LIMIT 1");
+    $stmt->execute($args);
+    return $stmt->fetchColumn() !== false;
 }
 
 function pr_row(PDO $pdo, string $where, array $args, bool $staff): ?array

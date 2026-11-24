@@ -5,7 +5,13 @@
 @section('hero-sub', 'Use one you don’t use anywhere else. You’ll log in with it straight after.')
 @section('labelledby', 'resetTitle')
 @section('card')
-          @if ($reset === null)
+          @if ($reset === null && $closed)
+          <div class="auth-heading">
+            <h1 class="auth-title" id="resetTitle">Account closed</h1>
+            <p class="auth-subtitle">This account was closed and can&rsquo;t be used again.</p>
+          </div>
+          <a class="btn-auth" href="{{ route($pr['home']) }}">Back to VENUSeP</a>
+          @elseif ($reset === null)
           <div class="auth-heading">
             <h1 class="auth-title" id="resetTitle">This link can&rsquo;t be used</h1>
             <p class="auth-subtitle">It has expired, was already used, or a newer link was sent after it. Links work once, for 30 minutes.</p>

@@ -171,9 +171,10 @@ DROP USER IF EXISTS ''@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-**D. `.env`.** Make it on laptop A, then copy the **same file** to every laptop by USB, never by chat or git. The same `APP_KEY` everywhere is required: without it, the IDs can't be opened after a switch.
+**D. `.env`.** Make it on laptop A, then copy the **same file** to every laptop by USB, never by chat or git. The same `APP_KEY` everywhere is required: without it, the IDs can't be opened after a switch. `DB_HOST` is laptop A's address (step G shows it), so every laptop's website starts on the main; after a switch the Server page keeps the new address in `storage/app/failover/server.json`.
 
 ```
+DB_HOST=A_IP
 DB_USERNAME=venusep_app
 DB_PASSWORD=APP_PASS
 DB_ADMIN_USERNAME=venusep_admin
@@ -197,7 +198,7 @@ $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-Time
 Register-ScheduledTask -TaskName "VENUSeP failover tick" -Action $a -Trigger $t
 ```
 
-**F. The first copy (laptop B, C, D only).** Load A's database, then start copying. `A_IP` is A's address, shown on A's Server page under "This laptop".
+**F. The first copy (laptop B, C, D only).** This **replaces** the laptop's own `venusep_laravel` with A's: back it up first if it holds anything you need. Load A's database, then start copying. `A_IP` is A's address, shown on A's Server page under "This laptop".
 
 ```
 C:\xampp\mysql\bin\mysqldump.exe -h A_IP -u venusep_admin -p --single-transaction --gtid --master-data=1 --routines --triggers --add-drop-database --databases venusep_laravel > %USERPROFILE%\seed.sql

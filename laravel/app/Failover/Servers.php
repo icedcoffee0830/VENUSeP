@@ -163,15 +163,26 @@ final class Servers
         return $r;
     }
 
-    private static function why(Throwable $e): string
+    /* "Can't reach it" only when it really could not connect; any other error says MySQL's own words
+       (the two-laptop test: a syntax error was shown as "can't reach it" and hid the real cause). */
+    public static function why(Throwable $e): string
     {
-        $code = $e instanceof PDOException ? (int) ($e->errorInfo[1] ?? 0) : 0;
+        $code = $e instanceof PDOException ? (int) ($e->errorInfo[1] ?? $e->getCode()) : 0;
         return match (true) {
             $code === 1049 => 'No VENUSeP database on this server',
             $code === 1045, $code === 1130 => 'The server answered but would not let this system sign in (check its accounts, SETUP.md)',
             $code === 1146 => 'A database with this name, but not a VENUSeP one',
-            default => 'Can’t reach it: is the laptop on, on the hotspot, and is MySQL running?',
+            in_array($code, [2002, 2003, 2005, 2006, 2013], true) => 'Can’t reach it: is the laptop on, on the hotspot, and is MySQL running?',
+            default => 'MySQL said: ' . preg_replace('/^SQLSTATE\[\w+\]: [^:]*: \d+ /', '', $e->getMessage()),
         };
+    }
+
+    /* MariaDB takes no placeholders in CHANGE MASTER: the port is written in as a number and the
+       texts are quoted (PDO sent the port as '3306', a syntax error, so no copy was ever pointed). */
+    public static function changeMasterSql(callable $quote, string $host, int $port, string $user, string $pass): string
+    {
+        return 'CHANGE MASTER TO MASTER_HOST = ' . $quote($host) . ', MASTER_PORT = ' . $port
+            . ', MASTER_USER = ' . $quote($user) . ', MASTER_PASSWORD = ' . $quote($pass) . ', MASTER_USE_GTID = slave_pos';
     }
 
     /* ---- Find ---- */
@@ -315,8 +326,7 @@ final class Servers
         if ($fresh) {
             $db->exec('SET GLOBAL gtid_slave_pos = @@gtid_binlog_pos');
         }
-        $db->prepare('CHANGE MASTER TO MASTER_HOST = ?, MASTER_PORT = ?, MASTER_USER = ?, MASTER_PASSWORD = ?, MASTER_USE_GTID = slave_pos')
-            ->execute([$main, self::port(), (string) config('venusep.db_repl_user'), (string) config('venusep.db_repl_pass')]);
+        $db->exec(self::changeMasterSql([$db, 'quote'], $main, self::port(), (string) config('venusep.db_repl_user'), (string) config('venusep.db_repl_pass')));
         $db->exec('START SLAVE');
         sleep(3);
         $s = $db->query('SHOW SLAVE STATUS')->fetch() ?: [];

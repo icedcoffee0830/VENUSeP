@@ -267,8 +267,16 @@ final class Servers
         }
         $to = self::pdo($target);
 
-        /* the main itself, locked after a restart: only unlock it */
+        /* the main itself, locked after a restart: only unlock it, and never while another laptop
+           already takes saves: this laptop's note is out of date then (the two-laptop test: a
+           page that had not heard of an emergency switch unlocked its own copy, two mains). */
         if (self::isMain($target)) {
+            foreach (array_filter($laptops, fn ($ip) => !self::isMain($ip)) as $other) {
+                if (self::probe($other)['role'] === 'main') {
+                    $steps[] = ['Check for two mains', false, $other . ' already takes saves. Press “Switch to this” on ' . $other . ' instead: that points this laptop at it.'];
+                    return $done('none');
+                }
+            }
             $step('Unlock ' . $target, fn () => $to->exec('SET GLOBAL read_only = 0'));
             return $done('unlock');
         }

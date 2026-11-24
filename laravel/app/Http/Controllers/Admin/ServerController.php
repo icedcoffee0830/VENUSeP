@@ -162,6 +162,9 @@ class ServerController
             $how = ['planned' => 'Switched the database server', 'emergency' => 'Emergency switch of the database server',
                 'unlock' => 'Unlocked saving on the database server', 'point' => 'Pointed this system at the database server'][$result['mode']] ?? 'Switched the database server';
             ActivityQueries::add('server_switched', 'Database server', $how . ($result['mode'] === 'unlock' ? ' ' . $ip : ' from ' . $from . ' to ' . $ip), $actor['id'], 'admin');
+            /* every other laptop's website follows at once (a laptop that is off is told by hand later) */
+            $told = \App\Failover\FileCopies::tellMain($ip);
+            $result['steps'][] = ['Tell the other laptops', true, $told ? 'Told ' . implode(', ', $told) : 'No other laptop answered; press “Switch to this” on ' . $ip . ' on each of them'];
         }
         return $this->reply($result['ok'] ? 200 : 409, $result + ['message' => $result['ok'] ? 'Switched. Every save now goes to ' . $ip . '.' : 'The switch stopped. Nothing after the failed step was done.']);
     }

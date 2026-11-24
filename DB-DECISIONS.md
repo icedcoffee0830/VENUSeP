@@ -1018,3 +1018,21 @@ Agreed with Aron on 2026-11-24, for the team paper.
   log rows, Revoke says it needs migration 21, the FAQ has no "What do I need to book?" yet.
 - Backups made before migration 21 cannot be restored once it is in (`backup.php` checks the
   layout version, as with every migration).
+
+## 30. Server transfer — decided 2026-11-16, built 2026-11-24 (migration 22)
+
+- **Migration 22** adds one `system_settings` row, `schema_version` = 22. **Every later migration
+  sets it to its own number** (its last statement before the check). The Server page's Test reads
+  it on another laptop's database and refuses a database at another level than this code
+  (`backup_schema_version()`, the highest migration file).
+- The database address lives in `storage/app/failover/server.json` on each laptop, not in the
+  database: it must be readable when the database is not. `.env`'s `DB_HOST` is the fallback.
+- Replication: MariaDB GTID + semi-sync (AFTER_SYNC), one main, every server starts read-only;
+  only the super admin switches, with password + authenticator code. The main always wins: a copy
+  with changes of its own is rebuilt, never switched to. Only the real database is copied
+  (`binlog-do-db`). Migrations run on the main only.
+- Files (photos, IDs, receipts) are not in the database: the 1-minute task copies them, deletions
+  included, so the ID retention rule holds on every laptop.
+- Saving without a copy: a save waits at most 10 s; with no copy connected the main is paused
+  (locked) until a copy is back or the super admin allows saving without a copy (it turns
+  itself back on when a copy returns).

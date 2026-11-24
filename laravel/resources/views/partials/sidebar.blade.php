@@ -23,6 +23,10 @@
     $sbWaiting = $sbIsAdmin ? \App\Queries\CoverQueries::waitingForMe() : ['covers' => 0, 'moves' => 0];
     $sbTab = $sbWaiting['covers'] ? ['tab' => 'covers'] : ($sbWaiting['moves'] ? ['tab' => 'moves'] : []);
     $sbCounts = ['Booking Management' => \App\Queries\BookingQueries::needsAction(), 'Staff Management' => $sbWaiting['covers'] + $sbWaiting['moves']];
+    /* failover: the copies' problems from the 1-minute task (1 = the task is not running), the super admin only */
+    if (admin_is_super() && ($sbHealth = \App\Failover\Health::last()) !== false) {
+        $sbCounts['Server'] = $sbHealth === null ? 1 : count($sbHealth);
+    }
     $items = [
         ['Dashboard',           route('admin.dashboard'),              'bi-speedometer2'],
         ['Booking Management',  route('admin.booking-requests'),       'bi-calendar-check'],
@@ -37,6 +41,7 @@
         ['Payment Settings',    route('admin.payment-settings'),       'bi-wallet2'],
         ['FAQ Management',      route('admin.faq-management'),         'bi-question-circle', 'admin'],   /* admin-added FAQ entries (2026-09-18) */
         ['Backup & Restore',    route('admin.backup-restore'),         'bi-database-check', 'super'],    /* the super admin only (DB-DECISIONS 28) */
+        ['Server',              route('admin.server'),                 'bi-hdd-network', 'super'],      /* failover: the laptops' database servers */
         ['#Records'],
         ['Reports',             route('admin.reports'),                'bi-bar-chart'],
         ['Activity',            route('admin.activity'),               'bi-clock-history', 'super'],

@@ -17,7 +17,7 @@ class BackupRestoreController
             'brVersion' => backup_schema_version(),
             'brCsrf'    => csrf_token(),
             'brSize'    => function ($b) { return $b >= 1048576 ? round($b / 1048576, 1) . ' MB' : max(1, round($b / 1024)) . ' KB'; },
-            'brKinds'   => ['manual' => 'Backup', 'pre-restore' => 'Safety copy before a restore', 'uploaded' => 'Uploaded file'],
+            'brKinds'   => ['manual' => 'Backup', 'auto' => 'Automatic daily backup', 'pre-restore' => 'Safety copy before a restore', 'uploaded' => 'Uploaded file'],
         ]);
     }
 }

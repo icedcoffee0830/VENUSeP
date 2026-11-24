@@ -25,7 +25,7 @@
           <div class="container-fluid">
             <div class="br-head">
               <h1>Backup &amp; Restore</h1>
-              <p>A backup is one file with everything the system has stored: the database, the uploaded IDs and receipts, and the room, venue and profile photos. It is kept on this computer, outside the website folder. The newest {{ (int) BACKUP_KEEP }} are kept.</p>
+              <p>A backup is one file with everything the system has stored: the database, the uploaded IDs and receipts, and the room, venue and profile photos. It is kept on this computer, outside the website folder. The newest {{ (int) BACKUP_KEEP }} are kept. Automatic daily backups are counted on their own: the newest {{ (int) BACKUP_KEEP_AUTO }}.</p>
             </div>
 
             <section class="br-card" aria-labelledby="brMakeTitle">

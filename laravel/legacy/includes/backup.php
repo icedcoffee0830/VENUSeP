@@ -40,9 +40,10 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/documents.php';   /* doc_root() */
 
-const BACKUP_KEEP = 10;
+const BACKUP_KEEP = 10;       // made by hand or uploaded
+const BACKUP_KEEP_AUTO = 7;   // made by the daily task (artisan venusep:backup), counted on their own
 const BACKUP_APP  = 'VENUSeP';
-const BACKUP_NAME_RE = '/^venusep-backup-\d{8}-\d{6}-(manual|pre-restore|uploaded)\.tar\.gz$/';
+const BACKUP_NAME_RE = '/^venusep-backup-\d{8}-\d{6}-(manual|auto|pre-restore|uploaded)\.tar\.gz$/';
 
 function backup_dir() {
     $d = doc_root() . '/backups';
@@ -91,7 +92,7 @@ function backup_mysql_bin($tool) {
    The password (if any) travels in the environment, never on a command line
    another process could read. Returns '' on success, else the error text. */
 function backup_run(array $cmd, $stdinFile = null, $stdoutFile = null) {
-    $cfg = venusep_db_config();
+    $cfg = venusep_db_admin_config();
     $desc = [
         0 => $stdinFile !== null ? ['file', $stdinFile, 'r'] : ['pipe', 'r'],
         1 => $stdoutFile !== null ? ['file', $stdoutFile, 'w'] : ['pipe', 'w'],
@@ -169,7 +170,7 @@ function backup_create($kind, $userId, $userLabel, &$error) {
         $error = 'mysqldump was not found (looked in XAMPP\'s mysql/bin).';
         return null;
     }
-    $cfg  = venusep_db_config();
+    $cfg  = venusep_db_admin_config();
     $work = backup_tempdir();
     try {
         $err = backup_run([$dump, '--host=' . $cfg['host'], '--user=' . $cfg['user'],
@@ -256,11 +257,14 @@ function backup_delete($file) {
     return true;
 }
 
-/* Keep the newest BACKUP_KEEP. */
+/* Keep the newest BACKUP_KEEP_AUTO daily-task backups and, separately, the newest
+   BACKUP_KEEP others, so a week of daily ones never pushes out a backup someone made
+   on purpose. A pre-restore copy is the way back from a bad restore: never pruned. */
 function backup_prune() {
-    /* A pre-restore copy is the way back from a bad restore: routine backups never push it out. */
-    $all = array_filter(backup_list(), function ($b) { return strpos($b['file'], '-pre-restore.') === false; });
-    foreach (array_slice($all, BACKUP_KEEP) as $b) {
+    $all = backup_list();   // newest first
+    $auto = array_filter($all, fn ($b) => str_contains($b['file'], '-auto.'));
+    $others = array_filter($all, fn ($b) => !str_contains($b['file'], '-auto.') && !str_contains($b['file'], '-pre-restore.'));
+    foreach (array_merge(array_slice($auto, BACKUP_KEEP_AUTO), array_slice($others, BACKUP_KEEP)) as $b) {
         backup_delete($b['file']);
     }
 }
@@ -280,10 +284,10 @@ function backup_read_manifest($archivePath) {
     }
 }
 
-/* Restore one backup file. Returns the pre-restore backup's name, or null
-   with $error set. Everyone — including the admin who asked — is signed out
-   at the end. */
-function backup_restore($archivePath, $userId, $userLabel, &$error) {
+/* Restore one backup file. Returns the pre-restore backup's name ('' when
+   $safetyCopy is false), or null with $error set. Everyone — including the
+   admin who asked — is signed out at the end. */
+function backup_restore($archivePath, $userId, $userLabel, &$error, bool $safetyCopy = true) {
     @set_time_limit(900);
     $error = '';
     $manifest = backup_read_manifest($archivePath);
@@ -322,7 +326,7 @@ function backup_restore($archivePath, $userId, $userLabel, &$error) {
         /* the dump names its database itself (USE / CREATE / DROP DATABASE), and
            the mysql client follows it — a backup of another copy (the old site's
            `venusep`, a test copy) would overwrite THAT database, not this one */
-        $cfg = venusep_db_config();
+        $cfg = venusep_db_admin_config();
         $other = backup_dump_other_database($work . '/database.sql', $cfg['name']);
         if ($other !== null) {
             $error = 'That backup is of the database "' . $other . '", and this system runs on "' . $cfg['name']
@@ -330,18 +334,23 @@ function backup_restore($archivePath, $userId, $userLabel, &$error) {
             return null;
         }
 
-        /* 1. the safety copy — no safety copy, no restore */
-        $pre = backup_create('pre-restore', $userId, $userLabel, $preErr);
-        if ($pre === null) {
-            $error = 'A safety backup of the current data could not be made, so nothing was restored. ' . $preErr;
-            return null;
+        /* 1. the safety copy — no safety copy, no restore. Only the command line may skip it
+           ($safetyCopy false, artisan venusep:restore --no-safety-copy): for a database too
+           damaged to dump, which is exactly when a restore is needed most. */
+        $pre = '';
+        if ($safetyCopy) {
+            $pre = backup_create('pre-restore', $userId, $userLabel, $preErr);
+            if ($pre === null) {
+                $error = 'A safety backup of the current data could not be made, so nothing was restored. ' . $preErr;
+                return null;
+            }
         }
 
         /* 2. the database (the dump drops and recreates it itself) */
         $err = backup_run([$mysql, '--host=' . $cfg['host'], '--user=' . $cfg['user'], '--default-character-set=utf8mb4'],
                           $work . '/database.sql', null);
         if ($err !== '') {
-            $error = 'The database could not be restored: ' . $err . ' The safety backup ' . $pre . ' holds the data from just before.';
+            $error = 'The database could not be restored: ' . $err . ($pre !== '' ? ' The safety backup ' . $pre . ' holds the data from just before.' : '');
             return null;
         }
 

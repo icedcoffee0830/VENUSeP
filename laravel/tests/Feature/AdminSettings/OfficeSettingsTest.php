@@ -55,6 +55,8 @@ class OfficeSettingsTest extends TestCase
     public function test_changing_one_office_leaves_the_others_alone_and_keeps_a_history(): void
     {
         $others = (array) $this->venue(2);
+        $history = fn () => DB::table('venue_settings_history')->where('venue_id', 1)->whereIn('field', ['opens', 'closes', 'days', 'lead'])->count();
+        $before = $history();   // a run a moment earlier leaves its rows
         $this->actingAsAdmin();
         $this->get(route('admin.office-settings'))->assertOk()->assertSee('Bahay Alumni')->assertSee('USeP Hostel');
         $this->send($this->settings(['opens' => '08:00', 'closes' => '17:00', 'days' => ['0'], 'lead' => '24']))->assertOk();
@@ -63,8 +65,7 @@ class OfficeSettingsTest extends TestCase
         $this->assertSame('0', $v->closed_weekdays);
         $this->assertSame(24, (int) $v->lead_hours);
         $this->assertSame($others, (array) $this->venue(2));
-        $this->assertSame(4, DB::table('venue_settings_history')->where('venue_id', 1)->whereIn('field', ['opens', 'closes', 'days', 'lead'])
-            ->where('changed_at', '>=', now()->subMinute())->count());
+        $this->assertSame($before + 4, $history());
     }
 
     public function test_money_settings_need_a_reason_and_bad_values_are_refused(): void
@@ -141,10 +142,12 @@ class OfficeSettingsTest extends TestCase
     {
         $contact = ['phone' => '(084) 123 4567', 'email' => 'Bahay@Usep.edu.ph', 'location' => 'Bahay Alumni, Obrero'];
         $this->actingAsAdmin('francishubero@gmail.com');
+        $history = fn () => DB::table('venue_settings_history')->where(['venue_id' => 1, 'field' => 'phone', 'new_value' => '(084) 123 4567'])->count();
+        $before = $history();   // earlier runs on the same test DB leave their rows
         $this->send($this->settings($contact))->assertOk();
         $v = $this->venue(1);
         $this->assertSame(['(084) 123 4567', 'bahay@usep.edu.ph', 'Bahay Alumni, Obrero'], [$v->contact_phone, $v->contact_email, $v->address]);
-        $this->assertSame(1, DB::table('venue_settings_history')->where(['venue_id' => 1, 'field' => 'phone', 'new_value' => '(084) 123 4567'])->count());
+        $this->assertSame($before + 1, $history());
 
         $this->send($this->settings($contact + ['venue_id' => 2]))->assertStatus(403)->assertJson(['error' => 'forbidden']);
         $this->assertNotSame('(084) 123 4567', $this->venue(2)->contact_phone);

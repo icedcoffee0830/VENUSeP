@@ -112,7 +112,7 @@ export default {
       await page.setViewportSize(DESKTOP);
       await page.goto(ctx.url('/customer/transaction-history'));
       await expect.visible(page.locator('.tabulator-row').first(), 'no rows');
-      expect.equal((await page.locator('h1').textContent()).trim(), 'Transaction History', 'the title');
+      expect.equal((await page.locator('h1:visible').textContent()).trim(), 'Transaction History', 'the title');
       expect.equal(await sideways(page), false, 'sideways scroll at 1280');
       await page.getByRole('button', { name: 'Download' }).click();
       const saved = page.waitForEvent('download');

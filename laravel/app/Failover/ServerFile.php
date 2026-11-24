@@ -28,6 +28,46 @@ final class ServerFile
     public static function dbHost(?string $path = null): ?string
     {
         $host = self::read($path)['db_host'] ?? null;
-        return is_string($host) && preg_match('/^[A-Za-z0-9.:-]{1,253}$/', $host) ? $host : null;
+        return self::isHost($host) ? $host : null;
+    }
+
+    public static function isHost(mixed $host): bool
+    {
+        return is_string($host) && preg_match('/^[A-Za-z0-9.:-]{1,253}$/', $host) === 1;
+    }
+
+    /* The laptops of the group, in the order they were added (the page names them A, B, C...). */
+    public static function laptops(): array
+    {
+        return array_values(array_filter((array) (self::read()['laptops'] ?? []), [self::class, 'isHost']));
+    }
+
+    /* The only writer: merge $changes, version + 1, under a lock, written to a temporary file
+       and renamed over the old one, so a reader never sees half a file. Returns the new content. */
+    public static function write(array $changes, string $by): array
+    {
+        $path = self::path();
+        @mkdir(dirname($path), 0775, true);
+        $lock = fopen($path . '.lock', 'c');
+        flock($lock, LOCK_EX);
+        try {
+            $old = self::read($path) ?? [];
+            $data = array_merge($old, $changes, [
+                'version' => (int) ($old['version'] ?? 0) + 1,
+                'changed_at' => date('Y-m-d H:i:s'),
+                'changed_by' => $by,
+            ]);
+            $tmp = $path . '.tmp-' . bin2hex(random_bytes(4));
+            file_put_contents($tmp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            /* Windows refuses the rename while a reader has the file open: a few short retries */
+            for ($i = 0; !@rename($tmp, $path) && $i < 5; $i++) {
+                usleep(50_000);
+            }
+            @unlink($tmp);
+            return $data;
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 }

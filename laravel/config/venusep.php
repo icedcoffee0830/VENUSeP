@@ -11,4 +11,7 @@ return [
        can stop; backups and restores need this fuller one. Empty = the website's own. */
     'db_admin_user' => env('DB_ADMIN_USERNAME'),
     'db_admin_pass' => env('DB_ADMIN_PASSWORD', ''),
+    /* the account a copy signs in with to pull changes from the main (Server page, Make it a copy) */
+    'db_repl_user' => env('DB_REPL_USERNAME', 'venusep_repl'),
+    'db_repl_pass' => env('DB_REPL_PASSWORD', ''),
 ];

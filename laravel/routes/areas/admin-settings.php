@@ -19,3 +19,6 @@ Route::middleware('staff:admin')->get('/admin/office-settings', [Admin\OfficeSet
 Route::middleware('staff:super')->get('/admin/activity', Admin\ActivityController::class)->name('admin.activity');
 Route::post('/admin/office-save', [Admin\OfficeSettingsController::class, 'save'])->name('admin.office-save');
 Route::match(['get', 'post'], '/admin/gcash-account-save', Admin\GcashAccountSaveController::class)->name('admin.gcash-account-save');
+/* Server (failover): the laptops' database servers. The super admin only; the action endpoint guards itself. */
+Route::middleware('staff:super')->get('/admin/server', [Admin\ServerController::class, 'index'])->name('admin.server');
+Route::post('/admin/server-action', [Admin\ServerController::class, 'action'])->name('admin.server-action');

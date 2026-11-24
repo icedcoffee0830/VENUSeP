@@ -37,6 +37,7 @@
         ['Payment Settings',    route('admin.payment-settings'),       'bi-wallet2'],
         ['FAQ Management',      route('admin.faq-management'),         'bi-question-circle', 'admin'],   /* admin-added FAQ entries (2026-09-18) */
         ['Backup & Restore',    route('admin.backup-restore'),         'bi-database-check', 'super'],    /* the super admin only (DB-DECISIONS 28) */
+        ['Server',              route('admin.server'),                 'bi-hdd-network', 'super'],      /* failover: the laptops' database servers */
         ['#Records'],
         ['Reports',             route('admin.reports'),                'bi-bar-chart'],
         ['Activity',            route('admin.activity'),               'bi-clock-history', 'super'],

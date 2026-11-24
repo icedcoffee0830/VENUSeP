@@ -816,6 +816,7 @@ Agreed with Aron on 2026-11-03 and 2026-11-04.
 | Move staff | anywhere | CEDU admin: between Venues and Hostel only | no |
 | Block a customer at an office | yes | own group's offices | no |
 | Suspend a customer account completely | yes | no | no |
+| Revoke a customer account (closed for good, #29) | yes | no | no |
 
 - Nobody resets the super admin's password inside the system: it uses Forgot password.
 
@@ -958,3 +959,62 @@ Agreed with Aron on 2026-11-03 and 2026-11-04.
   replacement of the same office, who takes the hall at that moment; with nobody to name, it cannot
   be sent.
 
+## 29. Paper features — decided 2026-11-24 (migration 21)
+Agreed with Aron on 2026-11-24, for the team paper.
+
+**Resetting a staff or admin password**
+- The Reset password window also asks for the resetting admin's own password. A wrong one
+  counts toward the same lockout as every other retyped password (5 tries, then a temporary
+  lock), and nothing changes until it is right.
+
+**Activity log records everything**
+- One table, `activity_log` (migration 21), for the actions no other table keeps: sign-ins and
+  failed ones (wrong email or password, suspended, revoked, a wrong two-step code), sign-outs,
+  password resets and changes, suspensions and reactivations, revokes, the super admin
+  handover, two-step verification turned on, moved or off, backups made, deleted and
+  restored, and bookings submitted. Each row: when, who (or nobody known), their role, what,
+  and the IP address.
+- A failed sign-in keeps the email address that was typed. **Never a password.** The privacy
+  notice says so.
+- The Activity page shows every recorded action, newest first, 50 to a page, next to booking
+  History (customers' lines too), office settings, ID views, blocks, deleted rooms, covers and
+  moves. Super admin only (as in #28).
+
+**Revoking a customer account (super admin only)**
+- From Customer Management, with the super admin's own password (the same lockout).
+- The account is closed for good: signed out, never reactivated (the database refuses it too),
+  its pending requests cancelled the way a customer cancel is, its data kept (bookings,
+  payments, History).
+- Its email can never be used again: sign-in, Google sign-in and registration refuse it, and
+  Forgot password sends no link (the same reply as for any address, so nothing tells which
+  emails exist). A link sent before the revoke says "This account was closed and can’t be
+  used again." Sign-in shows that message only after the right password, like a suspension.
+- Suspension (`users.is_active`) is unchanged; a revoke is a separate, final step.
+
+**Receipts name who handled the booking**
+- "Approved by": whoever moved the booking into Approved (at the counter, the staff who took
+  it). "Payment confirmed by": whoever confirmed the payment, else whoever issued the receipt.
+- On the Transaction Receipt page (staff and customer), its PDF, the "View" window and the
+  receipt email.
+- New receipts freeze both names in their snapshot, like the rest of the receipt; older ones
+  look them up. A name nobody can give is left out, never "Unknown".
+
+**FAQ "What do I need to book?"**
+- A built-in row (#19), first in Booking a venue, always shown: admins can edit, hide and move
+  it, and "Restore original" works. `{discount}` is filled in live; the 183-day window and the
+  5 unpaid bookings are written out (no placeholder holds them).
+- Under it the page adds by itself what each office asks: its lead time (the hostel: a stay
+  can start today) and the no-refund tick where its refunds are off. Those are set per office,
+  so no placeholder can say them.
+
+**Copy button**
+- A copy button beside each Booking ID on both Transaction History pages (staff and customer).
+
+**Migration 21**
+- Adds `activity_log`, `users.revoked_at` and `users.revoked_by_user_id` (with
+  `chk_users_revoked`: a revoked row is a customer's and stays inactive), and the FAQ row. Safe
+  to re-run. Aron runs it himself, on the dev DB and the test DB, and appends it to the
+  test/flows snapshot (the copy before it kept as `.before-m21`). The code works before it: no
+  log rows, Revoke says it needs migration 21, the FAQ has no "What do I need to book?" yet.
+- Backups made before migration 21 cannot be restored once it is in (`backup.php` checks the
+  layout version, as with every migration).

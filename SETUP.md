@@ -123,6 +123,14 @@ The first line lists the backups; the second restores one (a path to a `.tar.gz`
 
 One laptop holds the main database. The others keep a live copy of it and a copy of the photos, IDs and receipts. If the main laptop breaks, the super admin switches to a copy on **Server** (sidebar, super admin only) and nothing is lost. Start with two laptops: A (main) and B (copy).
 
+**The easy way: the setup scripts** in the `failover-setup` folder. Both laptops must be on the same phone hotspot, with MySQL running, and laptop A must have migrations 21 and 22.
+
+1. On laptop A, double-click `failover-setup\setup-laptop-A.bat` (say Yes to administrator rights). It asks for three passwords of your choice, then sets up MySQL, the firewall, the accounts, `.env`, the 1-minute task and the website. When it says so, restart MySQL in the XAMPP panel. At the end it opens the emergency page: sign in and press **Unlock saving** on A's row. Copy `laravel\.env` to a USB stick.
+2. On laptop B, double-click `failover-setup\setup-laptop-B.bat`. It asks for A's address (shown at the end of A's setup) and the `.env` on the USB stick. It keeps B's own database in your user folder, then loads A's and starts copying. Restart MySQL when it says so.
+3. On A's Server page: **Find servers on this hotspot**, **Add to the list**, **Test**. B must say "Up to date".
+
+`failover-setup\undo.bat` puts a laptop back (the old `my.ini` and `.env`, no task, no firewall rules). The manual steps below are what the scripts do.
+
 Do steps A to F on **every** laptop. Use **cmd** as administrator. Stop MySQL in the XAMPP panel before step A.
 
 **A. MySQL settings.** Add these lines under `[mysqld]` in `C:\xampp\mysql\bin\my.ini`. Only `server-id` differs: A=1, B=2, C=3, D=4.

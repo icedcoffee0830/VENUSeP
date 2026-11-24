@@ -25,3 +25,5 @@ Route::post('/admin/server-action', [Admin\ServerController::class, 'action'])->
 /* The emergency way in while the database is down (App\Failover\Outage lets these two through). */
 Route::match(['get', 'post'], '/server-emergency', [Admin\ServerController::class, 'emergency'])->name('failover.emergency');
 Route::post('/server-emergency/action', [Admin\ServerController::class, 'action'])->name('failover.emergency-action');
+/* The other laptops' file copies (App\Failover\FileCopies): APP_KEY-encrypted, no session. */
+Route::post('/failover/inbox', [\App\Failover\FileCopies::class, 'inbox'])->name('failover.inbox');

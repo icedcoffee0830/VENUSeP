@@ -14,4 +14,6 @@ return [
     /* the account a copy signs in with to pull changes from the main (Server page, Make it a copy) */
     'db_repl_user' => env('DB_REPL_USERNAME', 'venusep_repl'),
     'db_repl_pass' => env('DB_REPL_PASSWORD', ''),
+    /* the port every laptop's website listens on (artisan serve --port), for the file copies */
+    'web_port' => (int) env('FAILOVER_WEB_PORT', 8100),
 ];

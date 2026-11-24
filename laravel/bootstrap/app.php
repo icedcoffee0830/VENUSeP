@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'booking.access' => \App\Http\Middleware\BookingAccess::class,
         ]);
         /* Laravel exempts only "password", so a pasted "abc " was saved as "abc" and failed at sign-in. */
+        /* the other laptops' file copies: no session to hold a token; every message is APP_KEY-encrypted instead */
+        $middleware->validateCsrfTokens(except: ['failover/inbox']);
         $middleware->trimStrings(except: ['new_password', 'confirm_new_password', 'confirm_password', 'creator_password']);
         $middleware->prepend(\App\Http\Middleware\DetectOpenTransaction::class);
         /* First in the group: a database that can't be reached gets the one outage page, before

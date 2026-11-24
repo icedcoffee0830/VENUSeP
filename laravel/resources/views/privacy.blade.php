@@ -69,6 +69,7 @@
         <li>Each person can see only what their role allows.</li>
         <li>Admins sign in with two-step verification.</li>
         <li>Every time someone opens one of your documents, it is logged.</li>
+        <li>For security, a failed sign-in attempt records the email address that was typed, the time and the device's IP address, never the password, in an activity log that only the super admin can see.</li>
       </ul>
     </section>
 

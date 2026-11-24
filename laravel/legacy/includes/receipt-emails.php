@@ -318,6 +318,9 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
     $paidBy = $s['method'] === 'GCash'
         ? 'GCash' . ($s['gcash_reference'] !== '' ? ' · reference ' . bh_e($s['gcash_reference']) : '')
         : 'Cash at the counter';
+    /* who approved it and who confirmed the payment, as on the PDF; left out when unknown */
+    $handlers = array_filter(array_map(fn ($key, $label) => ($s[$key] ?? '') !== '' ? [$label, $s[$key]] : null,
+        array_keys(RECEIPT_HANDLERS), RECEIPT_HANDLERS));
     $details = re_rows(array_filter([
         ['Booking', bh_e($v['booking_ref'])],
         ['Room', bh_e($s['room_name']) . '<br><span style="color:#6e6a64;font-size:13px;">' . bh_e($s['venue_name']) . '</span>'],
@@ -325,6 +328,7 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
         ['Dates', bh_e($s['dates'])],
         ['Paid by', $paidBy],
         $v['confirmed'] !== '' ? ['Confirmed', bh_e($v['confirmed'])] : null,
+        ...array_map(fn ($h) => [$h[0], bh_e($h[1])], $handlers),
     ]), false);
 
     $lines = [];
@@ -370,6 +374,7 @@ function re_receipt_email(array $receipt, string $firstName, bool $isCopy, strin
           . 'Transaction Receipt ' . $v['number'] . "\nBooking: " . $v['booking_ref']
           . "\nRoom: " . $s['room_name'] . ', ' . $s['venue_name'] . "\nDates: " . $s['dates']
           . "\nPaid by: " . strip_tags(html_entity_decode($paidBy, ENT_QUOTES, 'UTF-8'))
+          . implode('', array_map(fn ($h) => "\n" . $h[0] . ': ' . $h[1], $handlers))
           . "\nAmount paid: " . $v['paid'] . "\n\n" . ($office !== '' ? $office . "\n\n" : '') . RE_NO_REPLY;
 
     return [

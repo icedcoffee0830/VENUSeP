@@ -132,6 +132,10 @@ function receipt_shape(array $row): array
     return $row;
 }
 
+/* Who handled the booking, as receipt lines (snapshot key => label): the page, the PDF and the
+   receipt email. Left out when nobody can be named. */
+const RECEIPT_HANDLERS = ['approved_by' => 'Approved by', 'payment_confirmed_by' => 'Payment confirmed by'];
+
 /* The receipt as lines, shared by the page, the emails and the PDF.
    Money is formatted with ₱; the PDF swaps it for 'PHP ' (receipt_pdf_text). */
 function receipt_view(array $receipt): array
@@ -163,7 +167,7 @@ function receipt_view(array $receipt): array
     if ($confirmed !== '') {
         $paidBy[] = ['Confirmed', $confirmed];
     }
-    foreach (['approved_by' => 'Approved by', 'payment_confirmed_by' => 'Payment confirmed by'] as $key => $label) {
+    foreach (RECEIPT_HANDLERS as $key => $label) {
         if (($s[$key] ?? '') !== '') {
             $paidBy[] = [$label, $s[$key]];
         }

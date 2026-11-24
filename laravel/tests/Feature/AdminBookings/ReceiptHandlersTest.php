@@ -34,6 +34,11 @@ class ReceiptHandlersTest extends TestCase
         $paidBy = receipt_view(receipt_for_booking($id))['paid_by'];
         $this->assertContains(['Approved by', 'Marites Robles'], $paidBy);
         $this->assertContains(['Payment confirmed by', 'Marites Robles'], $paidBy);
+        /* and the receipt email's summary, beside the attached PDF */
+        $mail = re_receipt_email(receipt_for_booking($id), 'Juan', true, 'juan@test.local');
+        $this->assertStringContainsString('>Approved by</td><td style="padding:9px 0;vertical-align:top;border-top:1px solid #f3ebe8;">Marites Robles</td>', $mail['html']);
+        $this->assertStringContainsString('>Payment confirmed by</td><td style="padding:9px 0;vertical-align:top;border-top:1px solid #f3ebe8;">Marites Robles</td>', $mail['html']);
+        $this->assertStringContainsString("\nApproved by: Marites Robles\nPayment confirmed by: Marites Robles\nAmount paid: ", $mail['text']);
 
         $this->flushSession();
         $this->actingAsCustomer()->get(route('customer.receipt', ['booking' => $ref]))->assertOk()
@@ -60,6 +65,10 @@ class ReceiptHandlersTest extends TestCase
         DB::update('UPDATE system_receipts SET issued_by_user_id = NULL WHERE booking_id = ?', [$id]);
         $this->get(route('admin.receipt', ['booking' => $ref]))->assertOk()
             ->assertSee('Amount paid')->assertDontSee('Payment confirmed by')->assertDontSee('Approved by')->assertDontSee('Unknown');
+        $mail = re_receipt_email(receipt_for_booking($id), 'Juan', true, 'juan@test.local');
+        foreach (['Approved by', 'Payment confirmed by', 'Unknown'] as $gone) {
+            $this->assertStringNotContainsString($gone, $mail['html'] . $mail['text']);
+        }
         $this->getJson(route('root.booking-details', ['booking' => $ref]))->assertOk()
             ->assertJsonPath('details.money.approvedBy', '')->assertJsonPath('details.money.confirmedBy', '');
     }

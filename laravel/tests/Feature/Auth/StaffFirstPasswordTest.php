@@ -49,7 +49,7 @@ class StaffFirstPasswordTest extends TestCase
     private function reset(int $userId, string $password)
     {
         return $this->withSession(['_token' => 'tok'])->withHeader('X-CSRF-TOKEN', 'tok')
-            ->post(route('admin.staff-save'), ['action' => 'reset_password', 'user_id' => $userId, 'new_password' => $password]);
+            ->post(route('admin.staff-save'), ['action' => 'reset_password', 'user_id' => $userId, 'new_password' => $password, 'password' => self::PASSWORD]);
     }
 
     /* Reset links are customer-only: this is how staff who forgot theirs get back in. */
@@ -57,6 +57,7 @@ class StaffFirstPasswordTest extends TestCase
     {
         $staff = $this->makeAccount('staff');
         DB::table('users')->where('id', $staff->id)->update(['password_changed_at' => now()]);
+        $this->knowPasswordOf('admin@gmail.com');
         $this->actingAsAdmin();
         $this->reset($staff->id, 'short')->assertStatus(400)->assertJson(['ok' => false, 'field' => 'new_password']);
         $this->reset($staff->id, 'Temp-Pass-2026')->assertOk()->assertJson(['ok' => true]);
@@ -67,6 +68,41 @@ class StaffFirstPasswordTest extends TestCase
         $this->flushSession();
         $this->signInAs($staff, 'staff')->get(route('admin.dashboard'))
             ->assertRedirect(route('admin.profile', ['password' => 'required']));
+    }
+
+    /* The admin confirms a reset with their OWN password (Aron 2026-11-24): the shared lockout
+       of every password re-check (reauth_verify), and nothing changes until it is right. */
+    public function test_a_reset_needs_the_admins_own_password_with_the_shared_lockout(): void
+    {
+        $staff = $this->makeAccount('staff');   // at Bahay Alumni
+        $na = $this->makeAccount('admin', ['totp' => 'JBSWY3DPEHPK3PXP', 'group' => 'bahay_alumni']);
+        $this->signInAs($na, 'admin');
+        $send = fn (string $own) => $this->withSession(['_token' => 'tok'])->withHeader('X-CSRF-TOKEN', 'tok')
+            ->post(route('admin.staff-save'), ['action' => 'reset_password', 'user_id' => $staff->id, 'new_password' => 'Temp-Pass-2026', 'password' => $own]);
+        $unchanged = fn () => $this->assertTrue(password_verify(self::PASSWORD, DB::table('users')->where('id', $staff->id)->value('password_hash')));
+
+        $send('')->assertStatus(400)->assertJson(['ok' => false, 'error' => 'no_password', 'message' => 'Enter your own password to confirm.']);
+        $send('not-mine')->assertStatus(401)->assertJson(['ok' => false, 'error' => 'wrong_password', 'attemptsLeft' => 4,
+            'message' => 'Wrong password. 4 attempt(s) left before a temporary lock.']);
+        $unchanged();
+        foreach ([3, 2, 1] as $left) {
+            $send('not-mine')->assertStatus(401)->assertJson(['attemptsLeft' => $left]);
+        }
+        $send('not-mine')->assertStatus(423)->assertJson(['ok' => false, 'error' => 'locked']);
+        $send(self::PASSWORD)->assertStatus(423);   // locked: even the right one waits
+        $unchanged();
+
+        DB::table('users')->where('id', $na->id)->update(['reauth_locked_until' => null]);
+        $send(self::PASSWORD)->assertOk()->assertJson(['ok' => true]);
+        $this->assertTrue(password_verify('Temp-Pass-2026', DB::table('users')->where('id', $staff->id)->value('password_hash')));
+        $this->assertSame(0, (int) DB::table('users')->where('id', $na->id)->value('reauth_failed_attempts'));
+    }
+
+    public function test_the_reset_window_asks_for_your_own_password(): void
+    {
+        $this->actingAsAdmin()->get(route('admin.staff'))->assertOk()
+            ->assertSee("label: 'Your password', inputType: 'password'", false)
+            ->assertSee('Enter your own password to confirm this reset.');
     }
 
     /* DB-DECISIONS 28: a normal admin never resets another admin, nobody resets the super

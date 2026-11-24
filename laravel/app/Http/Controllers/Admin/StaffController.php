@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\ConfirmsOwnPassword;
 use App\Queries\AccountQueries;
 use App\Queries\ActivityQueries;
 use App\Queries\StaffHallQueries;
@@ -27,7 +28,7 @@ use PDOException;
        set_halls:  hall_ids = JSON [room ids]: the halls of their office they cover
                    (migration 18; the hostel is one unit, no halls)
        set_active: active=0|1
-       reset_password: new_password — never your own
+       reset_password: new_password, password (your own, to confirm) — never your own account
        handover:   password, reason — the super admin to a normal admin
    · ADMIN ONLY, re-checked here — answered as JSON, not a redirect.
    · WHO MANAGES WHOM: staff_may_manage_account() (auth.php, DB-DECISIONS 28).
@@ -45,6 +46,8 @@ use PDOException;
    ===================================================================== */
 class StaffController
 {
+    use ConfirmsOwnPassword;
+
     public function index()
     {
         legacy('db', 'auth');
@@ -345,7 +348,8 @@ class StaffController
            (Aron 2026-10-31); Forgot password on the sign-in page is the other (DB-DECISIONS 28). The admin chooses a temporary
            password; password_changed_at goes back to NULL, so the staff member must replace
            it (EnforceTwoFactor). Who may reset whom: staff_may_manage_account() above; the
-           super admin's own password is never reset here, it uses Forgot password. */
+           super admin's own password is never reset here, it uses Forgot password.
+           The admin confirms with their own password (Aron 2026-11-24), the shared lockout. */
         if ($action === 'reset_password') {
             if ($target === $actor) {
                 return $this->reply(403, ['ok' => false, 'message' => 'Change your own password on your Profile page.']);
@@ -357,6 +361,9 @@ class StaffController
             legacy('passwords');
             if (!venusep_password_ready()) {
                 return $this->reply(500, ['ok' => false, 'message' => VENUSEP_PASSWORD_SETUP_ERROR]);
+            }
+            if ($refused = $this->ownPasswordRefusal((string) $request->input('password', ''))) {
+                return $refused;
             }
             try {
                 AccountQueries::resetPassword($target, venusep_password_hash($new));

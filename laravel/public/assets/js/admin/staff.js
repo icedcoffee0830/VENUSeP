@@ -55,16 +55,21 @@
         staffAction(body, window.smRedraw);
       };
 
+      /* The temporary password, and the admin's own to confirm it (staff-save checks it, with the shared lockout). */
       const resetPassword = async function (row) {
-        const pw = await venusepPrompt(
+        const typed = await venusepPrompt(
           'Choose a temporary password and give it to them yourself. They must replace it when they sign in. Their old password stops working now.',
-          { title: 'Reset the password of ' + row.name + '?', label: 'Temporary password (at least 8 characters)',
-            autocomplete: 'off', okLabel: 'Reset password', danger: true });
-        if (pw === null) return;
+          { title: 'Reset the password of ' + row.name + '?', okLabel: 'Reset password', danger: true,
+            fields: [
+              { label: 'Temporary password (at least 8 characters)', autocomplete: 'off' },
+              { label: 'Your password', inputType: 'password', autocomplete: 'current-password', note: 'Enter your own password to confirm this reset.' },
+            ] });
+        if (typed === null) return;
         const body = new FormData();
         body.append('action', 'reset_password');
         body.append('user_id', row.id);
-        body.append('new_password', pw);
+        body.append('new_password', typed[0]);
+        body.append('password', typed[1]);
         staffAction(body, function (res) { venusepAlert(res.message, { tone: 'ok', title: 'Password reset' }); });
       };
 

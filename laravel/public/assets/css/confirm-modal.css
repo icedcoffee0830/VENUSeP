@@ -100,8 +100,9 @@
 .vz-modal.vz-danger .vz-modal-btn.vz-ok:hover { background: #7d0f1e; }
 .vz-modal-btn:focus-visible { outline: 2px solid #a11626; outline-offset: 2px; }
 
-/* venusepPrompt(): one labelled field, e.g. a password re-entry */
+/* venusepPrompt(): labelled fields, e.g. a password re-entry */
 .vz-modal-field { margin: -6px 0 18px; text-align: left; }
+.vz-modal-note { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: #6e6a64; }
 .vz-modal-label { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: #4a463f; }
 .vz-modal-input {
   width: 100%;

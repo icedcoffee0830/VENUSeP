@@ -11,6 +11,9 @@ trait MakesAccounts
 {
     protected array $madeUserIds = [];
 
+    /* email => the password hash it had, for knowPasswordOf() */
+    protected array $knownPasswords = [];
+
     protected const PASSWORD = 'Correct-Horse-9';
 
     /* $type customer|staff|admin. Options: password (null = Google-only),
@@ -43,6 +46,15 @@ trait MakesAccounts
         return (object) ['id' => $id, 'email' => $email, 'customer_id' => $customerId];
     }
 
+    /* A seeded account's password is PASSWORD for this test, put back in tearDown: an admin's
+       own password confirms a password reset or a revoke. */
+    protected function knowPasswordOf(string $email): void
+    {
+        $this->knownPasswords[$email] ??= DB::table('users')->where('email', $email)->value('password_hash');
+        DB::table('users')->where('email', $email)->update(['password_hash' => password_hash(self::PASSWORD, PASSWORD_ARGON2ID,
+            ['memory_cost' => 19456, 'time_cost' => 2, 'threads' => 1])]);
+    }
+
     protected function signInAs(object $acct, string $type): static
     {
         $s = ['user_id' => $acct->id, 'account_type' => $type];
@@ -66,6 +78,10 @@ trait MakesAccounts
 
     protected function tearDown(): void
     {
+        foreach ($this->knownPasswords as $email => $hash) {
+            DB::table('users')->where('email', $email)->update(['password_hash' => $hash,
+                'reauth_failed_attempts' => 0, 'reauth_lock_level' => 0, 'reauth_locked_until' => null]);
+        }
         if ($this->madeUserIds) {
             $ids = $this->madeUserIds;
             foreach (['user_recovery_codes', 'remember_tokens', 'password_resets', 'customers', 'staff', 'notifications'] as $t) {

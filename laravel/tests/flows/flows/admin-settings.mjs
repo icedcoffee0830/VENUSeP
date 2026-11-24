@@ -314,6 +314,7 @@ export default {
       const row = page.locator('.tabulator-row', { hasText: s.newEmail });
       await row.getByRole('button', { name: 'Reset password' }).click();
       const tempPassword = 'Temp#Flow2026';
+      await page.locator('.vz-modal #vzPromptInput2').fill(ctx.password);   // the admin's own password confirms it
       await modal(ctx, page, { expect: /Reset the password of/, fill: tempPassword, ok: 'Reset password' });
       await modal(ctx, page, { expect: /Give them the temporary password/ });
       const u = await dbOne(`SELECT password_changed_at FROM users WHERE id = ?`, [s.newId]);

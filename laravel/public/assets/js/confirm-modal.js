@@ -27,8 +27,13 @@
      dialogs: <span class="vz-pw"><input type="password">venusepEye</span>.
      One click handler below serves every eye on the page.
 
+     opts.fields: several boxes in one dialog, each { label, inputType, placeholder,
+     autocomplete, note } (note: one line of help under the box). Resolves an array
+     of the typed values, in order, or null. Reset password asks for a temporary
+     password and the admin's own this way (2026-11-24).
+
    opts: { title, okLabel, cancelLabel, danger,
-           inputType, label, placeholder, autocomplete }   (the last four: prompt only)
+           inputType, label, placeholder, autocomplete, fields }   (the last five: prompt only)
      danger:true tints the icon/OK button red (destructive actions, e.g.
      Delete) instead of the neutral/dark default.
    ===================================================================== */
@@ -73,16 +78,20 @@
     var asks = mode === 'confirm' || mode === 'prompt';      // both have Cancel + OK
     var tone = asks ? (danger ? 'vz-danger' : '') : (opts.tone === 'ok' ? 'vz-ok' : '');
     var icon = danger ? ICONS.warning : (asks ? ICONS.question : ICONS.info);
-    var secret = opts.inputType === 'password';
-    var field = mode === 'prompt'
-      ? '<div class="vz-modal-field">' +
-          (opts.label ? '<label class="vz-modal-label" for="vzPromptInput">' + escapeHtml(opts.label) + '</label>' : '') +
+    /* the boxes: vzPromptInput, then vzPromptInput2, vzPromptInput3... */
+    var field = (mode === 'prompt' ? opts.fields || [opts] : []).map(function (f, i) {
+      var id = 'vzPromptInput' + (i ? i + 1 : '');
+      var secret = f.inputType === 'password';
+      return '<div class="vz-modal-field">' +
+          (f.label ? '<label class="vz-modal-label" for="' + id + '">' + escapeHtml(f.label) + '</label>' : '') +
           (secret ? '<span class="vz-pw">' : '') +
-          '<input class="vz-modal-input" id="vzPromptInput" data-vz="input" type="' + (secret ? 'password' : 'text') + '"' +
-          ' placeholder="' + escapeHtml(opts.placeholder || '') + '" autocomplete="' + escapeHtml(opts.autocomplete || 'off') + '">' +
+          '<input class="vz-modal-input" id="' + id + '" data-vz="input" type="' + (secret ? 'password' : 'text') + '"' +
+          ' placeholder="' + escapeHtml(f.placeholder || '') + '" autocomplete="' + escapeHtml(f.autocomplete || 'off') + '"' +
+          (f.note ? ' aria-describedby="' + id + 'Note"' : '') + '>' +
           (secret ? window.venusepEye + '</span>' : '') +
-        '</div>'
-      : '';
+          (f.note ? '<p class="vz-modal-note" id="' + id + 'Note">' + escapeHtml(f.note) + '</p>' : '') +
+        '</div>';
+    }).join('');
 
     return new Promise(function (resolve) {
       var overlay = document.createElement('div');
@@ -105,10 +114,15 @@
 
       var okBtn = overlay.querySelector('[data-vz="ok"]');
       var cancelBtn = overlay.querySelector('[data-vz="cancel"]');
-      var input = overlay.querySelector('[data-vz="input"]');
+      var inputs = Array.prototype.slice.call(overlay.querySelectorAll('[data-vz="input"]'));
+      var input = inputs[0];
       var done = false;
-      /* a prompt answers with its value (or null); the others with true/false */
-      function answer(ok) { return input ? (ok ? input.value : null) : ok; }
+      /* a prompt answers with its value (or null), opts.fields with every value; the others with true/false */
+      function answer(ok) {
+        if (!input) return ok;
+        if (!ok) return null;
+        return opts.fields ? inputs.map(function (el) { return el.value; }) : input.value;
+      }
 
       function close(result) {
         if (done) return;
@@ -129,8 +143,8 @@
       overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(answer(false)); });
       if (okBtn) okBtn.addEventListener('click', function () { close(answer(true)); });
       if (cancelBtn) cancelBtn.addEventListener('click', function () { close(answer(false)); });
-      /* Enter in the field submits, as it did in prompt() */
-      if (input) input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); close(answer(true)); } });
+      /* Enter in a field submits, as it did in prompt() */
+      inputs.forEach(function (el) { el.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); close(answer(true)); } }); });
       setTimeout(function () { (input || okBtn || overlay).focus(); }, 0);
     });
   }

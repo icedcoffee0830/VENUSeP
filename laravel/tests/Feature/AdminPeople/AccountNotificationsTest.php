@@ -60,7 +60,8 @@ class AccountNotificationsTest extends TestCase
     public function test_a_password_reset_by_the_groups_own_admin_tells_nobody_new(): void
     {
         $s = $this->staffAt(1);
-        $this->save('francishubero@gmail.com', ['action' => 'reset_password', 'user_id' => $s->id, 'new_password' => 'Temporary-123']);
+        $this->knowPasswordOf('francishubero@gmail.com');
+        $this->save('francishubero@gmail.com', ['action' => 'reset_password', 'user_id' => $s->id, 'new_password' => 'Temporary-123', 'password' => self::PASSWORD]);
         $this->assertSame([], $this->told('account_password_reset'));   // the actor is the group's only admin; never the super admin
     }
 

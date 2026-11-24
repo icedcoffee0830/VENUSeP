@@ -23,6 +23,10 @@
     $sbWaiting = $sbIsAdmin ? \App\Queries\CoverQueries::waitingForMe() : ['covers' => 0, 'moves' => 0];
     $sbTab = $sbWaiting['covers'] ? ['tab' => 'covers'] : ($sbWaiting['moves'] ? ['tab' => 'moves'] : []);
     $sbCounts = ['Booking Management' => \App\Queries\BookingQueries::needsAction(), 'Staff Management' => $sbWaiting['covers'] + $sbWaiting['moves']];
+    /* failover: the copies' problems from the 1-minute task (1 = the task is not running), the super admin only */
+    if (admin_is_super() && ($sbHealth = \App\Failover\Health::last()) !== false) {
+        $sbCounts['Server'] = $sbHealth === null ? 1 : count($sbHealth);
+    }
     $items = [
         ['Dashboard',           route('admin.dashboard'),              'bi-speedometer2'],
         ['Booking Management',  route('admin.booking-requests'),       'bi-calendar-check'],

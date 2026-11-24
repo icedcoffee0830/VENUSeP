@@ -1,6 +1,11 @@
 {{-- The Server panel (failover plan §2): the Server page and the emergency page show the same one.
      Rows are filled in by assets/js/admin/server.js, one Test per row (a laptop that is off
      costs 3 s, so the page itself never waits for it). Needs $svRows, $svUrl, $svProtected. --}}
+@if (is_array($svHealth) && $svHealth)
+  <div class="sv-banner is-bad" role="alert"><strong>Live copy stopped.</strong> @foreach ($svHealth as $p){{ $p }} @endforeach</div>
+@elseif ($svHealth === null)
+  <div class="sv-banner is-warn" role="status"><strong>No health check for 3 minutes.</strong> Is the 1-minute task running on this laptop (SETUP.md, “Two or more laptops”)?</div>
+@endif
 <div class="sv-head">
   <h1>Server</h1>
   <p>Every laptop keeps a live copy of the database. If the main laptop breaks, switch to an up-to-date copy here and nothing is lost. Only the super admin sees this page.</p>

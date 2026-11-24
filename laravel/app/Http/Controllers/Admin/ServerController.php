@@ -85,6 +85,7 @@ class ServerController
                 'listed' => in_array($ip, ServerFile::laptops(), true)], $rows, array_keys($rows)),
             'svUrl' => $mine ? 'http://' . $mine[0] . ':' . request()->getPort() : null,
             'svProtected' => Servers::protectedSaving(),
+            'svHealth' => \App\Failover\Health::last(),
             'svCsrf' => csrf_token(),
         ];
     }

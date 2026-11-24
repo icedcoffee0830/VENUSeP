@@ -384,6 +384,11 @@ final class Servers
         }
     }
 
+    public static function lock(string $ip): void
+    {
+        self::pdo($ip)->exec('SET GLOBAL read_only = 1');
+    }
+
     /* ---- Saving without a copy ---- */
 
     /* true = protected: a save waits until a copy has it (semi-sync on the main). */

@@ -8,6 +8,7 @@ use App\Queries\ActivityQueries;
 use App\Queries\BlockQueries;
 use App\Queries\BookingCreateQueries;
 use App\Queries\CustomerQueries;
+use App\Queries\SchemaQueries;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -168,7 +169,7 @@ class CustomerManagementController
     private function revoke(Request $request, array $user)
     {
         // Check
-        if (AccountQueries::revokedAt() === 'NULL') {
+        if (!SchemaQueries::has('users', 'revoked_at')) {
             return $this->reply(503, ['ok' => false, 'message' => 'Revoking needs migration 21 on this database (venusep_migration_21.sql). Nothing was changed.']);
         }
         if ($refused = $this->ownPasswordRefusal((string) $request->input('password', ''))) {

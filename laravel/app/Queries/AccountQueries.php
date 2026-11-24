@@ -68,7 +68,7 @@ class AccountQueries
     /* Was the account with this email, or this Google id, revoked? Then it can never be used again. */
     public static function isRevoked(string $email, ?string $googleSub = null): bool
     {
-        return self::revokedAt() !== 'NULL' && DB::selectOne("
+        return SchemaQueries::has('users', 'revoked_at') && DB::selectOne("
             SELECT 1 AS found
             FROM users u
             WHERE u.revoked_at IS NOT NULL AND (u.email = ? OR u.google_sub = ?)

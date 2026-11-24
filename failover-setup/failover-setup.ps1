@@ -127,23 +127,43 @@ function Wait-MySqlRestart {
     Ok 'MySQL restarted with the copy settings (it starts locked: read-only)'
 }
 
+# The accounts. MySQL is unlocked for this step only (a locked XAMPP MariaDB refused the per-database
+# rights on laptop A: "ERROR 1114 The table 'db' is full") and locked again whatever happens. If the
+# per-database rights still fail, the same rights go server-wide: they are kept in the other system
+# table, which works, and the lock still stops the website account from writing on a copy.
 function Set-Accounts([string]$db, [string]$app, [string]$admin, [string]$repl) {
-    Invoke-Sql @"
+    Invoke-Sql 'SET GLOBAL read_only = 0;' | Out-Null
+    try {
+        Invoke-Sql @"
 CREATE USER IF NOT EXISTS 'venusep_app'@'%' IDENTIFIED BY '$app';
 ALTER USER 'venusep_app'@'%' IDENTIFIED BY '$app';
-GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES ON ``$db``.* TO 'venusep_app'@'%';
 CREATE USER IF NOT EXISTS 'venusep_admin'@'%' IDENTIFIED BY '$admin';
 ALTER USER 'venusep_admin'@'%' IDENTIFIED BY '$admin';
-GRANT ALL PRIVILEGES ON ``$db``.* TO 'venusep_admin'@'%';
-GRANT SUPER, REPLICATION CLIENT, RELOAD ON *.* TO 'venusep_admin'@'%';
-GRANT SELECT ON mysql.proc TO 'venusep_admin'@'%';
 CREATE USER IF NOT EXISTS 'venusep_repl'@'%' IDENTIFIED BY '$repl';
 ALTER USER 'venusep_repl'@'%' IDENTIFIED BY '$repl';
+GRANT SUPER, REPLICATION CLIENT, RELOAD ON *.* TO 'venusep_admin'@'%';
 GRANT REPLICATION SLAVE ON *.* TO 'venusep_repl'@'%';
-DROP USER IF EXISTS ''@'localhost';
-FLUSH PRIVILEGES;
 "@ | Out-Null
-    Ok 'MySQL accounts venusep_app, venusep_admin and venusep_repl'
+        try {
+            Invoke-Sql @"
+GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES ON ``$db``.* TO 'venusep_app'@'%';
+GRANT ALL PRIVILEGES ON ``$db``.* TO 'venusep_admin'@'%';
+GRANT SELECT ON mysql.proc TO 'venusep_admin'@'%';
+"@ | Out-Null
+            Ok "MySQL accounts venusep_app, venusep_admin and venusep_repl (rights on $db)"
+        } catch {
+            if ($_.Exception.Message -notmatch '1114') { throw }
+            Invoke-Sql @"
+GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES ON *.* TO 'venusep_app'@'%';
+GRANT ALL PRIVILEGES ON *.* TO 'venusep_admin'@'%';
+"@ | Out-Null
+            Ok 'MySQL accounts venusep_app, venusep_admin and venusep_repl'
+            Warn "This MySQL refused rights on $db alone (error 1114), so the rights are server-wide. Fine for testing."
+        }
+        Invoke-Sql "DROP USER IF EXISTS ''@'localhost'; FLUSH PRIVILEGES;" | Out-Null
+    } finally {
+        Invoke-Sql 'SET GLOBAL read_only = 1;' | Out-Null
+    }
 }
 
 # ---------- Windows: firewall, network, the 1-minute task, the website ----------

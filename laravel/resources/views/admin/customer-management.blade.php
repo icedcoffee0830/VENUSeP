@@ -34,7 +34,7 @@
             <div class="lp-tools">
               <label class="lp-search"><i class="bi bi-search" aria-hidden="true"></i><input id="table-filter" type="search" placeholder="Name, email or phone…" aria-label="Search name, email or phone" autocomplete="off"/></label>
               <button type="button" class="lp-filters-btn" aria-expanded="false"><i class="bi bi-sliders" aria-hidden="true"></i>Filters</button>
-              <div class="lp-field"><label for="cmStatus">Status</label><select id="cmStatus"><option value="">All statuses</option><option>Active</option><option>Suspended</option></select></div>
+              <div class="lp-field"><label for="cmStatus">Status</label><select id="cmStatus"><option value="">All statuses</option><option>Active</option><option>Suspended</option><option>Revoked</option></select></div>
               <div class="lp-field"><label for="cmUsep">USeP</label><select id="cmUsep"><option value="">Everyone</option><option value="yes">USeP only</option><option value="no">Outside USeP</option></select></div>
               <div class="lp-field"><label for="cmBlocks">Blocks</label><select id="cmBlocks"><option value="">Any</option><option value="yes">Blocked somewhere</option></select></div>
             </div>
@@ -58,7 +58,7 @@
   var customerManagementPage = {
     customerSaveUrl: @json(route('admin.customer-save')),
     bookingRequestsUrl: @json(route('admin.booking-requests')),
-    suspendClass: @json($cmMaySuspend ? 'btn-cust-toggle' : null),   /* null = no Suspend button on this page */
+    suspendClass: @json($cmMaySuspend ? 'btn-cust-toggle' : null),   /* null = no Suspend or Revoke button on this page */
   };
 </script>
 <script src="{{ asset_stamped('assets/js/admin/customer-management.js') }}"></script>

@@ -417,7 +417,7 @@ function customer_session_heal()
             /* disabled by an admin: the sign-in page says so once (Bug 2) — the
                customer side's ?suspended=1, kept in the new session instead */
             if ($row !== null) {
-                session(['customer_disabled_notice' => true]);
+                session(['customer_disabled_notice' => $row['revoked_at'] !== null ? 'revoked' : true]);
             }
             return;
         }

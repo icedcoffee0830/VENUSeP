@@ -35,7 +35,9 @@ class CustomerLoginController
         session()->forget('login_notice');
         /* Bug 2: disabled while signed in (customer_session_heal() left this), or
            the right password on a disabled account (below). */
-        $accountDisabled = (bool) session()->pull('customer_disabled_notice', false);
+        $disabledNotice = session()->pull('customer_disabled_notice', false);
+        $accountDisabled = (bool) $disabledNotice;
+        $accountRevoked = $disabledNotice === 'revoked';   // closed for good (migration 21): its own words
 
         $post = $request->request;
         $tfaError = '';
@@ -108,7 +110,9 @@ class CustomerLoginController
                 } elseif ($customer && !$customer['is_active'] && password_verify($password, (string) $customer['password_hash'])) {
                     /* Only AFTER the password checked out, so this reveals nothing to a stranger. */
                     $accountDisabled = true;
-                    ActivityQueries::add('sign_in_failed', 'Sign-in: ' . $email, 'Refused: the account is suspended', (int) $customer['user_id'], 'customer');
+                    $accountRevoked = $customer['revoked_at'] !== null;
+                    ActivityQueries::add('sign_in_failed', 'Sign-in: ' . $email, $accountRevoked ? 'Refused: the account was revoked' : 'Refused: the account is suspended',
+                        (int) $customer['user_id'], 'customer');
                 } elseif (!$customer || !$customer['is_active'] || !password_verify($password, $customer['password_hash'])) {
                     // One generic message so the page does not reveal whether an email exists.
                     $lock = SignInThrottle::failed($email);   // counted for an unknown email too
@@ -146,7 +150,7 @@ class CustomerLoginController
         $gsTerms = !empty($post->get('terms'));
 
         $response = response()->view('auth.customer-login', compact(
-            'loginError', 'loginNotice', 'accountDisabled', 'tfaView', 'tfaCsrf', 'tfaError', 'tfaLock', 'pending',
+            'loginError', 'loginNotice', 'accountDisabled', 'accountRevoked', 'tfaView', 'tfaCsrf', 'tfaError', 'tfaLock', 'pending',
             'googleSignup', 'googleErrors', 'googleOn', 'gsName', 'gsPhone', 'gsTerms'
         ));
         if ($tfaView !== 'password') {

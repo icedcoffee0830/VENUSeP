@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\ConfirmsOwnPassword;
 use App\Queries\AccountQueries;
 use App\Queries\ActivityQueries;
 use App\Queries\BlockQueries;
+use App\Queries\BookingCreateQueries;
 use App\Queries\CustomerQueries;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -29,6 +31,9 @@ use PDOException;
        admin only, for fake, spam or fraud accounts. The target must be a CUSTOMER account
        (staff-save owns the staff side). Disabling signs them out: customer_session_heal()
        re-reads users.is_active on every request.
+     revoke, user_id, password: CLOSE the account for good (Aron 2026-11-24, migration 21). The
+       super admin only, retyping their own password. Suspended and never reactivated, its
+       pending requests cancelled, its data kept, its email never usable again.
      block | lift, customer_id, venue_id, reason: no new bookings at THAT office (BlockQueries).
        That office's group admin or the super admin; a reason is required and kept.
      fix_email, customer_id, email, reason: correct a counter account's wrong email
@@ -36,6 +41,8 @@ use PDOException;
    ===================================================================== */
 class CustomerManagementController
 {
+    use ConfirmsOwnPassword;
+
     public function index()
     {
         legacy('auth', 'offices');
@@ -54,13 +61,13 @@ class CustomerManagementController
                     'email'     => (string) $r['email'],
                     'phone'     => (string) ($r['phone'] ?? ''),
                     'usep'      => $r['university_id_no'] !== null && $r['university_id_no'] !== '' ? 'USeP' : '—',
-                    'status'    => $r['is_active'] ? 'Active' : 'Suspended',
+                    'status'    => $r['revoked_at'] !== null ? 'Revoked' : ($r['is_active'] ? 'Active' : 'Suspended'),
                     'bookings'  => (int) $r['booking_count'],
                     'open'      => (int) $r['open_count'],
                     'joined'    => $r['created_at'] ? date('M j, Y', strtotime($r['created_at'])) : '—',
                     'counter'   => $r['counter_venue_id'] !== null,
                     'lastLogin' => $r['last_login_at'] ? date('M j, Y', strtotime($r['last_login_at'])) : 'never',
-                    'fixEmail'  => self::mayFixEmail($r['counter_venue_id'], $r['last_login_at'] === null, (bool) $r['not_google']),
+                    'fixEmail'  => $r['revoked_at'] === null && self::mayFixEmail($r['counter_venue_id'], $r['last_login_at'] === null, (bool) $r['not_google']),
                     /* one entry per office this admin may block at: on or off, and by whom */
                     'blocks'    => array_map(fn ($o) => ['venueId' => $o['id'], 'office' => $o['name'], 'on' => isset($on[$o['id']])]
                         + (isset($on[$o['id']]) ? ['reason' => $on[$o['id']]['reason'], 'by' => $on[$o['id']]['blocked_by'],
@@ -105,7 +112,8 @@ class CustomerManagementController
             return $this->fixEmail($request);
         }
         if (!admin_is_super()) {
-            return $this->reply(403, ['ok' => false, 'message' => 'Only the super admin can suspend a customer account. To stop bookings at your office, block the customer there.']);
+            return $this->reply(403, ['ok' => false, 'message' => $action === 'revoke' ? 'Only the super admin can revoke a customer account.'
+                : 'Only the super admin can suspend a customer account. To stop bookings at your office, block the customer there.']);
         }
         $rawId  = $request->input('user_id');
         $target = $rawId !== null && ctype_digit((string) $rawId) ? (int) $rawId : 0;
@@ -125,6 +133,13 @@ class CustomerManagementController
         /* Customer-side only — staff-save owns the staff side. */
         if ($user['account_type'] !== 'customer') {
             return $this->reply(403, ['ok' => false, 'message' => 'That account is not a customer account.']);
+        }
+
+        if ($user['revoked_at'] !== null) {
+            return $this->reply(409, ['ok' => false, 'message' => 'This account was revoked. It is closed for good and can never be reactivated.']);
+        }
+        if ($action === 'revoke') {
+            return $this->revoke($request, $user);
         }
 
         if ($action === 'set_active') {
@@ -147,6 +162,40 @@ class CustomerManagementController
         return $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
     }
 
+    /* REVOKE: check, the super admin's own password, then save in one go: the account closed
+       (signed out on its next click: customer_session_heal() reads is_active) and every pending
+       request cancelled the way the customer would, so the History trigger frees its dates. */
+    private function revoke(Request $request, array $user)
+    {
+        // Check
+        if (AccountQueries::revokedAt() === 'NULL') {
+            return $this->reply(503, ['ok' => false, 'message' => 'Revoking needs migration 21 on this database (venusep_migration_21.sql). Nothing was changed.']);
+        }
+        if ($refused = $this->ownPasswordRefusal((string) $request->input('password', ''))) {
+            return $refused;
+        }
+
+        // Save
+        $actor = (int) session('user_id');
+        $cancelled = DB::transaction(function () use ($user, $actor) {
+            if (!AccountQueries::revoke((int) $user['id'], $actor)) {
+                return null;
+            }
+            $n = 0;
+            foreach (BookingCreateQueries::pendingOf((int) $user['customer_id']) as $bookingId) {
+                $n += BookingCreateQueries::cancelPending($bookingId, $actor, 'Request cancelled: the customer account was revoked.') ? 1 : 0;
+            }
+            return $n;
+        });
+        if ($cancelled === null) {
+            return $this->reply(409, ['ok' => false, 'message' => 'This account was revoked a moment ago.']);
+        }
+        ActivityQueries::add('account_revoked', 'Customer: ' . ($user['full_name'] ?? $user['email']),
+            'Revoked the account (closed for good); ' . $cancelled . ' pending request(s) cancelled');
+        return $this->reply(200, ['ok' => true, 'cancelled' => $cancelled,
+            'message' => 'Account revoked. They have been signed out for good' . ($cancelled ? ', and ' . $cancelled . ' pending request(s) were cancelled.' : '.')]);
+    }
+
     /* THE ONE EDIT OF A CUSTOMER'S DETAILS (DB-DECISIONS 28): a normal admin of the group
        whose counter made the account (USeP CEDU: either counter) may correct its email, while
        it has never been signed into and is not a Google account. Nobody else, the super admin
@@ -167,6 +216,9 @@ class CustomerManagementController
         $reason = mb_substr(trim((string) $request->input('reason', '')), 0, 500);
         if ($account === null) {
             return $this->reply(404, ['ok' => false, 'message' => 'That customer account no longer exists.']);
+        }
+        if ($account['revoked_at'] !== null) {   // a revoked account keeps its email: it can never register again
+            return $this->reply(409, ['ok' => false, 'message' => 'This account was revoked, so its email stays as it is.']);
         }
         if (!self::mayFixEmail($account['counter_venue_id'], $account['last_login_at'] === null, $account['google_sub'] === null)) {
             return $this->reply(403, ['ok' => false, 'error' => 'forbidden', 'message' => 'Only the customer can change this email. An admin of the group whose counter made the account may correct it, and only before anyone has signed into it and when it is not a Google account.']);

@@ -49,7 +49,8 @@ class CustomerQueries
         $offices = $scope === null ? '' : implode(',', array_map('intval', $scope) ?: [0]);
         $mine = $scope === null ? '' : " AND r.venue_id IN ($offices)";
         return array_map(fn ($r) => (array) $r, DB::select("
-            SELECT u.id AS user_id, u.email, u.is_active, u.last_login_at, u.google_sub IS NULL AS not_google,
+            SELECT u.id AS user_id, u.email, u.is_active, " . AccountQueries::revokedAt() . " AS revoked_at,
+                   u.last_login_at, u.google_sub IS NULL AS not_google,
                    c.id AS customer_id, c.full_name, c.phone, c.university_id_no, c.created_at, c.counter_venue_id,
                    (SELECT COUNT(*) FROM bookings b JOIN rooms r ON r.id = b.room_id
                      WHERE b.customer_id = c.id $mine) AS booking_count,
@@ -70,7 +71,8 @@ class CustomerQueries
     public static function findUser(int $userId): ?array
     {
         $row = DB::selectOne("
-            SELECT u.id, u.account_type, u.is_active, u.email, c.id AS customer_id, c.full_name
+            SELECT u.id, u.account_type, u.is_active, " . AccountQueries::revokedAt() . " AS revoked_at,
+                   u.email, c.id AS customer_id, c.full_name
             FROM users u
             LEFT JOIN customers c ON c.user_id = u.id
             WHERE u.id = ?
@@ -187,7 +189,8 @@ class CustomerQueries
     public static function account(int $customerId): ?array
     {
         $row = DB::selectOne("
-            SELECT c.id, c.full_name, c.counter_venue_id, u.id AS user_id, u.email, u.last_login_at, u.google_sub
+            SELECT c.id, c.full_name, c.counter_venue_id, u.id AS user_id, u.email, u.last_login_at, u.google_sub,
+                   " . AccountQueries::revokedAt() . " AS revoked_at
             FROM customers c
             JOIN users u ON u.id = c.user_id
             WHERE c.id = ?

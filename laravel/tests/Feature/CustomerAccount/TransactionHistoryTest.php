@@ -26,6 +26,18 @@ class TransactionHistoryTest extends TestCase
             ->assertSee(json_encode(route('customer.receipt')), false);
     }
 
+    /* A copy button beside each Booking ID, in the table and on the phone's card (assets/js/copy-ref.js). */
+    public function test_each_booking_id_gets_a_copy_button(): void
+    {
+        $this->actingAsCustomer('msantos@usep.edu.ph')->get(route('customer.transaction-history'))->assertOk()
+            ->assertSee(asset('assets/css/copy-ref.css'), false)
+            ->assertSee(asset('assets/js/copy-ref.js'), false)
+            ->assertSee('"bookingId":"' . $this->ref($this->firstBookingOf(3)) . '"', false)
+            ->assertSee('<span class="lp-name">${refWithCopy(r.bookingId)}</span>', false)
+            ->assertSee('<div class="th-ref">${refWithCopy(r.bookingId)} · ', false)
+            ->assertSee('data-copy-ref="${esc(ref)}" aria-label="Copy reference number"', false);
+    }
+
     /* The printout (partials/transaction-print) is the admin's paper: the university's
        header with no office line, the same footer, and the customer as who printed it. */
     public function test_the_printout_is_the_admins_paper_without_an_office(): void

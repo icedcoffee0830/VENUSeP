@@ -50,7 +50,7 @@
           columnDefaults: { accessorDownload: (v) => (typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v) },
           columns: [
             { title: 'Transaction ID', field: 'transactionId', minWidth: 150, width: 150 },
-            { title: 'Booking ID', field: 'bookingId', minWidth: 140, width: 140 },
+            { title: 'Booking ID', field: 'bookingId', minWidth: 170, width: 170, formatter: (cell) => refWithCopy(cell.getValue()), formatterPrint: (cell) => cell.getValue() },
             { title: 'Customer Name', field: 'customerName', minWidth: 180, width: 180 },
             { title: 'Venue', field: 'venue', minWidth: 200, width: 200 },
             { title: 'Event Date', field: 'eventDate', sorter: (a, b) => parseDate(a) - parseDate(b), minWidth: 130, width: 130 },

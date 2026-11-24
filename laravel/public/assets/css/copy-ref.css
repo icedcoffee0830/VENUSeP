@@ -1,0 +1,9 @@
+/* The copy button beside a booking reference: assets/js/copy-ref.js. Both Transaction History pages. */
+.copy-ref { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 26px; margin-left: 4px; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #6e6a64; font-size: 13px; line-height: 1; vertical-align: middle; cursor: pointer; transition: background-color .15s, border-color .15s, color .15s; }
+.copy-ref:hover { background: #f4f2ee; border-color: #ddd7ce; color: #1f1e1e; }
+.copy-ref:focus-visible { outline: 2px solid #a11626; outline-offset: 1px; }
+@media (pointer: coarse) { .copy-ref { width: 36px; height: 36px; } }
+
+.copy-ref-tip { position: fixed; z-index: 2000; transform: translate(-50%, -100%); padding: 4px 9px; border-radius: 7px; background: #1f1e1e; color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; }
+.copy-ref-tip.is-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .copy-ref, .copy-ref-tip { transition: none; } }

@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/tabulator-pager.css') }}" />
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/print-letterhead.css') }}" />
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/transaction-print.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/copy-ref.css') }}" />
 @endpush
 @section('content')
       <!-- [4] PAGE CONTENT -->
@@ -93,6 +94,7 @@
     <script src="{{ asset_stamped('assets/js/table-page-size.js') }}"></script>
     <script src="{{ asset_stamped('assets/js/list-page.js') }}"></script>
     <script src="{{ asset_stamped('assets/js/transaction-print.js') }}"></script>
+    <script src="{{ asset_stamped('assets/js/copy-ref.js') }}"></script>
 
     <!-- [6] PAGE SCRIPT -->
     <script>

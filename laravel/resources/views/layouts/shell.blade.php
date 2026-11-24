@@ -44,7 +44,8 @@
   <body @hasSection('body-class') class="@yield('body-class')" @endif>
     <div class="app-wrapper">
       @include('partials.header', ['portal' => $portal])
-      @include('partials.sidebar', ['portal' => $portal, 'active' => trim($__env->yieldContent('active'))])
+      {{-- decoded: @section('active', 'Backup & Restore') stores the label escaped ('Backup &amp; Restore'), which never matched the menu --}}
+      @include('partials.sidebar', ['portal' => $portal, 'active' => html_entity_decode(trim($__env->yieldContent('active')), ENT_QUOTES)])
       @yield('content')
     </div>
     @stack('body-end')

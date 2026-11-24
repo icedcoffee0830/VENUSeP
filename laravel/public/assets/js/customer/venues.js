@@ -60,11 +60,36 @@
       scrollTrigger: { trigger: '.lp-hero', start: 'top top', end: 'bottom top', scrub: 0.6 } });
   })();
 
-  /* In-page links scroll smoothly, and the scroll cue fades once you start.
+  /* In-page links glide to their section, and the scroll cue fades once you start.
      (The nav bar itself lives in includes/customer-nav.php.) Done here, not with CSS scroll-behavior,
-     because that CSS property makes ScrollTrigger mis-measure on zoom/resize. */
+     because that CSS property makes ScrollTrigger mis-measure on zoom/resize. And not with
+     scrollIntoView({behavior:'smooth'}) either: Chrome on Windows turns that into a jump when
+     Windows "Animation effects" is off, so the page moved like it teleported. glide() animates
+     the scroll itself. Reduced motion still jumps, as asked. */
   (function () {
     var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var run = 0;                                   /* a newer glide, or the user scrolling, stops the old one */
+    var STOPS = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+    function targetY(el) {                         /* where scrollIntoView({block:'start'}) would land */
+      var margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+      var max = document.documentElement.scrollHeight - window.innerHeight;
+      return Math.max(0, Math.min(el.getBoundingClientRect().top + window.scrollY - margin, max));
+    }
+    function glide(el, done) {
+      if (reduced) { el.scrollIntoView({ block: 'start' }); if (done) done(); return; }
+      var me = ++run, from = window.scrollY, t0 = performance.now();
+      var dur = Math.min(1400, 500 + Math.abs(targetY(el) - from) * 0.2);   /* longer trips take longer, up to 1.4s */
+      function stop() { run++; off(); }
+      function off() { STOPS.forEach(function (n) { window.removeEventListener(n, stop); }); }
+      STOPS.forEach(function (n) { window.addEventListener(n, stop, { passive: true }); });
+      requestAnimationFrame(function step(now) {
+        if (me !== run) return;
+        var p = Math.min(1, (now - t0) / dur);
+        var e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;  /* ease in and out */
+        window.scrollTo(0, from + (targetY(el) - from) * e);                 /* re-read: reveals and images move the target */
+        if (p < 1) requestAnimationFrame(step); else { off(); if (done) done(); }
+      });
+    }
     document.querySelectorAll('a[href^="#"]').forEach(function (a) {
       var id = a.getAttribute('href');
       if (id.length < 2) return;
@@ -72,9 +97,18 @@
         var t = document.querySelector(id);
         if (!t) return;
         e.preventDefault();
-        t.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+        glide(t);
       });
     });
+    /* Arrived from another page with a #section (the nav's "Bahay Alumni" from the FAQ):
+       the inline script at the top of <body> took the hash off before the browser could
+       jump, so the page opens at the top and glides down, then the hash goes back on. */
+    if (window.lpArrive) {
+      var hash = window.lpArrive, t = null;
+      try { t = document.querySelector(hash); } catch (err) {}
+      var putBack = function () { history.replaceState(history.state, '', location.pathname + location.search + hash); };
+      if (t) setTimeout(function () { glide(t, putBack); }, 350); else putBack();
+    }
     var cue = document.getElementById('lpCue');
     function paint() { if (cue) cue.classList.toggle('gone', window.scrollY > 60); }
     window.addEventListener('scroll', paint, { passive: true });

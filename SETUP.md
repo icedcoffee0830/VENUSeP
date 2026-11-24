@@ -43,7 +43,7 @@ C:\xampp\mysql\bin\mysql -u root < venusep_schema.sql
 **Then, in both cases,** bring it up to date. It's safe to run this more than once:
 
 ```
-for %i in (01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17) do C:\xampp\mysql\bin\mysql -u root venusep < venusep_migration_%i.sql
+for %i in (01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20) do C:\xampp\mysql\bin\mysql -u root venusep < venusep_migration_%i.sql
 ```
 
 Never run `php artisan migrate` on this database.

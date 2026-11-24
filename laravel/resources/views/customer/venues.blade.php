@@ -16,7 +16,13 @@
   <link rel="stylesheet" href="{{ asset_stamped('assets/css/customer/venues.css') }}" />
 </head>
 <body>
-<script>document.body.classList.add('js');</script>{{-- stays here: it must run before the first paint --}}
+<script>document.body.classList.add('js');
+/* Opened as venues#section from another page: take the hash off now, before the browser
+   jumps to it, so venues.js can glide there instead (window.lpArrive). Reduced motion keeps the jump. */
+if (location.hash.length > 1 && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+  window.lpArrive = location.hash;
+  history.replaceState(history.state, '', location.pathname + location.search);
+}</script>{{-- stays here: it must run before the first paint --}}
 
 <!-- The three drawn placeholders, defined once and reused by <use>. A real
      photo in assets/img/venues/ replaces the drawing for that room. -->

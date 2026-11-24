@@ -1,5 +1,11 @@
 /* Styles for legacy/includes/customer-nav.php. */
 
+  /* Going from one page with this bar to another (landing -> FAQ -> booking page) fades
+     between them instead of cutting. Browsers without view transitions just load the page. */
+  @media (prefers-reduced-motion: no-preference) {
+    @view-transition { navigation: auto; }
+  }
+
   /* nav styles live HERE so every page gets them with the include */
   .cn-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 60; border-bottom: 1px solid transparent;
     transition: background 480ms cubic-bezier(.16,1,.3,1), border-color 480ms cubic-bezier(.16,1,.3,1), box-shadow 480ms cubic-bezier(.16,1,.3,1); }

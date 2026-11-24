@@ -133,7 +133,8 @@ class CustomerRevokeTest extends TestCase
 
         $this->flushSession();
         $this->post(route('customer.customer-login'), ['email' => $this->victim->email, 'password' => self::PASSWORD])
-            ->assertSee('This account was closed and can&rsquo;t be used again.', false)->assertDontSee('This account has been disabled');
+            /* the visible notice, not the page's inlined script (which holds both alert texts) */
+            ->assertSee('This account was closed and can&rsquo;t be used again.', false)->assertDontSee('<strong>Account disabled.</strong>', false);
         $this->post(route('customer.customer-login'), ['email' => $this->victim->email, 'password' => 'wrong-one'])
             ->assertSee('Invalid email or password.');   // a stranger learns nothing
 

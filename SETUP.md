@@ -216,7 +216,7 @@ C:\xampp\mysql\bin\mysql.exe -u root -e "CHANGE MASTER TO MASTER_HOST='A_IP', MA
 
 **G. On laptop A.** Open `http://A_IP:8100/server-emergency` (A is still locked). Sign in as the super admin with the authenticator code, then press **Unlock saving** on A's row. Add B (and C, D) with **Find servers on this hotspot** or by typing the address, then **Test** each one: a copy must say "Up to date".
 
-**Every save now waits until a copy has it** (at most 10 seconds). If no copy is connected, the 1-minute task pauses saving: pages still open, and a save says "not saved, try again". The super admin can press **Allow saving without a copy** on the Server page. Protection comes back on by itself when a copy returns.
+**Every save now waits until a copy has it.** If no copy is connected, the main keeps working: the first save waits at most 10 seconds, then saving goes on without a copy, and the Server page warns the super admin that saves are on one laptop only. Protection comes back on by itself when a copy returns.
 
 **When the main breaks:** on any laptop, open its address, follow "Super admin? Sign in to switch servers", sign in, and press **Switch to this** on the copy that says it applied everything. Its website now uses the new main. When laptop A comes back it stays locked: press **Make it a copy** on A's row, wait for "Up to date", then switch back if you want.
 

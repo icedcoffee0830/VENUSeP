@@ -1033,6 +1033,7 @@ Agreed with Aron on 2026-11-24, for the team paper.
   (`binlog-do-db`). Migrations run on the main only.
 - Files (photos, IDs, receipts) are not in the database: the 1-minute task copies them, deletions
   included, so the ID retention rule holds on every laptop.
-- Saving without a copy: a save waits at most 10 s; with no copy connected the main is paused
-  (locked) until a copy is back or the super admin allows saving without a copy (it turns
-  itself back on when a copy returns).
+- Saving without a copy: a save waits at most 10 s for a copy, then the main goes on without
+  one, and the super admin's banner says saves are on one laptop only. Protection comes back
+  by itself when a copy returns. (Changed 2026-11-24 in the two-laptop test, Aron: "laptop B
+  must work even if mine doesn't"; the earlier rule paused the main until a copy was back.)

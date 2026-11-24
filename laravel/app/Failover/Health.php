@@ -43,24 +43,19 @@ final class Health
                 }
             }
         }
-        /* No copy connected while saving is protected: lock the main instead of letting every save
-           wait. The website answers one request at a time, so one waiting save would freeze the whole
-           site, the Server page included. Locked, saves get "not saved, try again" and reads work. */
-        $protected = Servers::protectedSaving();
-        if ($connected === 0 && $protected === true && !Cache::get(self::PAUSED)) {
-            Servers::lock(Servers::main());
-            Cache::forever(self::PAUSED, true);
-            ActivityQueries::add('saving_paused', 'Database server', 'No copy is connected: saving is paused until one is back', 0);
+        /* No copy connected: the main KEEPS WORKING (Aron, two-laptop test 2026-11-24: "laptop B
+           must work even if mine doesn't"). MariaDB waits at most rpl_semi_sync_master_timeout (10 s)
+           for a copy, then goes on without one; the banner says saves are unprotected. A pause left by
+           the earlier rule (the main locked) is lifted here. */
+        if (self::resume()) {
+            ActivityQueries::add('saving_resumed', 'Database server', 'Saving works again (the main is no longer paused without a copy)', 0);
         }
-        if ($connected === 0 && Cache::get(self::PAUSED)) {
-            $problems[] = 'Saving is paused: no copy is connected. Bring a copy back, or use “Allow saving without a copy” on the Server page.';
+        if ($connected === 0) {
+            $problems[] = 'No copy is connected: saves are kept on this laptop only until a copy is back.';
         }
-        if ($connected > 0 && $protected === false) {
+        if ($connected > 0 && Servers::protectedSaving() === false) {
             Servers::setProtected(true);
             ActivityQueries::add('saving_protected', 'Database server', 'A copy is back: saving waits for a copy again', 0);
-        }
-        if ($connected > 0 && self::resume()) {
-            ActivityQueries::add('saving_resumed', 'Database server', 'A copy is back: saving works again', 0);
         }
         Cache::put(self::KEY, ['problems' => $problems, 'at' => time()], 180);
         return $problems ? count($problems) . ' problem(s): ' . implode(' ', $problems) : 'every copy is copying';

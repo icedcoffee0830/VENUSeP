@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
    system_receipts: one row per confirmed payment. snapshot_json keeps what the receipt
      said on the day, so a later change never rewrites it.
-   Read only: payments, bookings, customers. */
+   Read only: payments, bookings, customers, booking_timeline, staff. */
 class ReceiptQueries
 {
     /* A booking's newest confirmed payment, or null. */
@@ -40,6 +40,28 @@ class ReceiptQueries
             JOIN customers c ON c.id = b.customer_id
             WHERE b.id = ?
         ", [$bookingId])->contact_email ?? '');
+    }
+
+    /* Who handled the booking, by staff name ('' when unknown): the staff member or admin
+       who approved it (its latest move into Approved; a counter booking is approved by the
+       staff who took it), and who confirmed this payment (or issued its receipt). */
+    public static function handlers(int $bookingId, int $paymentId): array
+    {
+        $row = DB::selectOne("
+            SELECT (SELECT s.full_name
+                      FROM booking_timeline t
+                      JOIN staff s ON s.user_id = t.performed_by_user_id
+                     WHERE t.booking_id = ? AND t.new_reservation_status = 'approved'
+                       AND NOT (t.old_reservation_status <=> 'approved')
+                     ORDER BY t.occurred_at DESC, t.id DESC
+                     LIMIT 1) AS approved_by,
+                   (SELECT s.full_name
+                      FROM payments p
+                      LEFT JOIN system_receipts r ON r.payment_id = p.id
+                      JOIN staff s ON s.user_id = COALESCE(p.confirmed_by_user_id, r.issued_by_user_id)
+                     WHERE p.id = ?) AS confirmed_by
+        ", [$bookingId, $paymentId]);
+        return ['approved_by' => (string) $row->approved_by, 'payment_confirmed_by' => (string) $row->confirmed_by];
     }
 
     public static function add(int $bookingId, int $paymentId, string $snapshot, ?int $actor): int

@@ -20,7 +20,6 @@ use Throwable;
 final class FileCopies
 {
     private const TOMB_DAYS = 7;
-    private const MAX_BYTES = 7 * 1024 * 1024;   // DOC_MAX_BYTES, the upload limit
 
     /* ---- what is here ---- */
 
@@ -152,7 +151,7 @@ final class FileCopies
         }
         if ($m['type'] === 'put') {
             $bytes = base64_decode((string) ($m['data'] ?? ''), true);
-            if ($bytes === false || strlen($bytes) > self::MAX_BYTES) {
+            if ($bytes === false || strlen($bytes) > DOC_MAX_BYTES) {
                 return response('', 422);
             }
             /* deleted here after that version was made: our tombstone is on its way to them */

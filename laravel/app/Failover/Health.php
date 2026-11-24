@@ -15,7 +15,7 @@ use Throwable;
 final class Health
 {
     private const KEY = 'failover.health';
-    public const PAUSED = 'failover.paused';   // the main was locked because no copy was connected
+    private const PAUSED = 'failover.paused';   // the main was locked because no copy was connected
 
     /* Problems, in words; [] = healthy. Only for a group of two or more laptops. */
     public static function check(): string
@@ -59,12 +59,21 @@ final class Health
             Servers::setProtected(true);
             ActivityQueries::add('saving_protected', 'Database server', 'A copy is back: saving waits for a copy again', 0);
         }
-        if ($connected > 0 && Cache::pull(self::PAUSED)) {
-            Servers::lock(Servers::main(), false);
+        if ($connected > 0 && self::resume()) {
             ActivityQueries::add('saving_resumed', 'Database server', 'A copy is back: saving works again', 0);
         }
         Cache::put(self::KEY, ['problems' => $problems, 'at' => time()], 180);
         return $problems ? count($problems) . ' problem(s): ' . implode(' ', $problems) : 'every copy is copying';
+    }
+
+    /* Lift the pause (a copy is back, or the super admin allowed saving without a copy). True = there was one. */
+    public static function resume(): bool
+    {
+        if (!Cache::pull(self::PAUSED)) {
+            return false;
+        }
+        Servers::lock(Servers::main(), false);
+        return true;
     }
 
     /* For the banner: problems, [] = fine, or null = nothing heard for 3 minutes in a group of

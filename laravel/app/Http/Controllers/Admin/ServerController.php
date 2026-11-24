@@ -75,14 +75,14 @@ class ServerController
     /* What the panel shows (the Server page, and the emergency page in piece 7). */
     public static function panel(): array
     {
-        $rows = ServerFile::laptops();
+        $rows = $listed = ServerFile::laptops();
         if (!array_filter($rows, [Servers::class, 'isMain'])) {
             array_unshift($rows, Servers::main());   // the main is always a row
         }
         $mine = Servers::myAddresses();
         return [
             'svRows' => array_map(fn ($ip, $i) => ['ip' => $ip, 'name' => 'Laptop ' . chr(65 + $i), 'mine' => Servers::isLocal($ip),
-                'listed' => in_array($ip, ServerFile::laptops(), true)], $rows, array_keys($rows)),
+                'listed' => in_array($ip, $listed, true)], $rows, array_keys($rows)),
             'svUrl' => $mine ? 'http://' . $mine[0] . ':' . request()->getPort() : null,
             'svProtected' => Servers::protectedSaving(),
             'svHealth' => \App\Failover\Health::last(),
@@ -138,12 +138,17 @@ class ServerController
                 if ($no = $this->confirm($request, $actor)) {
                     return $no;
                 }
-                return $this->{'do' . ucfirst($action)}($request, $ip, $laptops, $actor);
+                return match ($action) {
+                    'switch' => $this->doSwitch($ip, $laptops, $actor),
+                    'copy' => $this->done(Servers::makeCopy($ip), $actor, 'server_copy', 'Made ' . $ip . ' a copy of ' . Servers::main()),
+                    'rebuild' => $this->done(Servers::rebuild($ip), $actor, 'server_rebuilt', 'Rebuilt the copy on ' . $ip . ' from ' . Servers::main()),
+                    'saving' => $this->doSaving($request->boolean('on'), $actor),
+                };
         }
         return $this->reply(400, ['ok' => false, 'message' => 'Unknown action.']);
     }
 
-    private function doSwitch(Request $request, string $ip, array $laptops, array $actor): JsonResponse
+    private function doSwitch(string $ip, array $laptops, array $actor): JsonResponse
     {
         if (Servers::isLoopback($ip) && count($laptops) > 1) {
             return $this->reply(422, ['ok' => false, 'message' => 'Use the laptop’s network address, not 127.0.0.1: the other laptops can’t reach that one.']);
@@ -161,28 +166,22 @@ class ServerController
         return $this->reply($result['ok'] ? 200 : 409, $result + ['message' => $result['ok'] ? 'Switched. Every save now goes to ' . $ip . '.' : 'The switch stopped. Nothing after the failed step was done.']);
     }
 
-    private function doCopy(Request $request, string $ip, array $laptops, array $actor): JsonResponse
+    /* Make it a copy / Rebuild: [ok, message], logged when it worked. */
+    private function done(array $r, array $actor, string $action, string $detail): JsonResponse
     {
-        $r = Servers::makeCopy($ip);
         if ($r['ok']) {
-            ActivityQueries::add('server_copy', 'Database server', 'Made ' . $ip . ' a copy of ' . Servers::main(), $actor['id'], 'admin');
+            ActivityQueries::add($action, 'Database server', $detail, $actor['id'], 'admin');
         }
         return $this->reply($r['ok'] ? 200 : 409, $r);
     }
 
-    private function doRebuild(Request $request, string $ip, array $laptops, array $actor): JsonResponse
+    /* $on = protected again */
+    private function doSaving(bool $on, array $actor): JsonResponse
     {
-        $r = Servers::rebuild($ip);
-        if ($r['ok']) {
-            ActivityQueries::add('server_rebuilt', 'Database server', 'Rebuilt the copy on ' . $ip . ' from ' . Servers::main(), $actor['id'], 'admin');
-        }
-        return $this->reply($r['ok'] ? 200 : 409, $r);
-    }
-
-    private function doSaving(Request $request, string $ip, array $laptops, array $actor): JsonResponse
-    {
-        $on = $request->boolean('on');   // on = protected again
         Servers::setProtected($on);       // first: an unprotected save must not wait for the log line below
+        if (!$on) {
+            \App\Failover\Health::resume();   // a pause for "no copy connected" ends too
+        }
         ActivityQueries::add($on ? 'saving_protected' : 'saving_unprotected', 'Database server',
             $on ? 'Saving waits for a copy again' : 'Allowed saving without a copy', $actor['id'], 'admin');
         return $this->reply(200, ['ok' => true, 'protected' => $on]);

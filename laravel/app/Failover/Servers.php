@@ -120,7 +120,7 @@ final class Servers
                 $r['slavePos'] = (string) $db->query('SELECT @@gtid_slave_pos')->fetchColumn();
                 $r['ioPos'] = (string) $slave['Gtid_IO_Pos'];
                 $r['own'] = self::ownChanges((string) $db->query('SELECT @@gtid_current_pos')->fetchColumn(), $r['slavePos'])
-                    || in_array((int) $slave['Last_SQL_Errno'], [1950], true) || in_array((int) $slave['Last_IO_Errno'], [1236], true);
+                    || (int) $slave['Last_SQL_Errno'] === 1950 || (int) $slave['Last_IO_Errno'] === 1236;   // strict-mode refusal / main lacks its changes
                 try {
                     $mainPos = (string) self::pdo($r['of'])->query('SELECT @@gtid_binlog_pos')->fetchColumn();
                     $r['behind'] = max(0, self::seq($mainPos) - self::seq($r['slavePos']));
@@ -252,8 +252,7 @@ final class Servers
         }
         /* already a main (another laptop switched to it): only point this system at it, never two mains */
         if ($t['role'] === 'main') {
-            $oldOpen = (function () use ($main) { try { return (int) self::pdo($main)->query('SELECT @@read_only')->fetchColumn() === 0; } catch (Throwable) { return false; } })();
-            if ($oldOpen) {
+            if (self::probe($main)['role'] === 'main') {
                 $steps[] = ['Check for two mains', false, $main . ' still takes saves too. Switch from the laptop that holds the newest data.'];
                 return $done('none');
             }
@@ -321,7 +320,7 @@ final class Servers
         $db->exec('START SLAVE');
         sleep(3);
         $s = $db->query('SHOW SLAVE STATUS')->fetch() ?: [];
-        if (in_array((int) ($s['Last_SQL_Errno'] ?? 0), [1950], true) || in_array((int) ($s['Last_IO_Errno'] ?? 0), [1236], true)) {
+        if ((int) ($s['Last_SQL_Errno'] ?? 0) === 1950 || (int) ($s['Last_IO_Errno'] ?? 0) === 1236) {
             $db->exec('STOP SLAVE');
             throw new \RuntimeException('It has changes the main never got. The main always wins: rebuild it.');
         }
@@ -405,14 +404,9 @@ final class Servers
         }
     }
 
-    /* Off = "allow saving without a copy": also lifts the pause Health puts on when no copy is connected. */
     public static function setProtected(bool $on): void
     {
-        $db = self::pdo(self::main());
-        $db->exec('SET GLOBAL rpl_semi_sync_master_enabled = ' . ($on ? 1 : 0));
-        if (!$on && \Illuminate\Support\Facades\Cache::pull(Health::PAUSED)) {
-            $db->exec('SET GLOBAL read_only = 0');
-        }
+        self::pdo(self::main())->exec('SET GLOBAL rpl_semi_sync_master_enabled = ' . ($on ? 1 : 0));
     }
 
     /* ---- connection ---- */

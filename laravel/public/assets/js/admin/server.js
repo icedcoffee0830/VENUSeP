@@ -115,6 +115,8 @@
     const ip = tr.dataset.ip, name = tr.dataset.name || ip, r = tr._report || {};
     if (a === 'test') return test(tr).then(() => tr._report && show(checksHtml('Test of ' + ip + ' (' + name + ')', tr._report)));
     if (a === 'add' || a === 'remove') {
+      if (a === 'remove' && !(await venusepConfirm(name + ' (' + ip + ') stops getting copies of the photos, IDs and receipts, and is no longer checked. Its database is not touched. You can add it again later.',
+        { title: 'Remove ' + name + ' from the list?', okLabel: 'Remove', cancelLabel: 'Cancel', danger: true }))) return;
       const res = await post({ action: a, ip: ip });
       if (!res.ok) return venusepAlert(res.message);
       return location.reload();

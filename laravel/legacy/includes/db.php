@@ -97,7 +97,7 @@ function venusep_db_or_fail()
     if ($pdo !== null) {
         return $pdo;
     }
-    abort(response()->view('errors.db-unavailable', [], 503)->header('Retry-After', '120'));
+    abort(\App\Failover\Outage::page());
 }
 
 /* Minutes kept free before and after every VENUE booking. 60 if unreadable. */

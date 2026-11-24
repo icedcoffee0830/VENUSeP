@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
         /* Laravel exempts only "password", so a pasted "abc " was saved as "abc" and failed at sign-in. */
         $middleware->trimStrings(except: ['new_password', 'confirm_new_password', 'confirm_password', 'creator_password']);
         $middleware->prepend(\App\Http\Middleware\DetectOpenTransaction::class);
+        /* First in the group: a database that can't be reached gets the one outage page, before
+           anything below reads it (App\Failover\Outage). */
+        $middleware->web(prepend: [\App\Failover\Outage::class]);
         $middleware->web(append: [
             \App\Http\Middleware\NoFraming::class,   // first, so it marks every reply below it too
             \App\Http\Middleware\EnforceTwoFactor::class,
@@ -52,6 +55,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 ? response()->json(['ok' => false, 'error' => 'csrf', 'message' => 'This page has expired. Reload it and try again.'], 400)
                 : response()->json(['ok' => false, 'error' => 'not_logged_in', 'message' => 'Your session has ended. Log in again.'], 401);
         });
+        /* The connection was lost mid-request, or the server is read-only: the outage page, not a 500. */
+        $exceptions->render(fn (\Throwable $e, \Illuminate\Http\Request $request) => \App\Failover\Outage::render($e, $request));
         /* APP_DEBUG only: the pages' fetch() calls read JSON, so an error sql_failed() rethrew
            must reach them as JSON or they say "could not reach the server". Same test as above. */
         $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {

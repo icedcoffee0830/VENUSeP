@@ -27,7 +27,7 @@
         /* the phone's card for one payment; the page's CSS shows it instead of the cells */
         const card = (r) => `<article class="th-card">
             <div class="th-card-top"><span class="th-ven">${esc(r.venue)}</span>${chip(r.paymentStatus)}</div>
-            <div class="th-ref">${esc(r.bookingId)} · ${r.type === 'hostel' ? 'Stay' : 'Event'} ${esc(shortDate(r.eventDate) || r.eventDate)}</div>
+            <div class="th-ref">${refWithCopy(r.bookingId)} · ${r.type === 'hostel' ? 'Stay' : 'Event'} ${esc(shortDate(r.eventDate) || r.eventDate)}</div>
             <div class="th-money"><b>${esc(r.amount)}</b><span>${esc(r.paymentMethod)}${r.paidOn ? ' · paid ' + shortDate(r.paidOn, false) : ''}</span></div>
             <div class="th-bk">Booking ${chip(r.bookingStatus)}</div>
             ${actionButtons(r)}
@@ -67,8 +67,8 @@
           columns: [
             { title: 'Transaction ID', field: 'transactionId', visible: false, download: true, print: true },
             {
-              title: 'Booking', titleDownload: 'Booking ID', titlePrint: 'Booking ID', field: 'bookingId', width: 132,
-              formatter: (cell) => { const r = cell.getRow().getData(); return `<div class="lp-stack"><span class="lp-name">${esc(r.bookingId)}</span><span class="lp-sub">${esc(r.transactionId)}</span></div>`; },
+              title: 'Booking', titleDownload: 'Booking ID', titlePrint: 'Booking ID', field: 'bookingId', width: 160,
+              formatter: (cell) => { const r = cell.getRow().getData(); return `<div class="lp-stack"><span class="lp-name">${refWithCopy(r.bookingId)}</span><span class="lp-sub">${esc(r.transactionId)}</span></div>`; },
               formatterPrint: (cell) => cell.getValue(),
             },
             { title: 'Venue', field: 'venue', minWidth: 140 },

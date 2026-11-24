@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/print-letterhead.css') }}" />
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/transaction-print.css') }}" />
     <link rel="stylesheet" href="{{ asset_stamped('assets/css/admin/transaction-history.css') }}" />
+    <link rel="stylesheet" href="{{ asset_stamped('assets/css/copy-ref.css') }}" />
 @endpush
 @section('content')
       <main class="app-main">
@@ -97,6 +98,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.4.0/dist/js/tabulator.min.js" crossorigin="anonymous"></script>
     <script src="{{ asset_stamped('assets/js/table-page-size.js') }}"></script>
     <script src="{{ asset_stamped('assets/js/transaction-print.js') }}"></script>
+    <script src="{{ asset_stamped('assets/js/copy-ref.js') }}"></script>
 
     <!-- ============================================================
          [6] PAGE SCRIPT — builds the table, filters, exports.

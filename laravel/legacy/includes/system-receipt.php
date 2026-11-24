@@ -59,7 +59,8 @@ function receipt_issue(int $bookingId, int $actorUserId): ?int
     $contactEmail = \App\Queries\ReceiptQueries::contactEmail($bookingId);
 
     return \App\Queries\ReceiptQueries::add($bookingId, (int) $payment['id'],
-        json_encode(receipt_snapshot($rows[0], $payment, $contactEmail), JSON_UNESCAPED_UNICODE),
+        json_encode(receipt_snapshot($rows[0], $payment, $contactEmail)
+            + \App\Queries\ReceiptQueries::handlers($bookingId, (int) $payment['id']), JSON_UNESCAPED_UNICODE),
         $actorUserId ?: null);
 }
 
@@ -123,6 +124,10 @@ function receipt_for_booking(int $bookingId): ?array
 function receipt_shape(array $row): array
 {
     $row['snapshot'] = json_decode((string) $row['snapshot_json'], true) ?: [];
+    /* who approved and who confirmed: frozen since 2026-11-24, looked up for older receipts */
+    if (!array_key_exists('approved_by', $row['snapshot'])) {
+        $row['snapshot'] += \App\Queries\ReceiptQueries::handlers((int) $row['booking_id'], (int) $row['payment_id']);
+    }
     $row['number']   = receipt_number((int) $row['id'], (string) $row['issued_at']);
     return $row;
 }
@@ -157,6 +162,11 @@ function receipt_view(array $receipt): array
     $confirmed = $s['confirmed_at'] !== '' ? date('M j, Y, g:i A', strtotime($s['confirmed_at'])) : '';
     if ($confirmed !== '') {
         $paidBy[] = ['Confirmed', $confirmed];
+    }
+    foreach (['approved_by' => 'Approved by', 'payment_confirmed_by' => 'Payment confirmed by'] as $key => $label) {
+        if (($s[$key] ?? '') !== '') {
+            $paidBy[] = [$label, $s[$key]];
+        }
     }
 
     return [

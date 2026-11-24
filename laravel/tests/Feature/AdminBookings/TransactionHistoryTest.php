@@ -51,6 +51,19 @@ class TransactionHistoryTest extends TestCase
             ->assertSee(asset('assets/js/table-page-size.js'), false);
     }
 
+    /* A copy button beside each Booking ID (assets/js/copy-ref.js), copying that row's reference. */
+    public function test_each_booking_id_gets_a_copy_button(): void
+    {
+        $ref = $this->bookingRef((int) DB::table('payments')->join('bookings as b', 'b.id', '=', 'payments.booking_id')
+            ->join('rooms as r', 'r.id', '=', 'b.room_id')->where('r.venue_id', 1)->max('b.id'))[1];
+        $this->actingAsStaff()->get(route('admin.transaction-history'))->assertOk()
+            ->assertSee(asset('assets/css/copy-ref.css'), false)
+            ->assertSee(asset('assets/js/copy-ref.js'), false)
+            ->assertSee('"bookingId":"' . $ref . '"', false)
+            ->assertSee("field: 'bookingId', minWidth: 170, width: 170, formatter: (cell) => refWithCopy(cell.getValue())", false)
+            ->assertSee('data-copy-ref="${esc(ref)}" aria-label="Copy reference number"', false);
+    }
+
     public function test_admin_sees_the_ledger(): void
     {
         $this->actingAsAdmin()->get(route('admin.transaction-history'))->assertOk()->assertSee('Back to Dashboard');

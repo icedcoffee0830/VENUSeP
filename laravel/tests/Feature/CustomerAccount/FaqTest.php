@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\CustomerAccount;
 
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /* customer/faq — public; two frames (standalone / ?in=app account shell). */
@@ -85,6 +87,33 @@ class FaqTest extends TestCase
         $this->assertSame(route('customer.faq') . '?counter=1#gcash', faq_link_url('faq.php#gcash'));
         $this->assertStringContainsString('see your booking history.', faq_answer_html('Then see [your booking history](booking-history.php).'));
         $this->assertStringNotContainsString('<a ', faq_answer_html('Then see [your booking history](booking-history.php).'));
+    }
+
+    /* "What do I need to book?" opens Booking a venue: the rules booking-submit enforces,
+       with the numbers read from the settings. */
+    public function test_what_you_need_to_book_lists_the_live_rules(): void
+    {
+        config(['venusep.max_days_ahead' => 90, 'venusep.max_unpaid' => 2]);
+        $html = $this->get(route('customer.faq'))->assertOk()->getContent();
+        preg_match('~<section class="fq-section" id="booking".*?</section>~s', $html, $booking);
+        $first = explode('</details>', $booking[0])[0];
+
+        $this->assertStringContainsString('What do I need to book?', $first);
+        $this->assertStringContainsString('<strong>A valid ID</strong>, for every booking', $first);
+        $this->assertMatchesRegularExpression('~To get the USeP discount \((up to )?\d+% off\)~', $first);
+        $this->assertStringNotContainsString('{discount}', $first);
+        $this->assertStringContainsString('up to <strong>90 days</strong> ahead', $first);
+        $this->assertStringContainsString('No more than 2 unpaid bookings per office.', $first);
+        $this->assertStringContainsString('Hostel stays are paid by the end of the check-in day', $first);
+
+        $leads = array_column(DB::select("SELECT DISTINCT lead_hours AS h FROM venues WHERE venue_type = 'event'"), 'h');
+        if (count($leads) === 1) {
+            $this->assertStringContainsString('must start at least <strong>' . $leads[0] . ' hour' . ($leads[0] == 1 ? '' : 's') . '</strong> after you book', $first);
+        }
+        $noRefund = array_column(DB::select('SELECT name FROM venues WHERE refunds_enabled = 0 ORDER BY id'), 'name');
+        $noRefund
+            ? $this->assertStringContainsString('The no-refund agreement:</strong> ' . e(Arr::join($noRefund, ', ', ' and ')), $first)
+            : $this->assertStringNotContainsString('no-refund agreement', $first);
     }
 
     public function test_in_app_keeps_the_account_shell(): void

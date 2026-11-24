@@ -384,9 +384,9 @@ final class Servers
         }
     }
 
-    public static function lock(string $ip): void
+    public static function lock(string $ip, bool $locked = true): void
     {
-        self::pdo($ip)->exec('SET GLOBAL read_only = 1');
+        self::pdo($ip)->exec('SET GLOBAL read_only = ' . ($locked ? 1 : 0));
     }
 
     /* ---- Saving without a copy ---- */
@@ -405,9 +405,14 @@ final class Servers
         }
     }
 
+    /* Off = "allow saving without a copy": also lifts the pause Health puts on when no copy is connected. */
     public static function setProtected(bool $on): void
     {
-        self::pdo(self::main())->exec('SET GLOBAL rpl_semi_sync_master_enabled = ' . ($on ? 1 : 0));
+        $db = self::pdo(self::main());
+        $db->exec('SET GLOBAL rpl_semi_sync_master_enabled = ' . ($on ? 1 : 0));
+        if (!$on && \Illuminate\Support\Facades\Cache::pull(Health::PAUSED)) {
+            $db->exec('SET GLOBAL read_only = 0');
+        }
     }
 
     /* ---- connection ---- */

@@ -15,6 +15,7 @@ use Throwable;
 final class Health
 {
     private const KEY = 'failover.health';
+    public const PAUSED = 'failover.paused';   // the main was locked because no copy was connected
 
     /* Problems, in words; [] = healthy. Only for a group of two or more laptops. */
     public static function check(): string
@@ -42,9 +43,25 @@ final class Health
                 }
             }
         }
-        if ($connected > 0 && Servers::protectedSaving() === false) {
+        /* No copy connected while saving is protected: lock the main instead of letting every save
+           wait. The website answers one request at a time, so one waiting save would freeze the whole
+           site, the Server page included. Locked, saves get "not saved, try again" and reads work. */
+        $protected = Servers::protectedSaving();
+        if ($connected === 0 && $protected === true && !Cache::get(self::PAUSED)) {
+            Servers::lock(Servers::main());
+            Cache::forever(self::PAUSED, true);
+            ActivityQueries::add('saving_paused', 'Database server', 'No copy is connected: saving is paused until one is back', 0);
+        }
+        if ($connected === 0 && Cache::get(self::PAUSED)) {
+            $problems[] = 'Saving is paused: no copy is connected. Bring a copy back, or use “Allow saving without a copy” on the Server page.';
+        }
+        if ($connected > 0 && $protected === false) {
             Servers::setProtected(true);
             ActivityQueries::add('saving_protected', 'Database server', 'A copy is back: saving waits for a copy again', 0);
+        }
+        if ($connected > 0 && Cache::pull(self::PAUSED)) {
+            Servers::lock(Servers::main(), false);
+            ActivityQueries::add('saving_resumed', 'Database server', 'A copy is back: saving works again', 0);
         }
         Cache::put(self::KEY, ['problems' => $problems, 'at' => time()], 180);
         return $problems ? count($problems) . ' problem(s): ' . implode(' ', $problems) : 'every copy is copying';

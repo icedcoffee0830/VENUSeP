@@ -16,7 +16,8 @@ class PrivacyPageTest extends TestCase
             ->assertSee('Draft for the VENUSeP project. This notice has not yet been reviewed by the USeP University Data Privacy Office.')
             ->assertSee('Atty. Edward Caesar J. Bedro')
             ->assertSee('+6382 227 8192')
-            ->assertSee('https://usep.edu.ph/data-privacy-manual-and-forms/', false);
+            ->assertSee('https://usep.edu.ph/data-privacy-manual-and-forms/', false)
+            ->assertSee("<li>For security, a failed sign-in attempt records the email address that was typed, the time and the device's IP address, never the password, in an activity log that only the super admin can see.</li>", false);
     }
 
     public function test_no_page_links_to_it_yet(): void

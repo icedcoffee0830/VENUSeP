@@ -161,6 +161,10 @@ class GoogleController
                     });
                 break;
 
+            case 'revoked':
+                $this->fail('This account was closed and can’t be used again.');
+                break;
+
             case 'taken':
                 $this->fail('This email is already registered. Log in with your email and password. You can connect Google from your profile afterwards.');
                 break;

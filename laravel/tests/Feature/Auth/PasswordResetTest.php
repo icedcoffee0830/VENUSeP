@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Queries\SchemaQueries;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -83,6 +84,39 @@ class PasswordResetTest extends TestCase
         // the link is spent
         $this->get(route('customer.reset-password', ['token' => $token]));
         $this->get(route('customer.reset-password'))->assertSee('This link can');
+    }
+
+    /* A revoked account (migration 21) is refused like a suspended one: no link, the same
+       reply. A link sent before the revoke says the account is closed, and changes nothing. */
+    public function test_a_revoked_account_gets_no_link_and_its_old_link_says_it_is_closed(): void
+    {
+        if (!SchemaQueries::has('users', 'revoked_at')) {
+            $this->markTestSkipped('run migration 21 (venusep_migration_21.sql) on the test database');
+        }
+        ini_set('error_log', storage_path('logs/auth-tests-error.log'));
+        $c = $this->makeAccount('customer');
+        $opened = 'opened-before-revoke-0000000000000000000000';
+        $later  = 'used-after-revoke-000000000000000000000000';
+        $this->makeLink($c->id, $opened);
+        $this->get(route('customer.reset-password', ['token' => $opened]));   // the form is open when the revoke happens
+        DB::table('users')->where('id', $c->id)->update(['is_active' => 0, 'revoked_at' => now()]);
+        $hash = DB::table('users')->where('id', $c->id)->value('password_hash');
+
+        $this->post(route('customer.reset-password'), ['new_password' => 'brand-new-123', 'confirm_password' => 'brand-new-123'])
+            ->assertOk()->assertSee('Account closed')->assertSee('This account was closed and can&rsquo;t be used again.', false)
+            ->assertDontSee('name="new_password"', false);
+        $this->assertSame($hash, DB::table('users')->where('id', $c->id)->value('password_hash'));
+
+        $this->flushSession();
+        $this->makeLink($c->id, $later);
+        $this->get(route('customer.reset-password', ['token' => $later]))->assertRedirect(route('customer.reset-password'));
+        $this->get(route('customer.reset-password'))->assertSee('This account was closed and can&rsquo;t be used again.', false)
+            ->assertDontSee('name="new_password"', false);
+
+        DB::table('password_resets')->where('user_id', $c->id)->delete();
+        $this->post(route('customer.forgot-password'), ['email' => $c->email])->assertRedirect(route('customer.forgot-password'));
+        $this->get(route('customer.forgot-password'))->assertSee(PR_NOT_SET_UP_REPLY)->assertDontSee('closed');   // the same reply as anyone
+        $this->assertSame(0, DB::table('password_resets')->where('user_id', $c->id)->count());
     }
 
     public function test_bad_and_expired_links_are_refused(): void

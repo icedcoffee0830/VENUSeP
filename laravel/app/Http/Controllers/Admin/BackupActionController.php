@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\JsonEndpoint;
 use App\Queries\AccountQueries;
+use App\Queries\ActivityQueries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use PDOException;
@@ -80,6 +81,7 @@ class BackupActionController
             if ($file === null) {
                 return $this->bk(500, ['ok' => false, 'message' => $err]);
             }
+            ActivityQueries::add('backup_made', 'Backup', 'Made the backup ' . $file);
             return $this->bk(200, ['ok' => true, 'file' => $file, 'message' => 'Backup made: ' . $file]);
         }
 
@@ -87,6 +89,7 @@ class BackupActionController
             if (!backup_delete((string) $request->input('file', ''))) {
                 return $this->bk(404, ['ok' => false, 'message' => 'That backup no longer exists.']);
             }
+            ActivityQueries::add('backup_deleted', 'Backup', 'Deleted the backup ' . basename((string) $request->input('file', '')));
             return $this->bk(200, ['ok' => true, 'message' => 'Backup deleted.']);
         }
 
@@ -170,6 +173,8 @@ class BackupActionController
             }
             return $this->bk(409, ['ok' => false, 'message' => $err]);
         }
+        /* into the restored database: the log it brought back, if it has one */
+        ActivityQueries::add('backup_restored', 'Backup', 'Restored from ' . basename($archive) . '; the data from just before is kept as ' . $pre);
         /* backup_sign_everyone_out() emptied the session store; this request's own
            session would be written back at the end of it, so end it here too. */
         venusep_logout();

@@ -151,6 +151,8 @@ function tfa_enable(PDO $pdo, int $userId, string $secret, int $confirmedStep, ?
         $codes = tfa_replace_recovery_codes($pdo, $userId);
 
         $pdo->commit();
+        \App\Queries\ActivityQueries::add('tfa_on', 'Two-step verification',
+            $expectedEnabledAt === null ? 'Turned on' : 'Moved to a new phone', $userId);
         return $codes;
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -167,6 +169,7 @@ function tfa_regenerate_codes(PDO $pdo, int $userId): array
     try {
         $codes = tfa_replace_recovery_codes($pdo, $userId);
         $pdo->commit();
+        \App\Queries\ActivityQueries::add('tfa_codes', 'Two-step verification', 'New recovery codes made', $userId);
         return $codes;
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -184,6 +187,7 @@ function tfa_reset(PDO $pdo, int $userId): void
     $stmt = $pdo->prepare('CALL sp_reset_2fa(:u)');
     $stmt->execute([':u' => $userId]);
     $stmt->closeCursor();
+    \App\Queries\ActivityQueries::add('tfa_off', 'Two-step verification', 'Turned off', $userId);
 }
 
 /* The only way a 2FA code (TOTP or recovery) is checked. Mirrors the
@@ -448,6 +452,7 @@ function tfa_login_step(PDO $pdo, string $side, string $self, callable $finish):
         if ($result['ok']) {
             $finish($pending);
         }
+        \App\Queries\ActivityQueries::add('sign_in_failed', 'Sign-in: ' . $pending['email'], 'Wrong two-step code', $uid);
         return ['', tfa_error_message($result)];
     }
     if ($step === 'enroll_confirm' && $pending['mode'] === 'enroll') {

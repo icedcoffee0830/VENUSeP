@@ -13,6 +13,8 @@ use RuntimeException;
      office_group is a normal admin's group, handed_over_at a former super admin.
      password_hash NULL: a Google account with no password yet. uq_users_email: one account
      per email. reauth_*: the lockout for retyping a password (reauth_verify, auth.php).
+     revoked_at (migration 21): a customer account closed for good; it keeps its email, so the
+     address can never register again (revokedAt() reads NULL before migration 21).
    staff: a staff member's or admin's profile; venue_id is the one office a staff member handles.
    customers: a customer's profile.
    password_resets: emailed reset links; used_at set = spent. */
@@ -57,6 +59,34 @@ class AccountQueries
         return $row ? (array) $row : null;
     }
 
+    /* users.revoked_at of the row called $alias, as SQL; NULL before migration 21. */
+    public static function revokedAt(string $alias = 'u'): string
+    {
+        return SchemaQueries::has('users', 'revoked_at') ? "$alias.revoked_at" : 'NULL';
+    }
+
+    /* Was the account with this email, or this Google id, revoked? Then it can never be used again. */
+    public static function isRevoked(string $email, ?string $googleSub = null): bool
+    {
+        return SchemaQueries::has('users', 'revoked_at') && DB::selectOne("
+            SELECT 1 AS found
+            FROM users u
+            WHERE u.revoked_at IS NOT NULL AND (u.email = ? OR u.google_sub = ?)
+            LIMIT 1
+        ", [$email, $googleSub ?? '']) !== null;
+    }
+
+    /* Close a customer account for good, inside the caller's transaction. False when it is not
+       a customer or was revoked a moment ago. */
+    public static function revoke(int $userId, int $actor): bool
+    {
+        return DB::update("
+            UPDATE users
+            SET is_active = 0, revoked_at = NOW(), revoked_by_user_id = ?
+            WHERE id = ? AND account_type = 'customer' AND revoked_at IS NULL
+        ", [$actor, $userId]) === 1;
+    }
+
     /* Seconds left on a lock from wrong passwords, 0 when there is none. */
     public static function passwordLockSeconds(int $userId): int
     {
@@ -99,7 +129,7 @@ class AccountQueries
     public static function findCustomerSignIn(string $email): ?array
     {
         $row = DB::selectOne("
-            SELECT u.id AS user_id, u.email, u.password_hash, u.is_active,
+            SELECT u.id AS user_id, u.email, u.password_hash, u.is_active, " . self::revokedAt() . " AS revoked_at,
                    c.id AS customer_id, c.full_name, c.phone, c.address, c.university_id_no
             FROM users u
             JOIN customers c ON c.user_id = u.id
@@ -150,7 +180,7 @@ class AccountQueries
     public static function findCustomerOfUser(int $userId): ?array
     {
         $row = DB::selectOne("
-            SELECT c.id, u.is_active
+            SELECT c.id, u.is_active, " . self::revokedAt() . " AS revoked_at
             FROM customers c
             JOIN users u ON u.id = c.user_id
             WHERE c.user_id = ?

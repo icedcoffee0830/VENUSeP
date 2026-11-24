@@ -200,6 +200,7 @@ class RolesTest extends TestCase
         $bahay = $this->staffAt(self::BAHAY);
         $francis = (int) DB::table('users')->where('email', 'francishubero@gmail.com')->value('id');
         $super = (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id');
+        $this->knowPasswordOf('cedu.admin@gmail.com');
         $this->actingAsAdmin('cedu.admin@gmail.com');
         $roster = $this->get(route('admin.staff'))->assertOk();
         $roster->assertSee($venues->email)->assertDontSee($bahay->email)->assertDontSee('francishubero@gmail.com');
@@ -212,7 +213,7 @@ class RolesTest extends TestCase
         $this->postForm('admin.staff-save', ['action' => 'set_venue', 'user_id' => $venues->id, 'venue_id' => self::BAHAY])->assertStatus(403);
         $this->postForm('admin.staff-save', ['action' => 'set_venue', 'user_id' => $venues->id, 'venue_id' => self::HOSTEL])->assertOk();
         $this->assertSame(self::HOSTEL, (int) DB::table('staff')->where('user_id', $venues->id)->value('venue_id'));
-        $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $venues->id, 'new_password' => 'Long-enough-1'])->assertOk();
+        $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $venues->id, 'new_password' => 'Long-enough-1', 'password' => self::PASSWORD])->assertOk();
     }
 
     public function test_the_super_admin_manages_admins_but_nobody_resets_the_super_admin(): void
@@ -220,8 +221,9 @@ class RolesTest extends TestCase
         $na = $this->makeAccount('admin');
         DB::table('users')->where('id', $na->id)->update(['office_group' => 'cedu']);
         $super = (int) DB::table('users')->where('email', 'admin@gmail.com')->value('id');
+        $this->knowPasswordOf('admin@gmail.com');
         $this->actingAsAdmin();
-        $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $na->id, 'new_password' => 'Long-enough-1'])->assertOk();
+        $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $na->id, 'new_password' => 'Long-enough-1', 'password' => self::PASSWORD])->assertOk();
         $this->postForm('admin.staff-save', ['action' => 'reset_password', 'user_id' => $super, 'new_password' => 'Long-enough-1'])->assertStatus(403);
         $this->postForm('admin.staff-save', ['action' => 'set_active', 'user_id' => $na->id, 'active' => 0])->assertOk();
     }

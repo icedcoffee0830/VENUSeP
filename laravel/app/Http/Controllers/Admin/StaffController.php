@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\ConfirmsOwnPassword;
 use App\Queries\AccountQueries;
+use App\Queries\ActivityQueries;
 use App\Queries\StaffHallQueries;
 use App\Queries\VenueQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -26,7 +28,7 @@ use PDOException;
        set_halls:  hall_ids = JSON [room ids]: the halls of their office they cover
                    (migration 18; the hostel is one unit, no halls)
        set_active: active=0|1
-       reset_password: new_password — never your own
+       reset_password: new_password, password (your own, to confirm) — never your own account
        handover:   password, reason — the super admin to a normal admin
    · ADMIN ONLY, re-checked here — answered as JSON, not a redirect.
    · WHO MANAGES WHOM: staff_may_manage_account() (auth.php, DB-DECISIONS 28).
@@ -44,6 +46,8 @@ use PDOException;
    ===================================================================== */
 class StaffController
 {
+    use ConfirmsOwnPassword;
+
     public function index()
     {
         legacy('db', 'auth');
@@ -344,7 +348,8 @@ class StaffController
            (Aron 2026-10-31); Forgot password on the sign-in page is the other (DB-DECISIONS 28). The admin chooses a temporary
            password; password_changed_at goes back to NULL, so the staff member must replace
            it (EnforceTwoFactor). Who may reset whom: staff_may_manage_account() above; the
-           super admin's own password is never reset here, it uses Forgot password. */
+           super admin's own password is never reset here, it uses Forgot password.
+           The admin confirms with their own password (Aron 2026-11-24), the shared lockout. */
         if ($action === 'reset_password') {
             if ($target === $actor) {
                 return $this->reply(403, ['ok' => false, 'message' => 'Change your own password on your Profile page.']);
@@ -357,6 +362,9 @@ class StaffController
             if (!venusep_password_ready()) {
                 return $this->reply(500, ['ok' => false, 'message' => VENUSEP_PASSWORD_SETUP_ERROR]);
             }
+            if ($refused = $this->ownPasswordRefusal((string) $request->input('password', ''))) {
+                return $refused;
+            }
             try {
                 AccountQueries::resetPassword($target, venusep_password_hash($new));
             } catch (PDOException $e) {
@@ -365,6 +373,7 @@ class StaffController
             }
             \App\Http\Controllers\Auth\SignInThrottle::passed((string) $user['email']);   // a forgotten password often means a sign-in lock too
             $this->notify('account_password_reset', $actor, ['email' => $user['email']], $this->offices($user));
+            ActivityQueries::add('password_reset', 'Account: ' . $user['email'], 'Reset the password to a temporary one');
             return $this->reply(200, ['ok' => true,
                 'message' => 'Password reset. Give them the temporary password; they must replace it when they sign in.']);
         }
@@ -402,6 +411,8 @@ class StaffController
             if ((int) $user['is_active'] !== $active) {
                 $this->notify($active ? 'account_reactivated' : 'account_suspended', $actor,
                     ['email' => $user['email'], 'role' => $user['account_type']], $this->offices($user));
+                ActivityQueries::add($active ? 'account_reactivated' : 'account_suspended', 'Account: ' . $user['email'],
+                    $active ? 'Reactivated the account' : 'Suspended the account');
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,
                 'message' => $active ? 'Account reactivated.' : 'Account suspended. They can no longer sign in.']);
@@ -459,6 +470,7 @@ class StaffController
             mail_send($id);   // never throws
         }
         $this->notify('super_admin_handover', $actor, ['email' => $user['email']], null);   // the new super admin's bell
+        ActivityQueries::add('super_admin_handover', 'Account: ' . $user['email'], 'Handed over the super admin: ' . $reason);
         return $this->reply(200, ['ok' => true, 'signed_out' => true,
             'message' => $user['email'] . ' is now the super admin. Your account is suspended, so you are signed out.']);
     }

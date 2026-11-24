@@ -58,6 +58,7 @@ function customer_session_open(int $userId): bool
     ]);
 
     \App\Queries\AccountQueries::markSignedIn((int) $customer['user_id']);
+    \App\Queries\ActivityQueries::add('sign_in', 'Sign-in: ' . $customer['email'], 'Signed in');
     return true;
 }
 

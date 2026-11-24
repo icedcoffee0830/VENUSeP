@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Queries\PaymentQueries;
+use App\Queries\ReceiptQueries;
 use App\Support\Status;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -82,10 +83,12 @@ class BookingDetailsController extends Controller
             ];
         }
 
-        /* ---- the System Receipt, once one was issued ---- */
+        /* ---- the System Receipt, once one was issued, and who approved and confirmed (the receipt's names) ---- */
         $hasReceipt = false;
+        $handlers = ['approved_by' => '', 'payment_confirmed_by' => ''];
         if (venusep_db() !== null) {
             $hasReceipt = PaymentQueries::bookingsWithReceipt([(int) $b['id']]) !== [];
+            $handlers = ReceiptQueries::handlers((int) $b['id'], (int) (ReceiptQueries::findConfirmedPayment((int) $b['id'])['id'] ?? 0));
         }
 
         /* ---- the money ---- */
@@ -105,6 +108,8 @@ class BookingDetailsController extends Controller
                                    && in_array($b['paymentCode'], ['await_gcash', 'await_cash', 'overdue', 'await_event'], true)
                                    ? ($b['payment']['graceEndsLabel'] ?? $b['payment']['payByLabel']) : '',
             'paidOn'          => !empty($b['paidAtIso']) ? date('F j, Y', strtotime($b['paidAtIso'])) : '',
+            'approvedBy'      => $handlers['approved_by'],
+            'confirmedBy'     => $handlers['payment_confirmed_by'],
         ];
 
         return $this->json(200, ['ok' => true, 'details' => [

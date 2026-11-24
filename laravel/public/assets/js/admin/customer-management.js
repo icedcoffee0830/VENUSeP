@@ -26,6 +26,20 @@
         customerAction(body);
       };
 
+      /* Revoke (super admin): closed for good, never reactivated. Their own password confirms it. */
+      const revokeAction = async function (row) {
+        const pw = await venusepPrompt(
+          'The account is closed for good and can never be reactivated. All of the customer’s pending requests are cancelled. Their bookings, payments and history are kept, and their email address cannot be used to register again.',
+          { title: 'Revoke this customer account?', label: 'Your password', inputType: 'password', autocomplete: 'current-password',
+            okLabel: 'Revoke account', cancelLabel: 'Cancel', danger: true });
+        if (pw === null) return;
+        const body = new FormData();
+        body.append('action', 'revoke');
+        body.append('user_id', row.userId);
+        body.append('password', pw);
+        customerAction(body);
+      };
+
       const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
       /* Block or lift at one office: a reason either way. The customer never sees it. */
@@ -84,10 +98,12 @@
           + '<div class="lp-menu" id="' + id + '" popover>' + row.blocks.map(function (b) { return blockItem(row, b); }).join('') + '</div>';
       };
       const rowActions = function (row) {
+        if (row.status === 'Revoked') return '<span class="lp-acts"><span class="lp-you">Closed for good</span></span>';   /* nothing left to change */
         const active = row.status === 'Active';
         return '<div class="lp-acts">' + blockButtons(row)
           + (row.fixEmail ? '<button type="button" class="lp-btn btn-cust-fix-email">Fix email</button>' : '')
-          + (customerManagementPage.suspendClass ? '<button type="button" class="lp-btn ' + customerManagementPage.suspendClass + ' ' + (active ? 'lp-btn-no">Suspend' : 'lp-btn-ok">Reactivate') + '</button>' : '')
+          + (customerManagementPage.suspendClass ? '<button type="button" class="lp-btn ' + customerManagementPage.suspendClass + ' ' + (active ? 'lp-btn-no">Suspend' : 'lp-btn-ok">Reactivate') + '</button>'
+            + '<button type="button" class="lp-btn lp-btn-no btn-cust-revoke">Revoke</button>' : '')
           + '</div>';
       };
 
@@ -132,7 +148,7 @@
               const blocks = r.blocks.filter(function (b) { return b.on; }).map(function (b) {
                 return '<span class="vz-chip vz-chip-red" title="' + esc('By ' + b.by + ', ' + b.at + ': ' + b.reason) + '">Blocked at ' + esc(b.office) + '</span>';
               }).join('');
-              return '<div class="lp-stack"><span class="vz-chip vz-chip-' + (r.status === 'Active' ? 'green' : 'grey') + '">' + esc(r.status) + '</span>' + blocks
+              return '<div class="lp-stack"><span class="vz-chip vz-chip-' + ({ Active: 'green', Revoked: 'red' }[r.status] || 'grey') + '">' + esc(r.status) + '</span>' + blocks
                 + (r.fixEmail ? '<span class="cm-flag"><i class="bi bi-envelope-exclamation" aria-hidden="true"></i>Email can still be fixed</span>' : '') + '</div>';
             },
           },
@@ -146,6 +162,7 @@
                 block.closest('[popover]')?.hidePopover();
                 blockAction(row, block.dataset.act, Number(block.dataset.venue));
               } else if (e.target.closest('.btn-cust-fix-email')) fixEmailAction(row);
+              else if (customerManagementPage.suspendClass && e.target.closest('.btn-cust-revoke')) revokeAction(row);
               else if (customerManagementPage.suspendClass && e.target.closest('.' + customerManagementPage.suspendClass)) toggleActive(row);
             },
           },

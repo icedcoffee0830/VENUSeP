@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Queries\AccountQueries;
+use App\Queries\ActivityQueries;
 use App\Queries\VenueQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -94,8 +95,10 @@ class AdminLoginController
                     ) {
                         $lock = SignInThrottle::failed($email);   // counted for an unknown email too
                         $loginError = $lock > 0 ? SignInThrottle::message($lock) : 'Invalid email or password.';
+                        ActivityQueries::add('sign_in_failed', 'Sign-in: ' . $email, 'Wrong email or password (staff sign-in)', (int) ($user['id'] ?? 0));
                     } elseif (!(bool) $user['is_active']) {
                         /* Only AFTER the password checked out, so this reveals nothing to a stranger. */
+                        ActivityQueries::add('sign_in_failed', 'Sign-in: ' . $email, 'Refused: the account is suspended', (int) $user['id']);
                         $loginError = 'Your account has been suspended. Contact an administrator if you think this is a mistake.';
                     } elseif ($asAdmin && $user['account_type'] !== 'admin') {
                         /* Only AFTER the password checked out, like the department check below. */
@@ -171,6 +174,7 @@ class AdminLoginController
 
         // Record the successful login using the schema's last_login_at.
         AccountQueries::markSignedIn($userId);
+        ActivityQueries::add('sign_in', 'Sign-in: ' . $user['email'], 'Signed in', $userId, $user['account_type']);
 
         // Start from an empty session (nothing from a previous login survives) with a new id.
         session()->flush();

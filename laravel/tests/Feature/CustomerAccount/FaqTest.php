@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\CustomerAccount;
 
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /* customer/faq — public; two frames (standalone / ?in=app account shell). */
@@ -85,6 +86,48 @@ class FaqTest extends TestCase
         $this->assertSame(route('customer.faq') . '?counter=1#gcash', faq_link_url('faq.php#gcash'));
         $this->assertStringContainsString('see your booking history.', faq_answer_html('Then see [your booking history](booking-history.php).'));
         $this->assertStringNotContainsString('<a ', faq_answer_html('Then see [your booking history](booking-history.php).'));
+    }
+
+    /* "What do I need to book?" is a built-in row from migration 21, never built in code:
+       before the migration the page simply has no such question, and never shows it twice. */
+    public function test_what_you_need_to_book_is_shown_once_or_not_yet(): void
+    {
+        $html = $this->get(route('customer.faq'))->assertOk()->getContent();
+        $rowIn = DB::table('faqs')->where('is_builtin', 1)->where('default_question', 'What do I need to book?')->exists();
+        $this->assertSame($rowIn ? 1 : 0, substr_count($html, 'What do I need to book?'));
+        $this->assertStringContainsString('How early do I need to book?', $html);   // the rest of the section is there either way
+    }
+
+    /* The row opens Booking a venue: its stored answer with {discount} filled in, then each
+       office's own notice and refund rule, read from the office settings. */
+    public function test_what_you_need_to_book_lists_each_offices_rules(): void
+    {
+        $row = DB::table('faqs')->where('is_builtin', 1)->where('default_question', 'What do I need to book?')->first();
+        if ($row === null) {
+            $this->markTestSkipped('run migration 21 (venusep_migration_21.sql) on the test database');
+        }
+        $this->assertSame([0, 'any', 1], [(int) $row->sort_order, $row->policy, (int) $row->is_active]);
+        $this->assertSame($row->default_answer, $row->answer);   // "Restore original" has its wording
+        $html = $this->get(route('customer.faq'))->assertOk()->getContent();
+        preg_match('~<section class="fq-section" id="booking".*?</section>~s', $html, $booking);
+        $first = explode('</details>', $booking[0])[0];
+
+        $this->assertStringContainsString('What do I need to book?', $first);
+        $this->assertStringContainsString('<strong>A valid ID</strong>, for every booking', $first);
+        $this->assertMatchesRegularExpression('~To get the USeP discount \((up to )?\d+% off\)~', $first);
+        $this->assertStringNotContainsString('{discount}', $first);
+        $this->assertStringContainsString('up to <strong>183 days</strong> ahead', $first);
+        $this->assertStringContainsString('What each office asks:', $first);
+
+        foreach (DB::select("SELECT name, venue_type, lead_hours, refunds_enabled FROM venues WHERE is_active = 1") as $v) {
+            if (!str_contains($html, e($v->name))) {
+                continue;   // an office this page does not show
+            }
+            $rule = $v->venue_type === 'hostel' ? 'a stay can start today'
+                : 'a booking must start at least ' . $v->lead_hours . ' hour' . ($v->lead_hours == 1 ? '' : 's') . ' after you book';
+            $this->assertStringContainsString('<li><strong>' . e($v->name) . ':</strong> ' . $rule
+                . ($v->refunds_enabled ? '.' : '. Non-refundable: you tick the no-refund box.') . '</li>', $first);
+        }
     }
 
     public function test_in_app_keeps_the_account_shell(): void

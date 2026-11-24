@@ -7,11 +7,16 @@ use Illuminate\Http\Request;
 /* FAQ (was customer/faq.php) — public customer help page. Every question
    comes from the database (legacy faqs.php): only active rows, for each office's
    own refund switch (faq_row_for; DB-DECISIONS 28), and the "After you book"
-   section opens with each office's rule. Live rates and the discount are filled in.
+   section opens with each office's rule; "What do I need to book?" ends with each
+   office's notice and refund rule. Live rates and the discount are filled in.
    Two frames, one page: ?in=app sits inside the account shell; otherwise the
    standalone page with the browse-mode nav and footer. Writes nothing. */
 class FaqController
 {
+    /* The built-in row (migration 21) that gets each office's rules under its answer. Found by
+       its original wording, which an admin's edits never change. */
+    private const WHAT_YOU_NEED = 'What do I need to book?';
+
     public function __invoke(Request $request)
     {
         $vars = legacy('auth', 'offices', 'customer-bookings', 'faqs');   /* $customerContact for the header chip */
@@ -29,6 +34,12 @@ class FaqController
         $fqRows = faqs_by_section(false);
         $fqOffices = array_filter(office_all(), fn ($o) => staff_sees_venue($o['id']));
         $fqAnyRefunds = (bool) array_filter($fqOffices, fn ($o) => $o['refunds']);
+
+        /* one question: $questionHtml and $answerHtml already escaped */
+        $details = fn (string $questionHtml, string $for, string $answerHtml) => '<details><summary><span>' . $questionHtml
+            . ($for !== '' ? ' <span class="fq-for">' . e($for) . '</span>' : '') . '</span>'
+            . '<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>'
+            . $answerHtml . '</details>';
 
         /* the <details> list for one section; the section heading stays in the page */
         $fqSections = [];
@@ -51,10 +62,8 @@ class FaqController
                 if (($for = faq_row_for($r, $fqOffices)) === null) {
                     continue;
                 }
-                $html .= '<details><summary><span>' . faq_question_html($r['question'])
-                       . ($for !== '' ? ' <span class="fq-for">' . e($for) . '</span>' : '') . '</span>'
-                       . '<span class="fq-plus"><svg class="fq-icon" width="14" height="14"><use href="#fq-i-plus"/></svg></span></summary>'
-                       . faq_answer_html($r['answer']) . '</details>';
+                $html .= $details(faq_question_html($r['question']), $for, faq_answer_html($r['answer'])
+                    . ($r['is_builtin'] && $r['default_question'] === self::WHAT_YOU_NEED && $fqOffices ? self::officeRules($fqOffices) : ''));
             }
             $fqSections[$key] = $html;
         }
@@ -67,5 +76,20 @@ class FaqController
             /* staff at the counter: links keep ?counter=1, customer-only links are hidden */
             'fqCounterQ'      => counter_mode() ? '?counter=1' : '',
         ]);
+    }
+
+    /* Under "What do I need to book?": each office's notice and refund rule, from its own
+       settings (lead_hours, the refund switch), so it changes with them. Built here because
+       both are per office, and no {placeholder} can say that. The hostel has no lead time. */
+    private static function officeRules(array $offices): string
+    {
+        $html = '<p class="fq-a fq-rules">What each office asks:</p><div class="fq-a"><ul>';
+        foreach ($offices as $o) {
+            $html .= '<li><strong>' . e($o['name']) . ':</strong> '
+                   . ($o['type'] === 'hostel' ? 'a stay can start today'
+                       : 'a booking must start at least ' . $o['lead'] . ' hour' . ($o['lead'] == 1 ? '' : 's') . ' after you book')
+                   . ($o['refunds'] ? '.' : '. Non-refundable: you tick the no-refund box.') . '</li>';
+        }
+        return $html . '</ul></div>';
     }
 }

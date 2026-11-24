@@ -138,6 +138,16 @@ class RegisterSubmitController
             }
         }
 
+        /* A revoked account keeps its email for good (migration 21): it never registers again. */
+        try {
+            if (AccountQueries::isRevoked($email)) {
+                $this->reply(409, ['ok' => false, 'field' => 'email', 'message' => 'That email address can’t be used to register.']);
+            }
+        } catch (PDOException $e) {
+            sql_failed($e);
+            $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so the account was not created.']);
+        }
+
         /* A unique username derived from the email — the same rule Google sign-up uses. */
         legacy('accounts');
         try {

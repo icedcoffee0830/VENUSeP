@@ -230,10 +230,23 @@ class BookingCreateQueries
         return $row ? (array) $row : null;
     }
 
-    /* The customer cancels a request nobody approved yet. False when it is no longer pending. */
-    public static function cancelPending(int $bookingId, int $actor): bool
+    /* The customer's requests nobody approved yet, oldest first. */
+    public static function pendingOf(int $customerId): array
     {
-        return self::saveAs($actor, 'Request cancelled by the customer.', fn () => DB::update("
+        return array_map(fn ($r) => (int) $r->id, DB::select("
+            SELECT id
+            FROM bookings
+            WHERE customer_id = ? AND reservation_status = 'pending'
+            ORDER BY id
+        ", [$customerId]));
+    }
+
+    /* The customer cancels a request nobody approved yet (or the super admin, revoking the
+       account: $note says so). False when it is no longer pending. The History trigger writes
+       the line and frees the dates and beds. */
+    public static function cancelPending(int $bookingId, int $actor, string $note = 'Request cancelled by the customer.'): bool
+    {
+        return self::saveAs($actor, $note, fn () => DB::update("
             UPDATE bookings
             SET reservation_status = 'cancelled',
                 cancelled_at = NOW()

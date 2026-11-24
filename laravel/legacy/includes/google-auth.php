@@ -268,9 +268,14 @@ function google_check_claims(array $c, string $clientId, string $nonce, int $now
      ['action' => 'taken']     a customer already registered this email (with a
                                password, or linked to another Google account)
      ['action' => 'refused']   a staff/admin account, a suspended one, or a
-                               login with no customer profile */
+                               login with no customer profile
+     ['action' => 'revoked']   this Google id or this email belongs to a revoked account */
 function google_resolve(string $sub, string $email): array
 {
+    /* migration 21: closed for good, whichever of the two matches */
+    if (\App\Queries\AccountQueries::isRevoked($email, $sub)) {
+        return ['action' => 'revoked'];
+    }
     $row = \App\Queries\AccountQueries::findByGoogleSub($sub);
     if ($row) {
         if ($row['account_type'] !== 'customer' || !(bool) $row['is_active'] || $row['customer_id'] === null) {

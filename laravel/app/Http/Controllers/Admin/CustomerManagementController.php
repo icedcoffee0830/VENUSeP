@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Queries\AccountQueries;
+use App\Queries\ActivityQueries;
 use App\Queries\BlockQueries;
 use App\Queries\CustomerQueries;
 use Illuminate\Database\QueryException;
@@ -134,6 +135,10 @@ class CustomerManagementController
             } catch (PDOException $e) {
                 sql_failed($e);
                 return $this->reply(500, ['ok' => false, 'message' => 'Something went wrong, so nothing was changed.']);
+            }
+            if ((int) $user['is_active'] !== $active) {
+                ActivityQueries::add($active ? 'account_reactivated' : 'account_suspended', 'Customer: ' . ($user['full_name'] ?? $user['email']),
+                    $active ? 'Reactivated the account' : 'Suspended the account');
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,
                 'message' => $active ? 'Account reactivated.' : 'Account suspended. They have been signed out and can no longer sign in.']);

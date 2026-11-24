@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Queries\ActivityQueries;
 use Illuminate\Http\Request;
 use Throwable;
 
@@ -100,6 +101,7 @@ class PasswordResetController
                 }
                 if ($done === true) {
                     session()->forget('pw_reset');
+                    ActivityQueries::add('password_reset', 'Account: ' . $reset['email'], 'Reset the password with an emailed link', (int) $reset['user_id']);
                     session([($staff ? 'staff_login_notice' : 'login_notice') => 'Your password was changed. Log in with your new password.']);
                     return $this->noLeak(redirect()->route($pr['login']));
                 }

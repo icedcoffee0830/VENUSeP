@@ -66,10 +66,15 @@ class CustomerQueries
         "));
     }
 
-    /* The account an admin is about to change, or null. */
+    /* The account an admin is about to change, with its customer profile (if any), or null. */
     public static function findUser(int $userId): ?array
     {
-        $row = DB::selectOne('SELECT id, account_type, is_active FROM users WHERE id = ?', [$userId]);
+        $row = DB::selectOne("
+            SELECT u.id, u.account_type, u.is_active, u.email, c.id AS customer_id, c.full_name
+            FROM users u
+            LEFT JOIN customers c ON c.user_id = u.id
+            WHERE u.id = ?
+        ", [$userId]);
         return $row ? (array) $row : null;
     }
 

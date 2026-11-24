@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Queries\AccountQueries;
+use App\Queries\ActivityQueries;
 use Illuminate\Http\Request;
 use PDOException;
 
@@ -107,10 +108,12 @@ class CustomerLoginController
                 } elseif ($customer && !$customer['is_active'] && password_verify($password, (string) $customer['password_hash'])) {
                     /* Only AFTER the password checked out, so this reveals nothing to a stranger. */
                     $accountDisabled = true;
+                    ActivityQueries::add('sign_in_failed', 'Sign-in: ' . $email, 'Refused: the account is suspended', (int) $customer['user_id'], 'customer');
                 } elseif (!$customer || !$customer['is_active'] || !password_verify($password, $customer['password_hash'])) {
                     // One generic message so the page does not reveal whether an email exists.
                     $lock = SignInThrottle::failed($email);   // counted for an unknown email too
                     $loginError = $lock > 0 ? SignInThrottle::message($lock) : 'Invalid email or password.';
+                    ActivityQueries::add('sign_in_failed', 'Sign-in: ' . $email, 'Wrong email or password (customer sign-in)', (int) ($customer['user_id'] ?? 0));
                 } else {
                     SignInThrottle::passed($email);
                     // Re-hash an old bcrypt (or older-settings) hash to Argon2id (DB-DECISIONS #21).

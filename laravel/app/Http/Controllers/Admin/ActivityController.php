@@ -3,21 +3,42 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Queries\SchemaQueries;
+use Illuminate\Http\Request;
 
-/* ACTIVITY (Aron, 2026-11-01): what staff and admins did, for the admins to review.
-   Newest first: booking actions, office settings, who opened an ID, customer blocks at an
-   office (set and lifted, with the reasons), deleted rooms, and every step of a cover or a
-   move between groups. */
+/* ACTIVITY (Aron, 2026-11-01; everything since 2026-11-24): what everyone did, for the super
+   admin to review. Newest first, PER_PAGE to a page: booking actions (staff, admins and
+   customers), office settings, who opened an ID, customer blocks at an office (set and
+   lifted, with the reasons), deleted rooms, every step of a cover or a move between groups,
+   and the activity log (migration 21: sign-ins, passwords, suspensions, revokes, handovers,
+   two-step verification, backups, bookings submitted). Before migration 21 that part is skipped. */
 class ActivityController extends Controller
 {
-    public function __invoke()
+    private const PER_PAGE = 50;
+
+    public function __invoke(Request $request)
     {
         legacy('bookings');
-        $rows = venusep_db_or_fail()->query(
-            "(SELECT t.occurred_at AS at, COALESCE(u.username, u.email, 'System') AS who, u.account_type AS role,
-                     CONCAT('Booking #', t.booking_id) AS what, COALESCE(t.note, t.action_code) AS detail
-                FROM booking_timeline t JOIN users u ON u.id = t.performed_by_user_id
-               WHERE u.account_type IN ('admin', 'staff'))
+        $pdo = venusep_db_or_fail();
+        $all = self::parts();
+        $total = (int) $pdo->query("SELECT COUNT(*) FROM ($all) everything")->fetchColumn();
+        $pages = max(1, (int) ceil($total / self::PER_PAGE));
+        $page = min(max(1, (int) $request->query('page', 1)), $pages);
+        $rows = $pdo->query("$all ORDER BY at DESC LIMIT " . self::PER_PAGE . ' OFFSET ' . (($page - 1) * self::PER_PAGE))->fetchAll();
+
+        return view('admin.activity', ['rows' => $rows, 'page' => $page, 'pages' => $pages, 'total' => $total]);
+    }
+
+    /* Every recorded action, one UNION part per table: at, who, role, what, detail. A status
+       change with no note says what changed (a receipt sent: "Payment: await gcash to under review"). */
+    private static function parts(): string
+    {
+        return "(SELECT t.occurred_at AS at, COALESCE(u.username, u.email, 'System') AS who, u.account_type AS role,
+                     CONCAT('Booking #', t.booking_id) AS what,
+                     COALESCE(t.note, IF(t.old_payment_status <> t.new_payment_status,
+                              CONCAT('Payment: ', REPLACE(t.old_payment_status, '_', ' '), ' to ', REPLACE(t.new_payment_status, '_', ' ')),
+                              t.action_code)) AS detail
+                FROM booking_timeline t JOIN users u ON u.id = t.performed_by_user_id)
              UNION ALL
              (SELECT h.changed_at, COALESCE(u.username, u.email), u.account_type, CONCAT('Office: ', v.name),
                      CONCAT(h.field, ': ', COALESCE(h.old_value, ''), ' to ', COALESCE(h.new_value, ''), IF(h.note IS NULL, '', CONCAT(' (', h.note, ')')))
@@ -42,11 +63,11 @@ class ActivityController extends Controller
                 FROM rooms r JOIN venues v ON v.id = r.venue_id LEFT JOIN users u ON u.id = r.deleted_by_user_id
                WHERE r.deleted_at IS NOT NULL)
              UNION ALL
-             " . self::coverSteps() . "
-             ORDER BY at DESC LIMIT 300"
-        )->fetchAll();
-
-        return view('admin.activity', ['rows' => $rows]);
+             " . self::coverSteps()
+             . (SchemaQueries::has('activity_log') ? "
+             UNION ALL
+             (SELECT a.occurred_at, COALESCE(u.username, u.email, 'Unknown'), COALESCE(a.role, u.account_type), a.subject, a.detail
+                FROM activity_log a LEFT JOIN users u ON u.id = a.user_id)" : '');
     }
 
     /* Every step of a cover or a move between groups, one UNION part per step. An unanswered

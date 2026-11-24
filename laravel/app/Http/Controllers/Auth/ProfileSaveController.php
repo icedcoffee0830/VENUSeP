@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Queries\AccountQueries;
+use App\Queries\ActivityQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use PDOException;
@@ -226,6 +227,8 @@ class ProfileSaveController
             sql_failed($e, optional: true);
         }
         remember_cookie_clear();
+        ActivityQueries::add('password_changed', 'Account: ' . (AccountQueries::findEmailAndHash($userId)['email'] ?? 'user #' . $userId),
+            $firstPassword ? 'Set a first password' : 'Changed the password');
         $this->reply(200, ['ok' => true, 'message' => $firstPassword
             ? 'Your password was set. You can now sign in with your email and password, or with Google.'
             : 'Your password was changed.']);

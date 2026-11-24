@@ -8,3 +8,12 @@
       .ac-table th { text-align: left; font-size: .74rem; font-weight: 650; color: #606a75; padding: .7rem .9rem; border-bottom: 1px solid #e5e5e5; white-space: nowrap; }
       .ac-table td { padding: .6rem .9rem; border-top: 1px solid #f0efec; vertical-align: top; line-height: 1.45; }
       .ac-nowrap { white-space: nowrap; }
+      .ac-role { color: #606a75; }
+      /* pages: the same buttons as the booking list's pager (booking-requests.css .br-pbtn) */
+      .ac-pager { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; margin-top: .9rem; }
+      .ac-shown { color: #606a75; font-size: .78rem; font-variant-numeric: tabular-nums; }
+      .ac-pages { display: flex; gap: .35rem; }
+      .ac-pbtn { background: #fff; border: 1px solid #d7d7d7; border-radius: 7px; color: #1f1e1e; font-size: .78rem; min-height: 32px; display: inline-flex; align-items: center; padding: .25rem .75rem; text-decoration: none; }
+      a.ac-pbtn:hover { background: #f4f2ee; }
+      a.ac-pbtn:focus-visible { outline: 2px solid #a11626; outline-offset: 2px; }
+      .ac-pbtn[aria-disabled="true"] { cursor: not-allowed; opacity: .45; }

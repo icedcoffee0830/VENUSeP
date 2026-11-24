@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Queries\ActivityQueries;
 use Illuminate\Console\Command;
 
 /* The nightly backup. Windows Task Scheduler runs this; see SETUP.md. */
@@ -20,6 +21,7 @@ class VenusepBackup extends Command
             return self::FAILURE;
         }
         backup_prune();
+        ActivityQueries::add('backup_made', 'Backup', 'The nightly task made the backup ' . $file, 0);
         $this->info('Backup made: ' . $file);
         return self::SUCCESS;
     }

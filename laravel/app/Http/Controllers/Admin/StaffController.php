@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Queries\AccountQueries;
+use App\Queries\ActivityQueries;
 use App\Queries\StaffHallQueries;
 use App\Queries\VenueQueries;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -365,6 +366,7 @@ class StaffController
             }
             \App\Http\Controllers\Auth\SignInThrottle::passed((string) $user['email']);   // a forgotten password often means a sign-in lock too
             $this->notify('account_password_reset', $actor, ['email' => $user['email']], $this->offices($user));
+            ActivityQueries::add('password_reset', 'Account: ' . $user['email'], 'Reset the password to a temporary one');
             return $this->reply(200, ['ok' => true,
                 'message' => 'Password reset. Give them the temporary password; they must replace it when they sign in.']);
         }
@@ -402,6 +404,8 @@ class StaffController
             if ((int) $user['is_active'] !== $active) {
                 $this->notify($active ? 'account_reactivated' : 'account_suspended', $actor,
                     ['email' => $user['email'], 'role' => $user['account_type']], $this->offices($user));
+                ActivityQueries::add($active ? 'account_reactivated' : 'account_suspended', 'Account: ' . $user['email'],
+                    $active ? 'Reactivated the account' : 'Suspended the account');
             }
             return $this->reply(200, ['ok' => true, 'active' => $active,
                 'message' => $active ? 'Account reactivated.' : 'Account suspended. They can no longer sign in.']);
@@ -459,6 +463,7 @@ class StaffController
             mail_send($id);   // never throws
         }
         $this->notify('super_admin_handover', $actor, ['email' => $user['email']], null);   // the new super admin's bell
+        ActivityQueries::add('super_admin_handover', 'Account: ' . $user['email'], 'Handed over the super admin: ' . $reason);
         return $this->reply(200, ['ok' => true, 'signed_out' => true,
             'message' => $user['email'] . ' is now the super admin. Your account is suspended, so you are signed out.']);
     }

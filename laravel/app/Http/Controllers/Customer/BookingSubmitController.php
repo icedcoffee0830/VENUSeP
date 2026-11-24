@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Customer;
 
 use App\Http\Controllers\Controller;
+use App\Queries\ActivityQueries;
 use App\Queries\BookingCreateQueries;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -294,6 +295,9 @@ class BookingSubmitController extends Controller
                   $idFile->getClientOriginalName(), (int) session('user_id'), $docError);
         /* A booking whose ID failed to store is NOT rejected: the slot is held and
            staff see a booking with no ID document, which they can chase. */
+
+        /* The customer's one booking action with no History line of its own: Activity shows it from here */
+        ActivityQueries::add('booking_submitted', 'Booking #' . $bookingId, 'Booking submitted');
 
         /* Tell the venue's staff and the admins (2026-10-28). A failure costs a
            notification, never the booking. */

@@ -386,7 +386,12 @@ final class Servers
         $cfg = venusep_db_admin_config();
         $file = tempnam(sys_get_temp_dir(), 'venusep-copy-');
         try {
-            self::pdo($ip)->exec('STOP SLAVE');
+            /* its own log goes too: what it wrote by itself would still count as "changes of its own"
+               after the reload (the two-laptop test) */
+            $target = self::pdo($ip);
+            $target->exec('STOP SLAVE');
+            $target->exec('RESET SLAVE ALL');
+            $target->exec('RESET MASTER');
             $dump = backup_mysql_bin('mysqldump');
             $mysql = backup_mysql_bin('mysql');
             $err = backup_run([$dump, '--host=' . $main, '--port=' . self::port(), '--user=' . $cfg['user'], '--single-transaction', '--gtid',

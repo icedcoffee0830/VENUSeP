@@ -20,6 +20,13 @@ final class Health
     /* Problems, in words; [] = healthy. Only for a group of two or more laptops. */
     public static function check(): string
     {
+        /* this laptop's saved address is out of date: it points at a copy (the switch was made on
+           another laptop). Say so, and change nothing: the super admin points it at the main. */
+        if (count(ServerFile::laptops()) >= 2 && Servers::probe(Servers::main())['role'] === 'copy') {
+            $msg = 'This laptop’s website uses ' . Servers::main() . ', which is a copy now (the switch was made on another laptop). On the Server page, press “Switch to this” on the main.';
+            Cache::put(self::KEY, ['problems' => [$msg], 'at' => time()], 180);
+            return $msg;
+        }
         $copies = array_values(array_filter(ServerFile::laptops(), fn ($ip) => !Servers::isMain($ip)));
         if (!$copies) {
             Cache::forget(self::KEY);
@@ -65,6 +72,12 @@ final class Health
     public static function resume(): bool
     {
         if (!Cache::pull(self::PAUSED)) {
+            return false;
+        }
+        /* never unlock a copy: a laptop whose saved address is out of date (the switch was made on
+           another laptop) still calls the copy its main. Unlocking it let the task write a line of
+           its own there, and the copy stopped (the two-laptop test). */
+        if (Servers::probe(Servers::main())['role'] === 'copy') {
             return false;
         }
         Servers::lock(Servers::main(), false);

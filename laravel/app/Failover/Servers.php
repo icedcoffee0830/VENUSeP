@@ -249,6 +249,17 @@ final class Servers
             return ['ok' => $steps && !in_array(false, array_column($steps, 1), true), 'steps' => $steps, 'mode' => $mode];
         };
 
+        /* The password and code check that opens every Switch writes on the main (the code is marked
+           used), so a copy that was up to date is "1 change behind" a moment later (the two-laptop
+           test). Give it up to 5 s to apply what the main already has before it is tested. */
+        if (!self::isMain($target)) {
+            try {
+                $pos = (string) self::pdo($main)->query('SELECT @@gtid_binlog_pos')->fetchColumn();
+                self::pdo($target)->prepare('SELECT MASTER_GTID_WAIT(?, 5)')->execute([$pos]);
+            } catch (Throwable) {
+                // the main is gone (emergency) or the target is not a copy: the test below decides
+            }
+        }
         $t = self::probe($target);
         if (!$t['safe']) {
             $steps[] = ['Test ' . $target, false, implode('; ', array_column(array_filter($t['checks'], fn ($c) => !$c[0]), 1)) ?: 'It is not safe to switch to.'];

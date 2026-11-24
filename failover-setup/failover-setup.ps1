@@ -142,9 +142,11 @@ function Wait-MySqlRestart {
     if ((Invoke-Sql 'SELECT @@log_bin') -ne '1') { Fail 'MySQL started without the new settings. Run this again; if it repeats, send a screenshot.' }
     if ((Invoke-Sql 'SELECT @@read_only') -ne '1') { Fail "MySQL started but did not lock itself (init-file $script:LockFile)." }
     Ok 'MySQL restarted with the copy settings, and locked itself (read-only)'
-    $check = Invoke-Sql 'CHECK TABLE mysql.global_priv, mysql.db, mysql.tables_priv, mysql.columns_priv, mysql.proxies_priv, mysql.procs_priv;'
+    # every Aria table of MySQL's own (the accounts, roles, ...): laptop A had more than one damaged
+    $aria = (Invoke-Sql "SELECT GROUP_CONCAT(CONCAT('mysql.', TABLE_NAME)) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'mysql' AND ENGINE = 'Aria' AND TABLE_TYPE = 'BASE TABLE'").Trim()
+    $check = if ($aria) { Invoke-Sql "CHECK TABLE $aria;" } else { '' }
     if ($check -match 'Corrupt|\terror\t') {
-        Invoke-Sql 'REPAIR TABLE mysql.global_priv, mysql.db, mysql.tables_priv, mysql.columns_priv, mysql.proxies_priv, mysql.procs_priv;' | Out-Null
+        Invoke-Sql "REPAIR TABLE $aria;" | Out-Null
         Warn 'MySQL''s own account tables were damaged (an earlier stop that was not clean) and are repaired.'
     }
 }
@@ -182,7 +184,10 @@ GRANT ALL PRIVILEGES ON *.* TO 'venusep_admin'@'%';
             Ok 'MySQL accounts venusep_app, venusep_admin and venusep_repl'
             Warn "This MySQL refused rights on $db alone (error 1114), so the rights are server-wide. Fine for testing."
         }
-        Invoke-Sql "DROP USER IF EXISTS ''@'localhost'; FLUSH PRIVILEGES;" | Out-Null
+        # XAMPP's anonymous login: removed when possible. Not needed: the website connects by network
+        # address, which that login (localhost only) never matches.
+        try { Invoke-Sql "DROP USER IF EXISTS ''@'localhost';" | Out-Null } catch { Warn ('Left XAMPP''s anonymous login in place: ' + $_.Exception.Message) }
+        Invoke-Sql 'FLUSH PRIVILEGES;' | Out-Null
     } finally {
         Invoke-Sql 'SET GLOBAL read_only = 1;' | Out-Null
     }

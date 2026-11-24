@@ -46,8 +46,11 @@ function Remove-FailoverBlock([string]$text) {
 }
 
 # The lines go at the END of [mysqld]: XAMPP's my.ini already says server-id=1 further up, and in an
-# option file the later line wins.
-function Add-FailoverBlock([string]$text, [int]$serverId, [string]$db) {
+# option file the later line wins. No read-only=ON: a server STARTED read-only skips Aria's start-up
+# recovery, so after XAMPP's Stop button (not always a clean shutdown) MySQL's own account tables stayed
+# damaged ("wrong checksum", "table is full" on two laptops). init-file locks it instead, a moment later,
+# after that recovery and before anyone can save.
+function Add-FailoverBlock([string]$text, [int]$serverId, [string]$db, [string]$lockFile) {
     $text = Remove-FailoverBlock $text
     $head = [regex]::Match($text, '(?m)^\[mysqld\][^\n]*\n')
     if (-not $head.Success) { throw 'my.ini has no [mysqld] section.' }
@@ -56,7 +59,7 @@ function Add-FailoverBlock([string]$text, [int]$serverId, [string]$db) {
     $block = @($Begin,
         "server-id=$serverId", 'bind-address=0.0.0.0', 'skip-name-resolve', 'log-bin=binlog', 'relay-log=relay-bin',
         'binlog-format=ROW', "binlog-do-db=$db", 'log-slave-updates=ON', 'gtid-strict-mode=ON', 'expire_logs_days=7',
-        'log_bin_trust_function_creators=1', 'read-only=ON', 'rpl_semi_sync_master_enabled=ON', 'rpl_semi_sync_slave_enabled=ON',
+        'log_bin_trust_function_creators=1', ('init-file=' + ($lockFile -replace '\\', '/')), 'rpl_semi_sync_master_enabled=ON', 'rpl_semi_sync_slave_enabled=ON',
         'rpl_semi_sync_master_wait_point=AFTER_SYNC', 'rpl_semi_sync_master_timeout=10000', 'slave_net_timeout=10',
         $End) -join "`r`n"
     $before = $text.Substring(0, $at)
@@ -119,12 +122,31 @@ function Test-MySqlUp {
     try { Invoke-Sql 'SELECT 1' | Out-Null; return $true } catch { return $false }
 }
 
-function Wait-MySqlRestart {
-    Pause-For 'Now STOP and START MySQL in the XAMPP Control Panel (the new settings load on start).'
+# MySQL is shut down cleanly here (mysqladmin), not with XAMPP's Stop button, which can leave the Aria
+# system tables half-written. Then you press Start.
+function Restart-MySql {
+    if (Test-MySqlUp) {
+        Invoke-Native $script:MySqlAdmin @('-u', 'root', 'shutdown') | Out-Null
+        for ($i = 0; $i -lt 20 -and (Test-MySqlUp); $i++) { Start-Sleep -Seconds 1 }
+        if (Test-MySqlUp) { Fail ('MySQL did not shut down: ' + $script:NativeOut) }
+        Ok 'MySQL shut down cleanly'
+    }
+    Pause-For 'Now press START on MySQL in the XAMPP Control Panel (only Start; it is already stopped).'
     for ($i = 0; $i -lt 15 -and -not (Test-MySqlUp); $i++) { Start-Sleep -Seconds 2 }
     if (-not (Test-MySqlUp)) { Fail 'MySQL is not answering. Start it in the XAMPP panel; if it will not start, run undo.bat.' }
-    if ((Invoke-Sql 'SELECT @@log_bin') -ne '1') { Fail 'MySQL started without the new settings. Restart it in the XAMPP panel and run this again.' }
-    Ok 'MySQL restarted with the copy settings (it starts locked: read-only)'
+}
+
+function Wait-MySqlRestart {
+    [IO.File]::WriteAllText($script:LockFile, "SET GLOBAL read_only = 1;`r`n")
+    Restart-MySql
+    if ((Invoke-Sql 'SELECT @@log_bin') -ne '1') { Fail 'MySQL started without the new settings. Run this again; if it repeats, send a screenshot.' }
+    if ((Invoke-Sql 'SELECT @@read_only') -ne '1') { Fail "MySQL started but did not lock itself (init-file $script:LockFile)." }
+    Ok 'MySQL restarted with the copy settings, and locked itself (read-only)'
+    $check = Invoke-Sql 'CHECK TABLE mysql.global_priv, mysql.db, mysql.tables_priv, mysql.columns_priv, mysql.proxies_priv, mysql.procs_priv;'
+    if ($check -match 'Corrupt|\terror\t') {
+        Invoke-Sql 'REPAIR TABLE mysql.global_priv, mysql.db, mysql.tables_priv, mysql.columns_priv, mysql.proxies_priv, mysql.procs_priv;' | Out-Null
+        Warn 'MySQL''s own account tables were damaged (an earlier stop that was not clean) and are repaired.'
+    }
 }
 
 # The accounts. MySQL is unlocked for this step only (a locked XAMPP MariaDB refused the per-database
@@ -218,7 +240,7 @@ function Setup-A {
 
     Say '1/6  MySQL settings (my.ini)'
     Backup-Once $script:MyIni
-    [IO.File]::WriteAllText($script:MyIni, (Add-FailoverBlock ([IO.File]::ReadAllText($script:MyIni)) 1 $db))
+    [IO.File]::WriteAllText($script:MyIni, (Add-FailoverBlock ([IO.File]::ReadAllText($script:MyIni)) 1 $db $script:LockFile))
     Ok 'Added the copy settings, server-id=1'
     Wait-MySqlRestart
 
@@ -270,7 +292,7 @@ function Setup-B {
 
     Say '3/7  MySQL settings (my.ini)'
     Backup-Once $script:MyIni
-    [IO.File]::WriteAllText($script:MyIni, (Add-FailoverBlock ([IO.File]::ReadAllText($script:MyIni)) $id $db))
+    [IO.File]::WriteAllText($script:MyIni, (Add-FailoverBlock ([IO.File]::ReadAllText($script:MyIni)) $id $db $script:LockFile))
     Ok "Added the copy settings, server-id=$id"
     Wait-MySqlRestart
 
@@ -314,6 +336,7 @@ function Undo-Laptop {
         [IO.File]::WriteAllText($script:MyIni, (Remove-FailoverBlock ([IO.File]::ReadAllText($script:MyIni))))
         Ok 'Removed the copy settings from my.ini'
     }
+    if (Test-Path $script:LockFile) { Remove-Item $script:LockFile; Ok 'Removed the start-up lock file' }
     if (Test-MySqlUp) {
         try { Invoke-Sql 'STOP SLAVE; RESET SLAVE ALL; SET GLOBAL read_only = 0;' | Out-Null; Ok 'This laptop stopped copying' } catch { Warn $_.Exception.Message }
     }
@@ -324,7 +347,7 @@ function Undo-Laptop {
     netsh advfirewall firewall delete rule name="VENUSeP MySQL" | Out-Null
     netsh advfirewall firewall delete rule name="VENUSeP web" | Out-Null
     Ok 'Removed the firewall rules'
-    Pause-For 'Now STOP and START MySQL in the XAMPP Control Panel.'
+    Restart-MySql
     Say 'DONE. The MySQL accounts are left in place (harmless). A copy laptop''s own database was saved in your user folder as <name>-before-copy-<date>.sql.'
 }
 
@@ -338,6 +361,8 @@ if (-not (Test-Admin)) {
 $Xampp = Find-Xampp
 $MySql = Join-Path $Xampp 'mysql\bin\mysql.exe'
 $MySqlDump = Join-Path $Xampp 'mysql\bin\mysqldump.exe'
+$MySqlAdmin = Join-Path $Xampp 'mysql\bin\mysqladmin.exe'
+$LockFile = Join-Path $Xampp 'mysql\bin\venusep-failover-lock.sql'   # init-file: lock right after start
 $MyIni = Join-Path $Xampp 'mysql\bin\my.ini'
 $Php = Join-Path $Xampp 'php\php.exe'
 if (-not (Test-Path $EnvFile)) { Fail "No $EnvFile. Set up the project first (SETUP.md steps 1-3)." }

@@ -28,7 +28,8 @@
      One click handler below serves every eye on the page.
 
      opts.fields: several boxes in one dialog, each { label, inputType, placeholder,
-     autocomplete, note } (note: one line of help under the box). Resolves an array
+     autocomplete, note, spellcheck } (note: one line of help under the box;
+     spellcheck:false for a typed-out password or code). Resolves an array
      of the typed values, in order, or null. Reset password asks for a temporary
      password and the admin's own this way (2026-11-24).
 
@@ -87,7 +88,8 @@
           (secret ? '<span class="vz-pw">' : '') +
           '<input class="vz-modal-input" id="' + id + '" data-vz="input" type="' + (secret ? 'password' : 'text') + '"' +
           ' placeholder="' + escapeHtml(f.placeholder || '') + '" autocomplete="' + escapeHtml(f.autocomplete || 'off') + '"' +
-          (f.note ? ' aria-describedby="' + id + 'Note"' : '') + '>' +
+          (f.note ? ' aria-describedby="' + id + 'Note"' : '') +
+          (f.spellcheck === false ? ' spellcheck="false" autocapitalize="off"' : '') + '>' +
           (secret ? window.venusepEye + '</span>' : '') +
           (f.note ? '<p class="vz-modal-note" id="' + id + 'Note">' + escapeHtml(f.note) + '</p>' : '') +
         '</div>';

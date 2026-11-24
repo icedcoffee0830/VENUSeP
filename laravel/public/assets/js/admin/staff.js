@@ -61,7 +61,7 @@
           'Choose a temporary password and give it to them yourself. They must replace it when they sign in. Their old password stops working now.',
           { title: 'Reset the password of ' + row.name + '?', okLabel: 'Reset password', danger: true,
             fields: [
-              { label: 'Temporary password (at least 8 characters)', autocomplete: 'off' },
+              { label: 'Temporary password (at least 8 characters)', autocomplete: 'off', spellcheck: false },
               { label: 'Your password', inputType: 'password', autocomplete: 'current-password', note: 'Enter your own password to confirm this reset.' },
             ] });
         if (typed === null) return;

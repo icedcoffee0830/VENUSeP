@@ -116,6 +116,23 @@ final class FileCopies
         return $said ? implode('; ', $said) : 'no other laptops in the list';
     }
 
+    /* After a switch: tell every other laptop of the list which server is the main now. A laptop
+       that is off is skipped (it is told by hand later: Switch to this on the main). Returns the
+       laptops told. */
+    public static function tellMain(string $main): array
+    {
+        $told = [];
+        foreach (array_filter(ServerFile::laptops(), fn ($ip) => !Servers::isLocal($ip)) as $ip) {
+            try {
+                self::send($ip, ['type' => 'server', 'db_host' => $main, 'laptops' => ServerFile::laptops()]);
+                $told[] = $ip;
+            } catch (Throwable) {
+                // off or not on the hotspot
+            }
+        }
+        return $told;
+    }
+
     /* ---- the wire ---- */
 
     private static function send(string $ip, array $msg): array
@@ -144,6 +161,16 @@ final class FileCopies
         $reply = fn (array $r) => response(Crypt::encryptString(json_encode($r)), 200, ['Content-Type' => 'text/plain']);
         if (($m['type'] ?? '') === 'list') {
             return $reply(['files' => self::listing()]);
+        }
+        /* another laptop switched: this laptop's website follows the new main at once (the
+           two-laptop test: a laptop that never heard of a switch kept using its own locked copy) */
+        if (($m['type'] ?? '') === 'server') {
+            if (!ServerFile::isHost($m['db_host'] ?? null)) {
+                return response('', 422);
+            }
+            ServerFile::write(['db_host' => $m['db_host'], 'laptops' => array_values(array_unique([...ServerFile::laptops(),
+                ...array_filter((array) ($m['laptops'] ?? []), [ServerFile::class, 'isHost'])]))], 'another laptop');
+            return $reply(['ok' => true]);
         }
         $file = self::path((string) ($m['path'] ?? ''));
         if ($file === null) {

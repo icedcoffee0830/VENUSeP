@@ -76,6 +76,27 @@ class FileCopiesTest extends TestCase
         $this->assertFileDoesNotExist($this->root . '/ids/x.bin');
     }
 
+    /* the two-laptop test: a laptop that never heard of a switch kept using its own locked copy */
+    public function test_a_switch_on_another_laptop_points_this_laptops_website_at_the_new_main(): void
+    {
+        $file = sys_get_temp_dir() . '/venusep-server-' . bin2hex(random_bytes(4)) . '.json';
+        putenv('VENUSEP_SERVER_FILE=' . $file);
+        $_ENV['VENUSEP_SERVER_FILE'] = $_SERVER['VENUSEP_SERVER_FILE'] = $file;
+        try {
+            file_put_contents($file, json_encode(['version' => 3, 'db_host' => '10.82.16.12', 'laptops' => ['10.82.16.12']]));
+            $this->inbox(['type' => 'server', 'db_host' => '127.0.0.1;dbname=x', 'sent' => time()])->assertStatus(422);
+            $this->inbox(['type' => 'server', 'db_host' => '10.82.16.115', 'laptops' => ['10.82.16.115', '10.82.16.12'], 'sent' => time()])->assertOk();
+            $this->assertSame('10.82.16.115', \App\Failover\ServerFile::dbHost());
+            $this->assertSame(['10.82.16.12', '10.82.16.115'], \App\Failover\ServerFile::laptops());
+        } finally {
+            foreach (glob($file . '*') as $f) {
+                @unlink($f);
+            }
+            putenv('VENUSEP_SERVER_FILE=no-server-file-in-tests');
+            $_ENV['VENUSEP_SERVER_FILE'] = $_SERVER['VENUSEP_SERVER_FILE'] = 'no-server-file-in-tests';
+        }
+    }
+
     public function test_a_file_deleted_here_is_not_taken_back_from_a_laptop_that_still_has_it(): void
     {
         @mkdir(storage_path('app/failover'), 0775, true);

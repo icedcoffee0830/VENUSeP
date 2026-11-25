@@ -209,7 +209,10 @@ function Open-Firewall([string]$myIp) {
 }
 
 function Add-Task {
-    $a = New-ScheduledTaskAction -Execute $script:Php -Argument 'artisan venusep:failover-tick' -WorkingDirectory $Laravel
+    # php-win.exe: the same PHP without a console window (php.exe popped one up every minute)
+    $quiet = Join-Path (Split-Path -Parent $script:Php) 'php-win.exe'
+    $exe = if (Test-Path $quiet) { $quiet } else { $script:Php }
+    $a = New-ScheduledTaskAction -Execute $exe -Argument 'artisan venusep:failover-tick' -WorkingDirectory $Laravel
     $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
     $s = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
     Register-ScheduledTask -TaskName $TaskName -Action $a -Trigger $t -Settings $s -Force | Out-Null

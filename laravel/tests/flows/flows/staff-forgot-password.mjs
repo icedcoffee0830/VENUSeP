@@ -10,8 +10,8 @@ async function request(ctx, page, email) {
   await page.locator('#fpEmail').fill(email);
   await Promise.all([page.waitForLoadState('load'), page.getByRole('button', { name: 'Send reset link' }).click()]);
   await ctx.expect.url(page, /\/admin\/forgot-password$/);
-  await ctx.expect.text(page, 'Email isn’t set up');   // flows have no mail settings, so nobody is told a link went out
-  await ctx.expect.text(page, 'no reset link can arrive');
+  await ctx.expect.text(page, 'Check your email');   // flows have no mail settings: a laptop that has them would send it
+  await ctx.expect.text(page, 'is on its way');
 }
 
 export default {

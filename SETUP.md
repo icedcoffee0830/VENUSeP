@@ -129,6 +129,8 @@ One laptop holds the main database. The others keep a live copy of it and a copy
 2. On laptop B, double-click `failover-setup\setup-laptop-B.bat`. It asks for A's address (shown at the end of A's setup) and the `.env` on the USB stick. It keeps B's own database in your user folder, then loads A's and starts copying. Restart MySQL when it says so.
 3. On A's Server page: **Find servers on this hotspot**, **Add to the list**, **Test**. B must say "Up to date".
 
+Every time you test after that: start MySQL in the XAMPP panel, then double-click `failover-setup\start-website.bat` and keep its window open.
+
 `failover-setup\undo.bat` puts a laptop back (the old `my.ini` and `.env`, no task, no firewall rules). The manual steps below are what the scripts do.
 
 Do steps A to F on **every** laptop. Use **cmd** as administrator. Stop MySQL in the XAMPP panel before step A.

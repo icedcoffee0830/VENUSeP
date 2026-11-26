@@ -928,6 +928,10 @@ Agreed with Aron on 2026-11-03 and 2026-11-04.
 **Google sign-in**
 - One address everywhere. A small safety net in the code: if sign-in starts on a different
   host, it first moves to the configured one.
+- Exception (2026-11-26, phones through the Cloudflare tunnel): a page opened over **https** on
+  another address starts and ends the sign-in on that address (`google_redirect_uri()`), still
+  one address per sign-in. That address must be in the Google Cloud client's redirect URIs.
+  Plain http from another address still moves to the configured one.
 - Aron checks the Google Cloud redirect addresses and the publishing status himself.
 
 **Halls, covers and moves — decided 2026-11-05 (migration 18)**

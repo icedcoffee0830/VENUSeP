@@ -60,4 +60,19 @@ class GoogleHostTest extends TestCase
         $r->assertSessionHas('google_flow');
         $this->assertTrue(session('google_flow')['remember']);
     }
+
+    /* Phones through the Cloudflare tunnel (2026-11-26): the sign-in starts and ends on the
+       tunnel's https address, never sends the phone to localhost */
+    public function test_through_the_tunnel_the_sign_in_stays_on_the_tunnel_address(): void
+    {
+        $this->configure('http://localhost:8000/customer/google-callback');
+        $r = $this->get('https://river-paper-candle.trycloudflare.com/customer/google-start');
+        $to = $r->headers->get('Location');
+        $this->assertStringStartsWith('https://accounts.google.com/o/oauth2/v2/auth?', $to, 'no move to localhost');
+        parse_str((string) parse_url($to, PHP_URL_QUERY), $q);
+        $this->assertSame('https://river-paper-candle.trycloudflare.com/customer/google-callback', $q['redirect_uri']);
+
+        /* plain http from another address still moves to the configured one */
+        $this->get('http://10.96.84.115:8100/customer/google-start')->assertRedirect('http://localhost:8000/customer/google-start');
+    }
 }

@@ -37,7 +37,9 @@ class GoogleController
                callback share one host. */
             $remember = !empty($request->query('remember'));
             $home = parse_url((string) google_config()['redirect_uri']);
-            if (isset($home['scheme'], $home['host'])) {
+            /* opened over https through the tunnel (phones): the sign-in stays on that address
+               (google_redirect_uri()), so nothing moves */
+            if (isset($home['scheme'], $home['host']) && google_redirect_uri() === (string) google_config()['redirect_uri']) {
                 $port = $home['port'] ?? null;
                 $origin = strtolower($home['scheme'] . '://' . $home['host'])
                         . ($port && $port !== ($home['scheme'] === 'https' ? 443 : 80) ? ':' . $port : '');   // as getSchemeAndHttpHost() writes it

@@ -105,10 +105,15 @@ final class Servers
         legacy('backup');   // backup_schema_version()
         $r = ['ip' => $ip, 'reachable' => false, 'level' => null, 'role' => null, 'readOnly' => null,
             'running' => false, 'behind' => null, 'own' => false, 'of' => null, 'error' => null,
-            'slavePos' => '', 'ioPos' => '', 'checks' => [], 'safe' => false, 'current' => self::isMain($ip)];
+            'slavePos' => '', 'ioPos' => '', 'checks' => [], 'safe' => false, 'current' => self::isMain($ip),
+            'name' => null, 'pos' => ''];
         try {
             $db = self::pdo($ip);
             $r['reachable'] = true;
+            /* who it is (the laptop's Windows name: addresses change with every hotspot) and how far
+               its data goes (domain 0's number only grows, whichever laptop was the main) */
+            $r['name'] = (string) $db->query('SELECT @@hostname')->fetchColumn();
+            $r['pos'] = (string) $db->query('SELECT @@gtid_current_pos')->fetchColumn();
             $r['level'] = (int) $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'schema_version'")->fetchColumn();
             $slave = $db->query('SHOW SLAVE STATUS')->fetch() ?: null;
             $r['readOnly'] = (int) $db->query('SELECT @@read_only')->fetchColumn() === 1;   // in its own query (lab four)
@@ -187,41 +192,44 @@ final class Servers
 
     /* ---- Find ---- */
 
-    /* Addresses on this laptop's own /24 where MySQL answers. Only ever this laptop's own
-       network (a phone hotspot), never wider; about 5 seconds. Not for school Wi-Fi. */
+    /* Addresses on this laptop's hotspot (its /24) where MySQL answers. Only ever this laptop's own
+       network, never wider; about 1 second. Not for school Wi-Fi. All 254 tries run at once through
+       curl (CONNECT_ONLY): PHP's own sockets waited for each one in turn on Windows (2.5 minutes). */
     public static function find(): array
     {
-        $found = [];
-        foreach (self::myAddresses() as $mine) {
-            $net = substr($mine, 0, strrpos($mine, '.') + 1);
-            foreach (array_chunk(range(1, 254), 64) as $batch) {
-                $open = [];
-                foreach ($batch as $n) {
-                    $s = @stream_socket_client("tcp://{$net}{$n}:" . self::port(), $no, $err, 0.6, STREAM_CLIENT_CONNECT | STREAM_CLIENT_ASYNC_CONNECT);
-                    if ($s) {
-                        $open[$net . $n] = $s;
-                    }
-                }
-                $until = microtime(true) + 0.6;
-                while ($open && microtime(true) < $until) {
-                    $w = array_values($open);
-                    $r = $e = null;
-                    if (!@stream_select($r, $w, $e, 0, 100_000)) {
-                        continue;
-                    }
-                    foreach ($w as $s) {
-                        $ip = array_search($s, $open, true);
-                        if (@stream_socket_get_name($s, true) !== false) {
-                            $found[] = $ip;
-                        }
-                        fclose($s);
-                        unset($open[$ip]);
-                    }
-                }
-                array_map('fclose', $open);
-            }
+        $mine = self::myAddresses()[0] ?? null;
+        if ($mine === null) {
+            return [];
         }
-        return array_values(array_unique($found));
+        $net = substr($mine, 0, strrpos($mine, '.') + 1);
+        $multi = curl_multi_init();
+        $tries = [];
+        foreach (range(1, 254) as $n) {
+            $h = curl_init('http://' . $net . $n . ':' . self::port() . '/');
+            curl_setopt_array($h, [CURLOPT_CONNECT_ONLY => true, CURLOPT_CONNECTTIMEOUT_MS => 900, CURLOPT_TIMEOUT_MS => 1200]);
+            curl_multi_add_handle($multi, $h);
+            $tries[$net . $n] = $h;
+        }
+        $ok = [];   // each try's own result comes through curl_multi_info_read (curl_errno stays 0 here)
+        do {
+            $status = curl_multi_exec($multi, $running);
+            while ($done = curl_multi_info_read($multi)) {
+                $ok[spl_object_id($done['handle'])] = $done['result'] === CURLE_OK;
+            }
+            if ($running) {
+                curl_multi_select($multi, 0.2);
+            }
+        } while ($running && $status === CURLM_OK);
+        $found = [];
+        foreach ($tries as $ip => $h) {
+            if ($ok[spl_object_id($h)] ?? false) {
+                $found[] = $ip;
+            }
+            curl_multi_remove_handle($multi, $h);
+            curl_close($h);
+        }
+        curl_multi_close($multi);
+        return $found;
     }
 
     /* ---- Switch ---- */
@@ -377,6 +385,17 @@ final class Servers
                 return ['ok' => false, 'message' => 'That is the main.'];
             }
             return ['ok' => true, 'message' => self::follow(self::pdo($ip), self::main(), true) ?? 'It copies from the main now.'];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => $e instanceof PDOException ? self::why($e) : $e->getMessage()];
+        }
+    }
+
+    /* For the start file (Group): point $ip at $main. $fresh = it never copied from this main
+       (a locked old main joining); otherwise it keeps its place and only the address changes. */
+    public static function copyFrom(string $ip, string $main, bool $fresh): array
+    {
+        try {
+            return ['ok' => true, 'message' => self::follow(self::pdo($ip), $main, $fresh) ?? 'copies from ' . $main];
         } catch (Throwable $e) {
             return ['ok' => false, 'message' => $e instanceof PDOException ? self::why($e) : $e->getMessage()];
         }

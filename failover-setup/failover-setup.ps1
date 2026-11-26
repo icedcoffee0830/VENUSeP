@@ -418,13 +418,20 @@ function Start-Session {
         Ok 'started'
     }
 
-    Say '2/4  The website (port 8100)'
+    Say '2/4  The website (port 8100 for the hotspot, localhost:8000 for this laptop)'
     if (Test-Port '127.0.0.1' $WebPort) { Ok 'already running' } else {
         Start-Process cmd.exe -ArgumentList '/c', "`"$PSScriptRoot\start-website.bat`"" -WindowStyle Minimized
         for ($i = 0; $i -lt 20 -and -not (Test-Port '127.0.0.1' $WebPort); $i++) { Start-Sleep -Seconds 1 }
         if (-not (Test-Port '127.0.0.1' $WebPort)) { Fail 'The website did not start. Double-click start-website.bat to see why.' }
         Ok 'started in its own window (minimized): keep it open'
     }
+    # localhost:8000 = "Continue with Google" on this laptop (Google takes localhost, never a hotspot address)
+    if (-not (Test-Port '127.0.0.1' 8000)) {
+        Start-Process cmd.exe -ArgumentList '/c', 'start', '"VENUSeP website for this laptop (localhost:8000, keep open)"', '/min', "`"$script:Php`"", 'artisan', 'serve', '--port=8000' -WorkingDirectory $Laravel -WindowStyle Hidden
+        for ($i = 0; $i -lt 15 -and -not (Test-Port '127.0.0.1' 8000); $i++) { Start-Sleep -Seconds 1 }
+    }
+    if (Test-Port '127.0.0.1' 8000) { Ok 'http://localhost:8000 runs too: use it on this laptop (Continue with Google works there)' }
+    else { Warn 'localhost:8000 did not start (another program on port 8000?): Continue with Google will not work on this laptop' }
 
     Say '3/4  Find the other laptops on this hotspot (a few seconds)'
     Invoke-Native $script:Php @((Join-Path $Laravel 'artisan'), 'venusep:failover-start') | Out-Null
@@ -433,8 +440,9 @@ function Start-Session {
     Say '4/4  The Server page'
     $ip = Get-MyIp
     if (-not $ip) { $ip = '127.0.0.1' }
-    Start-Process "http://$($ip):$WebPort/server-emergency"
-    Ok "opened http://$($ip):$WebPort (everyone on the hotspot opens this address)"
+    Start-Process 'http://localhost:8000/server-emergency'
+    Ok 'opened http://localhost:8000 (on this laptop: Continue with Google works here)'
+    Ok "phones and the other laptops open http://$($ip):$WebPort (no Google sign-in there)"
 }
 
 # ---------- run (dot-sourcing this file without -Role only loads the functions, for testing) ----------

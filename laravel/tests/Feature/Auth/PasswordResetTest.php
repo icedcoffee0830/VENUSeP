@@ -35,7 +35,7 @@ class PasswordResetTest extends TestCase
         $c = $this->makeAccount('customer');
         $this->post(route('customer.forgot-password'), ['email' => strtoupper($c->email)])
             ->assertRedirect(route('customer.forgot-password'));
-        $this->get(route('customer.forgot-password'))->assertSee('Email isn’t set up')->assertSee(PR_NOT_SET_UP_REPLY);   // no mail settings in tests
+        $this->get(route('customer.forgot-password'))->assertSee('Check your email')->assertSee(PR_NOT_SET_UP_REPLY);   // no mail settings here: a laptop that has them sends it
         $this->get(route('customer.forgot-password'))->assertSee('Reset your password');   // shown once
 
         $rows = DB::table('password_resets')->where('user_id', $c->id)->get();

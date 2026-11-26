@@ -43,7 +43,8 @@ require_once __DIR__ . '/passwords.php';
 const PR_RESET_TTL_MIN      = 30;   // minutes a link works
 const PR_RESET_THROTTLE_MIN = 5;    // minutes between emails to one account
 /* The same for every address too: it tells only that this machine has no mail settings. */
-const PR_NOT_SET_UP_REPLY   = 'Not sent: email isn’t set up on this laptop, so no reset link can arrive.';
+/* this laptop has no mail settings: a laptop of the group that has them sends the email (mail_send_waiting()) */
+const PR_NOT_SET_UP_REPLY   = 'If that email belongs to a VENUSeP account, a link to reset the password is on its way; it can take a minute or two. The link works for 30 minutes. Check your spam folder if it doesn’t arrive.';
 const PR_REQUEST_REPLY      = 'If that email belongs to a VENUSeP account, we’ve sent it a link to reset the password. The link works for 30 minutes. Check your spam folder if it doesn’t arrive.';
 
 /* The accounts one side's links are for: never a revoked one (revokedAt() is NULL before migration 21). */

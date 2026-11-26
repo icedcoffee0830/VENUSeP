@@ -228,6 +228,9 @@ function mail_status_sweep(): void
             mail_send($outbox);
         }
     }
+
+    /* emails a laptop without mail settings could not send: this one sends them, if it can */
+    mail_send_waiting();
 }
 
 /* ---------------------------------------------------------------------

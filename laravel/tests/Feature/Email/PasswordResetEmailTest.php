@@ -88,8 +88,8 @@ class PasswordResetEmailTest extends TestCase
         $replies = [];
         foreach ([$acct->email, 'nobody.here@example.test'] as $email) {
             $this->post(route('customer.forgot-password'), ['email' => $email])->assertRedirect(route('customer.forgot-password'));
-            $replies[] = $this->get(route('customer.forgot-password'))->assertSee('email isn’t set up on this laptop')
-                ->assertDontSee('we’ve sent')->assertDontSee('Check your email')->getContent();
+            $replies[] = $this->get(route('customer.forgot-password'))->assertSee('is on its way')
+                ->assertDontSee('we’ve sent')->getContent();
         }
         $strip = fn ($html) => preg_replace('/name="_token" value="[^"]*"|content="[^"]*"/', '', $html);
         $this->assertSame($strip($replies[0]), $strip($replies[1]));   // the page still cannot test who has an account

@@ -161,6 +161,30 @@ class EmailQueries
         return $row ? (array) $row : null;
     }
 
+    /* Emails a laptop without mail settings left behind (mail_send_waiting()): from the last day;
+       a password reset only for 30 minutes, the life of its link. Oldest first. */
+    public static function waitingForASender(string $notSetUp): array
+    {
+        return array_column(DB::select("
+            SELECT id FROM email_outbox
+            WHERE status = 'not_sent' AND last_error = ?
+              AND created_at > NOW() - INTERVAL 1 DAY
+              AND (kind <> 'password_reset' OR created_at > NOW() - INTERVAL 30 MINUTE)
+            ORDER BY id
+            LIMIT 50
+        ", [$notSetUp]), 'id');
+    }
+
+    /* Take one waiting email for this laptop: only one laptop wins it (it becomes 'failed' with
+       "Sending…" until mail_send() says sent or why not). */
+    public static function claimForSending(int $id, string $notSetUp): bool
+    {
+        return DB::update("
+            UPDATE email_outbox SET status = 'failed', last_error = 'Sending from another laptop…'
+            WHERE id = ? AND status = 'not_sent' AND last_error = ?
+        ", [$id, $notSetUp]) === 1;
+    }
+
     /* Every password reset email: its mail-log copy, if any, is named after this id. */
     public static function passwordResetIds(): array
     {

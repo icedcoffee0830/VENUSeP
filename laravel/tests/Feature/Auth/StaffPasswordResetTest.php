@@ -49,7 +49,7 @@ class StaffPasswordResetTest extends TestCase
     {
         $acct = $this->makeAccount($type, $o);
         $this->post(route('admin.forgot-password'), ['email' => $acct->email])->assertRedirect(route('admin.forgot-password'));
-        $this->get(route('admin.forgot-password'))->assertSee('Email isn’t set up')->assertSee(PR_NOT_SET_UP_REPLY);   // no mail settings in tests
+        $this->get(route('admin.forgot-password'))->assertSee('Check your email')->assertSee(PR_NOT_SET_UP_REPLY);   // no mail settings here: a laptop that has them sends it
 
         $this->assertSame(1, DB::table('password_resets')->where('user_id', $acct->id)->count());
         $mail = DB::table('email_outbox')->where('requested_by_user_id', $acct->id)->first();

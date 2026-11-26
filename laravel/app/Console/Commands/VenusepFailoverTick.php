@@ -21,6 +21,8 @@ class VenusepFailoverTick extends Command
             'emergency sign-in' => fn () => SuperAdminCopy::refresh(),
             'files' => fn () => FileCopies::sweep(),
             'copies' => fn () => Health::check(),
+            /* emails another laptop could not send (no mail settings there): sent from here if this one can */
+            'emails' => function () { legacy('receipt-emails'); return mail_send_waiting() . ' waiting email(s) sent'; },
         ];
         $failed = false;
         foreach ($parts as $name => $run) {

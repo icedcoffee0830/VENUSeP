@@ -86,10 +86,36 @@ function mail_is_set_up(): bool
     return mail_config()['transport'] === 'smtp';
 }
 
-/* For links inside emails, e.g. mail_base_url() . '/customer/booking-history.php'. */
+/* For links inside emails, e.g. mail_base_url() . '/customer/booking-history.php'. A page opened
+   over https on another address (the tunnel phones use) links back to that address: a link to
+   localhost cannot open on a phone. Otherwise the settings' base_url. */
 function mail_base_url(): string
 {
-    return rtrim((string) mail_config()['base_url'], '/');
+    $base = rtrim((string) mail_config()['base_url'], '/');
+    $req = app()->runningInConsole() ? null : request();
+    if ($req && $req->isSecure() && strtolower($req->getHost()) !== strtolower((string) parse_url($base, PHP_URL_HOST))) {
+        return $req->getSchemeAndHttpHost();
+    }
+    return $base;
+}
+
+/* Emails another laptop of the group could not send (it has no mail settings: 'not_sent' with
+   MAIL_NOT_SET_UP) are sent by a laptop that has them, after its pages and every minute
+   (Aron 2026-11-26: only one laptop holds the Gmail settings, nobody copies the file). Each is
+   claimed first, so two laptops never send one twice. A reset link older than 30 minutes is no
+   longer valid, so it is left. Returns how many went out. */
+function mail_send_waiting(): int
+{
+    if (!mail_is_set_up()) {
+        return 0;
+    }
+    $sent = 0;
+    foreach (\App\Queries\EmailQueries::waitingForASender(MAIL_NOT_SET_UP) as $id) {
+        if (\App\Queries\EmailQueries::claimForSending((int) $id, MAIL_NOT_SET_UP) && mail_send((int) $id)) {
+            $sent++;
+        }
+    }
+    return $sent;
 }
 
 /* Queue one email. Never sends, so it is safe inside the caller's transaction.

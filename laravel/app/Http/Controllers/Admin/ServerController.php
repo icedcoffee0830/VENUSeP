@@ -81,7 +81,8 @@ class ServerController
         }
         $mine = Servers::myAddresses();
         return [
-            'svRows' => array_map(fn ($ip, $i) => ['ip' => $ip, 'name' => 'Laptop ' . chr(65 + $i), 'mine' => Servers::isLocal($ip),
+            /* the laptop's Windows name (start-venusep.bat learns them), so every laptop's page calls it the same */
+            'svRows' => array_map(fn ($ip, $i) => ['ip' => $ip, 'name' => (ServerFile::read()['names'][$ip] ?? null) ?: 'Laptop ' . chr(65 + $i), 'mine' => Servers::isLocal($ip),
                 'listed' => in_array($ip, $listed, true)], $rows, array_keys($rows)),
             'svUrl' => $mine ? 'http://' . $mine[0] . ':' . request()->getPort() : null,
             'svProtected' => Servers::protectedSaving(),

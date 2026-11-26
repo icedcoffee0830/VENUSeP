@@ -129,7 +129,7 @@ One laptop holds the main database. The others keep a live copy of it and a copy
 2. On laptop B, double-click `failover-setup\setup-laptop-B.bat`. It asks for A's address (shown at the end of A's setup) and the `.env` on the USB stick. It keeps B's own database in your user folder, then loads A's and starts copying. Restart MySQL when it says so.
 3. On A's Server page: **Find servers on this hotspot**, **Add to the list**, **Test**. B must say "Up to date".
 
-Every time you test after that: start MySQL in the XAMPP panel, then double-click `failover-setup\start-website.bat` and keep its window open.
+**Every session after that, on every laptop: double-click `failover-setup\start-venusep.bat`.** It starts MySQL and the website, finds the other laptops on the hotspot (by their Windows names, so new addresses don't matter), works out which one is the main, points every website and copy at it, and opens the Server page. The main is unlocked by itself only when every laptop it knows has answered, none of them already takes saves, and it holds the newest data; otherwise the window says what it is waiting for. Start the main laptop last if you can. The setup scripts find the main by themselves too: a new copy only needs laptop A's `.env`.
 
 `failover-setup\undo.bat` puts a laptop back (the old `my.ini` and `.env`, no task, no firewall rules). The manual steps below are what the scripts do.
 

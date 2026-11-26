@@ -4,7 +4,7 @@
 #   undo.bat            puts a laptop back the way it was
 # Every step can be run again safely. Old files are kept as *.before-failover.
 # Plain ASCII on purpose: Windows PowerShell 5.1 reads scripts as ANSI.
-param([ValidateSet('A', 'B', 'Undo')][string]$Role)
+param([ValidateSet('A', 'B', 'Undo', 'Start')][string]$Role)
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
@@ -273,14 +273,22 @@ function Setup-A {
 }
 
 function Setup-B {
-    $main = (Read-Host "Laptop A's address (shown at the end of A's setup)").Trim()
+    $fromA = (Read-Host "Where is laptop A's .env? (the file you were sent, for example C:\Users\you\Downloads\.env)").Trim('"', ' ')
+    if (-not (Test-Path $fromA)) { Fail "No file at $fromA." }
+    if (-not (Get-EnvValue $fromA 'DB_REPL_PASSWORD')) { Fail "$fromA is not the .env from laptop A's setup (no DB_REPL_PASSWORD)." }
+    Say 'Looking for the main laptop on this hotspot (a few seconds)...'
+    $found = Find-MainOnHotspot $fromA
+    $main = $null
+    if ($found) {
+        $answer = (Read-Host "The main is $($found[1]) at $($found[0]). Press Enter to use it, or type another address").Trim()
+        $main = if ($answer) { $answer } else { $found[0] }
+    } else {
+        $main = (Read-Host "No main found by itself. Type laptop A's address (its Server page shows it under This laptop)").Trim()
+    }
     if ($main -notmatch '^\d{1,3}(\.\d{1,3}){3}$') { Fail "'$main' is not an IPv4 address." }
     $n = Read-Host 'Which copy is this? 2 = laptop B, 3 = C, 4 = D [2]'
     $id = if ($n) { [int]$n } else { 2 }
     if ($id -lt 2 -or $id -gt 9) { Fail 'Type 2, 3 or 4.' }
-    $fromA = (Read-Host "Where is laptop A's .env? (the file on the USB stick, for example E:\.env)").Trim('"', ' ')
-    if (-not (Test-Path $fromA)) { Fail "No file at $fromA." }
-    if (-not (Get-EnvValue $fromA 'DB_REPL_PASSWORD')) { Fail "$fromA is not the .env from laptop A's setup (no DB_REPL_PASSWORD)." }
     if (-not (Test-MySqlUp)) { Fail 'Start MySQL in the XAMPP Control Panel first.' }
     $ip = Find-MyAddress
     if (-not (Test-NetConnection $main -Port 3306 -InformationLevel Quiet -WarningAction SilentlyContinue)) {
@@ -359,10 +367,80 @@ function Undo-Laptop {
     Say 'DONE. The MySQL accounts are left in place (harmless). A copy laptop''s own database was saved in your user folder as <name>-before-copy-<date>.sql.'
 }
 
+# ---------- every session: start-venusep.bat (no administrator rights needed) ----------
+
+function Test-Port([string]$ip, [int]$port, [int]$ms = 600) {
+    $c = New-Object Net.Sockets.TcpClient
+    try { return $c.ConnectAsync($ip, $port).Wait($ms) -and $c.Connected } catch { return $false } finally { $c.Close() }
+}
+
+function Get-MyIp {
+    try { return (Find-NetRoute -RemoteIPAddress 8.8.8.8 -ErrorAction Stop | Where-Object { $_.IPAddress } | Select-Object -First 1).IPAddress } catch { return $null }
+}
+
+# The laptop on this hotspot that takes saves, found with the admin account from A's .env:
+# MySQL answers, read_only = 0 and it copies from nobody. Null = none or more than one.
+function Find-MainOnHotspot([string]$envFile) {
+    $me = Get-MyIp
+    if (-not $me) { return $null }
+    $net = $me.Substring(0, $me.LastIndexOf('.') + 1)
+    $open = @()
+    $tasks = @{}
+    foreach ($n in 1..254) {
+        $c = New-Object Net.Sockets.TcpClient
+        $tasks["$net$n"] = @($c, $c.ConnectAsync("$net$n", 3306))
+    }
+    Start-Sleep -Milliseconds 1500
+    foreach ($ip in $tasks.Keys) {
+        if ($tasks[$ip][1].IsCompleted -and $tasks[$ip][0].Connected -and $ip -ne $me) { $open += $ip }
+        $tasks[$ip][0].Close()
+    }
+    $env:MYSQL_PWD = Get-EnvValue $envFile 'DB_ADMIN_PASSWORD'
+    $mains = @()
+    try {
+        foreach ($ip in $open) {
+            if ((Invoke-Native $script:MySql @('-h', $ip, '-u', 'venusep_admin', '-N', '-e', 'SELECT @@hostname, @@read_only; SHOW SLAVE STATUS;')) -ne 0) { continue }
+            $lines = @($script:NativeOut -split "`r?`n" | Where-Object { $_ })
+            $first = $lines[0] -split "`t"
+            if ($first.Count -ge 2 -and $first[1] -eq '0' -and $lines.Count -eq 1) { $mains += , @($ip, $first[0]) }
+        }
+    } finally { Remove-Item Env:\MYSQL_PWD -ErrorAction SilentlyContinue }
+    if ($mains.Count -eq 1) { return $mains[0] }
+    return $null
+}
+
+function Start-Session {
+    Say '1/4  MySQL'
+    if (Test-MySqlUp) { Ok 'already running' } else {
+        Start-Process -FilePath (Join-Path (Split-Path -Parent $script:MySql) 'mysqld.exe') -ArgumentList "--defaults-file=`"$script:MyIni`"", '--standalone' -WindowStyle Hidden
+        for ($i = 0; $i -lt 30 -and -not (Test-MySqlUp); $i++) { Start-Sleep -Seconds 1 }
+        if (-not (Test-MySqlUp)) { Fail 'MySQL did not start. Start it in the XAMPP Control Panel, then double-click this again.' }
+        Ok 'started'
+    }
+
+    Say '2/4  The website (port 8100)'
+    if (Test-Port '127.0.0.1' $WebPort) { Ok 'already running' } else {
+        Start-Process cmd.exe -ArgumentList '/c', "`"$PSScriptRoot\start-website.bat`"" -WindowStyle Minimized
+        for ($i = 0; $i -lt 20 -and -not (Test-Port '127.0.0.1' $WebPort); $i++) { Start-Sleep -Seconds 1 }
+        if (-not (Test-Port '127.0.0.1' $WebPort)) { Fail 'The website did not start. Double-click start-website.bat to see why.' }
+        Ok 'started in its own window (minimized): keep it open'
+    }
+
+    Say '3/4  Find the other laptops on this hotspot (a few seconds)'
+    Invoke-Native $script:Php @((Join-Path $Laravel 'artisan'), 'venusep:failover-start') | Out-Null
+    Write-Host $script:NativeOut
+
+    Say '4/4  The Server page'
+    $ip = Get-MyIp
+    if (-not $ip) { $ip = '127.0.0.1' }
+    Start-Process "http://$($ip):$WebPort/server-emergency"
+    Ok "opened http://$($ip):$WebPort (everyone on the hotspot opens this address)"
+}
+
 # ---------- run (dot-sourcing this file without -Role only loads the functions, for testing) ----------
 
 if (-not $Role) { return }
-if (-not (Test-Admin)) {
+if ($Role -ne 'Start' -and -not (Test-Admin)) {   # every session (Start) runs without administrator rights
     Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Role', $Role
     exit
 }
@@ -374,9 +452,9 @@ $LockFile = Join-Path $Xampp 'mysql\bin\venusep-failover-lock.sql'   # init-file
 $MyIni = Join-Path $Xampp 'mysql\bin\my.ini'
 $Php = Join-Path $Xampp 'php\php.exe'
 if (-not (Test-Path $EnvFile)) { Fail "No $EnvFile. Set up the project first (SETUP.md steps 1-3)." }
-Write-Host "VENUSeP server transfer setup ($Role) - XAMPP at $Xampp, project at $Root" -ForegroundColor White
+Write-Host "VENUSeP server transfer ($Role) - XAMPP at $Xampp, project at $Root" -ForegroundColor White
 try {
-    switch ($Role) { 'A' { Setup-A } 'B' { Setup-B } 'Undo' { Undo-Laptop } }
+    switch ($Role) { 'A' { Setup-A } 'B' { Setup-B } 'Undo' { Undo-Laptop } 'Start' { Start-Session } }
 } catch {
     Fail $_.Exception.Message
 }

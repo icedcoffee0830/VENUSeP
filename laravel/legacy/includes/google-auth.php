@@ -104,6 +104,21 @@ function google_config(): array
     return $cfg;
 }
 
+/* Where Google sends people back: the configured address (http://localhost:8000/...). A page
+   opened over https on another address (the Cloudflare tunnel phones use) starts AND ends the
+   sign-in on that address instead: still one address per sign-in, so the session cookie holds
+   (DB-DECISIONS 23, 28). That address must be listed in the Google Cloud client's redirect URIs,
+   or Google refuses it (redirect_uri_mismatch). */
+function google_redirect_uri(): string
+{
+    $cfg = (string) google_config()['redirect_uri'];
+    $req = request();
+    if ($req->isSecure() && strtolower($req->getHost()) !== strtolower((string) parse_url($cfg, PHP_URL_HOST))) {
+        return $req->getSchemeAndHttpHost() . (parse_url($cfg, PHP_URL_PATH) ?: '/customer/google-callback');
+    }
+    return $cfg;
+}
+
 /* Is Google sign-in set up on this machine? The buttons only show when it is. */
 function google_enabled(): bool
 {
@@ -144,7 +159,7 @@ function google_begin(string $purpose = 'signin', int $userId = 0, bool $remembe
 
     return GOOGLE_AUTH_ENDPOINT . '?' . http_build_query([
         'client_id'             => (string) $cfg['client_id'],
-        'redirect_uri'          => (string) $cfg['redirect_uri'],
+        'redirect_uri'          => google_redirect_uri(),
         'response_type'         => 'code',
         'scope'                 => 'openid email profile',
         'state'                 => $state,
@@ -193,7 +208,7 @@ function google_exchange_code(string $code, string $verifier, array $cfg): array
             'code'          => $code,
             'client_id'     => (string) $cfg['client_id'],
             'client_secret' => (string) $cfg['client_secret'],
-            'redirect_uri'  => (string) $cfg['redirect_uri'],
+            'redirect_uri'  => google_redirect_uri(),
             'grant_type'    => 'authorization_code',
             'code_verifier' => $verifier,
         ]),

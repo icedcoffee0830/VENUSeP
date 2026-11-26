@@ -114,7 +114,9 @@ class CustomerLoginTest extends TestCase
         $signup = ['sub' => 'sub-' . $email, 'email' => $email, 'name' => 'Gina Google', 'at' => time(), 'remember' => false];
         $this->withSession(['google_signup' => $signup])->get($this->url())->assertOk()
             ->assertSee('Finish creating your account')->assertSee($email)->assertSee('value="Gina Google"', false)
-            ->assertSee('<a class="auth-link" href="' . route('terms') . '" target="_blank" rel="noopener">Terms and Conditions</a>', false);
+            /* a pop-up on the page (terms-popup.js); without JavaScript the same link opens a new tab */
+            ->assertSee('<a class="auth-link" href="' . route('terms') . '" target="_blank" rel="noopener" data-terms-popup data-terms-for="gsTerms">Terms and Conditions</a>', false)
+            ->assertSee('assets/js/terms-popup.js', false);
 
         $this->post($this->url(), ['google_step' => 'create', 'full_name' => '', 'contact_number' => '123'])
             ->assertSee('Enter your full name.')->assertSee('Enter a mobile number in the form 09XX XXX XXXX.')

@@ -113,6 +113,10 @@
           <div class="auth-alt">
             <span class="auth-alt-text">Don&rsquo;t have an account yet? Ask an administrator &mdash; they create staff and admin accounts from <strong>Staff Management</strong>.</span>
           </div>
+          {{-- the way in while the database is down or locked (Aron 2026-11-26: typing /server-emergency is confusing) --}}
+          <div class="auth-alt">
+            <span class="auth-alt-text">Super admin, and signing in fails because the database is down or locked? <a href="{{ route('failover.emergency') }}" class="auth-link"><i class="bi bi-hdd-network" aria-hidden="true"></i> Open the server emergency page</a></span>
+          </div>
           @endif
         </div>
       </section>

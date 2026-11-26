@@ -35,9 +35,13 @@ class TermsPageTest extends TestCase
         $this->get(route('terms'))->assertSee('up to 90 days ahead')->assertSee('up to 2 unpaid upcoming bookings');
     }
 
-    public function test_the_sign_up_checkbox_links_it_in_a_new_tab(): void
+    /* Aron 2026-11-26: a pop-up on the same page (terms-popup.js, the terms page's own text);
+       without JavaScript the same link still opens a new tab; "I agree" ticks this checkbox */
+    public function test_the_sign_up_checkbox_opens_the_terms_in_a_pop_up(): void
     {
         $this->get(route('customer.customer-register'))->assertOk()
-            ->assertSee('I agree to the <a class="auth-link" href="' . route('terms') . '" target="_blank" rel="noopener">Terms and Conditions</a>', false);
+            ->assertSee('I agree to the <a class="auth-link" href="' . route('terms') . '" target="_blank" rel="noopener" data-terms-popup data-terms-for="terms">Terms and Conditions</a>', false)
+            ->assertSee('assets/js/terms-popup.js', false);
+        $this->get(route('terms'))->assertOk()->assertSee('id="pv-main"', false);   // where the pop-up takes its text from
     }
 }

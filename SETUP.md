@@ -201,7 +201,7 @@ php artisan serve --host=0.0.0.0 --port=8100
 Then, once, in **PowerShell** (change the two paths). Every minute it refreshes the super admin's emergency sign-in, copies the photos, IDs and receipts, and checks the copies.
 
 ```
-$a = New-ScheduledTaskAction -Execute "C:\xampp\php\php.exe" -Argument "artisan venusep:failover-tick" -WorkingDirectory "C:\xampp\htdocs\VENUSeP-laravel\laravel"
+$a = New-ScheduledTaskAction -Execute "C:\xampp\php\php-win.exe" -Argument "artisan venusep:failover-tick" -WorkingDirectory "C:\xampp\htdocs\VENUSeP-laravel\laravel"
 $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
 Register-ScheduledTask -TaskName "VENUSeP failover tick" -Action $a -Trigger $t
 ```

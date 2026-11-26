@@ -125,4 +125,20 @@ class EmailKindsTest extends TestCase
         // every copy of the reset link, in the HTML part and the plain one, is whole
         $this->assertSame($links['password_reset'], preg_grep('~^' . preg_quote(self::BASE) . '/customer/reset-password\?token=[A-Za-z0-9_-]{43}$~', $links['password_reset']));
     }
+
+    /* Aron 2026-11-26: the email says who approved, rejected or cancelled, as the website does;
+       the automatic ones (payment due, overdue, a block) name nobody */
+    public function test_status_emails_name_the_person_who_acted(): void
+    {
+        $name = (string) DB::selectOne('SELECT COALESCE(s.full_name, u.username) AS name FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = 1')->name;
+        foreach (['booking_approved' => 'Approved by', 'booking_rejected' => 'Reviewed by', 'booking_cancelled' => 'Cancelled by'] as $kind => $label) {
+            $row = EmailQueries::find($this->queue($kind)[0]);
+            $this->assertStringContainsString($label . ': ' . e($name), $row['body_html'], $kind);
+            $this->assertStringContainsString($label . ': ' . $name, $row['body_text'], $kind);
+        }
+        foreach (['payment_due', 'payment_overdue', 'booking_block_cancelled'] as $kind) {
+            $row = EmailQueries::find($this->queue($kind)[0]);
+            $this->assertDoesNotMatchRegularExpression('/(Approved|Reviewed|Cancelled) by:/', $row['body_text'], $kind);
+        }
+    }
 }

@@ -146,14 +146,20 @@ function queue_status_email(int $bookingId, string $kind, string $note, ?int $ac
     $first = re_first_name((string) $who['full_name']);
     $line = $b['roomName'] . ', ' . $b['venueName'] . '. ' . booking_date_label($b) . '. Reference ' . $b['bookingId'] . '.';
     $office = re_office_line($bookingId);
+    /* who did it, as the website's booking details say (Aron 2026-11-26): only for what a person
+       does; the automatic emails (payment due, overdue, a block) name nobody */
+    $byLabel = ['booking_approved' => 'Approved by', 'booking_rejected' => 'Reviewed by', 'booking_cancelled' => 'Cancelled by'][$kind] ?? null;
+    $byName = ($byLabel && $actorUserId) ? (string) (\Illuminate\Support\Facades\DB::selectOne(
+        'SELECT COALESCE(s.full_name, u.username) AS name FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = ?', [$actorUserId])->name ?? '') : '';
+    $by = $byName !== '' ? $byLabel . ': ' . $byName : '';
     $html = re_frame($line, $title, $first, bh_e($intro),
-        re_paragraph(bh_e($line)) . ($note !== '' ? re_paragraph(bh_e($note)) : ''),
+        re_paragraph(bh_e($line)) . ($by !== '' ? re_paragraph(bh_e($by)) : '') . ($note !== '' ? re_paragraph(bh_e($note)) : ''),
         'You&rsquo;re getting this because of your VENUSeP booking ' . bh_e($b['bookingId']) . '.' . re_office_footer($office));
     return mail_enqueue([
         'kind' => $kind, 'booking_id' => $bookingId, 'requested_by_user_id' => $actorUserId ?: null,
         'to_email' => $who['email'], 'subject' => $title . ': ' . $b['bookingId'],
         'body_html' => $html,
-        'body_text' => $title . "\n\nGood day, " . $first . "!\n" . $intro . "\n\n" . $line . ($note !== '' ? "\n\n" . $note : '') . ($office !== '' ? "\n\n" . $office : ''),
+        'body_text' => $title . "\n\nGood day, " . $first . "!\n" . $intro . "\n\n" . $line . ($by !== '' ? "\n" . $by : '') . ($note !== '' ? "\n\n" . $note : '') . ($office !== '' ? "\n\n" . $office : ''),
     ]);
 }
 

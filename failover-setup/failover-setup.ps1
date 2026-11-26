@@ -4,7 +4,7 @@
 #   undo.bat            puts a laptop back the way it was
 # Every step can be run again safely. Old files are kept as *.before-failover.
 # Plain ASCII on purpose: Windows PowerShell 5.1 reads scripts as ANSI.
-param([ValidateSet('A', 'B', 'Undo', 'Start')][string]$Role)
+param([ValidateSet('A', 'B', 'Undo', 'Start', 'Tunnel')][string]$Role)
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
@@ -445,10 +445,45 @@ function Start-Session {
     Ok "phones and the other laptops open http://$($ip):$WebPort (no Google sign-in there)"
 }
 
+# ---------- phones: start-tunnel.bat (the team's fixed https address, ngrok) ----------
+
+# The team's address (not secret); NGROK_URL in .env overrides it. The ngrok token is kept by
+# ngrok itself on each laptop (ngrok config add-authtoken): asked for once on a laptop without it.
+$TeamTunnel = 'https://willed-remarry-rope.ngrok-free.dev'
+
+function Start-Tunnel {
+    $url = Get-EnvValue $EnvFile 'NGROK_URL'
+    if (-not $url) { $url = $TeamTunnel }
+
+    $ngrok = (Get-Command ngrok -ErrorAction SilentlyContinue).Source
+    if (-not $ngrok) {
+        Say 'Installing ngrok (once, about a minute)'
+        winget install --id Ngrok.Ngrok -e --accept-source-agreements --accept-package-agreements
+        $ngrok = (Get-Command ngrok -ErrorAction SilentlyContinue).Source
+        if (-not $ngrok) { $ngrok = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\ngrok.exe' }
+        if (-not (Test-Path $ngrok)) { Fail 'ngrok was installed, but this window cannot see it yet. Close it and double-click start-tunnel.bat again.' }
+    }
+    # where ngrok keeps the token: its own folder, or the app-package folder when installed from the Microsoft Store
+    $cfgs = @(Join-Path $env:LOCALAPPDATA 'ngrok\ngrok.yml') + @(Get-ChildItem "$env:LOCALAPPDATA\Packages\*ngrok*\LocalCache\Local\ngrok\ngrok.yml" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    if (-not ($cfgs | Where-Object { (Test-Path $_) -and (Select-String -Path $_ -Pattern 'authtoken' -Quiet) })) {
+        Say 'First time on this laptop: the ngrok token (ngrok dashboard > Your Authtoken; ask Aron)'
+        $token = (Read-Host '  Paste the token').Trim()
+        if ($token -notmatch '^[A-Za-z0-9_-]{20,}$') { Fail 'That does not look like an ngrok token. Run this again.' }
+        if ((Invoke-Native $ngrok @('config', 'add-authtoken', $token)) -ne 0) { Fail ('ngrok did not take the token: ' + $script:NativeOut) }
+        Ok 'token saved on this laptop'
+    }
+    if (-not (Test-Port '127.0.0.1' 8000)) { Fail 'The website is not running on localhost:8000. Double-click start-venusep.bat first.' }
+
+    Say "Phones open:  $url"
+    Write-Host "  Sign in:     $url/customer/customer-login   (Continue with Google works there)"
+    Write-Host '  Keep this window open: closing it stops the address.'
+    Write-Host ''
+    & $ngrok http 8000 --url $url
+}
 # ---------- run (dot-sourcing this file without -Role only loads the functions, for testing) ----------
 
 if (-not $Role) { return }
-if ($Role -ne 'Start' -and -not (Test-Admin)) {   # every session (Start) runs without administrator rights
+if ($Role -notin @('Start', 'Tunnel') -and -not (Test-Admin)) {   # every session (Start) runs without administrator rights
     Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Role', $Role
     exit
 }
@@ -462,7 +497,7 @@ $Php = Join-Path $Xampp 'php\php.exe'
 if (-not (Test-Path $EnvFile)) { Fail "No $EnvFile. Set up the project first (SETUP.md steps 1-3)." }
 Write-Host "VENUSeP server transfer ($Role) - XAMPP at $Xampp, project at $Root" -ForegroundColor White
 try {
-    switch ($Role) { 'A' { Setup-A } 'B' { Setup-B } 'Undo' { Undo-Laptop } 'Start' { Start-Session } }
+    switch ($Role) { 'A' { Setup-A } 'B' { Setup-B } 'Undo' { Undo-Laptop } 'Start' { Start-Session } 'Tunnel' { Start-Tunnel } }
 } catch {
     Fail $_.Exception.Message
 }
